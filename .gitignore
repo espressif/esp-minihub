@@ -1,0 +1,29 @@
+# ESP-IDF build outputs (any app / depth)
+build/
+managed_components/
+dependencies.lock
+
+# IDF-generated Kconfig results only (not config/sdkconfig/ source trees)
+/sdkconfig
+/sdkconfig.old
+application/*/sdkconfig
+application/*/sdkconfig.old
+
+# Optional local IDF checkout / symlink at repo root
+/esp-idf/
+
+# MiniHub compose / local machine
+cmake/generated/
+.minihub_app
+.minihub_profile
+.minihub_env
+ci_artifacts/
+
+# Lab-only sdkconfig fragments (copy from *.example)
+**/config/sdkconfig/local.overrides
+
+# Tooling / OS
+__pycache__/
+*.py[cod]
+*.host.o
+.DS_Store

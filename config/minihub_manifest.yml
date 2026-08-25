@@ -1,0 +1,184 @@
+# MiniHub component manifest (source of truth).
+# Generates idf_component.yml, CMake REQUIRES, and adapter registration via:
+#   MINIHUB_APP=minihub python tools/sync_host_manifest.py
+#
+# Product = application/<name>/ (minihub, claw_minihub, …)
+# Sdkconfig recipe = application/<app>/config/sdkconfig/app.yml
+# Optional LCD recipe: variants/lcd.yml (copy over app.yml); sync uses _minihub_lcd when features include lcd
+# Shared fragments: config/sdkconfig/README.md
+
+version: '1.0'
+profile: minihub
+hardware:
+  target: esp32s31
+  flash_mb: 16
+  module: ESP32-S31
+profiles:
+  _host_base:
+    partition_table: partitions.csv
+    components:
+      require:
+      - minihub_core
+      - minihub_config
+      - minihub_adapter
+      - minihub_rules
+      - minihub_scenes
+      - minihub_web
+      - minihub_pack
+      - minihub_module
+      - minihub_store
+      - minihub_hub
+      - minihub_auth
+      - minihub_ota
+      - minihub_provision
+      - minihub_matter
+      - minihub_rainmaker
+      - minihub_net
+      - gen_bmgr_codes
+      - adapter_mqtt
+      - adapter_zigbee
+      - adapter_ble_mesh
+      - adapter_modbus
+      - adapter_matter
+      - minihub_zigbee
+      - minihub_ble_mesh
+      - minihub_ble_gatt
+      - minihub_usb_msc
+      - minihub_rtsp_cam
+      - nvs_flash
+      - esp_wifi
+      - esp_netif
+      - esp_event
+      - lwip
+      - esp_system
+      adapters:
+      - name: mqtt
+      - name: zigbee
+        kconfig: MINIHUB_ZIGBEE_SDK
+      - name: ble_mesh
+        kconfig: MINIHUB_BLE_MESH_SDK
+      - name: modbus
+        kconfig: MINIHUB_MODBUS
+      - name: matter
+        kconfig: MINIHUB_MATTER_ADAPTER
+        dynamic: true
+        host_static: true
+    idf_dependencies:
+      joltwallet/littlefs: ~=1.21.0
+      espressif/cjson: ^1.7.19
+      espressif/network_provisioning: ^1.1.0
+      espressif/mqtt: ^1.0.0
+      espressif/esp_flash_dispatcher: ^1.0.2
+      espressif/elf_loader:
+        git: https://github.com/espressif/esp-iot-solution.git
+        path: components/elf_loader
+        version: master
+      espressif/esp_board_manager: ~0.5.15
+  minihub:
+    extends: _host_base
+    partition_table: partitions.csv
+    board: esp32_s31_function_coreboard_1
+    sdkconfig_features:
+    - common
+    - memory
+    - partitions_16m
+    - eth
+    - wifi_sta
+    - usb_msc
+    - rtsp_cam
+    - dynamic_modules
+    - modbus
+    - factory_reset_gpio61
+    - main_task_stack
+    - rainmaker
+  _minihub_lcd:
+    extends: _host_base
+    partition_table: partitions.csv
+    board: esp32_s31_korvo1
+    sdkconfig_features:
+    - common
+    - memory
+    - partitions_16m
+    - wifi_sta
+    - lcd
+    - lcd_brookesia_storage
+    - dynamic_modules
+    - modbus
+    - rainmaker
+    components:
+      lcd_ui: true
+      require:
+      - minihub_core
+      - minihub_config
+      - minihub_adapter
+      - minihub_rules
+      - minihub_scenes
+      - minihub_web
+      - minihub_pack
+      - minihub_module
+      - minihub_store
+      - minihub_hub
+      - minihub_auth
+      - minihub_ota
+      - minihub_provision
+      - minihub_matter
+      - minihub_rainmaker
+      - minihub_lcd
+      - minihub_net
+      - gen_bmgr_codes
+      - adapter_mqtt
+      - adapter_zigbee
+      - adapter_ble_mesh
+      - adapter_modbus
+      - adapter_matter
+      - minihub_zigbee
+      - minihub_ble_mesh
+      - minihub_ble_gatt
+      - minihub_usb_msc
+      - minihub_rtsp_cam
+      - nvs_flash
+      - esp_wifi
+      - esp_netif
+      - esp_event
+      - lwip
+      - esp_system
+    idf_dependencies:
+      espressif/esp_lcd_touch_gt1151: '*'
+      espressif/brookesia_lib_utils: 0.8.*
+      espressif/brookesia_hal_adaptor: 0.8.*
+      espressif/brookesia_hal_boards: 0.8.*
+      espressif/brookesia_service_manager: 0.8.*
+      espressif/brookesia_service_helper: 0.8.*
+      espressif/brookesia_service_display: 0.8.*
+      espressif/brookesia_gui_interface: 0.8.*
+      espressif/brookesia_gui_lvgl: 0.8.*
+      espressif/esp_lvgl_adapter: 0.6.*
+    component_manifests:
+      minihub_lcd:
+        dependencies:
+          espressif/brookesia_lib_utils: 0.8.*
+          espressif/brookesia_hal_adaptor: 0.8.*
+          espressif/brookesia_hal_boards: 0.8.*
+          espressif/brookesia_service_manager: 0.8.*
+          espressif/brookesia_service_helper: 0.8.*
+          espressif/brookesia_service_display: 0.8.*
+          espressif/brookesia_gui_interface: 0.8.*
+          espressif/brookesia_gui_lvgl: 0.8.*
+          espressif/esp_lvgl_adapter: 0.6.*
+  claw_minihub:
+    extends: _host_base
+    partition_table: partitions.csv
+    board: esp32_s31_function_coreboard_1
+    sdkconfig_features:
+    - common
+    - memory
+    - partitions_16m
+    - eth
+    - wifi_sta
+    - usb_msc
+    - rtsp_cam
+    - dynamic_modules
+    - modbus
+    - factory_reset_gpio61
+    - main_task_stack
+    - rainmaker

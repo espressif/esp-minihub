@@ -1,0 +1,19 @@
+---
+description: Git branch names must not use hyphens (中划线)
+alwaysApply: true
+---
+
+# Git branch naming
+
+When creating or renaming git branches in this repo:
+
+- **Do not use hyphens (`-`)** in branch names.
+- Prefer **underscores (`_`)** to separate words, e.g. `feature/modbus_tcp_client`, `fix/rtsp_cam_reload`.
+- Keep the usual prefix style when used (`feature/`, `fix/`, etc.); the prefix slash is fine — only hyphen characters are banned.
+
+Examples:
+
+| Avoid | Use |
+|-------|-----|
+| `feature/miot-car-probe` | `feature/miot_car_probe` |
+| `fix/ble-mesh-uuid` | `fix/ble_mesh_uuid` |

@@ -1,0 +1,6 @@
+{
+  "ui_version": "0.2.0",
+  "min_api_version": 1,
+  "brand": "MiniHub",
+  "entry": "index.html"
+}

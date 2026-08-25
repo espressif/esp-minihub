@@ -1,0 +1,585 @@
+/*
+ * SPDX-FileCopyrightText: 2026 MiniHub Contributors
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * L2 JS plugins: QuickJS-NG + Host API v0 (host.log / point / command / http / config).
+ * Also runs main.js for runtime:hybrid packages (after native load).
+ */
+
+#include "minihub_js.h"
+
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <sys/stat.h>
+
+#include "cJSON.h"
+#include "esp_http_client.h"
+#include "esp_log.h"
+#include "minihub_config.h"
+#include "minihub_core.h"
+#include "minihub_paths.h"
+#include "sdkconfig.h"
+
+static const char *TAG = "minihub_js";
+
+#if CONFIG_MINIHUB_JS_PLUGINS
+
+#include "quickjs.h"
+
+#define MINIHUB_JS_HTTP_BODY_MAX 16384
+#define MINIHUB_JS_SCRIPT_MAX    (256 * 1024)
+
+static JSRuntime *s_rt;
+static JSContext *s_ctx;
+
+static char *read_file_alloc(const char *path, size_t max_len, size_t *out_len)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    long n = ftell(f);
+    if (n <= 0 || (size_t)n > max_len) {
+        fclose(f);
+        return NULL;
+    }
+    rewind(f);
+    char *buf = malloc((size_t)n + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t got = fread(buf, 1, (size_t)n, f);
+    fclose(f);
+    buf[got] = '\0';
+    if (out_len) {
+        *out_len = got;
+    }
+    return buf;
+}
+
+static JSValue js_log_level(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int level)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_UNDEFINED;
+    }
+    const char *msg = JS_ToCString(ctx, argv[0]);
+    if (!msg) {
+        return JS_EXCEPTION;
+    }
+    if (level == 0) {
+        ESP_LOGI(TAG, "%s", msg);
+    } else if (level == 1) {
+        ESP_LOGW(TAG, "%s", msg);
+    } else {
+        ESP_LOGE(TAG, "%s", msg);
+    }
+    JS_FreeCString(ctx, msg);
+    return JS_UNDEFINED;
+}
+
+static JSValue js_log_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return js_log_level(ctx, this_val, argc, argv, 0);
+}
+static JSValue js_log_warn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return js_log_level(ctx, this_val, argc, argv, 1);
+}
+static JSValue js_log_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    return js_log_level(ctx, this_val, argc, argv, 2);
+}
+
+static const char *js_get_str_prop(JSContext *ctx, JSValueConst obj, const char *key)
+{
+    JSValue v = JS_GetPropertyStr(ctx, obj, key);
+    if (JS_IsUndefined(v) || JS_IsNull(v)) {
+        JS_FreeValue(ctx, v);
+        return NULL;
+    }
+    const char *s = JS_ToCString(ctx, v);
+    JS_FreeValue(ctx, v);
+    return s;
+}
+
+static JSValue js_point_register(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1 || !JS_IsObject(argv[0])) {
+        return JS_ThrowTypeError(ctx, "register expects object");
+    }
+    minihub_point_t pt = {0};
+    const char *pid = js_get_str_prop(ctx, argv[0], "point_id");
+    const char *type = js_get_str_prop(ctx, argv[0], "type");
+    const char *adapter = js_get_str_prop(ctx, argv[0], "adapter");
+    const char *value = js_get_str_prop(ctx, argv[0], "value");
+    if (!pid) {
+        return JS_ThrowTypeError(ctx, "point_id required");
+    }
+    strncpy(pt.point_id, pid, sizeof(pt.point_id) - 1);
+    if (type) {
+        strncpy(pt.type, type, sizeof(pt.type) - 1);
+    } else {
+        strncpy(pt.type, "sensor", sizeof(pt.type) - 1);
+    }
+    if (adapter) {
+        strncpy(pt.adapter, adapter, sizeof(pt.adapter) - 1);
+    } else {
+        strncpy(pt.adapter, "js", sizeof(pt.adapter) - 1);
+    }
+    if (value) {
+        strncpy(pt.value, value, sizeof(pt.value) - 1);
+    }
+    JS_FreeCString(ctx, pid);
+    if (type) {
+        JS_FreeCString(ctx, type);
+    }
+    if (adapter) {
+        JS_FreeCString(ctx, adapter);
+    }
+    if (value) {
+        JS_FreeCString(ctx, value);
+    }
+
+    JSValue online_v = JS_GetPropertyStr(ctx, argv[0], "online");
+    pt.online = JS_ToBool(ctx, online_v);
+    JS_FreeValue(ctx, online_v);
+
+    esp_err_t err = minihub_point_register(&pt);
+    if (err != ESP_OK) {
+        return JS_ThrowInternalError(ctx, "point_register failed %s", esp_err_to_name(err));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_point_get(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_NULL;
+    }
+    const char *pid = JS_ToCString(ctx, argv[0]);
+    if (!pid) {
+        return JS_EXCEPTION;
+    }
+    minihub_point_t *p = minihub_point_get(pid);
+    JS_FreeCString(ctx, pid);
+    if (!p) {
+        return JS_NULL;
+    }
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "point_id", JS_NewString(ctx, p->point_id));
+    JS_SetPropertyStr(ctx, obj, "type", JS_NewString(ctx, p->type));
+    JS_SetPropertyStr(ctx, obj, "value", JS_NewString(ctx, p->value));
+    JS_SetPropertyStr(ctx, obj, "adapter", JS_NewString(ctx, p->adapter));
+    JS_SetPropertyStr(ctx, obj, "online", JS_NewBool(ctx, p->online));
+    return obj;
+}
+
+static JSValue js_command_invoke(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1 || !JS_IsObject(argv[0])) {
+        return JS_ThrowTypeError(ctx, "invoke expects {point_id, cmd}");
+    }
+    minihub_command_t cmd = {0};
+    const char *pid = js_get_str_prop(ctx, argv[0], "point_id");
+    const char *cname = js_get_str_prop(ctx, argv[0], "cmd");
+    if (!pid || !cname) {
+        if (pid) {
+            JS_FreeCString(ctx, pid);
+        }
+        if (cname) {
+            JS_FreeCString(ctx, cname);
+        }
+        return JS_ThrowTypeError(ctx, "point_id and cmd required");
+    }
+    strncpy(cmd.point_id, pid, sizeof(cmd.point_id) - 1);
+    strncpy(cmd.cmd, cname, sizeof(cmd.cmd) - 1);
+    JS_FreeCString(ctx, pid);
+    JS_FreeCString(ctx, cname);
+
+    esp_err_t err = minihub_command_invoke(&cmd);
+    if (err != ESP_OK) {
+        return JS_ThrowInternalError(ctx, "command_invoke failed %s", esp_err_to_name(err));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_point_set(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 2) {
+        return JS_ThrowTypeError(ctx, "set(id, value)");
+    }
+    const char *pid = JS_ToCString(ctx, argv[0]);
+    const char *val = JS_ToCString(ctx, argv[1]);
+    if (!pid || !val) {
+        if (pid) {
+            JS_FreeCString(ctx, pid);
+        }
+        if (val) {
+            JS_FreeCString(ctx, val);
+        }
+        return JS_EXCEPTION;
+    }
+    esp_err_t err = minihub_point_set(pid, val, NULL);
+    JS_FreeCString(ctx, pid);
+    JS_FreeCString(ctx, val);
+    if (err != ESP_OK) {
+        return JS_ThrowInternalError(ctx, "point_set failed %s", esp_err_to_name(err));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_http_request(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1 || !JS_IsObject(argv[0])) {
+        return JS_ThrowTypeError(ctx, "request expects object");
+    }
+    const char *url = js_get_str_prop(ctx, argv[0], "url");
+    const char *method = js_get_str_prop(ctx, argv[0], "method");
+    if (!url) {
+        return JS_ThrowTypeError(ctx, "url required");
+    }
+
+    esp_http_client_config_t cfg = {
+        .url = url,
+        .timeout_ms = 15000,
+        .buffer_size = 1024,
+    };
+    JSValue to = JS_GetPropertyStr(ctx, argv[0], "timeout_ms");
+    if (JS_IsNumber(to)) {
+        int32_t t = 0;
+        JS_ToInt32(ctx, &t, to);
+        if (t > 0) {
+            cfg.timeout_ms = t;
+        }
+    }
+    JS_FreeValue(ctx, to);
+
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    if (!client) {
+        JS_FreeCString(ctx, url);
+        if (method) {
+            JS_FreeCString(ctx, method);
+        }
+        return JS_ThrowInternalError(ctx, "http init failed");
+    }
+
+    if (method && method[0]) {
+        if (strcasecmp(method, "POST") == 0) {
+            esp_http_client_set_method(client, HTTP_METHOD_POST);
+        } else if (strcasecmp(method, "PUT") == 0) {
+            esp_http_client_set_method(client, HTTP_METHOD_PUT);
+        } else {
+            esp_http_client_set_method(client, HTTP_METHOD_GET);
+        }
+    }
+
+    const char *body = js_get_str_prop(ctx, argv[0], "body");
+    if (body) {
+        esp_http_client_set_post_field(client, body, (int)strlen(body));
+    }
+
+    esp_err_t err = esp_http_client_open(client, body ? (int)strlen(body) : 0);
+    if (err != ESP_OK) {
+        esp_http_client_cleanup(client);
+        JS_FreeCString(ctx, url);
+        if (method) {
+            JS_FreeCString(ctx, method);
+        }
+        if (body) {
+            JS_FreeCString(ctx, body);
+        }
+        return JS_ThrowInternalError(ctx, "http open failed");
+    }
+    (void)esp_http_client_fetch_headers(client);
+    int status = esp_http_client_get_status_code(client);
+
+    char *resp = calloc(1, MINIHUB_JS_HTTP_BODY_MAX + 1);
+    size_t total = 0;
+    if (resp) {
+        while (total < MINIHUB_JS_HTTP_BODY_MAX) {
+            int n = esp_http_client_read(client, resp + total,
+                                         (int)(MINIHUB_JS_HTTP_BODY_MAX - total));
+            if (n <= 0) {
+                break;
+            }
+            total += (size_t)n;
+        }
+        resp[total] = '\0';
+    }
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+
+    JS_FreeCString(ctx, url);
+    if (method) {
+        JS_FreeCString(ctx, method);
+    }
+    if (body) {
+        JS_FreeCString(ctx, body);
+    }
+
+    JSValue out = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, out, "status", JS_NewInt32(ctx, status));
+    JS_SetPropertyStr(ctx, out, "body", JS_NewString(ctx, resp ? resp : ""));
+    free(resp);
+    return out;
+}
+
+static JSValue js_config_get(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+    cJSON *adapters = minihub_config_get_adapters();
+    if (!adapters) {
+        return JS_NULL;
+    }
+    char *printed = cJSON_PrintUnformatted(adapters);
+    if (!printed) {
+        return JS_NULL;
+    }
+    JSValue v = JS_ParseJSON(ctx, printed, strlen(printed), "<config>");
+    free(printed);
+    return v;
+}
+
+static JSValue make_host_object(JSContext *ctx)
+{
+    JSValue host = JS_NewObject(ctx);
+    JSValue log = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, log, "info", JS_NewCFunction(ctx, js_log_info, "info", 1));
+    JS_SetPropertyStr(ctx, log, "warn", JS_NewCFunction(ctx, js_log_warn, "warn", 1));
+    JS_SetPropertyStr(ctx, log, "error", JS_NewCFunction(ctx, js_log_error, "error", 1));
+    JS_SetPropertyStr(ctx, host, "log", log);
+
+    JSValue point = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, point, "register", JS_NewCFunction(ctx, js_point_register, "register", 1));
+    JS_SetPropertyStr(ctx, point, "get", JS_NewCFunction(ctx, js_point_get, "get", 1));
+    JS_SetPropertyStr(ctx, point, "set", JS_NewCFunction(ctx, js_point_set, "set", 2));
+    JS_SetPropertyStr(ctx, host, "point", point);
+
+    JSValue command = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, command, "invoke", JS_NewCFunction(ctx, js_command_invoke, "invoke", 1));
+    JS_SetPropertyStr(ctx, host, "command", command);
+
+    JSValue http = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, http, "request", JS_NewCFunction(ctx, js_http_request, "request", 1));
+    JS_SetPropertyStr(ctx, host, "http", http);
+
+    JSValue config = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, config, "get", JS_NewCFunction(ctx, js_config_get, "get", 0));
+    JS_SetPropertyStr(ctx, host, "config", config);
+    return host;
+}
+
+static esp_err_t ensure_runtime(void)
+{
+    if (s_rt && s_ctx) {
+        return ESP_OK;
+    }
+    s_rt = JS_NewRuntime();
+    if (!s_rt) {
+        return ESP_ERR_NO_MEM;
+    }
+    s_ctx = JS_NewContext(s_rt);
+    if (!s_ctx) {
+        JS_FreeRuntime(s_rt);
+        s_rt = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
+static void dump_exception(JSContext *ctx)
+{
+    JSValue exc = JS_GetException(ctx);
+    const char *s = JS_ToCString(ctx, exc);
+    ESP_LOGE(TAG, "JS exception: %s", s ? s : "?");
+    if (s) {
+        JS_FreeCString(ctx, s);
+    }
+    JS_FreeValue(ctx, exc);
+}
+
+static esp_err_t run_module_script(const char *id, const char *script_path)
+{
+    size_t len = 0;
+    char *src = read_file_alloc(script_path, MINIHUB_JS_SCRIPT_MAX, &len);
+    if (!src) {
+        ESP_LOGE(TAG, "cannot read %s", script_path);
+        return ESP_FAIL;
+    }
+
+    JSValue ev = JS_Eval(s_ctx, src, len, script_path, JS_EVAL_TYPE_GLOBAL);
+    free(src);
+    if (JS_IsException(ev)) {
+        dump_exception(s_ctx);
+        JS_FreeValue(s_ctx, ev);
+        return ESP_FAIL;
+    }
+    JS_FreeValue(s_ctx, ev);
+
+    JSValue global = JS_GetGlobalObject(s_ctx);
+    JSValue setup = JS_GetPropertyStr(s_ctx, global, "setup");
+    JS_FreeValue(s_ctx, global);
+    if (!JS_IsFunction(s_ctx, setup)) {
+        ESP_LOGW(TAG, "module %s: no setup(host) function", id);
+        JS_FreeValue(s_ctx, setup);
+        return ESP_OK;
+    }
+
+    JSValue host = make_host_object(s_ctx);
+    JSValue args[1] = { host };
+    JSValue ret = JS_Call(s_ctx, setup, JS_UNDEFINED, 1, args);
+    JS_FreeValue(s_ctx, setup);
+    JS_FreeValue(s_ctx, host);
+    if (JS_IsException(ret)) {
+        dump_exception(s_ctx);
+        JS_FreeValue(s_ctx, ret);
+        return ESP_FAIL;
+    }
+    JS_FreeValue(s_ctx, ret);
+    ESP_LOGI(TAG, "JS module '%s' setup ok", id);
+    return ESP_OK;
+}
+
+static bool manifest_is_js_enabled(const char *path, char *id_out, size_t id_len)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        return false;
+    }
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    if (n <= 0 || n > 65536) {
+        fclose(f);
+        return false;
+    }
+    rewind(f);
+    char *buf = malloc((size_t)n + 1);
+    if (!buf) {
+        fclose(f);
+        return false;
+    }
+    size_t got = fread(buf, 1, (size_t)n, f);
+    fclose(f);
+    buf[got] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (!root) {
+        return false;
+    }
+    const cJSON *rt = cJSON_GetObjectItem(root, "runtime");
+    const cJSON *en = cJSON_GetObjectItem(root, "enabled");
+    const cJSON *id = cJSON_GetObjectItem(root, "id");
+    bool ok = false;
+    if (cJSON_IsString(rt)) {
+        if (strcmp(rt->valuestring, "js") == 0 || strcmp(rt->valuestring, "hybrid") == 0) {
+            ok = true;
+        }
+    }
+    if (ok && cJSON_IsBool(en) && !cJSON_IsTrue(en)) {
+        ok = false;
+    }
+    if (ok && cJSON_IsString(id) && id_out && id_len) {
+        strncpy(id_out, id->valuestring, id_len - 1);
+        id_out[id_len - 1] = '\0';
+    }
+    cJSON_Delete(root);
+    return ok;
+}
+
+void minihub_js_unload_all(void)
+{
+    if (s_ctx) {
+        JS_FreeContext(s_ctx);
+        s_ctx = NULL;
+    }
+    if (s_rt) {
+        JS_FreeRuntime(s_rt);
+        s_rt = NULL;
+    }
+}
+
+esp_err_t minihub_js_reload(void)
+{
+    minihub_js_unload_all();
+    esp_err_t err = ensure_runtime();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    DIR *d = opendir(MINIHUB_MODULES_DIR);
+    if (!d) {
+        ESP_LOGI(TAG, "no modules dir yet (%s)", MINIHUB_MODULES_DIR);
+        return ESP_OK;
+    }
+
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL) {
+        if (ent->d_name[0] == '.') {
+            continue;
+        }
+        /* Bound name length so snprintf cannot truncate under -Werror=format-truncation */
+        char name[MINIHUB_MODULE_ID_MAX];
+        if (strlen(ent->d_name) >= sizeof(name)) {
+            ESP_LOGW(TAG, "skip overlong module dir name");
+            continue;
+        }
+        memcpy(name, ent->d_name, strlen(ent->d_name) + 1);
+
+        char manifest[MINIHUB_PATH_MAX];
+        if (snprintf(manifest, sizeof(manifest), "%s/%s/module.json",
+                     MINIHUB_MODULES_DIR, name) >= (int)sizeof(manifest)) {
+            continue;
+        }
+        char id[MINIHUB_MODULE_ID_MAX] = {0};
+        if (!manifest_is_js_enabled(manifest, id, sizeof(id))) {
+            continue;
+        }
+        char script[MINIHUB_PATH_MAX];
+        if (snprintf(script, sizeof(script), "%s/%s/main.js",
+                     MINIHUB_MODULES_DIR, name) >= (int)sizeof(script)) {
+            continue;
+        }
+        struct stat st;
+        if (stat(script, &st) != 0) {
+            ESP_LOGW(TAG, "JS module %s missing main.js", id[0] ? id : name);
+            continue;
+        }
+        err = run_module_script(id[0] ? id : name, script);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "JS module %s failed: %s", id[0] ? id : name, esp_err_to_name(err));
+        }
+    }
+    closedir(d);
+    return ESP_OK;
+}
+
+#else /* !CONFIG_MINIHUB_JS_PLUGINS */
+
+esp_err_t minihub_js_reload(void)
+{
+    ESP_LOGD(TAG, "JS plugins disabled");
+    return ESP_OK;
+}
+
+void minihub_js_unload_all(void)
+{
+}
+
+#endif

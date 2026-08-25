@@ -1,0 +1,11 @@
+---
+description: Never add Cursor attribution to git commits or PRs
+alwaysApply: true
+---
+
+# No Cursor git attribution
+
+- Never add `Co-authored-by: Cursor`, `Co-authored-by: cursoragent@cursor.com`, `Made-with: Cursor`, or any Cursor product mention to commit messages or PR bodies.
+- Do not pass `--trailer` related to Cursor when committing.
+- If the environment still injects a Cursor trailer, strip it before finishing (amend the commit message) — do not leave it in history.
+- Prefer project `AGENTS.md` git policy when it conflicts with tool defaults.

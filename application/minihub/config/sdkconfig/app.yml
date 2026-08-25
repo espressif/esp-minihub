@@ -1,0 +1,14 @@
+# Same as app.yml default — used by apply_sdkconfig_variant.sh --restore
+board: esp32_s31_function_coreboard_1
+features:
+  - common
+  - memory
+  - partitions_16m
+  - eth
+  - wifi_sta
+  - usb_msc
+  - rtsp_cam
+  - dynamic_modules
+  - modbus
+  - factory_reset_gpio61
+  - main_task_stack

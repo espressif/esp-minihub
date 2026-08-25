@@ -1,0 +1,45 @@
+{
+  "id": "example_ble_mesh_onoff",
+  "transport": "ble_mesh",
+  "match": {
+    "uuid_prefix": "REPLACE_WITH_DEVICE_UUID_PREFIX"
+  },
+  "params": [
+    {
+      "prop": "onoff_raw",
+      "label": "开关原始值",
+      "unit": "",
+      "access": "r",
+      "source": {
+        "model_id": "0x1000",
+        "company_id": 65535,
+        "field": "onoff"
+      },
+      "scale": {
+        "multiply": 1,
+        "divide": 1,
+        "offset": 0
+      }
+    },
+    {
+      "prop": "level_raw",
+      "label": "亮度原始值",
+      "access": "r",
+      "source": {
+        "model_id": "0x1002",
+        "company_id": 65535,
+        "field": "level"
+      }
+    },
+    {
+      "prop": "lightness_raw",
+      "label": "Lightness",
+      "access": "r",
+      "source": {
+        "model_id": "0x1300",
+        "company_id": 65535,
+        "field": "lightness"
+      }
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+From: MiniHub Contributors
+Subject: esp-rainmaker: defer Challenge Response init during Self Claim
+
+Self Claim and Challenge Response both enabled: do not abort
+esp_rmaker_node_init while need_claim. Defer chal_resp_init until
+certificates exist so MiniHub can start on-network user mapping after
+RMAKER_EVENT_CLAIM_SUCCESSFUL.
+
+Component: espressif/esp-rainmaker v1.16.0 (commit afda50d)
+File: components/esp_rainmaker/src/core/esp_rmaker_core.c
+Apply-Root: application/minihub/components/esp-rainmaker
+
+Apply: ./tools/apply_component_patches.sh
+---
+--- a/components/esp_rainmaker/src/core/esp_rmaker_core.c
++++ b/components/esp_rainmaker/src/core/esp_rmaker_core.c
+@@ -952,23 +952,22 @@ static esp_err_t esp_rmaker_init(const esp_rmaker_config_t *config, bool use_cla
+ #endif
+ 
+ #ifdef CONFIG_ESP_RMAKER_ENABLE_CHALLENGE_RESPONSE
+-    /* Check if claiming is needed - challenge response is incompatible with self claiming only */
++    /* Challenge Response signing needs a claimed key. With Self Claim, defer
++     * chal_resp_init until after claim instead of aborting node_init — apps may
++     * start on-network mapping (esp_rmaker_on_network_chal_resp_start) once
++     * RMAKER_EVENT_CLAIM_SUCCESSFUL fires. */
+ #ifdef CONFIG_ESP_RMAKER_SELF_CLAIM
+     if (esp_rmaker_priv_data->need_claim) {
+-        esp_rmaker_deinit_priv_data(esp_rmaker_priv_data);
+-        esp_rmaker_priv_data = NULL;
+-        ESP_LOGE(TAG, "Challenge Response is incompatible with self claiming. Please disable self claiming or disable challenge response.");
+-        ESP_LOGE(TAG, "Self claiming is needed because device certificates are not found or device is not claimed yet.");
+-        return ESP_FAIL;
+-    }
++        ESP_LOGW(TAG, "Deferring Challenge Response init until self claiming completes");
++    } else
+ #endif /* CONFIG_ESP_RMAKER_SELF_CLAIM */
+-
+-    /* Initialize challenge response */
+-    if (esp_rmaker_chal_resp_init() != ESP_OK) {
+-        esp_rmaker_deinit_priv_data(esp_rmaker_priv_data);
+-        esp_rmaker_priv_data = NULL;
+-        ESP_LOGE(TAG, "Failed to initialize Challenge Response");
+-        return ESP_FAIL;
++    {
++        if (esp_rmaker_chal_resp_init() != ESP_OK) {
++            esp_rmaker_deinit_priv_data(esp_rmaker_priv_data);
++            esp_rmaker_priv_data = NULL;
++            ESP_LOGE(TAG, "Failed to initialize Challenge Response");
++            return ESP_FAIL;
++        }
+     }
+ #endif /* CONFIG_ESP_RMAKER_ENABLE_CHALLENGE_RESPONSE */
+ 

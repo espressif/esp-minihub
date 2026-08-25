@@ -1,0 +1,16 @@
+menu "MiniHub USB MSC"
+
+    config MINIHUB_USB_MSC
+        bool "Enable USB Host MSC (U-disk mount)"
+        default y if IDF_TARGET_ESP32S31
+        default n
+        help
+            Mount a FAT-formatted USB flash drive at /usb0 for RTSP recording
+            and other storage. Requires USB-OTG host wiring on the board.
+
+    config MINIHUB_USB_MSC_MOUNT_PATH
+        string "Primary MSC mount path"
+        depends on MINIHUB_USB_MSC
+        default "/usb0"
+
+endmenu

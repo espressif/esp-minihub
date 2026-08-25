@@ -1,0 +1,69 @@
+From: MiniHub Contributors
+Subject: esp-boost: skip mutex for non-virtual pipe fds in __wrap_* syscalls
+
+Fix Interrupt WDT panic when Zigbee radio ISR calls write() while
+esp-boost __wrap_write() always locks std::mutex in get_virtual_pipe().
+Virtual pipes use fd >= VIRTUAL_PIPE_FD_MIN (10000); pass through early.
+
+Component: espressif/esp-boost 0.6.0 (commit e5a6e838)
+File: managed_components/espressif__esp-boost/src/boost/config/src/esp32.cpp
+
+Apply: ./tools/apply_component_patches.sh
+---
+--- a/managed_components/espressif__esp-boost/src/boost/config/src/esp32.cpp
++++ b/managed_components/espressif__esp-boost/src/boost/config/src/esp32.cpp
+@@ -99,6 +99,10 @@
+     return next_fd.fetch_add(1);
+ }
+ 
++static bool is_virtual_pipe_fd(int fd) {
++    return fd >= VIRTUAL_PIPE_FD_MIN;
++}
++
+ // Check if a file descriptor is a virtual pipe
+ static VirtualPipe* get_virtual_pipe(int fd) {
+     std::lock_guard<std::mutex> lock(get_virtual_pipe_mutex());
+@@ -216,6 +220,9 @@
+ extern "C" ssize_t __real_read(int fd, void* buf, size_t count);
+ 
+ extern "C" ssize_t __wrap_read(int fd, void* buf, size_t count) {
++    if (!is_virtual_pipe_fd(fd)) {
++        return __real_read(fd, buf, count);
++    }
+     VirtualPipe* vpipe = get_virtual_pipe(fd);
+     if (!vpipe) {
+         // Not a virtual pipe, use system read
+@@ -262,6 +269,9 @@
+ extern "C" ssize_t __real_write(int fd, const void* buf, size_t count);
+ 
+ extern "C" ssize_t __wrap_write(int fd, const void* buf, size_t count) {
++    if (!is_virtual_pipe_fd(fd)) {
++        return __real_write(fd, buf, count);
++    }
+     VirtualPipe* vpipe = get_virtual_pipe(fd);
+     if (!vpipe) {
+         // Not a virtual pipe, use system write
+@@ -308,6 +318,9 @@
+ extern "C" int __real_close(int fd);
+ 
+ extern "C" int __wrap_close(int fd) {
++    if (!is_virtual_pipe_fd(fd)) {
++        return __real_close(fd);
++    }
+     VirtualPipe* vpipe = get_virtual_pipe(fd);
+     if (!vpipe) {
+         // Not a virtual pipe, use system close
+@@ -335,6 +348,13 @@
+ extern "C" int __real_fcntl(int fd, int cmd, ...);
+ 
+ extern "C" int __wrap_fcntl(int fd, int cmd, ...) {
++    if (!is_virtual_pipe_fd(fd)) {
++        va_list args;
++        va_start(args, cmd);
++        int arg = va_arg(args, int);
++        va_end(args);
++        return __real_fcntl(fd, cmd, arg);
++    }
+     VirtualPipe* vpipe = get_virtual_pipe(fd);
+     if (!vpipe) {
+         // Not a virtual pipe, use system fcntl

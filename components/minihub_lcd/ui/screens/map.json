@@ -1,0 +1,323 @@
+{
+  "type": "viewScreen",
+  "id": "map",
+  "mount_mode": "dynamic",
+  "style": {
+    "bgColor": "#0b0f1a",
+    "padding": "0dp"
+  },
+  "children": [
+    {
+      "type": "container",
+      "id": "sidebar",
+      "layout": {
+        "type": "flex",
+        "flexFlow": "column",
+        "mainAlign": "start",
+        "crossAlign": "stretch",
+        "gap": "6dp"
+      },
+      "placement": {
+        "mode": "absolute",
+        "x": "0dp",
+        "y": "0dp",
+        "width": "112dp",
+        "height": "480dp"
+      },
+      "style": {
+        "bgColor": "#0e1320",
+        "borderWidth": "1dp",
+        "borderColor": "#243049",
+        "padding": "4dp"
+      },
+      "children": [
+        {
+          "type": "label",
+          "id": "brand",
+          "labelProps": {
+            "text": "MiniHub"
+          },
+          "style": {
+            "textColor": "#818cf8",
+            "fontSize": "16sp"
+          }
+        },
+        {
+          "type": "button",
+          "id": "nav_overview",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_overview"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_overview_lbl",
+              "labelProps": {
+                "text": "概览"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_map",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_map"
+            }
+          ],
+          "style": {
+            "bgColor": "#6366f1",
+            "borderWidth": "1dp",
+            "borderColor": "#6366f1"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_map_lbl",
+              "labelProps": {
+                "text": "地图"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#eef2ff"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_store",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_store"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_store_lbl",
+              "labelProps": {
+                "text": "商店"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "container",
+          "id": "sidebar_spacer",
+          "placement": {
+            "mode": "flow",
+            "width": "wrap",
+            "height": "wrap",
+            "flexGrow": 1
+          }
+        },
+        {
+          "type": "button",
+          "id": "user_btn",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "user_tap"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "user_name",
+              "labelProps": {
+                "text": "用户"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4",
+                "fontSize": "12sp"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "container",
+      "id": "map_main",
+      "layout": {
+        "type": "flex",
+        "flexFlow": "column",
+        "mainAlign": "start",
+        "crossAlign": "stretch",
+        "gap": "10dp"
+      },
+      "placement": {
+        "mode": "absolute",
+        "x": "112dp",
+        "y": "0dp",
+        "width": "688dp",
+        "height": "480dp"
+      },
+      "style": {
+        "bgColor": "#0b0f1a",
+        "padding": "12dp"
+      },
+      "children": [
+        {
+          "type": "label",
+          "id": "map_title",
+          "labelProps": {
+            "text": "地图"
+          },
+          "style": {
+            "textColor": "#eef2ff",
+            "fontSize": "18sp"
+          }
+        },
+        {
+          "type": "label",
+          "id": "map_hub",
+          "labelProps": {
+            "text": "Hub: locating..."
+          },
+          "style": {
+            "textColor": "#8b9bb4",
+            "fontSize": "13sp"
+          }
+        },
+        {
+          "type": "label",
+          "id": "map_info",
+          "labelProps": {
+            "text": "Hub map (OpenStreetMap)"
+          },
+          "style": {
+            "textColor": "#5c6b85",
+            "fontSize": "12sp"
+          }
+        },
+        {
+          "type": "container",
+          "id": "map_canvas_wrap",
+          "placement": {
+            "width": "664dp",
+            "height": "316dp"
+          },
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049",
+            "radius": "10dp"
+          },
+          "children": [
+            {
+              "type": "image",
+              "id": "map_image",
+              "imageProps": {
+                "src": "",
+                "innerAlign": "stretch"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center",
+                "width": "664dp",
+                "height": "316dp"
+              },
+              "style": {
+                "bgColor": "#1a2238"
+              }
+            },
+            {
+              "type": "label",
+              "id": "map_status",
+              "labelProps": {
+                "text": "Updating map..."
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4",
+                "fontSize": "14sp"
+              },
+              "commonProps": {
+                "hidden": false
+              }
+            },
+            {
+              "type": "container",
+              "id": "map_hub_marker",
+              "placement": {
+                "mode": "relative",
+                "align": "center",
+                "width": "14dp",
+                "height": "14dp"
+              },
+              "style": {
+                "bgColor": "#2196f3",
+                "borderWidth": "2dp",
+                "borderColor": "#ffffff",
+                "radius": "7dp"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

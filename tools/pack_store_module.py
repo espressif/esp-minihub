@@ -1,0 +1,353 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 MiniHub Contributors
+# SPDX-License-Identifier: Apache-2.0
+"""Pack store_modules/<id>/ into deploy/<id>/<id>.mhub, or wrap native .so (MHMD).
+
+Two orthogonal steps (do not conflate):
+
+  pack  — outer Store package → ``<id>.mhub`` (container format, default zip)
+  mhmd  — inner native image  → MHMD header + ELF (not a compression format)
+
+L1 (config_only): module.json only
+L2 (runtime js):  module.json + main.js (+ ui/web)
+L3 (native):      module.json + <id>.so (MHMD+ELF from build/<id>.so) (+ ui/web)
+Hybrid:           module.json + <id>.so + main.js (+ ui/web)
+
+Source module.json stays declarative (no binary_size / adapter_version sizes).
+Packaged module.json may include binary_size / adapter_version for on-device checks.
+Deploy dir must not contain bare <id>.so — only <id>.mhub.
+
+Container format: ``--format`` / ``MHUB_PACK_FORMAT`` (default ``zip``).
+Host ``hub_zip.c`` currently unpacks zip only; other formats need firmware support first.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import struct
+import sys
+import zipfile
+from pathlib import Path
+
+# Outer .mhub container (not MHMD). Extend when Host gains another unpacker.
+PACK_FORMATS = ("zip",)
+DEFAULT_PACK_FORMAT = "zip"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from store_paths import (  # noqa: E402
+    STORE_MODULES,
+    module_deploy_dir,
+    module_mhmd_path,
+    module_source_dir,
+    resolve_deploy_dir,
+)
+
+# Build-derived keys — never required in source-tree module.json
+ARTIFACT_KEYS = ("hub_size", "binary_size", "adapter_version")
+
+# MHMD header (native .so payload for dynamic loader)
+MHMD_MAGIC = 0x4D484D44
+MHMD_ABI_VERSION = 1
+MHMD_CORE_API_VERSION = 1
+
+
+def wrap_mhmd(so_path: Path, out_path: Path) -> int:
+    """Wrap a linked .so with MiniHub MHMD header → build/<id>.so intermediate."""
+    payload = so_path.read_bytes()
+    header = struct.pack(
+        "<IIIIII12s",
+        MHMD_MAGIC,
+        MHMD_ABI_VERSION,
+        len(payload),
+        0,
+        MHMD_CORE_API_VERSION,
+        MHMD_CORE_API_VERSION,
+        b"\0" * 12,
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(header + payload)
+    print(f"Wrote {out_path} ({len(header) + len(payload)} bytes)")
+    return len(header) + len(payload)
+
+
+def is_hybrid_module(manifest: dict) -> bool:
+    return manifest.get("runtime") == "hybrid"
+
+
+def is_config_only(manifest: dict) -> bool:
+    if manifest.get("config_only") is True:
+        return True
+    if manifest.get("runtime") == "pack":
+        return True
+    if manifest.get("binary") or manifest.get("runtime") in ("js", "native", "hybrid"):
+        return False
+    if manifest.get("inject") or manifest.get("requires"):
+        return True
+    return False
+
+
+def is_js_module(manifest: dict, module_dir: Path) -> bool:
+    if is_hybrid_module(manifest):
+        return False
+    if manifest.get("runtime") == "js":
+        return True
+    if manifest.get("runtime") == "native":
+        return False
+    if (module_dir / "CMakeLists.txt").is_file():
+        return False
+    return (module_dir / "main.js").is_file()
+
+
+def read_adapter_version(module_dir: Path, module_id: str) -> str:
+    import re
+
+    candidates = [
+        module_dir / f"{module_id}_adapter.c",
+        *sorted(module_dir.glob("*_adapter.c")),
+    ]
+    for path in candidates:
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        match = re.search(r"\.version\s*=\s*\"([^\"]+)\"", text)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def source_manifest(manifest: dict) -> dict:
+    """Copy for source hygiene — drop deploy-only size fields if present."""
+    out = {k: v for k, v in manifest.items() if k not in ARTIFACT_KEYS}
+    return out
+
+
+def resolve_native_so(module_id: str, *, root: Path, deploy_mod: Path) -> Path:
+    """Prefer build/<id>.so; else recover MHMD from an existing deploy .mhub."""
+    so = module_mhmd_path(module_id, root=root)
+    if so.is_file():
+        return so
+    mhub = deploy_mod / f"{module_id}.mhub"
+    if mhub.is_file():
+        with zipfile.ZipFile(mhub) as zf:
+            name = f"{module_id}.so"
+            if name in zf.namelist():
+                so.parent.mkdir(parents=True, exist_ok=True)
+                so.write_bytes(zf.read(name))
+                return so
+    raise FileNotFoundError(
+        f"missing {so} — build/pack MHMD .so first (tools/build_store_modules.py)"
+    )
+
+
+def packaged_manifest(
+    manifest: dict,
+    *,
+    module_dir: Path,
+    module_id: str,
+    so: Path | None,
+) -> dict:
+    """Manifest written into .mhub zip (may include binary_size for device checks)."""
+    out = source_manifest(manifest)
+    need_binary = (
+        so
+        and so.is_file()
+        and not is_config_only(out)
+        and (is_hybrid_module(out) or not is_js_module(out, module_dir))
+    )
+    if need_binary:
+        out["binary"] = f"{module_id}.so"
+        out["binary_size"] = so.stat().st_size
+        av = read_adapter_version(module_dir, module_id)
+        if av:
+            out["adapter_version"] = av
+    return out
+
+
+def pack_store_module(
+    module_id: str,
+    *,
+    root: Path | None = None,
+    deploy: Path | None = None,
+    compress: bool = True,
+) -> Path:
+    from store_paths import ROOT
+
+    root = root or ROOT
+    deploy = resolve_deploy_dir(deploy)
+    module_dir = module_source_dir(module_id, root=root)
+    deploy_mod = module_deploy_dir(module_id, deploy)
+    manifest_path = module_dir / "module.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"missing {manifest_path}")
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    mid = manifest.get("id") or module_id
+    if mid != module_id:
+        raise ValueError(f"module.json id={mid!r} != directory {module_id!r}")
+
+    deploy_mod.mkdir(parents=True, exist_ok=True)
+    pkg_path = deploy_mod / f"{module_id}.mhub"
+    compression = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
+    names: list[str] = []
+
+    so: Path | None = None
+    hybrid = is_hybrid_module(manifest)
+    if not is_config_only(manifest) and (hybrid or not is_js_module(manifest, module_dir)):
+        so = resolve_native_so(module_id, root=root, deploy_mod=deploy_mod)
+
+    pkg_manifest = packaged_manifest(
+        manifest, module_dir=module_dir, module_id=module_id, so=so
+    )
+
+    with zipfile.ZipFile(pkg_path, "w", compression=compression) as zf:
+        zf.writestr(
+            "module.json",
+            json.dumps(pkg_manifest, indent=2, ensure_ascii=False) + "\n",
+        )
+        names.append("module.json")
+
+        if is_config_only(manifest):
+            pass
+        elif is_js_module(manifest, module_dir):
+            main_js = module_dir / "main.js"
+            if not main_js.is_file():
+                raise FileNotFoundError(f"L2 module missing {main_js}")
+            zf.write(main_js, "main.js")
+            names.append("main.js")
+        elif hybrid:
+            assert so is not None
+            zf.write(so, f"{module_id}.so")
+            names.append(f"{module_id}.so")
+            main_js = module_dir / "main.js"
+            if not main_js.is_file():
+                raise FileNotFoundError(f"hybrid module missing {main_js}")
+            zf.write(main_js, "main.js")
+            names.append("main.js")
+        else:
+            assert so is not None
+            zf.write(so, f"{module_id}.so")
+            names.append(f"{module_id}.so")
+
+        if not is_config_only(manifest):
+            ui = module_dir / "ui.json"
+            if ui.is_file():
+                zf.write(ui, "ui.json")
+                names.append("ui.json")
+            web = module_dir / "web"
+            if web.is_dir():
+                for path in sorted(web.rglob("*")):
+                    if path.is_file():
+                        arc = path.relative_to(module_dir).as_posix()
+                        zf.write(path, arc)
+                        names.append(arc)
+
+    # Hard cutover: remove legacy .hub and any deploy-side MHMD .so
+    legacy_hub = deploy_mod / f"{module_id}.hub"
+    if legacy_hub.is_file():
+        legacy_hub.unlink()
+    stray_so = deploy_mod / f"{module_id}.so"
+    if stray_so.is_file():
+        stray_so.unlink()
+
+    print(
+        f"Packed {module_id}: {pkg_path} ({pkg_path.stat().st_size} bytes) [{', '.join(names)}]"
+    )
+    return pkg_path
+
+
+def iter_packable_ids() -> list[str]:
+    ids: list[str] = []
+    if not STORE_MODULES.is_dir():
+        return ids
+    for d in sorted(STORE_MODULES.iterdir()):
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        if (d / "module.json").is_file():
+            ids.append(d.name)
+    return ids
+
+
+def _default_pack_format() -> str:
+    return os.environ.get("MHUB_PACK_FORMAT", DEFAULT_PACK_FORMAT).strip().lower() or DEFAULT_PACK_FORMAT
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Pack Store .mhub packages, or wrap native .so with MHMD."
+    )
+    sub = parser.add_subparsers(dest="cmd")
+
+    p_pack = sub.add_parser(
+        "pack",
+        help="Pack store_modules/<id>/ → deploy/<id>/<id>.mhub",
+    )
+    p_pack.add_argument("module_id", nargs="+", help="module id(s), or 'all'")
+    p_pack.add_argument(
+        "--format",
+        choices=PACK_FORMATS,
+        default=None,
+        help="outer .mhub container format (default: zip / MHUB_PACK_FORMAT)",
+    )
+    p_pack.add_argument(
+        "--store",
+        action="store_true",
+        help="for --format zip: ZIP_STORED (no deflate)",
+    )
+    p_pack.add_argument("--deploy", type=Path, default=None, help="deploy root")
+
+    p_mhmd = sub.add_parser(
+        "mhmd",
+        help="Wrap linked .so with MHMD header (native image, not package format)",
+    )
+    p_mhmd.add_argument("so_path", type=Path)
+    p_mhmd.add_argument("out_path", type=Path)
+
+    # Compat: bare `<id>…` → pack; legacy `zip` subcommand → pack
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "zip":
+        argv = ["pack", *argv[1:]]
+    if argv and argv[0] not in ("pack", "mhmd", "-h", "--help"):
+        argv = ["pack", *argv]
+
+    args = parser.parse_args(argv)
+    if args.cmd == "mhmd":
+        wrap_mhmd(args.so_path, args.out_path)
+        return 0
+    if args.cmd != "pack":
+        parser.print_help()
+        return 2
+
+    fmt = (args.format or _default_pack_format()).lower()
+    if fmt not in PACK_FORMATS:
+        print(
+            f"unsupported MHUB_PACK_FORMAT/format={fmt!r}; "
+            f"supported: {', '.join(PACK_FORMATS)}",
+            file=sys.stderr,
+        )
+        return 2
+    if fmt != "zip":
+        # Reserved for future containers; Host currently unpacks zip only.
+        print(f"pack format {fmt!r} not implemented yet", file=sys.stderr)
+        return 2
+
+    deploy = resolve_deploy_dir(args.deploy)
+    ids = args.module_id
+    if ids == ["all"]:
+        ids = iter_packable_ids()
+        if not ids:
+            print("No modules with module.json found", file=sys.stderr)
+            return 1
+
+    for mid in ids:
+        try:
+            pack_store_module(mid, deploy=deploy, compress=not args.store)
+        except (OSError, ValueError, FileNotFoundError) as exc:
+            print(f"pack_store_module {mid}: {exc}", file=sys.stderr)
+            return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,27 @@
+{
+  "type": "screenFlow",
+  "id": "main",
+  "screens": [
+    "overview",
+    "map",
+    "store"
+  ],
+  "initial": "overview",
+  "transitions": [
+    {
+      "from": [],
+      "action": "nav_overview",
+      "to": "overview"
+    },
+    {
+      "from": [],
+      "action": "nav_map",
+      "to": "map"
+    },
+    {
+      "from": [],
+      "action": "nav_store",
+      "to": "store"
+    }
+  ]
+}
