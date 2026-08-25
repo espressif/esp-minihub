@@ -12,7 +12,7 @@
 | `store_server.py` | Local Store HTTP |
 | `gen_host_export_symbols.py` | Host ELF export allowlist |
 | `apply_component_patches.sh` | Re-apply `patches/` |
-| `ci/` | GitLab helpers |
+| `ci/` | GitLab helpers (`install_git_hooks.sh` → local pre-commit + pre-push) |
 | `ui_font/` | LCD font subset |
 | `git-hooks/` | Local hooks |
 

@@ -3,8 +3,24 @@
 #
 # IDF: ESP32-S31 / MiniHub expects IDF ~6.2 (see docs/build.md).
 # Override IDF_CI_IMAGE in GitLab CI/CD variables for an internal 6.2 / S31 image.
+#
+# Pre-commit: .gitlab/ci/pre_check.yml (esp-at style).
+
+workflow:
+  rules:
+    # Prefer explicit push pipelines so branch push always runs pre_check.
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
+      variables:
+        IS_MR_PIPELINE: "0"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      variables:
+        IS_MR_PIPELINE: "1"
+    - if: $CI_COMMIT_BRANCH
+      variables:
+        IS_MR_PIPELINE: "0"
 
 stages:
+  - pre_check
   - build
   - pack
 
@@ -24,6 +40,9 @@ variables:
   GIT_DEPTH: "50"
   # Path-scoped init in tools/ci/build_apps.sh (avoid pulling all submodules)
   GIT_SUBMODULE_STRATEGY: "none"
+
+include:
+  - local: .gitlab/ci/pre_check.yml
 
 .idf_env:
   image:

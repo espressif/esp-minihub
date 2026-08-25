@@ -1,0 +1,51 @@
+# Pre-commit CI (pattern from espressif/esp-at .gitlab/ci/pre_check.yml)
+# https://github.com/espressif/esp-at/blob/master/.gitlab/ci/pre_check.yml
+#
+# Runs on branch push and merge requests (see workflow IS_MR_PIPELINE).
+
+.pre_check_template:
+  stage: pre_check
+  image: python:3.12
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+check_pre_commit:
+  extends:
+    - .pre_check_template
+  before_script:
+    - pip install --quiet pre-commit
+    - git config --global --add safe.directory "$CI_PROJECT_DIR" || true
+  script:
+    # Push / non-MR: full tree. MR: changed files only (fallback --all-files).
+    - |
+      set -euo pipefail
+      echo "CI_PIPELINE_SOURCE=${CI_PIPELINE_SOURCE:-}"
+      echo "IS_MR_PIPELINE=${IS_MR_PIPELINE:-0}"
+      if [ "${IS_MR_PIPELINE:-0}" = "0" ] || [ "${CI_PIPELINE_SOURCE:-}" = "push" ]; then
+        MODIFIED_FILES=""
+      elif [ -z "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]; then
+        echo "CI_MERGE_REQUEST_DIFF_BASE_SHA unset; falling back to --all-files"
+        MODIFIED_FILES=""
+      else
+        MODIFIED_FILES=$(git diff --name-only "$CI_MERGE_REQUEST_DIFF_BASE_SHA" "$CI_COMMIT_SHA" || true)
+      fi
+      echo "MODIFIED_FILES:"
+      if [ -n "$MODIFIED_FILES" ]; then
+        printf '%s\n' "$MODIFIED_FILES"
+      else
+        echo "(empty → --all-files)"
+      fi
+      export MODIFIED_FILES
+    - pre-commit install --allow-missing-config -t pre-commit -t pre-push -t commit-msg
+    - |
+      set -euo pipefail
+      if [ -n "${MODIFIED_FILES:-}" ]; then
+        # Word-splitting intentional for --files
+        # shellcheck disable=SC2086
+        pre-commit run --show-diff-on-failure --files $MODIFIED_FILES
+      else
+        pre-commit run --show-diff-on-failure --all-files
+      fi

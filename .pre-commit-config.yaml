@@ -1,0 +1,50 @@
+# See https://pre-commit.com and esp-at .gitlab/ci/pre_check.yml
+#
+# Keep hooks lightweight for Host + Store plugin trees. Heavy formatters
+# (astyle / full copyright) can be added later if needed.
+#
+# Local: pre-commit install -t pre-commit -t pre-push -t commit-msg
+# so both `git commit` and `git push` run these hooks.
+
+default_stages: [pre-commit, pre-push]
+
+exclude: |
+  (?x)^(
+    application/.+/build/.*|
+    application/.+/managed_components/.*|
+    application/.+/components/esp-rainmaker/.*|
+    ci_artifacts/.*|
+    .*\.bin$|
+    .*\.elf$|
+    .*\.map$|
+    .*\.so$|
+    .*\.mhub$|
+    .*\.otf$|
+    .*\.png$|
+    .*\.jpg$
+  )$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: |
+          (?x)^(
+            .+\.(md|rst|patch|map)|
+            .+\.pb-c\.(c|h)$
+          )$
+      - id: end-of-file-fixer
+        exclude: |
+          (?x)^(
+            .+\.(md|rst|patch|map|bin)|
+            .+\.pb-c\.(c|h)$
+          )$
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ["-f=lf"]
+      - id: detect-private-key
