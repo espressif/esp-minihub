@@ -1,0 +1,28 @@
+From: MiniHub Contributors
+Subject: esp-matter: null-check peer before CHIPoBLE GATT write
+
+After GAP disconnect, peer_delete() removes the peer, but CHIPoBLE may still
+call SendWriteRequest (e.g. StandAloneAck). SubscribeCharacteristic already
+null-checks peer; SendWriteRequest did not and crashed in peer_svc_find_uuid.
+
+Tree: ../esp-matter (connectedhomeip)
+File: connectedhomeip/connectedhomeip/src/platform/ESP32/nimble/BLEManagerImpl.cpp
+Apply-Root: ../esp-matter
+
+Apply: ./tools/apply_component_patches.sh
+---
+--- a/connectedhomeip/connectedhomeip/src/platform/ESP32/nimble/BLEManagerImpl.cpp
++++ b/connectedhomeip/connectedhomeip/src/platform/ESP32/nimble/BLEManagerImpl.cpp
+@@ -633,6 +633,12 @@ CHIP_ERROR BLEManagerImpl::SendWriteRequest(BLE_CONNECTION_OBJECT conId, const C
+     const struct peer_chr * chr;
+     int rc;
+     const struct peer * peer = peer_find(conId);
++    // After GAP disconnect peer_delete() runs, but CHIPoBLE may still try StandAloneAck.
++    if (peer == nullptr)
++    {
++        ChipLogError(Ble, "Peer not found for CHIPoBLE write (conn may be closed)");
++        return BLE_ERROR_GATT_WRITE_FAILED;
++    }
+ 
+     chr = peer_chr_find_uuid(peer, (ble_uuid_t *) (&ShortUUID_CHIPoBLEService), (ble_uuid_t *) (&UUID128_CHIPoBLEChar_RX));
+     if (chr == nullptr)

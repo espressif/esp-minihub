@@ -1,0 +1,11 @@
+{
+  "version": "0.1.0",
+  "assets": [
+    "constants/theme.json",
+    "assets/device_icons.json",
+    "screens/overview.json",
+    "screens/map.json",
+    "screens/store.json",
+    "flows/main.json"
+  ]
+}

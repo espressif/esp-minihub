@@ -1,0 +1,2 @@
+# Larger app_main stack for adapter_start_all + module RPC
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=10240

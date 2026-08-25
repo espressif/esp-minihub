@@ -1,0 +1,10 @@
+{
+  "type": "imageSet",
+  "images": [
+    { "id": "icon_switch", "src": "../images/icon_switch.png", "width": 32, "height": 32 },
+    { "id": "icon_light", "src": "../images/icon_light.png", "width": 32, "height": 32 },
+    { "id": "icon_sensor", "src": "../images/icon_sensor.png", "width": 32, "height": 32 },
+    { "id": "icon_button", "src": "../images/icon_button.png", "width": 32, "height": 32 },
+    { "id": "icon_device", "src": "../images/icon_device.png", "width": 32, "height": 32 }
+  ]
+}

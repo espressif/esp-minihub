@@ -1,0 +1,99 @@
+# Build every application/ firmware (+ merged flash bin).
+# Pack Store .mhub once in pack:mhub when libadapter_*.so exist (skip OK if none).
+#
+# IDF: ESP32-S31 / MiniHub expects IDF ~6.2 (see docs/build.md).
+# Override IDF_CI_IMAGE in GitLab CI/CD variables for an internal 6.2 / S31 image.
+
+stages:
+  - build
+  - pack
+
+variables:
+  IDF_CI_IMAGE: "espressif/idf:latest"
+  # Product (-app / MINIHUB_APP): application/<name>/  e.g. minihub
+  MINIHUB_APP: "minihub"
+  # Firmware jobs never pack .mhub; pack:mhub owns Store packages
+  MINIHUB_SKIP_MHUB: "1"
+  # Matter needs a local ESP_MATTER_PATH tree (not cloned here)
+  MINIHUB_BUILD_MATTER: "0"
+  # RainMaker: submodule application/minihub/components/esp-rainmaker (leave unset to follow
+  # application/minihub/config/sdkconfig/feature/rainmaker.defaults). Set to "0" to force stub-only.
+  # MINIHUB_BUILD_RAINMAKER: "0"
+  MINIHUB_CI_ARTIFACTS: "$CI_PROJECT_DIR/ci_artifacts"
+  MINIHUB_STORE_DEPLOY: "$CI_PROJECT_DIR/ci_artifacts/store"
+  GIT_DEPTH: "50"
+  # Path-scoped init in tools/ci/build_apps.sh (avoid pulling all submodules)
+  GIT_SUBMODULE_STRATEGY: "none"
+
+.idf_env:
+  image:
+    name: $IDF_CI_IMAGE
+    entrypoint: [""]
+  before_script:
+    - git config --global --add safe.directory "$CI_PROJECT_DIR" || true
+    - |
+      if [ -f "$IDF_PATH/export.sh" ]; then
+        # shellcheck source=/dev/null
+        . "$IDF_PATH/export.sh"
+      elif [ -f /opt/esp/idf/export.sh ]; then
+        # shellcheck source=/dev/null
+        . /opt/esp/idf/export.sh
+      fi
+    - idf.py --version || true
+    - python3 --version
+    - mkdir -p "$MINIHUB_CI_ARTIFACTS" "$MINIHUB_STORE_DEPLOY"
+
+.build_app:
+  extends: .idf_env
+  stage: build
+  artifacts:
+    when: on_success
+    expire_in: 14 days
+    name: "minihub-$APP-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ci_artifacts/$APP/
+      - application/$APP/build/$APP.bin
+      - application/$APP/build/$APP.elf
+      - application/$APP/build/minihub_merged.bin
+      - application/$APP/build/flasher_args.json
+      # Needed by pack:mhub (minihub fills these; other apps may be empty)
+      - application/$APP/build/modules/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+build:app:
+  extends: .build_app
+  parallel:
+    matrix:
+      - APP:
+          - minihub
+  variables:
+    MINIHUB_APP: "$APP"
+  script:
+    - test -f "application/${APP}/CMakeLists.txt"
+    - bash tools/ci/build_apps.sh
+    - test -f "ci_artifacts/${APP}/firmware/${APP}_merged.bin"
+    - test -f "application/${APP}/build/minihub_merged.bin"
+
+# Store pack (no-op success when minihub built no libadapter_*.so)
+pack:mhub:
+  extends: .idf_env
+  stage: pack
+  needs:
+    - job: build:app
+      parallel:
+        matrix:
+          - APP: minihub
+  script:
+    - bash tools/ci/pack_store_modules.sh
+  artifacts:
+    when: on_success
+    expire_in: 14 days
+    name: "minihub-mhub-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ci_artifacts/mhub/
+      - ci_artifacts/store/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH

@@ -1,0 +1,28 @@
+{
+  "type": "constant",
+  "data": {
+    "theme": {
+      "bg": "#0b0f1a",
+      "sidebar": "#0e1320",
+      "card": "#151c2f",
+      "card2": "#1a2238",
+      "border": "#243049",
+      "text": "#eef2ff",
+      "muted": "#8b9bb4",
+      "dim": "#5c6b85",
+      "accent": "#6366f1",
+      "accent2": "#818cf8",
+      "ok": "#22c55e",
+      "warn": "#f59e0b",
+      "bad": "#ef4444"
+    },
+    "user": {
+      "display_name": "用户"
+    },
+    "stats": {
+      "devices": "0",
+      "online": "0",
+      "adapters": "0"
+    }
+  }
+}

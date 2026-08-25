@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 MiniHub Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Matter commissioner over MiniHub Ethernet (disable CHIP Wi-Fi station).
+# Do NOT set CONFIG_ENABLE_ETHERNET_TELEMETRY — invalid on ESP32-S31.
+
+# CONFIG_ENABLE_WIFI_STATION is not set
