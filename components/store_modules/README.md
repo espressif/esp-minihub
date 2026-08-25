@@ -1,7 +1,7 @@
 # Store-installable modules
 
 Place module sources as siblings under this directory (`components/store_modules/<id>/`).
-This tree may be empty in the Host-only release; plugins are delivered as **`.mhub`** packages via Store.
+Public Host ships **`miot`** here as an L3 Store plugin (pack to `miot.mhub`); it is not a Host `require`.
 
 | Tier | Typical contents | Deploy artifact |
 |------|------------------|-----------------|
@@ -17,8 +17,7 @@ Deploy directory (`MINIHUB_STORE_DEPLOY`, default `~/workspace/minihub_store`):
 ```
 
 ```bash
-./tools/build_firmware.py modules              # build + pack native modules (if sources present)
-python3 tools/pack_store_module.py pack all        # → deploy/<id>/<id>.mhub (container: zip)
-# python3 tools/pack_store_module.py mhmd <so> <out.so>   # native MHMD wrap only (not package format)
+./tools/build_firmware.py -app minihub build modules   # build + pack native modules
+python3 tools/pack_store_module.py pack all             # → deploy/<id>/<id>.mhub
 python3 tools/sync_store_catalog.py all
 ```

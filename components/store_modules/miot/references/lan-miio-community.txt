@@ -1,0 +1,28 @@
+# 局域网 miIO 社区资料（adapter_miot 当前未实现，仅供后续 LAN 适配参考）
+
+## 协议概要
+- 传输：通常 UDP，端口 54321
+- 加密：AES + 设备 token（32 字节 hex，需从米家/备份/社区工具提取）
+- 消息：JSON RPC，常见 method get_prop / set_prop / call_action 等
+- 发现：mDNS、子网扫描、或手动配置 IP
+
+## 与云控区别
+| 项目     | 云控 (MiniHub 现状)     | 局域网 miIO              |
+|----------|-------------------------|--------------------------|
+| 网络     | 需外网                  | 仅需局域网               |
+| 认证     | 小米账号 session        | 每设备 token             |
+| 延迟     | 较高（HTTPS 往返）      | 低                       |
+| 官方文档 | 无公开 Hub API          | 无完整官方消费者协议 PDF |
+
+## 推荐阅读（开源）
+https://github.com/rytilahti/python-miio
+https://python-miio.readthedocs.io/en/latest/
+https://www.home-assistant.io/integrations/xiaomi_miio/
+
+## 相关社区项目（链接见 links.txt）
+- MiService：偏云会话/token，也可辅助局域网设备信息
+- Home Assistant Xiaomi Miio：大量设备型号兼容表与 troubleshooting
+
+## MiniHub 文档声明
+docs/14-MIoT云接入Checklist.md 第一节：
+  「通过小米云 API 读写设备属性，不经过局域网 miIO」

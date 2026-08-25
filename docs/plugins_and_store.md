@@ -17,7 +17,7 @@ Do not add vendor cloud credentials or default device rules to Host `config/` fo
 | L2 | + `main.js` (+ `ui/` / `web/`) | `<id>.mhub` |
 | L3 | + native `.so` (MHMD) | `<id>.mhub` (+ MHMD intermediate) |
 
-Sources (optional): `components/store_modules/<id>/`.  
+Sources (optional): `components/store_modules/<id>/` (e.g. `miot` L3 plugin).  
 Deploy root: `MINIHUB_STORE_DEPLOY` (default `~/workspace/minihub_store`).
 
 ```bash

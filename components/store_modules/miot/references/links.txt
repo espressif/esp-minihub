@@ -1,0 +1,21 @@
+# adapter_miot 参考链接（每行一个 URL，# 开头为注释）
+# 更新时请同步 references/README.md
+
+# --- 小米官方 / Spec ---
+https://iot.mi.com/
+https://iot.mi.com/new/doc/
+
+# --- 社区：云会话 / 登录 ---
+https://github.com/Yonsm/MiService
+
+# --- 社区：局域网 miIO（MiniHub 未实现）---
+https://github.com/rytilahti/python-miio
+https://python-miio.readthedocs.io/
+
+# --- 社区：集成经验 ---
+https://www.home-assistant.io/integrations/xiaomi_miio/
+
+# --- MiniHub 云登录 / API 主机（实现见 miot/auth/）---
+https://account.xiaomi.com/
+https://sts.api.io.mi.com/
+https://api.io.mi.com/
