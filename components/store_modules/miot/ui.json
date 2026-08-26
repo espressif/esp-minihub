@@ -1,0 +1,38 @@
+{
+  "filter_label": "米家云",
+  "auth": true,
+  "login_form": "credentials_2fa",
+  "actions": [
+    "login",
+    "sync",
+    "logout",
+    "homes"
+  ],
+  "labels": {
+    "login": "登录",
+    "sync": "同步",
+    "logout": "退出",
+    "homes": "选择家庭",
+    "change_home": "切换家庭",
+    "select_home": "选择家庭",
+    "logged_out": "未登录",
+    "login_title": "登录米家云",
+    "username": "小米账号",
+    "password": "密码",
+    "ticket": "短信验证码",
+    "ticket_placeholder": "手机短信验证码",
+    "captcha": "图形验证码",
+    "send_code": "发送验证码",
+    "cancel": "取消",
+    "cta_logged_out_title": "米家云未登录",
+    "cta_logged_out_body": "登录后可同步云端设备与局域网控制",
+    "cta_logged_out_button": "登录米家",
+    "cta_empty_title": "米家云已登录 · {user}",
+    "cta_empty_body": "先选择家庭，再同步云端设备与 LAN token",
+    "cta_empty_button": "选择家庭并同步",
+    "home_picker_title": "选择米家家庭",
+    "home_picker_hint": "同步将导入该家庭下的设备名称与房间",
+    "home_picker_confirm": "同步此家庭",
+    "home_picker_relogin": "重新登录"
+  }
+}

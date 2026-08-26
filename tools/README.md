@@ -9,7 +9,7 @@
 | `build_store_modules.py` | Build + pack native Store modules |
 | `sync_host_manifest.py` | Apply manifest for `MINIHUB_APP` |
 | `sync_store_catalog.py` | Store `catalog.json` |
-| `store_server.py` | Local Store HTTP |
+| `store_server.py` | Local Store HTTP (+ `/api/miot-spec/*`) |
 | `gen_host_export_symbols.py` | Host ELF export allowlist |
 | `apply_component_patches.sh` | Re-apply `patches/` |
 | `ci/` | GitLab helpers (`install_git_hooks.sh` → local pre-commit + pre-push) |

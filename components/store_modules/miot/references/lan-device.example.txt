@@ -1,0 +1,31 @@
+# adapters.json — miot 局域网设备示例
+#
+# 推荐：登录小米云后 POST /api/miot/sync — Hub 自动写入 token/mac/ip，无需手抄。
+#
+# 离线/手动：PC 与 Hub 同一局域网时
+#    pip install python-miio && miio discover
+#
+# 2. 查 siid/piid：https://iot.mi.com/ 搜设备 model
+#
+# 3. 写入 /data/config/adapters.json 后 POST /api/hub/reload
+#
+# IP 无需手写：Hub 启动/轮询时 UDP 广播 miio.info 发现局域网设备，
+# 再用 token（+ 可选 model/mac）绑定到正确 IP。静态 ip 仍可作为加速/兜底。
+
+{
+  "point_id": "switch/miot_plug_01",
+  "type": "switch",
+  "token": "0123456789abcdef0123456789abcdef",
+  "model": "chuangmi.plug.m3",
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "mode": "lan",
+  "siid": 2,
+  "piid_on": 1,
+  "piid_bright": 2
+}
+
+# mode 说明：
+#   lan    — 仅 UDP miIO（无需小米云登录）
+#   cloud  — 仅 HTTPS api.io.mi.com（需 did + 云会话）
+#   auto   — 有 token 优先 LAN（自动发现 IP），否则 cloud（默认）
+#   did 以 blt. 开头的 BLE，以及 camera/tv/speaker/lock：强制 cloud（不写 token、不探测 LAN）

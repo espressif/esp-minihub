@@ -37,6 +37,21 @@ endif()
 # Always link USB MSC + RTSP recorder when present (also listed in manifest).
 list(APPEND MINIHUB_MAIN_REQUIRES minihub_usb_msc minihub_rtsp_cam minihub_js)
 
+# Store L3 plugins: pull into the IDF build graph so libadapter_*.so can be linked
+# from their archives. They are NOT registered as Host adapters when
+# CONFIG_MINIHUB_DYNAMIC_MODULES=y (see REGISTER_ADAPTER guards in store_modules).
+# --gc-sections drops unused objects from the app ELF when nothing references them.
+if(CONFIG_MINIHUB_DYNAMIC_MODULES)
+    file(GLOB _MINIHUB_STORE_MOD_CMAKE "${MINIHUB_REPO_ROOT}/components/store_modules/*/CMakeLists.txt")
+    foreach(_SM_CMAKE ${_MINIHUB_STORE_MOD_CMAKE})
+        get_filename_component(_SM_DIR ${_SM_CMAKE} DIRECTORY)
+        get_filename_component(_SM ${_SM_DIR} NAME)
+        if(EXISTS "${_SM_DIR}/module.json")
+            list(APPEND MINIHUB_MAIN_REQUIRES ${_SM})
+        endif()
+    endforeach()
+endif()
+
 idf_component_register(
     SRCS "main.c" "adapters_setup.generated.c"
     INCLUDE_DIRS "."
