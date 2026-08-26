@@ -6,4 +6,3 @@ idf_component_register(
     INCLUDE_DIRS "include" "."
     REQUIRES minihub_core minihub_adapter minihub_module minihub_ble_mesh minihub_zigbee minihub_product_params espressif__cjson freertos
 )
-
