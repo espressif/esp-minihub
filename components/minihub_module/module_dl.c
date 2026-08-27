@@ -27,6 +27,35 @@ static const char *TAG = "module_dl";
 
 #if CONFIG_MINIHUB_DYNAMIC_MODULES && defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) && CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
 #include "esp_dlfcn.h"
+#if defined(CONFIG_ELF_LOADER_LOAD_PSRAM) && CONFIG_ELF_LOADER_LOAD_PSRAM
+void esp_elf_arch_flush(void);
+#if CONFIG_IDF_TARGET_ESP32S31
+#include "soc/cache_reg.h"
+#include "soc/soc.h"
+#endif
+
+/** Re-sync I/D cache after dlopen so varied PT_LOAD layouts stay executable on S31. */
+static void module_dl_sync_psram_exec(void)
+{
+    esp_elf_arch_flush();
+}
+
+/**
+ * Arm I-fetch from PSRAM heap immediately before jumping into the module.
+ * On ESP32-S31, PSRAM .so text is not in the XIP-mapped firmware region; IBUS1
+ * can be shut again by flash/cache traffic (esp. SPI_FLASH_AUTO_SUSPEND) after
+ * the earlier flush, causing Instruction access fault at minihub_module_entry.
+ */
+static void module_dl_arm_psram_entry(void)
+{
+    esp_elf_arch_flush();
+#if CONFIG_IDF_TARGET_ESP32S31
+    portDISABLE_INTERRUPTS();
+    REG_CLR_BIT(CACHE_L1_ICACHE_CTRL_REG, CACHE_L1_ICACHE_SHUT_IBUS1);
+    portENABLE_INTERRUPTS();
+#endif
+}
+#endif
 /* QuickJS ships weak dlopen stubs; reference a symbol unique to elf_loader's
  * dlfcn.o so its strong dlopen/dlsym win at link time. */
 extern void dllist(dl_list_t type);
@@ -430,6 +459,10 @@ static esp_err_t module_dl_load_on_task(const char *binary_path,
         return ESP_FAIL;
     }
 
+#if defined(CONFIG_ELF_LOADER_LOAD_PSRAM) && CONFIG_ELF_LOADER_LOAD_PSRAM
+    module_dl_sync_psram_exec();
+#endif
+
     minihub_module_entry_fn entry = (minihub_module_entry_fn)dlsym(handle, MINIHUB_MODULE_ENTRY_SYMBOL);
     if (!entry) {
         const char *msg = dlerror();
@@ -479,6 +512,10 @@ static esp_err_t module_dl_load_on_task(const char *binary_path,
 
     if (invoke_entry) {
         ESP_LOGI(TAG, "calling module entry %p on DRAM stack", (void *)entry);
+#if defined(CONFIG_ELF_LOADER_LOAD_PSRAM) && CONFIG_ELF_LOADER_LOAD_PSRAM
+        /* Log first: ESP_LOGI can touch flash; arm IBUS1 immediately before jump. */
+        module_dl_arm_psram_entry();
+#endif
         err = entry(host, config, out_adapter);
         if (err != ESP_OK || !out_adapter || !*out_adapter) {
             ESP_LOGE(TAG, "module entry failed: %s", esp_err_to_name(err != ESP_OK ? err : ESP_FAIL));

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Stage firmware + merged flash image for CI upload (no Store .mhub).
+# Stage firmware + merged flash image + compiled sdkconfig for CI upload (no Store .mhub).
 # Flash images are taken from build/flasher_args.json → flash_files (same set as merge-bin).
 #
 # Usage: tools/ci/stage_artifacts.sh <app_name>
@@ -18,7 +18,8 @@ if [[ -z "$APP" ]]; then
   exit 2
 fi
 
-BUILD="$ROOT/application/$APP/build"
+APP_DIR="$ROOT/application/$APP"
+BUILD="$APP_DIR/build"
 ARTIFACTS="${MINIHUB_CI_ARTIFACTS:-$ROOT/ci_artifacts}"
 OUT="$ARTIFACTS/$APP"
 ARGS_JSON="$BUILD/flasher_args.json"
@@ -79,6 +80,16 @@ if [[ "$missing" -ne 0 ]]; then
 fi
 
 copy_rel "$ARGS_JSON"
+
+# Effective Kconfig after idf.py build (project root, not in flash_files).
+SDKCONFIG="$APP_DIR/sdkconfig"
+if [[ -f "$SDKCONFIG" ]]; then
+  cp -a "$SDKCONFIG" "$OUT/firmware/sdkconfig"
+  echo "  sdkconfig (compiled)"
+else
+  echo "ERROR: missing compiled sdkconfig $SDKCONFIG — run a successful build first" >&2
+  exit 1
+fi
 
 # Debug / OTA helpers (not in flash_files)
 for f in \

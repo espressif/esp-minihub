@@ -65,3 +65,21 @@ curl -X POST http://$HUB/api/modules -H 'Content-Type: application/json' \
 ## Native symbol allowlist
 
 Plugins may leave Host symbols undefined; Host registers them at load time. Public snapshot: [module_sdk/host_export_allowlist.json](module_sdk/host_export_allowlist.json). Regenerate with `tools/gen_host_export_symbols.py` after rebuilding modules.
+
+## L3 runtime compatibility
+
+Host firmware and Store `.mhub` are **loosely coupled**. After a full firmware flash, plugins built with **different Host apps** (`minihub`, `claw_minihub`), **link flags**, or **pack dates** can load as long as:
+
+| Requirement | Notes |
+|-------------|--------|
+| **Same SoC target** | e.g. `esp32s31` — cross-chip `.so` will not relocate |
+| **`abi_version`** | Must match `MINIHUB_MODULE_ABI_VERSION` in Host |
+| **`core_api_min` / `core_api_max`** | Must include Host `MINIHUB_CORE_API_VERSION` |
+| **Undefined symbols** | Subset of Host allowlist; add new deps → regenerate `host_elf_symbols_generated.c` |
+| **No Host Kconfig in plugins** | Use `minihub_module_host_api_t` only; do not `#if CONFIG_*` Host options |
+
+**Not required to match:** which application built the `.so`, `CONFIG_ELF_FILE_SYSTEM_BASE_PATH`, minihub vs claw feature Kconfig, or exact GNU ld page size — Host tolerates varied PT_LOAD layouts (PSRAM cache sync on S31 after `dlopen` / before `entry`).
+
+**Recommended for new packages:** link with `-Wl,-z,max-page-size=4` (see `cmake/minihub_module_so.cmake`). `tools/check_module_so_layout.py` warns on large vaddr gaps but does not block packaging.
+
+**Future ABI bumps:** increment `MINIHUB_MODULE_ABI_VERSION` and extend `minihub_module_host_api_t` at the tail; old plugins fail with a clear version error instead of crashing.

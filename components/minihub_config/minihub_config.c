@@ -371,6 +371,31 @@ esp_err_t minihub_config_save_adapters(cJSON *adapters_root)
     return ESP_OK;
 }
 
+esp_err_t minihub_config_remove_adapter(const char *adapter_name)
+{
+    if (!adapter_name || !adapter_name[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_adapters_cfg) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    cJSON *adapters = cJSON_GetObjectItem(s_adapters_cfg, "adapters");
+    if (!cJSON_IsObject(adapters)) {
+        return ESP_OK;
+    }
+    cJSON *slot = cJSON_GetObjectItem(adapters, adapter_name);
+    if (!slot) {
+        return ESP_OK;
+    }
+    cJSON_DeleteItemFromObject(adapters, adapter_name);
+    esp_err_t err = minihub_config_save_adapters(s_adapters_cfg);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "removed adapters.json slot '%s'", adapter_name);
+    }
+    return err;
+}
+
 esp_err_t minihub_config_save_rules(cJSON *rules_root)
 {
     if (!rules_root) {

@@ -64,7 +64,9 @@ static void heap_monitor_task(void *arg)
 esp_err_t minihub_heap_monitor_start(void)
 {
     const uint32_t interval_ms = (uint32_t)CONFIG_MINIHUB_HEAP_LOG_INTERVAL_SEC * 1000U;
-    BaseType_t ok = minihub_task_create_psram(heap_monitor_task, "heap_mon", 2048, (void *)(uintptr_t)interval_ms, 1, NULL);
+    /* Internal stack: must stay runnable while spi_flash disables PSRAM cache. */
+    BaseType_t ok = minihub_task_create_internal(heap_monitor_task, "heap_mon", 2048,
+                                                 (void *)(uintptr_t)interval_ms, 1, NULL);
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "failed to create heap monitor task");
         return ESP_ERR_NO_MEM;

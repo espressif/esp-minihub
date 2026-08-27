@@ -50,6 +50,12 @@ cJSON *minihub_module_list_json(void);
 esp_err_t minihub_module_register_rpc(const char *module_id, minihub_module_rpc_fn rpc);
 
 /**
+ * Drop persisted host RPC for a module id (Store uninstall / orphan cleanup).
+ * Prevents hub_reload from recreating a manifest-less listing slot.
+ */
+esp_err_t minihub_module_forget_host_rpc(const char *module_id);
+
+/**
  * Attach Host Web auth UI metadata (same shape as Store module ui.json).
  * Used when a module is host-static / builtin and has no on-disk ui.json.
  */

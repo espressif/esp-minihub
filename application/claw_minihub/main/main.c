@@ -521,8 +521,11 @@ void app_main(void)
     ESP_LOGI(TAG, "ESP-Claw git version: %s", claw_get_git_version());
     ESP_LOGI(TAG, "Edge Agent version: %s", edge_agent_get_version());
 
-    /* PSRAM task stacks cannot call esp_flash_* while cache is off.
-     * elf_loader also wraps those APIs — init dispatcher before NVS/FAT. */
+    ESP_ERROR_CHECK(app_allocate_runtime_state());
+
+    /* main_task stack may live in PSRAM (SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY on
+     * claw board). Wrapped esp_flash_* must go through the dispatcher task
+     * (internal stack) before any NVS/partition access. */
     {
         const esp_flash_dispatcher_config_t flash_disp_cfg = {
             .task_stack_size = 4096,
@@ -533,6 +536,9 @@ void app_main(void)
         ESP_ERROR_CHECK(esp_flash_dispatcher_init(&flash_disp_cfg));
         ESP_LOGI(TAG, "esp_flash_dispatcher ready");
     }
+
+    ESP_ERROR_CHECK(init_nvs());
+    ESP_ERROR_CHECK(app_config_init());
     app_cjson_use_psram();
     {
         esp_err_t mem_err = minihub_heap_monitor_start();
@@ -540,10 +546,6 @@ void app_main(void)
             ESP_LOGW(TAG, "heap monitor start failed: %s", esp_err_to_name(mem_err));
         }
     }
-
-    ESP_ERROR_CHECK(app_allocate_runtime_state());
-    ESP_ERROR_CHECK(init_nvs());
-    ESP_ERROR_CHECK(app_config_init());
     ESP_ERROR_CHECK(app_config_load(s_config));
     /* MiniHub dual-stack: keep stock Claw defaults, expose local MiniHub MCP
      * wrappers (and keep stock mcp_discover via cap_mcp_client). */

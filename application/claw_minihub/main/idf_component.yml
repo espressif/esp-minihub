@@ -9,7 +9,8 @@ dependencies:
   joltwallet/littlefs: "~=1.21.0"
   espressif/cjson: "^1.7.19"
   espressif/network_provisioning: "^1.1.0"
-  espressif/esp_flash_dispatcher: "^1.0.2"
+  espressif/esp_flash_dispatcher:
+    path: ../../../components/esp_flash_dispatcher
   espressif/elf_loader:
     git: https://github.com/espressif/esp-iot-solution.git
     path: components/elf_loader

@@ -5,8 +5,12 @@ function(minihub_add_module_so module_id component_name)
         return()
     endif()
 
+    # Tight PT_LOAD vaddr alignment: default 4 KiB page size leaves a 4099-byte gap
+    # between RX and RW segments; esp_elf_loader warns above 0x400 and S31 can fault
+    # at minihub_module_entry. max-page-size=4 keeps separate RX/RW (unlike -Wl,-n RWX).
     set(so_link_flags -shared -fPIC -static-libgcc -nostdlib -nostartfiles
         -fdata-sections -ffunction-sections -Wl,--gc-sections -fvisibility=hidden
+        -Wl,-z,max-page-size=4 -Wl,-z,common-page-size=4
         -Wl,--strip-all -Wl,--strip-debug -Wl,--strip-discarded)
 
     set(out_dir "${CMAKE_BINARY_DIR}/modules")

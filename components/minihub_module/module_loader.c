@@ -833,6 +833,40 @@ static bool module_binary_installed(const module_slot_t *slot)
     return stat(slot->binary_path, &st) == 0;
 }
 
+static bool module_slot_installed(const module_slot_t *slot)
+{
+    if (!slot) {
+        return false;
+    }
+    if (slot->manifest_path[0] != '\0') {
+        return slot->builtin_id[0] != '\0' || module_binary_installed(slot);
+    }
+    /* Host RPC listing without a Store package (zigbee / rtsp_cam). */
+    return slot->rpc != NULL;
+}
+
+static void remove_ephemeral_module_slot(const char *module_id)
+{
+    for (size_t i = 0; i < s_module_count; i++) {
+        if (strcmp(s_modules[i].info.id, module_id) != 0) {
+            continue;
+        }
+        if (s_modules[i].manifest_path[0] != '\0') {
+            return;
+        }
+        if (s_modules[i].ui_json) {
+            cJSON_Delete(s_modules[i].ui_json);
+            s_modules[i].ui_json = NULL;
+        }
+        if (i + 1 < s_module_count) {
+            memmove(&s_modules[i], &s_modules[i + 1],
+                    (s_module_count - i - 1) * sizeof(s_modules[i]));
+        }
+        s_module_count--;
+        return;
+    }
+}
+
 cJSON *minihub_module_list_json(void)
 {
     cJSON *arr = cJSON_CreateArray();
@@ -905,7 +939,7 @@ cJSON *minihub_module_list_json(void)
         }
         bool managed = s_modules[i].manifest_path[0] != '\0' && s_modules[i].builtin_id[0] == '\0';
         cJSON_AddBoolToObject(item, "managed", managed);
-        bool installed = s_modules[i].builtin_id[0] != '\0' || module_binary_installed(&s_modules[i]);
+        bool installed = module_slot_installed(&s_modules[i]);
         cJSON_AddBoolToObject(item, "installed", installed);
         cJSON_AddBoolToObject(item, "has_rpc", s_modules[i].rpc != NULL);
         if (s_modules[i].ui_file_path[0]) {
@@ -953,7 +987,7 @@ bool minihub_module_overview_adapter_visible(const char *adapter_name)
         if (!s_modules[i].info.enabled) {
             return false;
         }
-        bool installed = s_modules[i].builtin_id[0] != '\0' || module_binary_installed(&s_modules[i]);
+        bool installed = module_slot_installed(&s_modules[i]);
         if (!installed) {
             return false;
         }
@@ -1185,12 +1219,44 @@ esp_err_t minihub_module_register_rpc(const char *module_id, minihub_module_rpc_
         slot->info.abi_version = MINIHUB_MODULE_ABI_VERSION;
         slot->info.core_api_min = MINIHUB_CORE_API_VERSION;
         slot->info.core_api_max = MINIHUB_CORE_API_VERSION;
-        strncpy(slot->builtin_id, module_id, sizeof(slot->builtin_id) - 1);
         ESP_LOGI(TAG, "host RPC module slot created: %s", module_id);
     }
     slot->rpc = rpc;
     slot->info.loaded = true;
     return ESP_OK;
+}
+
+esp_err_t minihub_module_forget_host_rpc(const char *module_id)
+{
+    if (!module_id || !module_id[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    bool found = false;
+    for (size_t i = 0; i < s_host_rpc_count; i++) {
+        if (strcmp(s_host_rpcs[i].id, module_id) != 0) {
+            continue;
+        }
+        if (i + 1 < s_host_rpc_count) {
+            memmove(&s_host_rpcs[i], &s_host_rpcs[i + 1],
+                    (s_host_rpc_count - i - 1) * sizeof(s_host_rpcs[i]));
+        }
+        s_host_rpc_count--;
+        found = true;
+        break;
+    }
+
+    module_slot_t *slot = find_module(module_id);
+    if (slot && slot->manifest_path[0] == '\0') {
+        remove_ephemeral_module_slot(module_id);
+        found = true;
+    }
+
+    if (found) {
+        ESP_LOGI(TAG, "forgot host RPC module '%s'", module_id);
+        return ESP_OK;
+    }
+    return ESP_ERR_NOT_FOUND;
 }
 
 esp_err_t minihub_module_set_ui_json(const char *module_id, const char *json)
@@ -1368,8 +1434,22 @@ esp_err_t minihub_module_clear_load_guard(const char *id)
 esp_err_t minihub_module_delete(const char *id)
 {
     module_slot_t *slot = find_module(id);
-    if (!slot || slot->manifest_path[0] == '\0' || slot->builtin_id[0] != '\0') {
-        return slot ? ESP_ERR_NOT_SUPPORTED : ESP_ERR_NOT_FOUND;
+    if (!slot) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (slot->manifest_path[0] == '\0') {
+        char adapter[sizeof(slot->info.adapter_name)];
+        strncpy(adapter, slot->info.adapter_name, sizeof(adapter) - 1);
+        adapter[sizeof(adapter) - 1] = '\0';
+        (void)minihub_module_forget_host_rpc(id);
+        (void)minihub_config_remove_adapter(adapter);
+        ESP_LOGI(TAG, "removed orphan module listing '%s'", id);
+        return ESP_OK;
+    }
+
+    if (slot->builtin_id[0] != '\0') {
+        return ESP_ERR_NOT_SUPPORTED;
     }
     if (!module_binary_installed(slot)) {
         ESP_LOGW(TAG, "module '%s' not installed (binary missing)", id);
@@ -1403,6 +1483,8 @@ esp_err_t minihub_module_delete(const char *id)
     if (dir[0] && strcmp(dir, MINIHUB_MODULES_DIR) != 0) {
         (void)rmdir(dir);
     }
+    (void)minihub_module_forget_host_rpc(id);
+    (void)minihub_config_remove_adapter(slot->info.adapter_name);
     ESP_LOGI(TAG, "deleted module '%s'", id);
     return ESP_OK;
 }
