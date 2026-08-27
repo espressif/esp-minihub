@@ -100,6 +100,31 @@ static void log_wifi_startup_config(const app_config_t *config)
              config->ap_behavior[0] ? config->ap_behavior : "keep");
 }
 
+#if CONFIG_MINIHUB_NET_ETH && CONFIG_MINIHUB_NET_PREFER_ETH
+static void prefer_eth_default_route(void)
+{
+    esp_netif_t *eth = minihub_net_eth_netif();
+    esp_netif_ip_info_t info = {0};
+
+    if (!eth || esp_netif_get_ip_info(eth, &info) != ESP_OK || info.ip.addr == 0) {
+        return;
+    }
+    esp_netif_set_default_netif(eth);
+}
+#endif
+
+static bool host_has_uplink(void)
+{
+#if CONFIG_MINIHUB_NET_ETH
+    if (minihub_net_has_ip()) {
+        return true;
+    }
+#endif
+    wifi_manager_status_t status = {0};
+    wifi_manager_get_status(&status);
+    return status.sta_connected;
+}
+
 static void on_wifi_state_changed(bool connected, void *user_ctx)
 {
     (void)user_ctx;
@@ -114,7 +139,13 @@ static void on_wifi_state_changed(bool connected, void *user_ctx)
              status.mode ? status.mode : "off",
              ap_ssid ? ap_ssid : "(none)");
 
-    esp_err_t err = app_claw_set_network_status(connected, ap_ssid);
+#if CONFIG_MINIHUB_NET_ETH && CONFIG_MINIHUB_NET_PREFER_ETH
+    if (connected) {
+        prefer_eth_default_route();
+    }
+#endif
+
+    esp_err_t err = app_claw_set_network_status(host_has_uplink(), ap_ssid);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to update network UI: %s", esp_err_to_name(err));
     }
@@ -213,12 +244,13 @@ static esp_err_t main_get_wifi_status(http_server_wifi_status_t *status)
     status->wifi_mode = wifi_status.mode;
 
 #if CONFIG_MINIHUB_NET_ETH
-    /* SoftAP skipped when Ethernet already has an address. */
-    if (!status->wifi_connected && minihub_net_has_ip() &&
-            minihub_net_get_ip(s_eth_ip_str, sizeof(s_eth_ip_str))) {
+    /* Prefer Ethernet for displayed IP and default route when both uplinks are up. */
+    if (minihub_net_has_ip() && minihub_net_get_ip(s_eth_ip_str, sizeof(s_eth_ip_str))) {
         status->wifi_connected = true;
         status->ip = s_eth_ip_str;
-        if (!status->wifi_mode || strcmp(status->wifi_mode, "off") == 0) {
+        if (wifi_status.sta_connected) {
+            status->wifi_mode = "eth";
+        } else if (!status->wifi_mode || strcmp(status->wifi_mode, "off") == 0) {
             status->wifi_mode = "eth";
         }
     }
@@ -431,22 +463,27 @@ static void start_portal(void)
 static void start_wifi_and_portal(void)
 {
 #if CONFIG_MINIHUB_NET_ETH
-    /* Function board: Ethernet + SoftAP together blows the ~121KiB internal
-     * heap (Wi-Fi TX/RX, AP netif, FILE locks). Prefer ETH; SoftAP only when
-     * there is no uplink. */
     if (wait_for_eth_ip(5000)) {
         char ip[16] = {0};
         minihub_net_get_ip(ip, sizeof(ip));
-        ESP_LOGI(TAG, "Ethernet uplink %s — skip Wi-Fi to keep internal RAM", ip);
-        (void)app_claw_set_network_status(true, NULL);
+        ESP_LOGI(TAG, "Ethernet uplink %s (Wi-Fi still starts per saved config)", ip);
+    } else {
+        ESP_LOGW(TAG, "No Ethernet IP after wait; continuing with Wi-Fi");
+    }
+#endif
+
+    esp_err_t init_err = wifi_manager_init();
+    if (init_err != ESP_OK) {
+        ESP_LOGE(TAG, "Wi-Fi init failed: %s", esp_err_to_name(init_err));
+        (void)app_claw_set_network_status(host_has_uplink(), NULL);
         start_portal();
         return;
     }
-    ESP_LOGW(TAG, "No Ethernet IP after wait; starting Wi-Fi SoftAP");
-#endif
 
-    ESP_ERROR_CHECK(wifi_manager_init());
-    ESP_ERROR_CHECK(wifi_manager_register_state_callback(on_wifi_state_changed, NULL));
+    esp_err_t cb_err = wifi_manager_register_state_callback(on_wifi_state_changed, NULL);
+    if (cb_err != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi state callback register failed: %s", esp_err_to_name(cb_err));
+    }
     log_wifi_startup_config(s_config);
 
     esp_err_t wifi_err = wifi_manager_start(&(wifi_manager_config_t) {
@@ -459,26 +496,32 @@ static void start_wifi_and_portal(void)
     });
     if (wifi_err != ESP_OK) {
         ESP_LOGE(TAG, "Wi-Fi start failed: %s", esp_err_to_name(wifi_err));
+        (void)app_claw_set_network_status(host_has_uplink(), NULL);
         start_portal();
         return;
     }
 
     start_portal();
-    if (captive_dns_start(&(captive_dns_config_t) {
-            .ap_netif = wifi_manager_get_ap_netif(),
-            .configure_dhcp_dns = true,
-        }) != ESP_OK) {
+
+    wifi_manager_status_t status = {0};
+    wifi_manager_get_status(&status);
+    if (status.ap_active &&
+            captive_dns_start(&(captive_dns_config_t) {
+                .ap_netif = wifi_manager_get_ap_netif(),
+                .configure_dhcp_dns = true,
+            }) != ESP_OK) {
         ESP_LOGW(TAG, "Captive DNS could not start, portal pop-up disabled");
     }
 
     if (s_config->wifi_ssid[0] != '\0') {
         esp_err_t wait_err = wifi_manager_wait_connected(30000);
         if (wait_err == ESP_OK) {
-            wifi_manager_status_t status = {0};
             wifi_manager_get_status(&status);
             ESP_LOGI(TAG, "Wi-Fi STA ready: %s", status.sta_ip);
+#if CONFIG_MINIHUB_NET_ETH && CONFIG_MINIHUB_NET_PREFER_ETH
+            prefer_eth_default_route();
+#endif
         } else if (wait_err == ESP_ERR_TIMEOUT) {
-            wifi_manager_status_t status = {0};
             wifi_manager_get_status(&status);
             ESP_LOGW(TAG,
                      "Wi-Fi STA not connected within wait window; retrying in background: mode=%s ap_active=%d ap_ip=%s",
@@ -490,8 +533,9 @@ static void start_wifi_and_portal(void)
         }
     }
 
-    wifi_manager_status_t status = {0};
     wifi_manager_get_status(&status);
+    (void)app_claw_set_network_status(host_has_uplink(),
+                                      status.ap_active ? status.ap_ssid : NULL);
     if (status.ap_active) {
         const char *portal_auth = s_config->ap_password[0] ? "wpa2" : "open";
         ESP_LOGW(TAG,
@@ -633,6 +677,16 @@ void app_main(void)
     ESP_ERROR_CHECK(claw_paths_set(CLAW_PATH_DATA, app_fs_storage_base_path()));
     ESP_ERROR_CHECK(claw_paths_set(CLAW_PATH_SYSTEM, app_fs_system_base_path()));
 
+    /* wifi_manager_init must run before minihub_net_init: stock esp-claw
+     * ESP_ERROR_CHECKs esp_event_loop_create_default(), so ETH must not
+     * own the default loop first. Start/AP still happens later after Claw. */
+    {
+        esp_err_t wifi_init_err = wifi_manager_init();
+        if (wifi_init_err != ESP_OK) {
+            ESP_LOGW(TAG, "Wi-Fi manager init failed: %s", esp_err_to_name(wifi_init_err));
+        }
+    }
+
 #if CONFIG_MINIHUB_NET_ETH
     /* Claw owns Wi-Fi; MiniHub starts ETH only (prefer ETH when link has IP). */
     {
@@ -662,8 +716,7 @@ void app_main(void)
         },
     }));
 
-    /* Claw first: skill/agent/FILE locks need internal RAM. Wi-Fi SoftAP is
-     * skipped later if Ethernet already has an address. */
+    /* Claw first: skill/agent/FILE locks need internal RAM before Wi-Fi/AP. */
     ESP_ERROR_CHECK(minihub_core_init());
     ESP_ERROR_CHECK(cap_mcp_server_init());
     ESP_ERROR_CHECK(minihub_mcp_server_init());
