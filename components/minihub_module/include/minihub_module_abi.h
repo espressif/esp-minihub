@@ -12,8 +12,19 @@
 #include "minihub_core.h"
 #include "minihub_adapter.h"
 
-/** Host ↔ module binary ABI version; bump on incompatible changes */
+/** Host ↔ module binary ABI version; bump on incompatible host API vtable changes */
 #define MINIHUB_MODULE_ABI_VERSION  1
+
+/*
+ * Runtime compatibility (Store L3 .so):
+ * - Same IDF target as Host (e.g. esp32s31); chip mismatch fails at dlopen/relocate.
+ * - module.json abi_version + core_api_min/max gate manifest vs Host.
+ * - Host resolves undefined symbols from a shared allowlist (host_export_allowlist.json);
+ *   plugins must not link the Host firmware or depend on Host Kconfig macros.
+ * - PT_LOAD segment layout may vary (link flags / toolchain); Host syncs PSRAM I/D
+ *   cache after dlopen and before module entry on S31-class targets.
+ * - Extend minihub_module_host_api_t only at the tail; modules must honor struct_size.
+ */
 
 /** Module image magic "MHMD" */
 #define MINIHUB_MODULE_MAGIC  0x4D484D44U

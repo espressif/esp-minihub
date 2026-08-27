@@ -14,6 +14,7 @@
 #include "minihub_core.h"
 #include "minihub_hub.h"
 #include "minihub_module.h"
+#include "minihub_net.h"
 #include "minihub_ota.h"
 #include "minihub_rules.h"
 #include "minihub_store.h"
@@ -774,6 +775,42 @@ esp_err_t hub_api_call(const char *method, const char *path, const char *query, 
     }
     if (mask == HUB_M_PUT && strcmp(path_buf, "/api/config/adapters") == 0) {
         return dispatch_adapters_put(body, out);
+    }
+    if (mask == HUB_M_GET && strcmp(path_buf, "/api/store/catalog") == 0) {
+        cJSON *catalog = minihub_store_catalog_merged();
+        if (!catalog) {
+            *out = err_obj("STORE_ERROR", "catalog failed");
+            return ESP_OK;
+        }
+        *out = catalog;
+        return ESP_OK;
+    }
+    if (mask == HUB_M_GET && strcmp(path_buf, "/api/modules") == 0) {
+        cJSON *modules = minihub_module_list_json();
+        if (!modules) {
+            *out = err_obj("MODULE_ERROR", "modules list failed");
+            return ESP_OK;
+        }
+        *out = modules;
+        return ESP_OK;
+    }
+    if (mask == HUB_M_GET && strcmp(path_buf, "/api/system") == 0) {
+        cJSON *root = cJSON_CreateObject();
+        if (!root) {
+            return ESP_ERR_NO_MEM;
+        }
+        char ip[16] = {0};
+        (void)minihub_net_get_ip(ip, sizeof(ip));
+        cJSON_AddBoolToObject(root, "ok", true);
+        cJSON_AddStringToObject(root, "local_ip", ip);
+#if defined(CONFIG_APP_CLAW_CAP_CORE)
+        /* Claw portal serves MiniHub UI at /minihub */
+        cJSON_AddStringToObject(root, "web_base", "/minihub");
+#else
+        cJSON_AddStringToObject(root, "web_base", "");
+#endif
+        *out = root;
+        return ESP_OK;
     }
     if (mask == HUB_M_GET && strcmp(path_buf, "/api/store/config") == 0) {
         cJSON *root = cJSON_CreateObject();

@@ -20,6 +20,7 @@ exclude: |
     .*\.so$|
     .*\.mhub$|
     .*\.otf$|
+    .*\.ttf$|
     .*\.png$|
     .*\.jpg$
   )$

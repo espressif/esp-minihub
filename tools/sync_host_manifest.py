@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Sync config/minihub_manifest.yml → idf_component.yml, CMake, adapters_setup."""
+"""Sync shared + per-app manifests → idf_component.yml, CMake, adapters_setup.
+
+Shared base: config/minihub_manifest.yml (profiles._host_base, …)
+Product:     application/<app>/manifest.yml
+"""
 
 from __future__ import annotations
 
@@ -16,6 +20,9 @@ try:
 except ImportError:
     print("PyYAML required: pip install pyyaml", file=sys.stderr)
     sys.exit(1)
+
+# Keys that belong on the app manifest root but are not part of the resolved profile body.
+_APP_META_KEYS = frozenset({"hand_maintained", "variants", "store_preinstall"})
 
 
 def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -153,10 +160,47 @@ set(MINIHUB_MAIN_REQUIRES
 """
 
 
+def load_yaml(path: Path) -> dict[str, Any]:
+    with path.open(encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise SystemExit(f"Expected mapping in {path}")
+    return data
+
+
+def merge_app_manifest(
+    manifest: dict[str, Any], app_name: str, app_manifest_path: Path
+) -> bool:
+    """Register application/<app>/manifest.yml into manifest['profiles'].
+
+    Returns hand_maintained flag from the app file (default False).
+    """
+    if not app_manifest_path.is_file():
+        return False
+
+    raw = load_yaml(app_manifest_path)
+    hand_maintained = bool(raw.get("hand_maintained", False))
+    variants = raw.get("variants") or {}
+    if variants and not isinstance(variants, dict):
+        raise SystemExit(f"{app_manifest_path}: variants must be a mapping")
+
+    profile_body = {k: v for k, v in raw.items() if k not in _APP_META_KEYS}
+    profiles = manifest.setdefault("profiles", {})
+    if not isinstance(profiles, dict):
+        raise SystemExit("config/minihub_manifest.yml: profiles must be a mapping")
+
+    profiles[app_name] = profile_body
+    for vname, vprof in variants.items():
+        if not isinstance(vprof, dict):
+            raise SystemExit(f"{app_manifest_path}: variants.{vname} must be a mapping")
+        profiles[f"_{app_name}_{vname}"] = vprof
+
+    return hand_maintained
+
+
 def sync(project_root: Path, app_name: str) -> None:
     manifest_path = project_root / "config" / "minihub_manifest.yml"
-    with manifest_path.open(encoding="utf-8") as f:
-        manifest = yaml.safe_load(f)
+    manifest = load_yaml(manifest_path)
 
     app_name = (app_name or "minihub").strip() or "minihub"
     os.environ["MINIHUB_APP"] = app_name
@@ -169,13 +213,24 @@ def sync(project_root: Path, app_name: str) -> None:
         expand_features,
     )
 
+    app_manifest_path = project_root / "application" / app_name / "manifest.yml"
+    hand_maintained = merge_app_manifest(manifest, app_name, app_manifest_path)
+
     # Component set: product name, or LCD overlay when app.yml includes lcd feature
-    if app_name == "minihub" and app_has_feature(project_root, app_name, "lcd"):
-        profile_name = "_minihub_lcd"
+    lcd_profile = f"_{app_name}_lcd"
+    if app_has_feature(project_root, app_name, "lcd") and lcd_profile in (
+        manifest.get("profiles") or {}
+    ):
+        profile_name = lcd_profile
     elif app_name in (manifest.get("profiles") or {}):
         profile_name = app_name
     else:
         profile_name = manifest.get("profile") or "minihub"
+        if profile_name not in (manifest.get("profiles") or {}):
+            raise SystemExit(
+                f"No profile for app={app_name}. Add application/{app_name}/manifest.yml "
+                f"or a profiles entry in config/minihub_manifest.yml"
+            )
 
     prof = resolve_profile(manifest, profile_name)
     gen_dir = project_root / "cmake" / "generated"
@@ -193,11 +248,16 @@ def sync(project_root: Path, app_name: str) -> None:
         raise FileNotFoundError(f"application main/ missing for MINIHUB_APP={app_name}")
 
     main_yml = app_main / "idf_component.yml"
-    if app_name != "claw_minihub":
+    adapters_c = app_main / "adapters_setup.generated.c"
+
+    if hand_maintained:
+        print(f"  → {main_yml} (skipped; hand_maintained in {app_manifest_path.name})")
+        print(f"  → adapters_setup.generated.c (skipped; hand_maintained)")
+    else:
         main_yml.write_text(yaml_dump({"dependencies": idf_deps}), encoding="utf-8")
         print(f"  → {main_yml}")
-    else:
-        print(f"  → {main_yml} (skipped; claw_minihub manifest is hand-maintained)")
+        adapters_c.write_text(gen_adapters_setup(adapters), encoding="utf-8")
+        print(f"  → {adapters_c}")
 
     lcd_yml = project_root / "components" / "minihub_lcd" / "idf_component.yml"
     comp_manifests = prof.get("component_manifests") or {}
@@ -209,11 +269,12 @@ def sync(project_root: Path, app_name: str) -> None:
     elif lcd_yml.exists():
         lcd_yml.unlink()
 
-    adapters_c = app_main / "adapters_setup.generated.c"
-    adapters_c.write_text(gen_adapters_setup(adapters), encoding="utf-8")
-
     cmake_path = gen_dir / "minihub_components.cmake"
-    cmake_path.write_text(gen_cmake_requires(require, adapters), encoding="utf-8")
+    if hand_maintained:
+        print(f"  → {cmake_path} (skipped; hand_maintained — avoid overwriting Host cmake)")
+    else:
+        cmake_path.write_text(gen_cmake_requires(require, adapters), encoding="utf-8")
+        print(f"  → {cmake_path}")
 
     (gen_dir / "profile.txt").write_text(app_name + "\n", encoding="utf-8")
     partition = prof.get("partition_table", "partitions.csv")
@@ -237,9 +298,10 @@ def sync(project_root: Path, app_name: str) -> None:
     lcd_ui = bool(components.get("lcd_ui"))
     (gen_dir / "lcd_ui.txt").write_text("1\n" if lcd_ui else "0\n", encoding="utf-8")
 
-    print(f"sync_host_manifest: app={app_name} components={profile_name} partition={partition} lcd_ui={lcd_ui}")
-    print(f"  → {adapters_c}")
-    print(f"  → {cmake_path}")
+    print(
+        f"sync_host_manifest: app={app_name} components={profile_name} "
+        f"partition={partition} lcd_ui={lcd_ui} hand_maintained={hand_maintained}"
+    )
     if lcd_yml.exists():
         print(f"  → {lcd_yml}")
 

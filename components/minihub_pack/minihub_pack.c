@@ -11,11 +11,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "minihub_config.h"
 #include "minihub_paths.h"
 #include "esp_log.h"
 
 static const char *TAG = "minihub_pack";
-static const char *PACK_DIR = MINIHUB_PACKS_DIR;
 
 #define MAX_PACKS 16
 
@@ -124,9 +124,10 @@ static esp_err_t load_pack_file(const char *path)
 
 static esp_err_t scan_pack_directory(void)
 {
-    DIR *dir = opendir(PACK_DIR);
+    const char *pack_dir = minihub_paths_packs_dir();
+    DIR *dir = opendir(pack_dir);
     if (!dir) {
-        ESP_LOGW(TAG, "pack dir %s not found, skip", PACK_DIR);
+        ESP_LOGW(TAG, "pack dir %s not found, skip", pack_dir);
         return ESP_OK;
     }
 
@@ -140,11 +141,11 @@ static esp_err_t scan_pack_directory(void)
             continue;
         }
         char path[320];
-        if (strlen(PACK_DIR) + 1 + name_len >= sizeof(path)) {
+        if (strlen(pack_dir) + 1 + name_len >= sizeof(path)) {
             ESP_LOGW(TAG, "pack path too long: %s", ent->d_name);
             continue;
         }
-        snprintf(path, sizeof(path), "%s/%s", PACK_DIR, ent->d_name);
+        snprintf(path, sizeof(path), "%s/%s", pack_dir, ent->d_name);
         load_pack_file(path);
     }
     closedir(dir);

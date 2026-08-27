@@ -278,38 +278,6 @@ static esp_err_t zigbee_adapter_start(void)
         }
     }
 
-#if !CONFIG_MINIHUB_ZIGBEE_SDK
-    if (n == 0) {
-        minihub_zigbee_device_t demo = {0};
-        strncpy(demo.point_id, "light/zigbee_light", sizeof(demo.point_id) - 1);
-        strncpy(demo.type, "light", sizeof(demo.type) - 1);
-        demo.caps = MINIHUB_ZB_CAP_ONOFF;
-        demo.endpoint = 1;
-        register_point_from_dev(&demo);
-
-        minihub_zigbee_device_t sw = {0};
-        strncpy(sw.point_id, "switch/zigbee_plug", sizeof(sw.point_id) - 1);
-        strncpy(sw.type, "switch", sizeof(sw.type) - 1);
-        sw.caps = MINIHUB_ZB_CAP_ONOFF;
-        sw.endpoint = 1;
-        register_point_from_dev(&sw);
-
-        minihub_zigbee_device_t sensor = {0};
-        strncpy(sensor.point_id, "sensor/zigbee_temp", sizeof(sensor.point_id) - 1);
-        strncpy(sensor.type, "sensor", sizeof(sensor.type) - 1);
-        sensor.caps = MINIHUB_ZB_CAP_TEMP | MINIHUB_ZB_CAP_HUMIDITY;
-        sensor.endpoint = 1;
-        register_point_from_dev(&sensor);
-
-        minihub_zigbee_device_t contact = {0};
-        strncpy(contact.point_id, "sensor/zigbee_door", sizeof(contact.point_id) - 1);
-        strncpy(contact.type, "sensor", sizeof(contact.type) - 1);
-        contact.caps = MINIHUB_ZB_CAP_IAS_ZONE;
-        contact.endpoint = 1;
-        register_point_from_dev(&contact);
-    }
-#endif
-
     ESP_LOGI(TAG, "adapter started (%u mapped devices)", (unsigned)n);
     (void)s_config;
     return ESP_OK;

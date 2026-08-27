@@ -58,7 +58,7 @@ void app_main(void)
 
     ESP_LOGI(TAG, "MiniHub starting...");
 
-    /* Must init before any NVS/partition flash access — APIs are linker-wrapped. */
+    /* Before NVS: flash dispatcher for PSRAM-stack callers (incl. main on some boards). */
     {
         const esp_flash_dispatcher_config_t flash_disp_cfg = {
             .task_stack_size = 4096,
@@ -74,6 +74,18 @@ void app_main(void)
         ESP_LOGI(TAG, "esp_flash_dispatcher ready");
     }
 
+    err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        err = nvs_flash_erase();
+        if (err != ESP_OK) {
+            return;
+        }
+        err = nvs_flash_init();
+    }
+    if (err != ESP_OK) {
+        return;
+    }
+
     esp_task_wdt_config_t wdt_cfg = {
         .timeout_ms = 30000,
         .idle_core_mask = 0,
@@ -85,18 +97,6 @@ void app_main(void)
     }
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "task_wdt config: %s", esp_err_to_name(err));
-    }
-
-    err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        err = nvs_flash_erase();
-        if (err != ESP_OK) {
-            return;
-        }
-        err = nvs_flash_init();
-    }
-    if (err != ESP_OK) {
-        return;
     }
 
     err = minihub_factory_reset_button_start();

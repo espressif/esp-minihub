@@ -82,10 +82,13 @@ BUILD_DIR = APP_DIR / "build"
 
 def _sdkconfig_path_for_app(rel: str) -> str:
     """SDKCONFIG_DEFAULTS entries are resolved relative to the IDF project dir (APP_DIR)."""
+    root_path = ROOT / rel
     app_local = APP_DIR / rel
     if app_local.is_file():
         return os.path.relpath(app_local, APP_DIR)
-    return os.path.relpath(ROOT / rel, APP_DIR)
+    if root_path.is_file():
+        return os.path.relpath(root_path, APP_DIR)
+    raise FileNotFoundError(f"SDKCONFIG_DEFAULTS fragment missing: {rel}")
 
 
 def set_app(app_name: str) -> None:
@@ -614,7 +617,14 @@ def ensure_board_manager() -> None:
     # Without -c ./boards, bmgr uses the managed catalog board (codec-only) and PSRAM stays off.
     defaults_text = defaults.read_text(encoding="utf-8") if defaults.is_file() else ""
     local_boards_stale = boards_dir.is_dir() and "CONFIG_SPIRAM=y" not in defaults_text
-    if current == bmgr_name and defaults.is_file() and not local_boards_stale:
+    # Regenerated under another checkout (e.g. MiniHub path baked into CMakeLists).
+    cmake_txt = (
+        (APP_DIR / "components/gen_bmgr_codes/CMakeLists.txt").read_text(encoding="utf-8")
+        if (APP_DIR / "components/gen_bmgr_codes/CMakeLists.txt").is_file()
+        else ""
+    )
+    board_path_stale = bool(cmake_txt) and str(APP_DIR.resolve()) not in cmake_txt
+    if current == bmgr_name and defaults.is_file() and not local_boards_stale and not board_path_stale:
         return
     gen = APP_DIR / "managed_components/espressif__esp_board_manager/gen_bmgr_config_codes.py"
     if not gen.is_file():

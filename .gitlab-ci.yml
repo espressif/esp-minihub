@@ -70,11 +70,8 @@ include:
     expire_in: 14 days
     name: "minihub-$APP-$CI_COMMIT_SHORT_SHA"
     paths:
+      # Staged from flasher_args.json flash_files (+ elf/map/merged/sdkconfig) by stage_artifacts.sh
       - ci_artifacts/$APP/
-      - application/$APP/build/$APP.bin
-      - application/$APP/build/$APP.elf
-      - application/$APP/build/minihub_merged.bin
-      - application/$APP/build/flasher_args.json
       # Needed by pack:mhub (minihub fills these; other apps may be empty)
       - application/$APP/build/modules/
   rules:
@@ -87,11 +84,14 @@ build:app:
     matrix:
       - APP:
           - minihub
+          - claw_minihub
   variables:
     MINIHUB_APP: "$APP"
   script:
     - test -f "application/${APP}/CMakeLists.txt"
     - bash tools/ci/build_apps.sh
+    - test -f "ci_artifacts/${APP}/firmware/flasher_args.json"
+    - test -f "ci_artifacts/${APP}/firmware/sdkconfig"
     - test -f "ci_artifacts/${APP}/firmware/${APP}_merged.bin"
     - test -f "application/${APP}/build/minihub_merged.bin"
 

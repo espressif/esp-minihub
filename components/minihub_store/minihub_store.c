@@ -875,6 +875,27 @@ static cJSON *installed_module_manifest(const char *id)
     }
     return load_json_file(path);
 }
+
+static void module_uninstall_adapter_name(const char *id, char *out, size_t out_len)
+{
+    if (!out || out_len == 0) {
+        return;
+    }
+    out[0] = '\0';
+    cJSON *manifest = installed_module_manifest(id);
+    if (manifest) {
+        const cJSON *adapter = cJSON_GetObjectItem(manifest, "adapter");
+        if (cJSON_IsString(adapter) && adapter->valuestring[0]) {
+            strncpy(out, adapter->valuestring, out_len - 1);
+            out[out_len - 1] = '\0';
+        }
+        cJSON_Delete(manifest);
+    }
+    if (!out[0] && id) {
+        strncpy(out, id, out_len - 1);
+        out[out_len - 1] = '\0';
+    }
+}
 #endif
 
 static char *installed_pack_version(const char *id, char *out, size_t out_len)
@@ -1770,18 +1791,36 @@ esp_err_t minihub_store_uninstall(const char *kind, const char *id)
     }
     if (strcmp(kind, "module") == 0) {
 #if CONFIG_MINIHUB_DYNAMIC_MODULES
-        bool installed = module_installed(id);
-        /* Builtin / host-static adapters: refuse — disable via adapters.json. */
-        esp_err_t del = minihub_module_delete(id);
-        if (del == ESP_ERR_NOT_SUPPORTED) {
-            ESP_LOGW(TAG, "uninstall '%s': firmware builtin — use adapters enabled=false", id);
-            return ESP_ERR_NOT_SUPPORTED;
-        }
-        if (!installed) {
-            return ESP_ERR_NOT_FOUND;
-        }
+        char adapter_name[MINIHUB_MODULE_ID_MAX + 1];
+        module_uninstall_adapter_name(id, adapter_name, sizeof(adapter_name));
+
         char pkg_dir[MINIHUB_MODULE_PKG_PATH_MAX];
         module_pkg_dir(id, pkg_dir, sizeof(pkg_dir));
+        struct stat st_pkg;
+        bool pkg_exists = stat(pkg_dir, &st_pkg) == 0;
+        bool on_disk = module_installed(id);
+
+        if (!on_disk && !pkg_exists) {
+            (void)minihub_module_delete(id);
+            (void)minihub_module_forget_host_rpc(id);
+            (void)minihub_config_remove_adapter(adapter_name);
+            return ESP_OK;
+        }
+
+        /* Best-effort loader delete; always remove_tree for a full store uninstall. */
+        esp_err_t del = minihub_module_delete(id);
+        if (del == ESP_ERR_NOT_SUPPORTED) {
+            if (!pkg_exists) {
+                ESP_LOGW(TAG, "uninstall '%s': firmware builtin — use adapters enabled=false", id);
+                return ESP_ERR_NOT_SUPPORTED;
+            }
+            ESP_LOGW(TAG, "uninstall '%s': partial delete (%s), removing package dir",
+                     id, esp_err_to_name(del));
+        } else if (del != ESP_OK && del != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(TAG, "uninstall '%s': delete returned %s, removing package dir",
+                     id, esp_err_to_name(del));
+        }
+
         (void)minihub_hub_remove_tree(pkg_dir);
         char staging_dir[MINIHUB_MODULE_STAGING_PATH_MAX];
         snprintf(staging_dir, sizeof(staging_dir), "%s.staging", pkg_dir);

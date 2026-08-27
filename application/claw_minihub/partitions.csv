@@ -1,0 +1,10 @@
+# Name,    Type, SubType, Offset,   Size
+# ESP32-S31 / 16MB flash — dual OTA + Claw FAT system/storage + MiniHub modstore
+nvs,       data, nvs,     0xA000,   0x6000
+otadata,   data, ota,     0x10000,  0x2000
+phy_init,  data, phy,     0x12000,  0x1000
+ota_0,     app,  ota_0,         ,   5M
+ota_1,     app,  ota_1,         ,   5M
+system,    data, fat,           ,   2600K
+storage,   data, fat,           ,   0x150000
+modstore,  data, littlefs,      ,   0x150000

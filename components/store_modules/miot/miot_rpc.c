@@ -259,6 +259,42 @@ static esp_err_t miot_run_sync_job(miot_sync_job_t *job)
     return ESP_OK;
 }
 
+static void auto_sync_async_done(esp_err_t result, void *user_ctx)
+{
+    miot_sync_job_t *job = user_ctx;
+
+    (void)result;
+    if (!job) {
+        return;
+    }
+    if (job->sync_err == ESP_OK) {
+        request_miot_reload();
+        ESP_LOGI(TAG, "post-auth async sync ok: %u device(s)", (unsigned)job->synced);
+    } else if (job->sync_err == ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "post-auth async sync need_home (use Web sync to pick home)");
+    } else {
+        ESP_LOGW(TAG, "post-auth async sync failed: %s", esp_err_to_name(job->sync_err));
+    }
+    free(job);
+}
+
+/** Return verify/login RPC quickly; run cloud sync on http_worker in background. */
+static esp_err_t auto_sync_start_async(void)
+{
+    miot_sync_job_t *job = calloc(1, sizeof(miot_sync_job_t));
+
+    if (!job) {
+        return ESP_ERR_NO_MEM;
+    }
+    job->merge = true;
+    job->reload = true;
+    esp_err_t err = miot_http_run_worker_async(miot_sync_job_worker, job, auto_sync_async_done, job);
+    if (err != ESP_OK) {
+        free(job);
+    }
+    return err;
+}
+
 static void auto_sync_to_response(cJSON *resp)
 {
     miot_sync_job_t job = {
@@ -309,6 +345,19 @@ static void auto_sync_to_response(cJSON *resp)
     cJSON_AddNumberToObject(resp, "bindkeys", (double)job.bindkeys);
     cJSON_AddBoolToObject(resp, "reloaded", true);
     miot_sync_job_add_home_echo(resp, &job);
+}
+
+static void auto_sync_after_auth(cJSON *resp)
+{
+    if (!resp) {
+        return;
+    }
+    if (auto_sync_start_async() == ESP_OK) {
+        cJSON_AddStringToObject(resp, "sync", "pending");
+        return;
+    }
+    /* Worker queue full — fall back to blocking sync (legacy behaviour). */
+    auto_sync_to_response(resp);
 }
 
 static esp_err_t rpc_status(const cJSON *params, cJSON **out)
@@ -1043,7 +1092,7 @@ static esp_err_t rpc_verify(const cJSON *params, cJSON **out)
     }
     cJSON_AddStringToObject(resp, "result", err == ESP_OK ? "ok" : "fail");
     if (err == ESP_OK) {
-        auto_sync_to_response(resp);
+        auto_sync_after_auth(resp);
     } else {
         cJSON_AddStringToObject(resp, "error", esp_err_to_name(err));
         if (const char *msg = minihub_miot_auth_last_error()) {

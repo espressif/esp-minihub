@@ -2,7 +2,7 @@ idf_component_register(
     SRCS "minihub_mcp_server.c" "hub_api_gateway.c"
     INCLUDE_DIRS "include" "."
     REQUIRES minihub_core minihub_hub minihub_rules minihub_config minihub_store
-             minihub_module minihub_ota minihub_zigbee minihub_ble_mesh json
+             minihub_module minihub_ota minihub_zigbee minihub_ble_mesh minihub_net json
              cap_mcp_server
 )
 

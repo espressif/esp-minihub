@@ -7,7 +7,8 @@
 | `compose_sdkconfig.py` | Compose sdkconfig defaults from `app.yml` + features |
 | `pack_store_module.py` | `pack` → `.mhub`; `mhmd` → MHMD wrap |
 | `build_store_modules.py` | Build + pack native Store modules |
-| `sync_host_manifest.py` | Apply manifest for `MINIHUB_APP` |
+| `product_assets.py` | Resolve app/repo config JSON; list `store_preinstall` |
+| `sync_host_manifest.py` | Merge `_host_base` + `application/<app>/manifest.yml` for `MINIHUB_APP` |
 | `sync_store_catalog.py` | Store `catalog.json` |
 | `store_server.py` | Local Store HTTP (+ `/api/miot-spec/*`) |
 | `gen_host_export_symbols.py` | Host ELF export allowlist |

@@ -1,0 +1,10 @@
+idf_component_register(
+    SRCS
+        "cmd_module.c"
+    INCLUDE_DIRS
+        "."
+    PRIV_REQUIRES
+        console
+        minihub_module
+        espressif__cjson
+)

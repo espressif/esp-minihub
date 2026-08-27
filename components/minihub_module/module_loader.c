@@ -7,6 +7,7 @@
 #include "minihub_module.h"
 
 #include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -214,6 +215,93 @@ static void parent_dir(const char *path, char *out, size_t out_len)
     }
     memcpy(out, path, n);
     out[n] = '\0';
+}
+
+/** Crash / incomplete-load guard: /store/modules/<id>/.load_guard */
+#define LOAD_GUARD_NAME ".load_guard"
+#define LOAD_GUARD_LOADING "loading"
+#define LOAD_GUARD_OK "ok"
+
+typedef enum {
+    LOAD_GUARD_NONE = 0,
+    LOAD_GUARD_STATE_LOADING,
+    LOAD_GUARD_STATE_OK,
+} load_guard_state_t;
+
+static bool load_guard_path(const module_slot_t *slot, char *out, size_t out_len)
+{
+    if (!slot || !out || out_len == 0 || slot->manifest_path[0] == '\0') {
+        return false;
+    }
+    char dir[192];
+    parent_dir(slot->manifest_path, dir, sizeof(dir));
+    if (!dir[0]) {
+        return false;
+    }
+    return snprintf(out, out_len, "%s/%s", dir, LOAD_GUARD_NAME) < (int)out_len;
+}
+
+static load_guard_state_t load_guard_read(const module_slot_t *slot)
+{
+    char path[220];
+    if (!load_guard_path(slot, path, sizeof(path))) {
+        return LOAD_GUARD_NONE;
+    }
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        return LOAD_GUARD_NONE;
+    }
+    char buf[16] = {0};
+    size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r' || buf[n - 1] == ' ')) {
+        buf[--n] = '\0';
+    }
+    if (strcmp(buf, LOAD_GUARD_LOADING) == 0) {
+        return LOAD_GUARD_STATE_LOADING;
+    }
+    if (strcmp(buf, LOAD_GUARD_OK) == 0) {
+        return LOAD_GUARD_STATE_OK;
+    }
+    return LOAD_GUARD_NONE;
+}
+
+static esp_err_t load_guard_write(const module_slot_t *slot, const char *state)
+{
+    char path[220];
+    if (!load_guard_path(slot, path, sizeof(path)) || !state) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        ESP_LOGW(TAG, "cannot write load guard %s: errno=%d", path, errno);
+        return ESP_FAIL;
+    }
+    fputs(state, f);
+    fputc('\n', f);
+    fclose(f);
+    return ESP_OK;
+}
+
+static void load_guard_clear_slot(const module_slot_t *slot)
+{
+    char path[220];
+    if (!load_guard_path(slot, path, sizeof(path))) {
+        return;
+    }
+    unlink(path);
+}
+
+static const char *load_guard_state_str(load_guard_state_t st)
+{
+    switch (st) {
+    case LOAD_GUARD_STATE_LOADING:
+        return "loading";
+    case LOAD_GUARD_STATE_OK:
+        return "ok";
+    default:
+        return "none";
+    }
 }
 
 static cJSON *load_json_file_capped(const char *path, long max_len)
@@ -647,18 +735,19 @@ static esp_err_t try_load_binary(module_slot_t *slot, const cJSON *adapter_cfg)
         }
     }
 
-    minihub_module_entry_fn entry = NULL;
+    /* Persist "loading" before dlopen/entry so a crash leaves a sticky skip flag. */
+    (void)load_guard_write(slot, LOAD_GUARD_LOADING);
+
     minihub_module_rpc_fn rpc = NULL;
     void *handle = NULL;
-    esp_err_t err = minihub_module_dl_load(slot->binary_path, &entry, &rpc, &handle);
-    if (err != ESP_OK) {
-        return err;
-    }
-
     const minihub_adapter_t *adapter = NULL;
-    err = entry(&s_host_api, adapter_cfg, &adapter);
+    esp_err_t err = minihub_module_dl_load_and_enter(slot->binary_path, &s_host_api, adapter_cfg,
+                                                     &adapter, &rpc, &handle);
     if (err != ESP_OK || !adapter) {
-        ESP_LOGE(TAG, "module '%s' entry failed: %s", slot->info.id, esp_err_to_name(err));
+        /* Soft failure: clear guard so a later retry (disk free, new package) can proceed. */
+        load_guard_clear_slot(slot);
+        ESP_LOGE(TAG, "module '%s' entry/load failed: %s", slot->info.id,
+                 esp_err_to_name(err != ESP_OK ? err : ESP_FAIL));
         return err != ESP_OK ? err : ESP_FAIL;
     }
 
@@ -670,6 +759,7 @@ static esp_err_t try_load_binary(module_slot_t *slot, const cJSON *adapter_cfg)
     if (err == ESP_OK) {
         slot->adapter = adapter;
         slot->info.loaded = true;
+        (void)load_guard_write(slot, LOAD_GUARD_OK);
         struct stat st;
         if (stat(slot->binary_path, &st) == 0) {
             ESP_LOGI(TAG, "module '%s' loaded binary %ld bytes adapter %s",
@@ -688,6 +778,8 @@ static esp_err_t try_load_binary(module_slot_t *slot, const cJSON *adapter_cfg)
                          slot->info.id, adapter->version, slot->adapter_version_expected);
             }
         }
+    } else {
+        load_guard_clear_slot(slot);
     }
     (void)handle;
     return err;
@@ -741,6 +833,40 @@ static bool module_binary_installed(const module_slot_t *slot)
     return stat(slot->binary_path, &st) == 0;
 }
 
+static bool module_slot_installed(const module_slot_t *slot)
+{
+    if (!slot) {
+        return false;
+    }
+    if (slot->manifest_path[0] != '\0') {
+        return slot->builtin_id[0] != '\0' || module_binary_installed(slot);
+    }
+    /* Host RPC listing without a Store package (zigbee / rtsp_cam). */
+    return slot->rpc != NULL;
+}
+
+static void remove_ephemeral_module_slot(const char *module_id)
+{
+    for (size_t i = 0; i < s_module_count; i++) {
+        if (strcmp(s_modules[i].info.id, module_id) != 0) {
+            continue;
+        }
+        if (s_modules[i].manifest_path[0] != '\0') {
+            return;
+        }
+        if (s_modules[i].ui_json) {
+            cJSON_Delete(s_modules[i].ui_json);
+            s_modules[i].ui_json = NULL;
+        }
+        if (i + 1 < s_module_count) {
+            memmove(&s_modules[i], &s_modules[i + 1],
+                    (s_module_count - i - 1) * sizeof(s_modules[i]));
+        }
+        s_module_count--;
+        return;
+    }
+}
+
 cJSON *minihub_module_list_json(void)
 {
     cJSON *arr = cJSON_CreateArray();
@@ -778,6 +904,11 @@ cJSON *minihub_module_list_json(void)
         cJSON_AddNumberToObject(item, "abi_version", info->abi_version);
         cJSON_AddBoolToObject(item, "enabled", info->enabled);
         cJSON_AddBoolToObject(item, "loaded", info->loaded);
+        {
+            load_guard_state_t gst = load_guard_read(&s_modules[i]);
+            cJSON_AddStringToObject(item, "load_guard", load_guard_state_str(gst));
+            cJSON_AddBoolToObject(item, "load_blocked", gst == LOAD_GUARD_STATE_LOADING);
+        }
         if (s_modules[i].is_js) {
             cJSON_AddStringToObject(item, "runtime", "js");
         } else if (s_modules[i].hybrid_entry) {
@@ -808,7 +939,7 @@ cJSON *minihub_module_list_json(void)
         }
         bool managed = s_modules[i].manifest_path[0] != '\0' && s_modules[i].builtin_id[0] == '\0';
         cJSON_AddBoolToObject(item, "managed", managed);
-        bool installed = s_modules[i].builtin_id[0] != '\0' || module_binary_installed(&s_modules[i]);
+        bool installed = module_slot_installed(&s_modules[i]);
         cJSON_AddBoolToObject(item, "installed", installed);
         cJSON_AddBoolToObject(item, "has_rpc", s_modules[i].rpc != NULL);
         if (s_modules[i].ui_file_path[0]) {
@@ -856,7 +987,7 @@ bool minihub_module_overview_adapter_visible(const char *adapter_name)
         if (!s_modules[i].info.enabled) {
             return false;
         }
-        bool installed = s_modules[i].builtin_id[0] != '\0' || module_binary_installed(&s_modules[i]);
+        bool installed = module_slot_installed(&s_modules[i]);
         if (!installed) {
             return false;
         }
@@ -1088,12 +1219,44 @@ esp_err_t minihub_module_register_rpc(const char *module_id, minihub_module_rpc_
         slot->info.abi_version = MINIHUB_MODULE_ABI_VERSION;
         slot->info.core_api_min = MINIHUB_CORE_API_VERSION;
         slot->info.core_api_max = MINIHUB_CORE_API_VERSION;
-        strncpy(slot->builtin_id, module_id, sizeof(slot->builtin_id) - 1);
         ESP_LOGI(TAG, "host RPC module slot created: %s", module_id);
     }
     slot->rpc = rpc;
     slot->info.loaded = true;
     return ESP_OK;
+}
+
+esp_err_t minihub_module_forget_host_rpc(const char *module_id)
+{
+    if (!module_id || !module_id[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    bool found = false;
+    for (size_t i = 0; i < s_host_rpc_count; i++) {
+        if (strcmp(s_host_rpcs[i].id, module_id) != 0) {
+            continue;
+        }
+        if (i + 1 < s_host_rpc_count) {
+            memmove(&s_host_rpcs[i], &s_host_rpcs[i + 1],
+                    (s_host_rpc_count - i - 1) * sizeof(s_host_rpcs[i]));
+        }
+        s_host_rpc_count--;
+        found = true;
+        break;
+    }
+
+    module_slot_t *slot = find_module(module_id);
+    if (slot && slot->manifest_path[0] == '\0') {
+        remove_ephemeral_module_slot(module_id);
+        found = true;
+    }
+
+    if (found) {
+        ESP_LOGI(TAG, "forgot host RPC module '%s'", module_id);
+        return ESP_OK;
+    }
+    return ESP_ERR_NOT_FOUND;
 }
 
 esp_err_t minihub_module_set_ui_json(const char *module_id, const char *json)
@@ -1249,15 +1412,44 @@ esp_err_t minihub_module_set_enabled(const char *id, bool enabled)
         return err;
     }
     slot->info.enabled = enabled;
+    /* Enabling again is an explicit retry — drop a sticky crash guard. */
+    if (enabled) {
+        load_guard_clear_slot(slot);
+    }
     ESP_LOGI(TAG, "module '%s' enabled=%d", id, enabled);
+    return ESP_OK;
+}
+
+esp_err_t minihub_module_clear_load_guard(const char *id)
+{
+    module_slot_t *slot = find_module(id);
+    if (!slot) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    load_guard_clear_slot(slot);
+    ESP_LOGI(TAG, "module '%s' load guard cleared", id);
     return ESP_OK;
 }
 
 esp_err_t minihub_module_delete(const char *id)
 {
     module_slot_t *slot = find_module(id);
-    if (!slot || slot->manifest_path[0] == '\0' || slot->builtin_id[0] != '\0') {
-        return slot ? ESP_ERR_NOT_SUPPORTED : ESP_ERR_NOT_FOUND;
+    if (!slot) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (slot->manifest_path[0] == '\0') {
+        char adapter[sizeof(slot->info.adapter_name)];
+        strncpy(adapter, slot->info.adapter_name, sizeof(adapter) - 1);
+        adapter[sizeof(adapter) - 1] = '\0';
+        (void)minihub_module_forget_host_rpc(id);
+        (void)minihub_config_remove_adapter(adapter);
+        ESP_LOGI(TAG, "removed orphan module listing '%s'", id);
+        return ESP_OK;
+    }
+
+    if (slot->builtin_id[0] != '\0') {
+        return ESP_ERR_NOT_SUPPORTED;
     }
     if (!module_binary_installed(slot)) {
         ESP_LOGW(TAG, "module '%s' not installed (binary missing)", id);
@@ -1280,6 +1472,9 @@ esp_err_t minihub_module_delete(const char *id)
         char ui_path[256];
         snprintf(ui_path, sizeof(ui_path), "%s/ui.json", dir);
         unlink(ui_path);
+        char guard_path[256];
+        snprintf(guard_path, sizeof(guard_path), "%s/%s", dir, LOAD_GUARD_NAME);
+        unlink(guard_path);
     }
     if (unlink(slot->manifest_path) != 0) {
         ESP_LOGE(TAG, "cannot delete %s", slot->manifest_path);
@@ -1288,6 +1483,8 @@ esp_err_t minihub_module_delete(const char *id)
     if (dir[0] && strcmp(dir, MINIHUB_MODULES_DIR) != 0) {
         (void)rmdir(dir);
     }
+    (void)minihub_module_forget_host_rpc(id);
+    (void)minihub_config_remove_adapter(slot->info.adapter_name);
     ESP_LOGI(TAG, "deleted module '%s'", id);
     return ESP_OK;
 }
@@ -1329,6 +1526,17 @@ esp_err_t minihub_module_load_all(const cJSON *adapters_root)
             continue;
         }
 
+        /* Native packages only: sticky "loading" means last boot crashed mid-entry. */
+        if (!slot->is_js && slot->builtin_id[0] == '\0' &&
+            load_guard_read(slot) == LOAD_GUARD_STATE_LOADING) {
+            ESP_LOGW(TAG,
+                     "skip '%s' — load guard stuck in loading (previous crash?). "
+                     "Clear via POST /api/modules {\"id\":\"%s\",\"clear_load_guard\":true} "
+                     "or enable=true, then reload.",
+                     slot->info.id, slot->info.id);
+            continue;
+        }
+
         ESP_LOGI(TAG, "loading '%s' binary='%s'", slot->info.id,
                  slot->binary_path[0] ? slot->binary_path : "(none)");
         if (slot->hybrid_entry == 2) {
@@ -1360,6 +1568,10 @@ esp_err_t minihub_module_load_deferred(const cJSON *adapters_root)
         esp_err_t err = validate_module_info(&slot->info);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "skip deferred '%s' (validate: %s)", slot->info.id, esp_err_to_name(err));
+            continue;
+        }
+        if (load_guard_read(slot) == LOAD_GUARD_STATE_LOADING) {
+            ESP_LOGW(TAG, "skip deferred '%s' — load guard stuck in loading", slot->info.id);
             continue;
         }
         ESP_LOGI(TAG, "loading deferred companion '%s' binary='%s'",

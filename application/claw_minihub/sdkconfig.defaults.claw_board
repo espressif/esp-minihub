@@ -1,0 +1,57 @@
+# Claw FAT system+/fatfs storage, plus MiniHub LittleFS `modstore` → `/store`.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+
+# Function / Korvo-1 S31: octal PSRAM. Board-manager generated defaults omit
+# CONFIG_SPIRAM (managed board file only lists codec), so MiniHub core_task
+# (xTaskCreateWithCaps SPIRAM) fails with ESP_ERR_NO_MEM.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_250M=y
+CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
+CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
+
+# Ethernet-first Function board: keep internal DRAM for TLS/mbedTLS.
+# Task stacks in PSRAM; mbedTLS frees CA/config after handshake.
+CONFIG_FREERTOS_PLACE_TASK_STACKS_IN_EXT_RAM=y
+CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA=y
+CONFIG_MBEDTLS_DYNAMIC_FREE_CA_CERT=y
+# Prefer PSRAM for generic malloc, but keep small allocs (NVS pages, etc.)
+# in internal RAM so flash ops never write PSRAM while cache is off.
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# mDNS after Claw: internal heap is typically <1KB; task must be allowed in PSRAM.
+CONFIG_MDNS_TASK_CREATE_FROM_SPIRAM=y
+CONFIG_MDNS_TASK_CREATE_FROM_INTERNAL=n
+CONFIG_MDNS_MEMORY_ALLOC_SPIRAM=y
+CONFIG_MDNS_MEMORY_ALLOC_INTERNAL=n
+
+# S31: keep flash ops IRAM-safe. AUTO_SUSPEND is OFF — matching working
+# minihub — because with it ON, L3 .so entry in PSRAM heap still hits
+# Instruction access fault even after IBUS1 re-arm (CI e9a144c repro).
+# PSRAM stacks rely on flash_dispatcher bounce buffers instead.
+# CONFIG_SPI_FLASH_AUTO_SUSPEND is not set
+CONFIG_SPI_FLASH_PLACE_FUNCTIONS_IN_IRAM=y
+
+# Same as esp32_s31_korvo1: BSS/NOINIT in PSRAM + .text XIP on PSRAM corrupts
+# Wi-Fi's api-lock pointer during FAT/flash (cache off). Mutex then looks like
+# ASCII from the file being read (e.g. "content" in router_rules.json).
+# XIP itself is required so ELF_LOADER_LOAD_PSRAM modules can execute.
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=n
+CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY=n
+
+# Leave more INTERNAL heap for newlib FILE locks (fopen/fclose abort in
+# lock_init_generic when the 32K DMA reserve + Wi-Fi BSS leave nothing).
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=16384
+
+# S31 internal heap is ~121KiB once Wi-Fi .bss stays internal. Default
+# TX=16 + MGMT=32 + 20 sockets is too large for Claw + SoftAP fallback.
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_TX_BA_WIN=3
+CONFIG_ESP_WIFI_MGMT_SBUF_NUM=8
+CONFIG_LWIP_MAX_SOCKETS=12
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880
+CONFIG_LWIP_TCP_WND_DEFAULT=2880
