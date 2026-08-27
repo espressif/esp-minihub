@@ -1,0 +1,31 @@
+# MiniHub Core MVP overlay: Core + Zigbee adapter (+ dynamic Store modules).
+# MIoT is NOT linked into firmware — install the Store L3 plugin at runtime.
+# Web UI attaches to the Claw portal at GET /minihub (no second httpd).
+#
+# RF coexistence (meeting constraint, see docs/29-MVP-Zigbee-Smoke-v2.md):
+#   - Wi-Fi STA (Claw wifi_manager) + Zigbee coordinator: OK on S31 (esp_coex_wifi_i154)
+#   - BLE Mesh SDK: OFF — Mesh provisioning and Zigbee permit_join must not run together
+#   - S3 DevKit compile smoke: Zigbee SDK OFF → adapter simulation points (no 802.15.4 radio)
+#
+CONFIG_MINIHUB_WEB_UI=y
+CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB=n
+# Catalog/install on claw: LittleFS partition label `modstore` → `/store`.
+CONFIG_MINIHUB_STORE=y
+CONFIG_MINIHUB_DYNAMIC_MODULES=y
+CONFIG_ELF_LOADER=y
+CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT=y
+# Claw writable FAT is /fatfs (no LittleFS /data). Must match module_dl extract root.
+CONFIG_ELF_FILE_SYSTEM_BASE_PATH="/fatfs"
+CONFIG_MINIHUB_ZIGBEE_SDK=n
+CONFIG_MINIHUB_BLE_MESH_SDK=n
+CONFIG_MINIHUB_MATTER_ADAPTER=n
+CONFIG_MINIHUB_MODBUS=n
+CONFIG_MINIHUB_RAINMAKER=n
+CONFIG_MINIHUB_POINT_DEBOUNCE_MS=1000
+# Claw wifi_manager owns STA/AP — keep minihub_net Wi-Fi off to avoid a second stack.
+CONFIG_MINIHUB_NET_WIFI_STA=n
+CONFIG_MINIHUB_WIFI_PROVISIONING=n
+# Keep Sec1 so minihub_provision (SoftAP+POP) still compiles on IDF 6.x defaults (Sec2-only).
+CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_1=y
+# Periodic internal/DMA/PSRAM heap log (tag minihub_mem) while chasing S31 OOM.
+CONFIG_MINIHUB_HEAP_LOG_INTERVAL_SEC=10

@@ -1,0 +1,284 @@
+menu "MiniHub"
+
+    config MINIHUB_WIFI_SSID
+        string "WiFi SSID"
+        default "YOUR_SSID"
+        help
+            Leave as YOUR_SSID to use NVS / SoftAP provisioning instead.
+
+    config MINIHUB_WIFI_PASS
+        string "WiFi Password"
+        default "YOUR_PASSWORD"
+
+    config MINIHUB_WIFI_PROVISIONING
+        bool "Enable Wi-Fi provisioning when SSID not set"
+        default y
+        help
+            When Kconfig/NVS have no Wi-Fi credentials, start provisioning.
+            Disable entirely if the product uses only baked-in SSID/password
+            or Ethernet (no on-device Wi-Fi setup UI).
+
+            Transport is SoftAP or BLE (see choice below). SoftAP is the
+            default and does not require Bluetooth. Select BLE only for the
+            customer RF profile (Wi-Fi STA + Zigbee, BLE only during provision).
+
+    choice MINIHUB_WIFI_PROV_TRANSPORT
+        prompt "Wi-Fi provisioning transport"
+        depends on MINIHUB_WIFI_PROVISIONING
+        default MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
+        help
+            SoftAP: phone joins PROV_* AP (no Bluetooth required).
+            BLE: phone provisions over GATT; pulls in NimBLE. Use only when
+            needed — leave SoftAP if BLE provisioning will not be used.
+
+        config MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
+            bool "SoftAP (no Bluetooth)"
+
+        config MINIHUB_WIFI_PROV_TRANSPORT_BLE
+            bool "BLE (requires Bluetooth / NimBLE)"
+            select BT_ENABLED
+            select BT_NIMBLE_ENABLED
+            help
+                Enables CONFIG_BT_ENABLED + NimBLE via select.
+                Prefer sdkconfig.defaults.wifi_sta_zigbee for the full customer
+                profile. Do not enable BLE Mesh on the same profile if BLE must
+                be released after provision.
+
+    endchoice
+
+    config MINIHUB_WIFI_PROV_BLE_FREE_BTDM
+        bool "Release Bluetooth (BTDM) after BLE Wi-Fi provisioning"
+        depends on MINIHUB_WIFI_PROV_TRANSPORT_BLE
+        default y
+        help
+            After NETWORK_PROV_END, free BT controller memory so BLE is fully
+            off. Required for customer profile: BLE only for provisioning.
+            Disable if another feature needs BLE to stay on (e.g. BLE Mesh).
+            Has no effect when SoftAP provisioning or provisioning is disabled.
+
+    config MINIHUB_FACTORY_RESET_BUTTON
+        bool "BOOT button long-press factory reset (erase NVS)"
+        default n
+        help
+            Hold the configured GPIO to erase the default NVS partition and
+            restart (clears Wi-Fi credentials in NVS). Off by default — enable
+            per board profile (e.g. sdkconfig.defaults.s31_function / wifi_sta_zigbee).
+            Does not change Kconfig-baked SSID; set MINIHUB_WIFI_SSID=YOUR_SSID
+            if you need SoftAP/BLE provisioning after reset.
+
+    config MINIHUB_FACTORY_RESET_GPIO
+        int "Factory-reset button GPIO"
+        depends on MINIHUB_FACTORY_RESET_BUTTON
+        default 61
+        range 0 61
+        help
+            ESP32-S31 Function / Korvo BOOT button is GPIO61 (active low), not GPIO0.
+
+    config MINIHUB_FACTORY_RESET_HOLD_MS
+        int "Factory-reset hold time (ms)"
+        depends on MINIHUB_FACTORY_RESET_BUTTON
+        default 5000
+        range 1000 30000
+
+    config MINIHUB_FACTORY_RESET_ACTIVE_LOW
+        bool "Factory-reset button is active low"
+        depends on MINIHUB_FACTORY_RESET_BUTTON
+        default y
+
+    # Stub for esp_codec_dev >=2.0 optional dep on espressif/usb_host_uac.
+    # Without this symbol, IDF Component Manager treats CODEC_UAC_SUPPORT as a
+    # missing Kconfig key and fails configure (even when UAC is unused).
+    config CODEC_UAC_SUPPORT
+        bool "USB Audio Class (UAC) codec support"
+        default n
+        help
+            Enable only if the board/profile installs espressif/usb_host_uac.
+            Default off for Function/Korvo Wi-Fi+Zigbee profiles.
+
+    config MINIHUB_API_TOKEN
+        string "REST API Bearer token (empty = auth disabled)"
+        default ""
+
+    config MINIHUB_POINT_DEBOUNCE_MS
+        int "Point update debounce (ms, 0=off)"
+        default 1000
+        range 0 10000
+        help
+            Minimum interval between point.updated events for the same point.
+            Reduces RainMaker MQTT chatter from adapter polls. Local value/props
+            still update immediately; cloud report is rate-limited.
+
+    config MINIHUB_STORE
+        bool "Enable MiniHub Store (catalog download for packs/modules)"
+        default y
+        depends on MINIHUB_WEB_UI
+        help
+            Fetch catalog from LAN store server and install ecosystem packs
+            (and adapter modules when dynamic modules are enabled).
+
+    config MINIHUB_STORE_SERVER
+        string "MiniHub Store server IP or hostname"
+        depends on MINIHUB_STORE
+        default "172.168.10.13"
+
+    config MINIHUB_STORE_PORT
+        int "MiniHub Store server port"
+        depends on MINIHUB_STORE
+        default 8080
+        range 1 65535
+
+    config MINIHUB_DYNAMIC_MODULES
+        bool "Enable dynamic adapter module loader (.mhub / .so via elf_loader)"
+        default n
+        help
+            Load adapter modules from modstore LittleFS using espressif/elf_loader.
+            When enabled, adapters marked "dynamic" in manifest are not linked statically.
+
+    config MINIHUB_HUB_MAX_BYTES
+        int "Max .mhub package size downloaded into PSRAM (bytes)"
+        depends on MINIHUB_DYNAMIC_MODULES
+        default 1048576
+        range 65536 4194304
+        help
+            Store installs plugins as .mhub (zip). The whole archive is
+            buffered in PSRAM before extraction. Reject larger downloads.
+
+    config MINIHUB_JS_PLUGINS
+        bool "Enable L2 JS plugins (QuickJS-NG + Host API v0)"
+        depends on MINIHUB_DYNAMIC_MODULES
+        default y
+        help
+            Load runtime:js modules (main.js) via espressif/quickjs-ng.
+            Disable on memory-tight profiles.
+
+    config MINIHUB_ZIGBEE_SDK
+        bool "Use ESP-Zigbee-SDK coordinator (requires 802.15.4 SoC or RCP)"
+        default n
+        help
+            Enable real Zigbee stack via esp-zigbee-lib. Target must support
+            IEEE 802.15.4 (e.g. ESP32-H2/C6) or use an external RCP module.
+
+    config MINIHUB_BLE_MESH_SDK
+        bool "Use ESP-BLE-Mesh Provisioner (Generic OnOff Client)"
+        default n
+        help
+            Enable real BLE Mesh Provisioner via ESP-IDF bt/esp_ble_mesh.
+            Mutual exclusion with Zigbee SDK / Matter commissioner profiles
+            is recommended until multi-radio coexistence is validated.
+
+    config MINIHUB_MATTER_ADAPTER
+        bool "Enable Matter adapter / commissioner (Wi-Fi / Thread Matter over IP)"
+        default n
+        help
+            Registers the Matter adapter and Web/API commission UI, and
+            builds the ESP-Matter DeviceCommissioner when compiled with
+            ./tools/build_sdk.py … matter (MINIHUB_BUILD_MATTER=1 and
+            ESP_MATTER_PATH). MiniHub does not need a Thread radio for
+            Wi-Fi Matter devices. build_sdk.py auto-adds the matter stack
+            when this option is set in sdkconfig. Thread radio/BR is a
+            separate option (MINIHUB_THREAD_ADAPTER).
+
+    config MINIHUB_THREAD_ADAPTER
+        bool "Enable Thread adapter (border router / radio — future)"
+        default n
+        select MINIHUB_MATTER_ADAPTER
+        help
+            Future Thread border router / radio path. Selecting this also
+            enables the Matter adapter (Thread Matter devices). Wi-Fi-only
+            Matter does not require this option.
+
+    config MINIHUB_MODBUS
+        bool "Enable Modbus client (esp-modbus TCP / RTU)"
+        default y
+        help
+            Build espressif/esp-modbus and register the modbus adapter
+            (TCP, RTU/RS-485, and TCP gateways). Runtime enable remains
+            adapters.json → adapters.modbus.enabled (default false).
+
+    if MINIHUB_MODBUS
+        config MINIHUB_MODBUS_UART_NUM
+            int "Default UART port for Modbus RTU"
+            default 1
+            range 0 2
+            help
+                Used when a gateways[] entry has transport=rtu and omits uart_port.
+
+        config MINIHUB_MODBUS_UART_TXD
+            int "Default Modbus RTU TX GPIO (-1 = require adapters.json)"
+            default -1
+
+        config MINIHUB_MODBUS_UART_RXD
+            int "Default Modbus RTU RX GPIO (-1 = require adapters.json)"
+            default -1
+
+        config MINIHUB_MODBUS_UART_RTS
+            int "Default Modbus RTU RTS / DE~RE GPIO (-1 = no RS485 direction pin)"
+            default -1
+    endif
+
+    config MINIHUB_RAINMAKER
+        bool "Enable ESP RainMaker bridge (phone APP control)"
+        default n
+        help
+            Embed esp-rainmaker and map MiniHub Points (switch/light/sensor)
+            to RainMaker Devices for the phone APP. Prefer Self Claim
+            (CONFIG_ESP_RMAKER_SELF_CLAIM) with BLE Mesh. Not a build_sdk
+            radio stack — enable via sdkconfig / product defaults.
+
+    # MIoT credentials live in the Store plugin (components/store_modules/miot),
+    # not in Host/Claw Kconfig.
+
+    config MINIHUB_HEAP_LOG_INTERVAL_SEC
+        int "Periodic internal/PSRAM heap log interval (seconds, 0=off)"
+        default 30
+        range 0 3600
+        help
+            When non-zero, logs free/min/largest/total for internal RAM and PSRAM
+            on this interval (tag: minihub_mem).
+
+    menu "User interface"
+
+        config MINIHUB_WEB_UI
+            bool "Enable Host Web UI (browser dashboard at /)"
+            default y
+            help
+                Serves the Host console from /store/preinstall/web/index.html (modstore).
+                If missing, a tiny ROM fallback page is shown. REST /api/* still works when
+                this is disabled. Required for third-party module web pages.
+
+        config MINIHUB_MODULE_THIRD_PARTY_UI_WEB
+            bool "Enable third-party module web UI pages"
+            depends on MINIHUB_WEB_UI
+            default y
+            help
+                Allow browsers to open HTML/CSS/JS shipped inside Store modules
+                (directory web/ in .mhub). Served at GET /modules/<id>/web/* from
+                /store/modules/<id>/web/. Requires MINIHUB_WEB_UI (Host web stack).
+
+        config MINIHUB_LCD_UI
+            bool "Enable LCD UI (esp-brookesia JSON UI)"
+            depends on !MINIHUB_NET_ETH
+            default n
+            help
+                On-device touchscreen UI via esp-brookesia.
+                Requires brookesia_hal_boards and LCD profile dependencies.
+                Mutually exclusive with Ethernet (EMAC and RGB LCD share pin
+                groups on Korvo-1; Function CoreBoard has RJ45 and no LCD).
+
+        config MINIHUB_LCD_UI_REFRESH_MS
+            int "LCD UI data refresh interval (ms)"
+            depends on MINIHUB_LCD_UI
+            default 2000
+            range 500 30000
+
+        config MINIHUB_DEV_FS_UPLOAD
+            bool "Allow HTTP PUT of LCD UI JSON files (dev)"
+            depends on MINIHUB_LCD_UI
+            default y
+            help
+                Exposes PUT /api/dev/fs/ui/... to write files under /data/ui/
+                without reflashing the storage partition. Reboot to reload LCD UI.
+
+    endmenu
+
+endmenu

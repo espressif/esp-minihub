@@ -27,6 +27,7 @@ static cJSON *s_adapters_cfg;
 static cJSON *s_rules_cfg;
 static cJSON *s_scenes_cfg;
 
+static char s_data_root[32];
 static char s_config_dir[64];
 static char s_adapters_path[96];
 static char s_rules_path[96];
@@ -48,12 +49,37 @@ static void resolve_config_paths(void)
         root = "/fatfs";
         ESP_LOGI(TAG, "config root %s (no %s mount)", root, MINIHUB_VFS_MOUNT);
     }
+    strlcpy(s_data_root, root, sizeof(s_data_root));
     snprintf(s_config_dir, sizeof(s_config_dir), "%s/config", root);
     snprintf(s_adapters_path, sizeof(s_adapters_path), "%s/adapters.json", s_config_dir);
     snprintf(s_rules_path, sizeof(s_rules_path), "%s/rules.json", s_config_dir);
     snprintf(s_scenes_path, sizeof(s_scenes_path), "%s/scenes.json", s_config_dir);
     snprintf(s_packs_dir, sizeof(s_packs_dir), "%s/packs", s_config_dir);
     snprintf(s_tmp_dir, sizeof(s_tmp_dir), "%s/tmp", root);
+}
+
+const char *minihub_paths_data_root(void)
+{
+    if (!s_data_root[0]) {
+        resolve_config_paths();
+    }
+    return s_data_root[0] ? s_data_root : MINIHUB_VFS_MOUNT;
+}
+
+const char *minihub_paths_module_tmp_dir(void)
+{
+    if (!s_tmp_dir[0]) {
+        resolve_config_paths();
+    }
+    return s_tmp_dir[0] ? s_tmp_dir : MINIHUB_MODULE_TMP_DIR;
+}
+
+const char *minihub_paths_packs_dir(void)
+{
+    if (!s_packs_dir[0]) {
+        resolve_config_paths();
+    }
+    return s_packs_dir[0] ? s_packs_dir : MINIHUB_PACKS_DIR;
 }
 
 /**

@@ -1,0 +1,68 @@
+## IDF Component Manager Manifest File
+## Hand-maintained for claw_minihub (see application/claw_minihub/manifest.yml hand_maintained).
+## tools/sync_host_manifest.py must not overwrite this file.
+dependencies:
+  espressif/esp_board_manager:
+    version: "^0.6"
+    public: true
+
+  joltwallet/littlefs: "~=1.21.0"
+  espressif/cjson: "^1.7.19"
+  espressif/network_provisioning: "^1.1.0"
+  espressif/esp_flash_dispatcher: "^1.0.2"
+  espressif/elf_loader:
+    git: https://github.com/espressif/esp-iot-solution.git
+    path: components/elf_loader
+    version: master
+
+  minihub_mvp:
+    path: ../../../components/minihub_mvp
+
+  minihub_mcp_server:
+    path: ../../../components/minihub_mcp_server
+
+  minihub_web:
+    path: ../../../components/minihub_web
+
+  app_claw:
+    path: ../components/esp-claw/components/common/app_claw
+
+  app_config:
+    path: ../components/app_config
+
+  captive_dns:
+    path: ../components/esp-claw/components/common/captive_dns
+
+  espressif/ramfs:
+    version: "^0.1"
+
+  claw_utils:
+    path: ../components/esp-claw/components/claw_modules/claw_utils
+
+  system_ui:
+    rules:
+    - if: $CONFIG{ESP_BOARD_DEV_DISPLAY_LCD_SUPPORT} == True
+    path: ../components/esp-claw/components/common/system_ui
+
+  http_reuse:
+    path: ../components/esp-claw/components/common/http_reuse
+
+  http_server:
+    path: ../components/http_server
+
+  settings:
+    path: ../components/esp-claw/components/common/settings
+
+  wifi_manager:
+    path: ../components/esp-claw/components/common/wifi_manager
+
+  cmd_module:
+    path: ../components/cmd_module
+
+  cap_account_bind:
+    path: ../components/cap_account_bind
+
+  esp_video:
+    path: ../components/esp-claw/components/common/esp_video
+    matches:
+    - if: $CONFIG{ESP_BOARD_DEV_CAMERA_SUPPORT} == True

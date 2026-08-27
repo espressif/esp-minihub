@@ -3,6 +3,8 @@
 Place module sources as siblings under this directory (`components/store_modules/<id>/`).
 Public Host ships **`miot`** here as an L3 Store plugin (pack to `miot.mhub`); it is not a Host `require`.
 
+Factory preinstall into device `/store/modules/<id>/` is **product-scoped**: list ids in `application/<app>/manifest.yml` as `store_preinstall: [miot, …]`. The optional `"preinstall"` field in `module.json` is **not** used for factory bundling (kept for tooling/docs only).
+
 | Tier | Typical contents | Deploy artifact |
 |------|------------------|-----------------|
 | L1 pack | `module.json` (+ inject) | `<id>.mhub` zip |

@@ -27,4 +27,8 @@ if(CONFIG_MINIHUB_DYNAMIC_MODULES)
     if(_elf_dir)
         target_include_directories(${COMPONENT_LIB} PRIVATE "${_elf_dir}/include")
     endif()
+    # Pull elf_loader dlfcn.o (strong dlopen) so QuickJS weak stubs do not win.
+    if(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT)
+        target_link_options(${COMPONENT_LIB} INTERFACE "LINKER:-u,dllist")
+    endif()
 endif()

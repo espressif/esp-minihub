@@ -90,6 +90,12 @@ cJSON *minihub_module_overview_adapters_json(void);
 /** Enable/disable a manifest module */
 esp_err_t minihub_module_set_enabled(const char *id, bool enabled);
 
+/**
+ * Clear `/store/modules/<id>/.load_guard` so the next automatic load may retry.
+ * Used after a crash left the guard stuck in "loading".
+ */
+esp_err_t minihub_module_clear_load_guard(const char *id);
+
 /** Delete manifest file and rescan */
 esp_err_t minihub_module_delete(const char *id);
 
@@ -112,6 +118,17 @@ esp_err_t minihub_module_dl_load(const char *binary_path,
                                  minihub_module_entry_fn *out_entry,
                                  minihub_module_rpc_fn *out_rpc,
                                  void **out_handle);
+
+/**
+ * Like minihub_module_dl_load, then invoke minihub_module_entry on the same
+ * internal-DRAM worker (avoids calling relocated SO code from PSRAM/main stacks).
+ */
+esp_err_t minihub_module_dl_load_and_enter(const char *binary_path,
+                                           const minihub_module_host_api_t *host,
+                                           const cJSON *config,
+                                           const minihub_adapter_t **out_adapter,
+                                           minihub_module_rpc_fn *out_rpc,
+                                           void **out_handle);
 
 /** Unload all dynamically loaded module handles */
 void minihub_module_dl_unload_all(void);

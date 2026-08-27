@@ -1,0 +1,8 @@
+{
+  "adapters": {
+    "zigbee": {
+      "enabled": true,
+      "devices": []
+    }
+  }
+}

@@ -58,18 +58,29 @@ idf_component_register(
     REQUIRES ${MINIHUB_MAIN_REQUIRES}
 )
 
+include(${MINIHUB_REPO_ROOT}/cmake/minihub_product_assets.cmake)
+
 set(MINIHUB_FS_DIR ${CMAKE_BINARY_DIR}/littlefs_image)
 file(REMOVE_RECURSE ${MINIHUB_FS_DIR})
 file(MAKE_DIRECTORY ${MINIHUB_FS_DIR}/config)
-file(COPY ${MINIHUB_REPO_ROOT}/config/adapters.json DESTINATION ${MINIHUB_FS_DIR}/config)
-file(COPY ${MINIHUB_REPO_ROOT}/config/rules.json DESTINATION ${MINIHUB_FS_DIR}/config)
-file(COPY ${MINIHUB_REPO_ROOT}/config/scenes.json DESTINATION ${MINIHUB_FS_DIR}/config)
-if(EXISTS ${MINIHUB_REPO_ROOT}/config/packs)
-    file(COPY ${MINIHUB_REPO_ROOT}/config/packs DESTINATION ${MINIHUB_FS_DIR}/config)
+# Prefer application/<app>/config/*; fall back to repo config/*
+foreach(_cfg adapters.json rules.json scenes.json)
+    minihub_resolve_config_asset(${_cfg} _cfg_src)
+    if(_cfg_src)
+        file(COPY ${_cfg_src} DESTINATION ${MINIHUB_FS_DIR}/config)
+        message(STATUS "fs config: ${_cfg} ← ${_cfg_src}")
+    else()
+        message(WARNING "fs config: ${_cfg} missing (app + repo config/)")
+    endif()
+endforeach()
+minihub_resolve_config_asset(packs _packs_src)
+if(_packs_src)
+    file(COPY ${_packs_src} DESTINATION ${MINIHUB_FS_DIR}/config)
 endif()
-if(EXISTS ${MINIHUB_REPO_ROOT}/config/product_params)
+minihub_resolve_config_asset(product_params _pp_src)
+if(_pp_src)
     file(MAKE_DIRECTORY ${MINIHUB_FS_DIR}/config/product_params)
-    file(COPY ${MINIHUB_REPO_ROOT}/config/product_params/ DESTINATION ${MINIHUB_FS_DIR}/config/product_params)
+    file(COPY ${_pp_src}/ DESTINATION ${MINIHUB_FS_DIR}/config/product_params)
 endif()
 set(_minihub_ui_dep)
 if(CONFIG_MINIHUB_LCD_UI AND EXISTS ${MINIHUB_REPO_ROOT}/components/minihub_lcd/ui/root.json)
@@ -107,6 +118,8 @@ if(EXISTS ${_MINIHUB_STORE_DEPLOY}/catalog.json)
     file(COPY ${_MINIHUB_STORE_DEPLOY}/catalog.json DESTINATION ${MINIHUB_MODSTORE_DIR})
 endif()
 # Stage /store/files from deploy/<id>/<id>.mhub (zip package)
+minihub_store_preinstall_list(MINIHUB_STORE_PREINSTALL)
+message(STATUS "store_preinstall: ${MINIHUB_STORE_PREINSTALL}")
 file(GLOB _STORE_MOD_JSONS "${_MINIHUB_STORE_ROOT}/*/module.json")
 foreach(_MOD_JSON ${_STORE_MOD_JSONS})
     get_filename_component(_MOD_DIR ${_MOD_JSON} DIRECTORY)
@@ -169,17 +182,12 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
     else()
         message(WARNING "modstore: ${_MOD}.mhub missing under ${_DEPLOY_MOD}")
     endif()
-    # Factory-preinstall into /store/modules only when module.json has
-    # "preinstall": true (default false). Catalog + /files stay available for Store install.
-    # L3/hybrid need .so; L2/js/web may preinstall with module.json + web/ only.
+    # Factory-preinstall into /store/modules/<id>/ only when listed in
+    # application/<app>/manifest.yml → store_preinstall (module.json "preinstall" ignored).
+    # Catalog + /files/*.mhub stay available for on-device Store install.
     set(_PREINSTALL FALSE)
-    execute_process(
-        COMMAND ${Python3_EXECUTABLE} -c
-            "import json,sys; m=json.load(open(sys.argv[1])); sys.exit(0 if m.get('preinstall') is True else 1)"
-            ${_MOD_JSON}
-        RESULT_VARIABLE _PREINSTALL_RC
-    )
-    if(_PREINSTALL_RC EQUAL 0)
+    list(FIND MINIHUB_STORE_PREINSTALL ${_MOD} _PRE_IDX)
+    if(NOT _PRE_IDX EQUAL -1)
         execute_process(
             COMMAND ${Python3_EXECUTABLE} -c
                 "import json,sys; m=json.load(open(sys.argv[1])); r=m.get('runtime'); sys.exit(0 if r=='hybrid' else 1)"
@@ -197,6 +205,8 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
             set(_PREINSTALL TRUE)
         elseif(EXISTS ${_MOD_DIR}/main.js OR EXISTS ${_MOD_DIR}/web)
             set(_PREINSTALL TRUE)
+        else()
+            message(WARNING "modstore: ${_MOD} in store_preinstall but no .so/main.js/web — skipped")
         endif()
     endif()
     if(_PREINSTALL)
@@ -233,10 +243,11 @@ if(CONFIG_MINIHUB_WEB_UI AND EXISTS ${_MINIHUB_WEB_SRC}/index.html)
     file(COPY ${_MINIHUB_WEB_SRC}/ DESTINATION ${MINIHUB_MODSTORE_DIR}/preinstall/web)
     message(STATUS "modstore: staged Host Web UI under preinstall/web/")
 endif()
-if(EXISTS ${MINIHUB_REPO_ROOT}/config/product_params)
+minihub_resolve_config_asset(product_params _pp_modstore)
+if(_pp_modstore)
     file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/preinstall/product_params)
-    file(COPY ${MINIHUB_REPO_ROOT}/config/product_params/ DESTINATION ${MINIHUB_MODSTORE_DIR}/preinstall/product_params)
-    message(STATUS "modstore: staged product_params quirks")
+    file(COPY ${_pp_modstore}/ DESTINATION ${MINIHUB_MODSTORE_DIR}/preinstall/product_params)
+    message(STATUS "modstore: staged product_params quirks ← ${_pp_modstore}")
 endif()
 
 littlefs_create_partition_image(modstore ${MINIHUB_MODSTORE_DIR} FLASH_IN_PROJECT)

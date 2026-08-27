@@ -64,8 +64,10 @@ def feature_to_path(project_root: Path, app_name: str, name: str) -> str:
         return app_rel
     if (project_root / shared_rel).is_file():
         return shared_rel
-    return app_rel
-
+    raise FileNotFoundError(
+        f"sdkconfig feature {key!r} not found for app={app_name!r} "
+        f"(tried {app_rel} and {shared_rel})"
+    )
 
 def expand_features(project_root: Path, app_name: str, features: list[str]) -> list[str]:
     return [feature_to_path(project_root, app_name, f) for f in features]

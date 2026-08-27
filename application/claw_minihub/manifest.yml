@@ -1,0 +1,21 @@
+# Product profile for application/claw_minihub.
+# Sync: MINIHUB_APP=claw_minihub python tools/sync_host_manifest.py
+# hand_maintained: skip generating main/idf_component.yml and adapters_setup.generated.c
+#
+# Config JSON: application/claw_minihub/config/* → else repo config/
+# Factory Store modules: store_preinstall (e.g. [miot]); empty = none baked into /store/modules
+extends: _host_base
+hand_maintained: true
+store_preinstall: []
+partition_table: partitions.csv
+board: esp32_s31_function_coreboard_1
+components:
+  adapters:
+  - name: zigbee
+sdkconfig_features:
+- common
+- memory
+- eth
+- wifi_sta
+- dynamic_modules
+- main_task_stack

@@ -75,6 +75,8 @@ extern const char MINIHUB_INDEX_HTML_FALLBACK[];
 static httpd_handle_t s_server;
 /** Optional extra index.html (attach config); NULL = preinstall path only. */
 static const char *s_index_override;
+/** Console mount path (e.g. /minihub); used for login link web_base. */
+static const char *s_index_uri = "/";
 
 static esp_err_t read_http_body(httpd_req_t *req, char **out_buf, size_t *out_len, size_t max_bytes);
 
@@ -210,6 +212,7 @@ static esp_err_t send_json(httpd_req_t *req, cJSON *json)
         return ESP_FAIL;
     }
     httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     esp_err_t err = httpd_resp_send(req, body, HTTPD_RESP_USE_STRLEN);
     free(body);
     return err;
@@ -667,6 +670,18 @@ static esp_err_t handle_api_system(httpd_req_t *req)
 
     cJSON_AddItemToObject(root, "storage", lfs_usage_json("storage"));
     cJSON_AddItemToObject(root, "modstore", lfs_usage_json("modstore"));
+
+    {
+        char local_ip[16] = {0};
+        if (minihub_net_get_ip(local_ip, sizeof(local_ip)) && local_ip[0]) {
+            cJSON_AddStringToObject(root, "local_ip", local_ip);
+        }
+        if (s_index_uri && strcmp(s_index_uri, "/") != 0) {
+            cJSON_AddStringToObject(root, "web_base", s_index_uri);
+        } else {
+            cJSON_AddStringToObject(root, "web_base", "");
+        }
+    }
 
     cJSON *net = cJSON_CreateObject();
     if (net) {
@@ -2582,6 +2597,7 @@ static esp_err_t handle_api_modules_manage(httpd_req_t *req)
     const cJSON *id = cJSON_GetObjectItem(root, "id");
     const cJSON *del = cJSON_GetObjectItem(root, "delete");
     const cJSON *enabled = cJSON_GetObjectItem(root, "enabled");
+    const cJSON *clear_guard = cJSON_GetObjectItem(root, "clear_load_guard");
     const cJSON *reload = cJSON_GetObjectItem(root, "reload");
     bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
 
@@ -2598,9 +2614,11 @@ static esp_err_t handle_api_modules_manage(httpd_req_t *req)
         err = minihub_module_delete(id_copy);
     } else if (cJSON_IsBool(enabled)) {
         err = minihub_module_set_enabled(id_copy, cJSON_IsTrue(enabled));
+    } else if (cJSON_IsTrue(clear_guard)) {
+        err = minihub_module_clear_load_guard(id_copy);
     } else {
         cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing enabled/delete");
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing enabled/delete/clear_load_guard");
     }
     cJSON_Delete(root);
 
@@ -3417,6 +3435,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
         local = *cfg;
     }
     index_uri = (local.index_uri && local.index_uri[0]) ? local.index_uri : "/";
+    s_index_uri = index_uri;
     s_index_override = (local.index_path && local.index_path[0]) ? local.index_path : NULL;
     s_server = server;
 
