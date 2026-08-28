@@ -15,6 +15,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "minihub_ble_mesh.h"
 #include "minihub_core.h"
 #include "minihub_task.h"
 #include "sdkconfig.h"
@@ -155,6 +156,49 @@ esp_err_t minihub_zigbee_permit_join(int seconds)
 bool minihub_zigbee_permit_join_active(void)
 {
     return zigbee_stack_permit_join_active();
+}
+
+void minihub_zigbee_json_add_permit_join_error(cJSON *obj, esp_err_t err)
+{
+    const char *error = esp_err_to_name(err);
+    const char *user_reply = NULL;
+    const char *hint = NULL;
+
+    if (!obj || err == ESP_OK) {
+        return;
+    }
+
+    if (err == ESP_ERR_NOT_SUPPORTED) {
+        error = "Zigbee SDK not built into firmware";
+        user_reply = "Zigbee 功能未编入当前固件，需用 zigbee stack 重新编译并烧录；无需重启设备。";
+        hint = "Reply to the user in IM with user_reply. Do not call restart_device.";
+    } else if (err == ESP_ERR_INVALID_STATE && minihub_zigbee_permit_join_active()) {
+        error = "Zigbee permit_join already open";
+        user_reply = "Zigbee 入网窗口已开启，请勿重复操作。";
+        hint = "Reply in IM; do not restart the device.";
+    } else if (err == ESP_ERR_INVALID_STATE && minihub_ble_mesh_provisioning_busy()) {
+        error = "BLE Mesh provisioning active";
+        user_reply = "BLE Mesh 正在配网，暂时无法开启 Zigbee 入网。";
+        hint = "Reply in IM; do not restart the device.";
+    } else if (err == ESP_ERR_INVALID_STATE && !minihub_zigbee_running()) {
+        error = "Zigbee coordinator not ready";
+        user_reply = "Zigbee 协调器尚未就绪，请稍等约 30 秒后重试。";
+        hint = "Reply in IM; wait and retry permit_join. Do not restart the device.";
+    } else if (err == ESP_ERR_INVALID_ARG) {
+        error = "invalid seconds";
+        user_reply = "入网时长参数无效。";
+        hint = "Reply in IM with the error; do not restart the device.";
+    } else {
+        hint = "Reply to the user in IM explaining the failure. Do not call restart_device.";
+    }
+
+    cJSON_AddStringToObject(obj, "error", error);
+    if (user_reply) {
+        cJSON_AddStringToObject(obj, "user_reply", user_reply);
+    }
+    if (hint) {
+        cJSON_AddStringToObject(obj, "hint", hint);
+    }
 }
 
 static int parse_install_code_hex(const char *hex, uint8_t *out, size_t out_cap, size_t *out_len)

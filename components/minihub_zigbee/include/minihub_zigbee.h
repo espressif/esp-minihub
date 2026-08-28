@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "esp_err.h"
+#include "cJSON.h"
 #include "minihub_zigbee_types.h"
 
 esp_err_t minihub_zigbee_init(void);
@@ -17,6 +18,9 @@ esp_err_t minihub_zigbee_stop(void);
 
 esp_err_t minihub_zigbee_permit_join(int seconds);
 bool minihub_zigbee_permit_join_active(void);
+
+/** Add human-readable error / user_reply / hint fields to a JSON object for permit_join failures. */
+void minihub_zigbee_json_add_permit_join_error(cJSON *obj, esp_err_t err);
 
 /**
  * Add install code for a joining device (hex string, optional 0x / separators).

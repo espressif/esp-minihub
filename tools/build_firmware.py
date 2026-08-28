@@ -227,9 +227,10 @@ def parse_argv(argv: list[str]) -> tuple[str, str, list[str], list[str]]:
             usage(2)
 
     if not stacks:
-        stacks = list(DEFAULT_STACKS)
-
-    app = resolve_app(cli_app)
+        app = resolve_app(cli_app)
+        stacks = [] if app == "claw_minihub" else list(DEFAULT_STACKS)
+    else:
+        app = resolve_app(cli_app)
     return app, stacks, idf_args
 
 
@@ -490,6 +491,11 @@ def sdkconfig_defaults(stacks: list[str]) -> str:
             base.extend(expand_features(ROOT, APP_NAME, feats))
         except FileNotFoundError:
             pass
+        if "zigbee" in stacks:
+            base.append("config/sdkconfig/feature/zigbee.defaults")
+        if "ble_mesh" in stacks:
+            base.append("config/sdkconfig/feature/ble_mesh.defaults")
+        base.append("cmake/generated/sdkconfig_stacks.gen")
         paths = append_local_overrides(ROOT, APP_NAME, base)
         return ";".join(_sdkconfig_path_for_app(p) for p in paths)
 

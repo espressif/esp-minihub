@@ -70,6 +70,11 @@ static bool adapter_is_radio_host(const minihub_adapter_t *adapter)
         return true;
     }
 #endif
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+    if (strcmp(adapter->name, "thread") == 0) {
+        return true;
+    }
+#endif
     return false;
 }
 

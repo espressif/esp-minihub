@@ -24,6 +24,7 @@ CONFIG_MINIHUB_RAINMAKER=n
 CONFIG_MINIHUB_POINT_DEBOUNCE_MS=1000
 # Claw wifi_manager owns STA/AP — keep minihub_net Wi-Fi off to avoid a second stack.
 CONFIG_MINIHUB_NET_WIFI_STA=n
+CONFIG_MINIHUB_NET_WIFI_SOFTAP=y
 CONFIG_MINIHUB_WIFI_PROVISIONING=n
 # Keep Sec1 so minihub_provision (SoftAP+POP) still compiles on IDF 6.x defaults (Sec2-only).
 CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_1=y

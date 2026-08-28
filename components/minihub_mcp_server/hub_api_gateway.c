@@ -9,7 +9,6 @@
 
 #include "hub_api_gateway.h"
 
-#include "minihub_ble_mesh.h"
 #include "minihub_config.h"
 #include "minihub_core.h"
 #include "minihub_hub.h"
@@ -18,10 +17,14 @@
 #include "minihub_ota.h"
 #include "minihub_rules.h"
 #include "minihub_store.h"
+#if CONFIG_MINIHUB_ZIGBEE_SDK
 #include "minihub_zigbee.h"
+#endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
+#include "minihub_ble_mesh.h"
+#endif
 
 #include "esp_log.h"
-
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,6 +62,9 @@ static const hub_api_rule_t s_rules[] = {
     {HUB_M_GET, "/api/store/config"},
     {HUB_M_GET, "/api/matter/status"},
     {HUB_M_GET, "/api/radio/provision"},
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+    {HUB_M_GET, "/api/zigbee"},
+#endif
     {HUB_M_GET, "/api/modules/*/preview"},
     {HUB_M_POST, "/api/command"},
     {HUB_M_POST, "/api/rules/import"},
@@ -68,8 +74,13 @@ static const hub_api_rule_t s_rules[] = {
     {HUB_M_GET, "/api/ota"},
     {HUB_M_POST, "/api/ota"},
     {HUB_M_POST, "/api/hub/reload"},
+    {HUB_M_POST, "/api/points/remove"},
+#if CONFIG_MINIHUB_ZIGBEE_SDK
     {HUB_M_POST, "/api/zigbee/permit_join"},
+#endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
     {HUB_M_POST, "/api/ble_mesh/permit_provision"},
+#endif
     {HUB_M_POST, "/api/store/install"},
     {HUB_M_POST, "/api/store/upgrade"},
     {HUB_M_POST, "/api/store/uninstall"},
@@ -523,6 +534,7 @@ static esp_err_t dispatch_hub_reload(cJSON **out)
     return ESP_OK;
 }
 
+#if CONFIG_MINIHUB_ZIGBEE_SDK
 static esp_err_t dispatch_zigbee_permit(const char *body, cJSON **out)
 {
     int seconds = 60;
@@ -544,7 +556,7 @@ static esp_err_t dispatch_zigbee_permit(const char *body, cJSON **out)
     cJSON_AddBoolToObject(root, "ok", zb_err == ESP_OK);
     cJSON_AddStringToObject(root, "result", zb_err == ESP_OK ? "ok" : "fail");
     if (zb_err != ESP_OK) {
-        cJSON_AddStringToObject(root, "error", esp_err_to_name(zb_err));
+        minihub_zigbee_json_add_permit_join_error(root, zb_err);
     }
     cJSON_AddBoolToObject(root, "ready", minihub_zigbee_running());
     cJSON_AddBoolToObject(root, "permit_join", minihub_zigbee_permit_join_active());
@@ -552,7 +564,84 @@ static esp_err_t dispatch_zigbee_permit(const char *body, cJSON **out)
     *out = root;
     return ESP_OK;
 }
+#endif /* CONFIG_MINIHUB_ZIGBEE_SDK */
 
+static esp_err_t dispatch_points_remove(const char *body, cJSON **out)
+{
+    cJSON *req = body && body[0] ? cJSON_Parse(body) : NULL;
+    if (!req || !cJSON_IsObject(req)) {
+        cJSON_Delete(req);
+        *out = err_obj("INVALID_ARG", "JSON body required");
+        return ESP_OK;
+    }
+
+    esp_err_t err = minihub_hub_points_remove(req, out);
+    cJSON_Delete(req);
+    if (err == ESP_ERR_NO_MEM) {
+        return err;
+    }
+    if (!*out) {
+        *out = err_obj("INTERNAL", "remove failed");
+    }
+    return ESP_OK;
+}
+
+static esp_err_t dispatch_get_radio_provision(cJSON **out)
+{
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddBoolToObject(root, "ok", true);
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+    cJSON_AddBoolToObject(root, "zigbee_available", true);
+    const bool zb = minihub_zigbee_permit_join_active();
+#else
+    cJSON_AddBoolToObject(root, "zigbee_available", false);
+    const bool zb = false;
+#endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
+    cJSON_AddBoolToObject(root, "ble_mesh_available", true);
+    const bool bm_permit = minihub_ble_mesh_permit_provision_active();
+    const bool bm_busy = minihub_ble_mesh_provisioning_busy();
+#else
+    cJSON_AddBoolToObject(root, "ble_mesh_available", false);
+    const bool bm_permit = false;
+    const bool bm_busy = false;
+#endif
+    cJSON_AddBoolToObject(root, "zigbee_permit_join", zb);
+    cJSON_AddBoolToObject(root, "ble_mesh_permit_provision", bm_permit);
+    cJSON_AddBoolToObject(root, "ble_mesh_provisioning", bm_busy);
+    cJSON_AddBoolToObject(root, "busy", zb || bm_busy);
+    *out = root;
+    return ESP_OK;
+}
+
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+static esp_err_t dispatch_get_zigbee(cJSON **out)
+{
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddBoolToObject(root, "ok", true);
+    cJSON_AddBoolToObject(root, "available", true);
+    cJSON_AddBoolToObject(root, "ready", minihub_zigbee_running());
+    cJSON_AddBoolToObject(root, "permit_join", minihub_zigbee_permit_join_active());
+    minihub_point_t *list = NULL;
+    size_t count = 0;
+    if (minihub_point_list_by_adapter("zigbee", &list, &count) == ESP_OK) {
+        cJSON_AddNumberToObject(root, "device_count", (double)count);
+        free_point_list(list, count);
+    } else {
+        cJSON_AddNumberToObject(root, "device_count", 0);
+    }
+    *out = root;
+    return ESP_OK;
+}
+#endif /* CONFIG_MINIHUB_ZIGBEE_SDK */
+
+#if CONFIG_MINIHUB_BLE_MESH_SDK
 static esp_err_t dispatch_ble_mesh_permit(const char *body, cJSON **out)
 {
     int seconds = 60;
@@ -581,6 +670,7 @@ static esp_err_t dispatch_ble_mesh_permit(const char *body, cJSON **out)
     *out = root;
     return ESP_OK;
 }
+#endif /* CONFIG_MINIHUB_BLE_MESH_SDK */
 
 typedef enum {
     STORE_OP_INSTALL = 0,
@@ -738,6 +828,14 @@ esp_err_t hub_api_call(const char *method, const char *path, const char *query, 
     if (mask == HUB_M_GET && strcmp(path_buf, "/api/points/history") == 0) {
         return dispatch_get_history(effective_query, out);
     }
+    if (mask == HUB_M_GET && strcmp(path_buf, "/api/radio/provision") == 0) {
+        return dispatch_get_radio_provision(out);
+    }
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+    if (mask == HUB_M_GET && strcmp(path_buf, "/api/zigbee") == 0) {
+        return dispatch_get_zigbee(out);
+    }
+#endif
     if (mask == HUB_M_POST && strcmp(path_buf, "/api/command") == 0) {
         return dispatch_post_command(body, out);
     }
@@ -858,12 +956,19 @@ esp_err_t hub_api_call(const char *method, const char *path, const char *query, 
     if (mask == HUB_M_POST && strcmp(path_buf, "/api/hub/reload") == 0) {
         return dispatch_hub_reload(out);
     }
+    if (mask == HUB_M_POST && strcmp(path_buf, "/api/points/remove") == 0) {
+        return dispatch_points_remove(body, out);
+    }
+#if CONFIG_MINIHUB_ZIGBEE_SDK
     if (mask == HUB_M_POST && strcmp(path_buf, "/api/zigbee/permit_join") == 0) {
         return dispatch_zigbee_permit(body, out);
     }
+#endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
     if (mask == HUB_M_POST && strcmp(path_buf, "/api/ble_mesh/permit_provision") == 0) {
         return dispatch_ble_mesh_permit(body, out);
     }
+#endif
     if (mask == HUB_M_POST && strcmp(path_buf, "/api/store/install") == 0) {
         return dispatch_store_op(STORE_OP_INSTALL, body, out);
     }

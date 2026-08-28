@@ -21,6 +21,11 @@
 #include "minihub_core.h"
 #include "minihub_task.h"
 #include "nvs.h"
+#include "sdkconfig.h"
+
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+#include "minihub_zigbee.h"
+#endif
 
 static const char *TAG = "im_notify";
 
@@ -215,6 +220,42 @@ static void notify_task(void *arg)
     }
 }
 
+static void on_point_registered(const minihub_event_t *event, void *user_data)
+{
+    const cJSON *adapter_j;
+    const cJSON *pid_j;
+    const cJSON *type_j;
+    char msg[MSG_MAX];
+    uint16_t index = UINT16_MAX;
+    (void)user_data;
+
+    if (!event || !event->data) {
+        return;
+    }
+    adapter_j = cJSON_GetObjectItem(event->data, "adapter");
+    if (!cJSON_IsString(adapter_j) || strcmp(adapter_j->valuestring, "zigbee") != 0) {
+        return;
+    }
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+    if (!minihub_zigbee_permit_join_active()) {
+        return;
+    }
+#endif
+    pid_j = cJSON_GetObjectItem(event->data, "point_id");
+    type_j = cJSON_GetObjectItem(event->data, "type");
+    if (!cJSON_IsString(pid_j) || !pid_j->valuestring[0]) {
+        return;
+    }
+    index = minihub_point_index_of(pid_j->valuestring);
+    if (!cooldown_ok(index)) {
+        return;
+    }
+    snprintf(msg, sizeof(msg), "Zigbee 新设备入网: %s (%s)",
+             pid_j->valuestring,
+             (cJSON_IsString(type_j) && type_j->valuestring[0]) ? type_j->valuestring : "device");
+    (void)minihub_im_notify_text(msg);
+}
+
 static void on_point_updated(const minihub_event_t *event, void *user_data)
 {
     minihub_point_t *point;
@@ -251,6 +292,10 @@ esp_err_t minihub_im_notify_init(void)
         return ESP_ERR_NO_MEM;
     }
     esp_err_t err = minihub_event_bus_subscribe("point.updated", on_point_updated, NULL);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = minihub_event_bus_subscribe("point.registered", on_point_registered, NULL);
     if (err != ESP_OK) {
         return err;
     }

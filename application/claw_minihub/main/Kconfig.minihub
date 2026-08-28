@@ -154,9 +154,15 @@ menu "MiniHub"
     config MINIHUB_ZIGBEE_SDK
         bool "Use ESP-Zigbee-SDK coordinator (requires 802.15.4 SoC or RCP)"
         default n
+        select ZB_ENABLED
+        select ZB_ZCZR
+        select ZB_RADIO_NATIVE if SOC_IEEE802154_SUPPORTED
+        select ESP_COEX_SW_COEXIST_ENABLE
         help
             Enable real Zigbee stack via esp-zigbee-lib. Target must support
             IEEE 802.15.4 (e.g. ESP32-H2/C6) or use an external RCP module.
+            Also enables ZB_ENABLED and coordinator/native-radio options required
+            by esp-zigbee-lib (do not enable MINIHUB_ZIGBEE_SDK alone in menuconfig).
 
     config MINIHUB_BLE_MESH_SDK
         bool "Use ESP-BLE-Mesh Provisioner (Generic OnOff Client)"

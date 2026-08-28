@@ -8,7 +8,14 @@ set(MOD_REQ
 )
 # elf_loader wraps esp_flash_* ; only pull it in when .so loading is enabled.
 if(CONFIG_MINIHUB_DYNAMIC_MODULES)
-    list(APPEND MOD_SRCS module_dl.c host_elf_symbols.c host_elf_symbols_generated.c)
+    list(APPEND MOD_SRCS module_dl.c host_elf_symbols.c)
+    # Prefer build/gen copy from tools/build_store_modules.py; fall back to committed baseline.
+    set(_host_elf_gen "${CMAKE_BINARY_DIR}/../../gen/host_elf_symbols_generated.c")
+    if(EXISTS "${_host_elf_gen}")
+        list(APPEND MOD_SRCS "${_host_elf_gen}")
+    else()
+        list(APPEND MOD_SRCS host_elf_symbols_generated.c)
+    endif()
     list(APPEND MOD_REQ espressif__elf_loader)
 endif()
 

@@ -7,4 +7,7 @@ ota_0,     app,  ota_0,         ,   5M
 ota_1,     app,  ota_1,         ,   5M
 system,    data, fat,           ,   2600K
 storage,   data, fat,           ,   0x150000
-modstore,  data, littlefs,      ,   0x150000
+modstore,  data, littlefs,      ,   0x140000
+# Zigbee coordinator NVS + factory (esp-zigbee-lib); required when MINIHUB_ZIGBEE_SDK=y
+zb_storage, data, nvs,          ,   0x4000
+zb_fct,     data, fat,          ,   0x1000
