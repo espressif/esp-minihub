@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include "minihub_config.h"
 #include "minihub_paths.h"
+#include "esp_attr.h"
 #include "esp_log.h"
 
 static const char *TAG = "minihub_pack";
@@ -30,7 +31,7 @@ typedef struct {
     cJSON *raw;
 } pack_entry_t;
 
-static pack_entry_t s_packs[MAX_PACKS];
+EXT_RAM_BSS_ATTR static pack_entry_t s_packs[MAX_PACKS];
 static size_t s_pack_count;
 
 static void clear_packs(void)

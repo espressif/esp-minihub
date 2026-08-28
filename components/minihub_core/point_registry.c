@@ -8,6 +8,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -17,7 +18,7 @@ static const char *TAG = "point_registry";
 
 #define HASH_SLOTS MINIHUB_MAX_POINTS
 
-static minihub_point_t s_points[MINIHUB_MAX_POINTS];
+EXT_RAM_BSS_ATTR static minihub_point_t s_points[MINIHUB_MAX_POINTS];
 static size_t s_point_count;
 static int16_t s_hash_table[HASH_SLOTS];
 static SemaphoreHandle_t s_mutex;

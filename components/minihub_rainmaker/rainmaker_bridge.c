@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "cJSON.h"
 
@@ -34,7 +35,7 @@ typedef struct {
 } bridge_entry_t;
 
 static esp_rmaker_node_t *s_node;
-static bridge_entry_t s_entries[BRIDGE_MAX_DEVICES];
+EXT_RAM_BSS_ATTR static bridge_entry_t s_entries[BRIDGE_MAX_DEVICES];
 static size_t s_entry_count;
 static bool s_updating_from_cloud;
 static bool s_suppress_config_report;

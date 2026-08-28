@@ -16,6 +16,7 @@
 #include "minihub_paths.h"
 #include "minihub_config.h"
 #include "minihub_hub.h"
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
 
@@ -87,7 +88,7 @@ static minihub_module_entry_fn find_builtin_entry(const char *id)
     return NULL;
 }
 
-static module_slot_t s_modules[MAX_MODULES];
+EXT_RAM_BSS_ATTR static module_slot_t s_modules[MAX_MODULES];
 static size_t s_module_count;
 static minihub_module_host_api_t s_host_api;
 
