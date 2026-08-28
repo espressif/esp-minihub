@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_sntp.h"
 #include "minihub_core.h"
@@ -57,7 +58,7 @@ typedef struct {
     char last_fired_at[8];
 } rule_t;
 
-static rule_t s_rules[MAX_RULES];
+EXT_RAM_BSS_ATTR static rule_t s_rules[MAX_RULES];
 static size_t s_rule_count;
 static uint8_t s_rule_buckets[RULE_BUCKETS][MAX_RULES_PER_BUCKET];
 static uint8_t s_rule_bucket_len[RULE_BUCKETS];

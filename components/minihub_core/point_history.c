@@ -9,11 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "esp_attr.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
-/** Global value-change ring (filtered by point_id on read). Keeps DRAM small. */
+/** Global value-change ring (filtered by point_id on read). Lives in PSRAM. */
 #define POINT_HISTORY_GLOBAL 160
 
 typedef struct {
@@ -23,7 +24,7 @@ typedef struct {
     char new_value[MINIHUB_VALUE_MAX];
 } point_hist_entry_t;
 
-static point_hist_entry_t s_hist[POINT_HISTORY_GLOBAL];
+EXT_RAM_BSS_ATTR static point_hist_entry_t s_hist[POINT_HISTORY_GLOBAL];
 static size_t s_head;
 static size_t s_count;
 static SemaphoreHandle_t s_mutex;

@@ -7,6 +7,7 @@
 #include "minihub_scenes.h"
 
 #include <string.h>
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "minihub_core.h"
 #include "freertos/FreeRTOS.h"
@@ -30,7 +31,7 @@ typedef struct {
     size_t cmd_count;
 } scene_t;
 
-static scene_t s_scenes[MAX_SCENES];
+EXT_RAM_BSS_ATTR static scene_t s_scenes[MAX_SCENES];
 static size_t s_scene_count;
 
 static esp_err_t load_scenes(const cJSON *scenes_cfg)

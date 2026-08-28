@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "minihub_core.h"
 
@@ -48,7 +49,7 @@ typedef struct {
     size_t param_count;
 } pp_quirk_t;
 
-static pp_quirk_t s_quirks[MINIHUB_PP_MAX_QUIRKS];
+EXT_RAM_BSS_ATTR static pp_quirk_t s_quirks[MINIHUB_PP_MAX_QUIRKS];
 static size_t s_quirk_count;
 
 static const char *k_reserved[] = {

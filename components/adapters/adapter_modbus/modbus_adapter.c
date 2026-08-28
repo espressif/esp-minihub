@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include "esp_attr.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -51,8 +52,8 @@ typedef struct {
     bool started;
 } modbus_gw_runtime_t;
 
-static modbus_config_t s_cfg;
-static modbus_gw_runtime_t s_rt[MODBUS_MAX_GATEWAYS];
+EXT_RAM_BSS_ATTR static modbus_config_t s_cfg;
+EXT_RAM_BSS_ATTR static modbus_gw_runtime_t s_rt[MODBUS_MAX_GATEWAYS];
 static uint32_t s_last_poll_ms;
 static bool s_points_registered;
 
