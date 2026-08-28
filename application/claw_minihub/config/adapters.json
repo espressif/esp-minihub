@@ -3,6 +3,10 @@
     "zigbee": {
       "enabled": true,
       "devices": []
+    },
+    "ble_mesh": {
+      "enabled": true,
+      "devices": []
     }
   }
 }

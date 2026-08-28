@@ -23,17 +23,29 @@
 #include "sdkconfig.h"
 
 extern const minihub_adapter_t zigbee_adapter;
+#if CONFIG_MINIHUB_BLE_MESH_SDK
+extern const minihub_adapter_t ble_mesh_adapter;
+#endif
 
 static const char *TAG = "minihub_bringup";
 
 static esp_err_t register_mvp_adapters(void)
 {
+    esp_err_t err = ESP_OK;
     /* Vendor cloud adapters load via Store DYNAMIC_MODULES — not static register. */
 #if CONFIG_MINIHUB_ZIGBEE_SDK
-    return minihub_adapter_register(&zigbee_adapter);
-#else
-    return ESP_OK;
+    err = minihub_adapter_register(&zigbee_adapter);
+    if (err != ESP_OK) {
+        return err;
+    }
 #endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
+    err = minihub_adapter_register(&ble_mesh_adapter);
+    if (err != ESP_OK) {
+        return err;
+    }
+#endif
+    return err;
 }
 
 static esp_err_t register_demo_point(void)

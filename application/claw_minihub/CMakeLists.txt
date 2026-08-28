@@ -23,6 +23,7 @@ list(APPEND EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../../components"
     # MVP adapters only (avoid compiling every adapters/*)
     "${CMAKE_CURRENT_LIST_DIR}/../../components/adapters/adapter_zigbee"
+    "${CMAKE_CURRENT_LIST_DIR}/../../components/adapters/adapter_ble_mesh"
     # Store L3 plugins (e.g. miot) are loaded at runtime — not EXTRA_COMPONENT_DIRS.
 )
 
@@ -33,7 +34,6 @@ set(EXCLUDE_COMPONENTS
     minihub_matter
     minihub_rtsp_cam
     minihub_usb_msc
-    adapter_ble_mesh
     adapter_matter
     adapter_modbus
     adapter_mqtt

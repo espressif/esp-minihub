@@ -163,19 +163,24 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 }
 
-static esp_err_t prepare_wifi(void)
+static esp_err_t ensure_wifi_driver_init(void)
 {
     wifi_mode_t mode = WIFI_MODE_NULL;
 
+    if (esp_wifi_get_mode(&mode) != ESP_ERR_WIFI_NOT_INIT) {
+        return ESP_OK;
+    }
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    return esp_wifi_init(&cfg);
+}
+
+static esp_err_t prepare_wifi(void)
+{
     if (esp_netif_get_handle_from_ifkey("WIFI_STA_DEF") == NULL) {
         s_sta_netif = esp_netif_create_default_wifi_sta();
     } else {
         s_sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    }
-
-    if (esp_wifi_get_mode(&mode) == ESP_ERR_WIFI_NOT_INIT) {
-        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-        ESP_RETURN_ON_ERROR(esp_wifi_init(&cfg), TAG, "wifi init");
     }
 
     ESP_RETURN_ON_ERROR(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL),
@@ -195,6 +200,8 @@ static esp_err_t start_wifi_sta(void)
     }
     return ESP_OK;
 #else
+    ESP_RETURN_ON_ERROR(ensure_wifi_driver_init(), TAG, "wifi init");
+
     wifi_config_t wifi_config = {0};
     esp_err_t err = minihub_provision_load_credentials(&wifi_config);
     if (err == ESP_OK) {

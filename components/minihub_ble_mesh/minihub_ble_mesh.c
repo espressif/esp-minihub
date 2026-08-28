@@ -131,6 +131,13 @@ esp_err_t minihub_ble_mesh_stop(void)
 esp_err_t minihub_ble_mesh_permit_provision(int seconds)
 {
 #if CONFIG_MINIHUB_BLE_MESH_SDK
+    if (seconds > 0 && !ble_mesh_stack_running()) {
+        esp_err_t err = minihub_ble_mesh_start();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "permit_provision: stack start failed: %s", esp_err_to_name(err));
+            return err;
+        }
+    }
     return ble_mesh_stack_permit_provision(seconds);
 #else
     (void)seconds;

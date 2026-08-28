@@ -602,10 +602,12 @@ static esp_err_t dispatch_get_radio_provision(cJSON **out)
 #endif
 #if CONFIG_MINIHUB_BLE_MESH_SDK
     cJSON_AddBoolToObject(root, "ble_mesh_available", true);
+    cJSON_AddBoolToObject(root, "ble_mesh_running", minihub_ble_mesh_running());
     const bool bm_permit = minihub_ble_mesh_permit_provision_active();
     const bool bm_busy = minihub_ble_mesh_provisioning_busy();
 #else
     cJSON_AddBoolToObject(root, "ble_mesh_available", false);
+    cJSON_AddBoolToObject(root, "ble_mesh_running", false);
     const bool bm_permit = false;
     const bool bm_busy = false;
 #endif
@@ -663,8 +665,19 @@ static esp_err_t dispatch_ble_mesh_permit(const char *body, cJSON **out)
     cJSON_AddBoolToObject(root, "ok", bm_err == ESP_OK);
     cJSON_AddStringToObject(root, "result", bm_err == ESP_OK ? "ok" : "fail");
     if (bm_err != ESP_OK) {
-        cJSON_AddStringToObject(root, "error", esp_err_to_name(bm_err));
+        if (bm_err == ESP_ERR_INVALID_STATE && minihub_ble_mesh_provisioning_busy()) {
+            cJSON_AddStringToObject(root, "error", "BLE Mesh 正在配网，请勿重复开启");
+        } else if (bm_err == ESP_ERR_INVALID_STATE && !minihub_ble_mesh_running()) {
+            cJSON_AddStringToObject(root, "error", "BLE Mesh 栈未就绪（启动失败或仍在初始化）");
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+        } else if (bm_err == ESP_ERR_INVALID_STATE && minihub_zigbee_permit_join_active()) {
+            cJSON_AddStringToObject(root, "error", "Zigbee 正在入网，无法同时开启 BLE Mesh 配网");
+#endif
+        } else {
+            cJSON_AddStringToObject(root, "error", esp_err_to_name(bm_err));
+        }
     }
+    cJSON_AddBoolToObject(root, "ready", minihub_ble_mesh_running());
     cJSON_AddBoolToObject(root, "permit_provision", minihub_ble_mesh_permit_provision_active());
     cJSON_AddNumberToObject(root, "seconds", seconds);
     *out = root;

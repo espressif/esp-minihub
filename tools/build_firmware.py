@@ -450,13 +450,14 @@ def rainmaker_build_enabled() -> bool:
     )
 
 
-def sdkconfig_matter_adapter_enabled() -> bool:
-    """True if working tree sdkconfig asks for Matter adapter/commissioner."""
-    path = ROOT / "sdkconfig"
+def sdkconfig_has(option_y: str) -> bool:
+    """True if application sdkconfig sets CONFIG_FOO=y."""
+    path = APP_DIR / "sdkconfig"
     if not path.is_file():
         return False
+    needle = f"{option_y}=y"
     return any(
-        line.strip() == "CONFIG_MINIHUB_MATTER_ADAPTER=y"
+        line.strip() == needle
         for line in path.read_text(encoding="utf-8", errors="ignore").splitlines()
     )
 
@@ -465,7 +466,7 @@ def ensure_matter_stack(stacks: list[str]) -> list[str]:
     """If MATTER_ADAPTER=y in sdkconfig, pull in the matter stack automatically."""
     if "matter" in stacks:
         return stacks
-    if not sdkconfig_matter_adapter_enabled():
+    if not sdkconfig_has("CONFIG_MINIHUB_MATTER_ADAPTER"):
         return stacks
     out = list(stacks)
     out.append("matter")
@@ -495,6 +496,8 @@ def sdkconfig_defaults(stacks: list[str]) -> str:
             base.append("config/sdkconfig/feature/zigbee.defaults")
         if "ble_mesh" in stacks:
             base.append("config/sdkconfig/feature/ble_mesh.defaults")
+        if "zigbee" in stacks or "ble_mesh" in stacks:
+            base.append("config/sdkconfig/feature/radio_coexist_memory.defaults")
         base.append("cmake/generated/sdkconfig_stacks.gen")
         paths = append_local_overrides(ROOT, APP_NAME, base)
         return ";".join(_sdkconfig_path_for_app(p) for p in paths)
@@ -506,6 +509,8 @@ def sdkconfig_defaults(stacks: list[str]) -> str:
         features.append("zigbee")
     if "ble_mesh" in stacks:
         features.append("ble_mesh")
+    if "zigbee" in stacks or "ble_mesh" in stacks:
+        features.append("radio_coexist_memory")
     if "matter" in stacks:
         features.extend(["matter", "matter_memory", "matter_ble"])
         if app_has_feature(ROOT, APP_NAME, "eth") or "eth" in features:
@@ -668,12 +673,12 @@ def shell_bmgr_codegen() -> list[str]:
         '  echo "Generating components/gen_bmgr_codes (missing on fresh checkout)"',
         '  if [ ! -f "$GEN" ]; then',
         '    echo "esp_board_manager not fetched yet; running idf.py reconfigure"',
-        "    idf_retry idf.py --preview reconfigure",
+        "    idf.py --preview reconfigure",
         "  fi",
         '  if [ -f "$GEN" ]; then',
         f"    {py_cmd}",
         "  else",
-        f"    idf_retry {idf_bmgr}",
+        f"    {idf_bmgr}",
         "  fi",
         '  test -f "$META"',
         "fi",
@@ -738,20 +743,6 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
     ensure_gen_bmgr_placeholder()
 
     idf_cmd = "idf.py --preview " + " ".join(shlex.quote(a) for a in idf_args)
-    # Retry wrapper: Component Manager git fetches (esp-iot-solution / elf_loader) flake in CI.
-    idf_retry_fn = [
-        "idf_retry() {",
-        '  local max="${IDF_RETRY_MAX:-4}" n=1',
-        '  while true; do',
-        '    if "$@"; then return 0; fi',
-        '    local rc=$?',
-        '    if [ "$n" -ge "$max" ]; then return "$rc"; fi',
-        '    echo "idf_retry: attempt $n/$max failed (rc=$rc); sleeping $((n * 20))s" >&2',
-        '    sleep $((n * 20))',
-        "    n=$((n + 1))",
-        "  done",
-        "}",
-    ]
     shell_parts = [
         "set -euo pipefail",
         f'cd "{APP_DIR}"',
@@ -768,7 +759,6 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
         'git config --global http.lowSpeedLimit 1000 || true',
         'git config --global http.lowSpeedTime 600 || true',
         'source "$IDF_PATH/export.sh"',
-        *idf_retry_fn,
     ]
     if use_matter:
         shell_parts.extend(matter_env_exports())
@@ -777,11 +767,11 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
     # Fresh trees (CI) default to esp32; MiniHub boards need preview target esp32s31.
     if needs_esp32s31_set_target() and "set-target" not in idf_args:
         print("idf.py --preview set-target esp32s31 (sdkconfig missing or wrong target)")
-        shell_parts.append("idf_retry idf.py --preview set-target esp32s31")
+        shell_parts.append("idf.py --preview set-target esp32s31")
     shell_parts.append("export IDF_TARGET=esp32s31")
     # gen_bmgr_codes is gitignored / symlink-to-ignored — generate after CM fetch
     shell_parts.extend(shell_bmgr_codegen())
-    shell_parts.append(f"idf_retry {idf_cmd}")
+    shell_parts.append(idf_cmd)
 
     script = "\n".join(shell_parts) + "\n"
     rc = subprocess.run(["bash", "-c", script], cwd=str(APP_DIR)).returncode

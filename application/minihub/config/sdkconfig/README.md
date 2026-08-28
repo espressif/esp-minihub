@@ -13,6 +13,9 @@ Shared fragments: repo-root `config/sdkconfig/`.
 
 ```bash
 ./tools/build_firmware.py -app minihub zigbee build
+./tools/build_firmware.py -app minihub ble_mesh build   # + radio_coexist_memory auto
 # Optional LCD HW recipe:
 # ./tools/apply_sdkconfig_variant.sh lcd
 ```
+
+Boot order: BLE Mesh / Zigbee adapters start before `esp_wifi_init()` (see `minihub_net_start_wifi`). Radio memory trim: `config/sdkconfig/feature/radio_coexist_memory.defaults`.
