@@ -264,6 +264,18 @@ static esp_timer_handle_t s_bdb_retry_timer;
 static uint8_t s_bdb_retry_mode;
 static discover_job_t *s_disc_delayed_job;
 
+typedef enum {
+    DISC_DEFER_NONE = 0,
+    DISC_DEFER_KICK_NEXT,
+    DISC_DEFER_MATCH_SENSOR,
+    DISC_DEFER_SIMPLE_DESC,
+    DISC_DEFER_FINALIZE,
+} disc_defer_action_t;
+
+static esp_timer_handle_t s_disc_defer_timer;
+static discover_job_t *s_disc_defer_job;
+static disc_defer_action_t s_disc_defer_action;
+
 void zigbee_stack_set_hooks(minihub_zigbee_device_cb_t on_device,
                             minihub_zigbee_attr_cb_t on_attr,
                             zigbee_stack_ready_cb_t on_ready,
@@ -490,6 +502,7 @@ static void disc_job_release(discover_job_t *job)
 }
 
 static void disc_kick_next(void);
+static void disc_defer_step(discover_job_t *job, disc_defer_action_t action);
 static void disc_request_simple_desc(discover_job_t *job);
 static void disc_request_match_sensor(discover_job_t *job);
 static void schedule_disc_delay(discover_job_t *job, int delay_ms);
@@ -532,19 +545,19 @@ static void disc_finalize(discover_job_t *job)
             ESP_LOGW(TAG, "interview incomplete for 0x%04x — retry %u/%u in %d ms (sleepy ED)",
                      short_addr, job->attempt + 1, DISC_MAX_ATTEMPTS, DISC_RETRY_DELAY_MS);
             schedule_disc_delay(job, DISC_RETRY_DELAY_MS);
-            disc_kick_next();
+            disc_defer_step(NULL, DISC_DEFER_KICK_NEXT);
             return;
         }
         ESP_LOGW(TAG, "interview failed for 0x%04x after %u attempts — not registering as switch",
                  short_addr, DISC_MAX_ATTEMPTS);
         disc_job_release(job);
-        disc_kick_next();
+        disc_defer_step(NULL, DISC_DEFER_KICK_NEXT);
         return;
     }
 
     disc_job_release(job);
     emit_classified(short_addr, ieee, ep, caps, device_id);
-    disc_kick_next();
+    disc_defer_step(NULL, DISC_DEFER_KICK_NEXT);
 }
 
 static void disc_request_match_sensor(discover_job_t *job)
@@ -659,11 +672,11 @@ static void active_ep_cb(const ezb_zdo_active_ep_req_result_t *result, void *use
         ESP_LOGW(TAG, "active_ep failed for 0x%04x err=%d zdp=0x%02x — MatchDesc temp/humidity",
                  job->short_addr, result ? (int)result->error : -1,
                  (result && result->rsp) ? (unsigned)result->rsp->status : 0xffu);
-        disc_request_match_sensor(job);
+        disc_defer_step(job, DISC_DEFER_MATCH_SENSOR);
         return;
     }
     job->ep_index = 0;
-    disc_request_simple_desc(job);
+    disc_defer_step(job, DISC_DEFER_SIMPLE_DESC);
 }
 
 static void match_sensor_cb(const ezb_zdo_match_desc_req_result_t *result, void *user_ctx)
@@ -687,7 +700,7 @@ static void match_sensor_cb(const ezb_zdo_match_desc_req_result_t *result, void 
         job->eps[0] = ep;
         job->ep_count = 1;
         job->ep_index = 0;
-        disc_request_simple_desc(job);
+        disc_defer_step(job, DISC_DEFER_SIMPLE_DESC);
         return;
     }
 
@@ -697,7 +710,7 @@ static void match_sensor_cb(const ezb_zdo_match_desc_req_result_t *result, void 
     job->ep_count = 1;
     job->first_ep = 1;
     job->ep_index = 0;
-    disc_request_simple_desc(job);
+    disc_defer_step(job, DISC_DEFER_SIMPLE_DESC);
 }
 
 static void simple_desc_cb(const ezb_zdo_simple_desc_req_result_t *result, void *user_ctx)
@@ -734,9 +747,9 @@ static void simple_desc_cb(const ezb_zdo_simple_desc_req_result_t *result, void 
 
     job->ep_index++;
     if (job->ep_index >= job->ep_count) {
-        disc_finalize(job);
+        disc_defer_step(job, DISC_DEFER_FINALIZE);
     } else {
-        disc_request_simple_desc(job);
+        disc_defer_step(job, DISC_DEFER_SIMPLE_DESC);
     }
 }
 
@@ -767,6 +780,54 @@ static void disc_kick_next(void)
     }
 }
 
+static void disc_defer_timer_cb(void *arg)
+{
+    (void)arg;
+    discover_job_t *job = s_disc_defer_job;
+    disc_defer_action_t action = s_disc_defer_action;
+    s_disc_defer_job = NULL;
+    s_disc_defer_action = DISC_DEFER_NONE;
+    if (action == DISC_DEFER_NONE) {
+        return;
+    }
+
+    esp_zigbee_lock_acquire(portMAX_DELAY);
+    switch (action) {
+    case DISC_DEFER_KICK_NEXT:
+        disc_kick_next();
+        break;
+    case DISC_DEFER_MATCH_SENSOR:
+        if (job && job->in_use) {
+            disc_request_match_sensor(job);
+        }
+        break;
+    case DISC_DEFER_SIMPLE_DESC:
+        if (job && job->in_use) {
+            disc_request_simple_desc(job);
+        }
+        break;
+    case DISC_DEFER_FINALIZE:
+        if (job && job->in_use) {
+            disc_finalize(job);
+        }
+        break;
+    default:
+        break;
+    }
+    esp_zigbee_lock_release();
+}
+
+static void disc_defer_step(discover_job_t *job, disc_defer_action_t action)
+{
+    if (!s_disc_defer_timer || action == DISC_DEFER_NONE) {
+        return;
+    }
+    s_disc_defer_job = job;
+    s_disc_defer_action = action;
+    esp_timer_stop(s_disc_defer_timer);
+    esp_timer_start_once(s_disc_defer_timer, 1);
+}
+
 static void disc_delay_timer_cb(void *arg)
 {
     (void)arg;
@@ -777,7 +838,7 @@ static void disc_delay_timer_cb(void *arg)
     }
     ESP_LOGI(TAG, "discover delay elapsed → start 0x%04x", job->short_addr);
     job->phase = DISC_PHASE_IDLE;
-    disc_kick_next();
+    disc_defer_step(NULL, DISC_DEFER_KICK_NEXT);
 }
 
 static void schedule_disc_delay(discover_job_t *job, int delay_ms)
@@ -941,7 +1002,7 @@ static void fallback_timer_cb(void *arg)
     ESP_LOGW(TAG, "discover timeout for 0x%04x phase=%d", s_disc_active->short_addr,
              (int)s_disc_active->phase);
     if (s_disc_active->phase == DISC_PHASE_ACTIVE_EP) {
-        disc_request_match_sensor(s_disc_active);
+        disc_defer_step(s_disc_active, DISC_DEFER_MATCH_SENSOR);
         return;
     }
     if (s_disc_active->phase == DISC_PHASE_MATCH_SENSOR) {
@@ -949,10 +1010,10 @@ static void fallback_timer_cb(void *arg)
         s_disc_active->ep_count = 1;
         s_disc_active->first_ep = 1;
         s_disc_active->ep_index = 0;
-        disc_request_simple_desc(s_disc_active);
+        disc_defer_step(s_disc_active, DISC_DEFER_SIMPLE_DESC);
         return;
     }
-    disc_finalize(s_disc_active);
+    disc_defer_step(s_disc_active, DISC_DEFER_FINALIZE);
 }
 
 static void bdb_retry_timer_cb(void *arg)
@@ -1414,11 +1475,12 @@ static bool app_signal_handler(const ezb_app_signal_t *app_signal)
 
     switch (signal_type) {
     case EZB_ZDO_SIGNAL_SKIP_STARTUP:
-        /* Register 802.15.4 with coex only when Wi-Fi STA is actually used.
+        /* Register 802.15.4 with coex only when 2.4 GHz Wi-Fi is in use (minihub_net
+         * STA or external stack via MINIHUB_NET_WIFI_SOFTAP, e.g. Claw wifi_manager).
          * BLE Mesh may be compiled in but disabled at runtime — do not force
          * coex schemes that steal RX from sleepy end devices. */
 #if CONFIG_ESP_COEX_SW_COEXIST_ENABLE && CONFIG_SOC_IEEE802154_SUPPORTED && \
-    CONFIG_MINIHUB_NET_WIFI_STA
+    (CONFIG_MINIHUB_NET_WIFI_STA || CONFIG_MINIHUB_NET_WIFI_SOFTAP)
         {
             esp_err_t coex_err = esp_coex_wifi_i154_enable();
             if (coex_err != ESP_OK) {
@@ -2012,6 +2074,16 @@ esp_err_t zigbee_stack_start(void)
             return err;
         }
     }
+    if (!s_disc_defer_timer) {
+        const esp_timer_create_args_t args = {
+            .callback = disc_defer_timer_cb,
+            .name = "zb_disc_def",
+        };
+        err = esp_timer_create(&args, &s_disc_defer_timer);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
     if (!s_bdb_retry_timer) {
         const esp_timer_create_args_t args = {
             .callback = bdb_retry_timer_cb,
@@ -2212,89 +2284,4 @@ esp_err_t zigbee_stack_onoff(uint16_t short_addr, uint8_t endpoint, minihub_zigb
     return esp_zigbee_err_to_esp(zb_err);
 }
 
-#else /* !CONFIG_MINIHUB_ZIGBEE_SDK */
-
-esp_err_t zigbee_stack_start(void)
-{
-    return ESP_ERR_NOT_SUPPORTED;
-}
-esp_err_t zigbee_stack_stop(void)
-{
-    return ESP_OK;
-}
-esp_err_t zigbee_stack_permit_join(int seconds)
-{
-    (void)seconds;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-bool zigbee_stack_permit_join_active(void)
-{
-    return false;
-}
-esp_err_t zigbee_stack_add_install_code(uint64_t ieee, const uint8_t *ic, size_t ic_len)
-{
-    (void)ieee;
-    (void)ic;
-    (void)ic_len;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-bool zigbee_stack_running(void)
-{
-    return false;
-}
-esp_err_t zigbee_stack_onoff(uint16_t short_addr, uint8_t endpoint, minihub_zigbee_onoff_cmd_t cmd)
-{
-    (void)short_addr;
-    (void)endpoint;
-    (void)cmd;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-esp_err_t zigbee_stack_subscribe(uint16_t short_addr, uint8_t endpoint, uint64_t ieee, uint8_t caps)
-{
-    (void)short_addr;
-    (void)endpoint;
-    (void)ieee;
-    (void)caps;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-void zigbee_stack_rediscover(uint16_t short_addr, uint64_t ieee)
-{
-    (void)short_addr;
-    (void)ieee;
-}
-void zigbee_stack_subscribe_product_params(uint16_t short_addr, uint8_t endpoint, uint64_t ieee)
-{
-    (void)short_addr;
-    (void)endpoint;
-    (void)ieee;
-}
-esp_err_t zigbee_stack_write_attr(uint16_t short_addr, uint8_t endpoint, uint16_t cluster_id,
-                                  uint16_t attr_id, uint8_t attr_type, void *value, uint16_t value_size)
-{
-    (void)short_addr;
-    (void)endpoint;
-    (void)cluster_id;
-    (void)attr_id;
-    (void)attr_type;
-    (void)value;
-    (void)value_size;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-void zigbee_stack_set_hooks(minihub_zigbee_device_cb_t on_device, minihub_zigbee_attr_cb_t on_attr,
-                            zigbee_stack_ready_cb_t on_ready, void *ctx)
-{
-    (void)on_device;
-    (void)on_attr;
-    (void)on_ready;
-    (void)ctx;
-}
-void zigbee_stack_notify_device(const minihub_zigbee_device_t *dev)
-{
-    (void)dev;
-}
-void zigbee_stack_notify_attr(const minihub_zigbee_attr_evt_t *evt)
-{
-    (void)evt;
-}
-
-#endif
+#endif /* CONFIG_MINIHUB_ZIGBEE_SDK */

@@ -148,10 +148,18 @@ def pack_one(
     return store_pkg
 
 
+def host_elf_symbols_out(*, root: Path = ROOT) -> Path:
+    """Build-tree copy; do not overwrite the committed components/… source file."""
+    out = app_build_dir(root=root) / "gen" / "host_elf_symbols_generated.c"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    return out
+
+
 def refresh_host_and_catalog(*, root: Path = ROOT, deploy: Path | None = None) -> None:
     deploy = resolve_deploy_dir(deploy)
     modules_dir = resolve_modules_dir(root=root)
     mhmd_dir = app_build_dir(root=root)
+    gen_out = host_elf_symbols_out(root=root)
     subprocess.run(
         [
             sys.executable,
@@ -163,7 +171,8 @@ def refresh_host_and_catalog(*, root: Path = ROOT, deploy: Path | None = None) -
             "--store-dir",
             str(deploy),
             "--out",
-            str(root / "components" / "minihub_module" / "host_elf_symbols_generated.c"),
+            str(gen_out),
+            "--skip-allowlist",
         ],
         cwd=str(root),
         check=True,

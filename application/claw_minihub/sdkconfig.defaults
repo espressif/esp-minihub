@@ -146,6 +146,7 @@ CONFIG_MINIHUB_STORE_PORT=62027
 
 #
 # MiniHub RF profile (merged via sdkconfig.defaults.minihub):
-#   Zigbee adapter enabled in adapters.json; real 802.15.4 stack needs S31 + CONFIG_MINIHUB_ZIGBEE_SDK=y.
+#   Real 802.15.4 Zigbee needs S31 + CONFIG_MINIHUB_ZIGBEE_SDK=y; when n, zigbee
+#   is not registered and does not appear in Web Store / overview.
 #   BLE Mesh disabled for MVP (CONFIG_MINIHUB_BLE_MESH_SDK=n). Wi-Fi + Zigbee coexistence on S31 only.
 #

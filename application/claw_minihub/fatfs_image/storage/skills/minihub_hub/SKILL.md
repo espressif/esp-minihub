@@ -1,7 +1,7 @@
 ---
 {
   "name": "minihub_hub",
-  "description": "DEFAULT for 开灯/关灯/开插座/关插座/列出设备, 米家/miot, and MiniHub Store 插件 (可安装的插件/适配器 catalog). Use hub.api GET /api/store/catalog — NEVER skills_lab / ESP-Skill hub for 插件. MCP points.list + command.invoke for loaded adapters.",
+  "description": "DEFAULT for 开灯/关灯/开插座/关插座/列出设备/删除设备, 米家/miot, and MiniHub Store 插件. Zigbee delete: hub.api POST /api/points/remove (NOT modules/zigbee/rpc). Use hub.api GET /api/store/catalog — NEVER skills_lab for 插件.",
   "metadata": {
     "cap_groups": [
       "cap_minihub_local_mcp"
@@ -16,6 +16,14 @@
 Use this skill by default when the user asks to list devices, read state, or toggle lights/switches/plugs — including plain **开灯 / 关灯** (no need to say 米家 or MiniHub).
 
 All device actions MUST go through local MiniHub MCP (`mcp_call_tool` → `command.invoke` / `points.list`). Do not use Lua, GPIO, or board LED scripts for lights.
+
+**Remove Zigbee / BLE Mesh / Matter from Hub (用户说删除设备):**
+
+- Zigbee is a **builtin radio adapter**, **not** a Store module — **never** `POST /api/modules/zigbee/rpc` (returns `NOT_FOUND` / `DENIED`).
+- **Always** use `hub.api` **`POST /api/points/remove`** before saying deletion is impossible.
+- Delete all Zigbee: `"body":"{\"adapter\":\"zigbee\",\"delete_all\":true}"`. One device: `"body":"{\"point_id\":\"light/zb_11dd\"}"`.
+- On `"ok":true`, reply with removed `point_ids`; then `GET /api/points?adapter=zigbee` to confirm empty.
+- Hub-side remove only (NVS + point registry); physical device may still need factory reset to leave the network.
 
 ## MCP server (same device)
 
@@ -58,6 +66,8 @@ Do **not** invent paths outside the allowlist. Denied responses have `"error":"D
 | method | path | notes |
 | --- | --- | --- |
 | GET | `/api/points` | query `type` / `adapter` |
+| GET | `/api/zigbee` | Zigbee coordinator status (`ready`, `permit_join`, `device_count`) |
+| GET | `/api/radio/provision` | Zigbee / BLE Mesh 配网窗口状态 |
 | GET | `/api/points/history` | query `point_id` + `limit` (cloud+local) |
 | GET | `/api/rules` | |
 | GET | `/api/adapters` or `/api/config/adapters` | |
@@ -75,6 +85,7 @@ Do **not** invent paths outside the allowlist. Denied responses have `"error":"D
 | POST | `/api/ota` | body `{"url":"https://..."}` URL OTA (not binary upload) |
 | POST | `/api/hub/reload` | soft hub reload |
 | POST | `/api/zigbee/permit_join` | body optional `{"seconds":60}` |
+| POST | `/api/points/remove` | Hub-side remove: `{"point_id":"..."}` or `{"adapter":"zigbee","delete_all":true}` |
 | POST | `/api/ble_mesh/permit_provision` | body optional `{"seconds":60}` |
 | POST | `/api/store/install` | body `{"kind","id","reload"?}` |
 | POST | `/api/store/upgrade` | body `{"kind","id","reload"?}` |
@@ -137,12 +148,6 @@ After Store-install of `miot`, next-steps should include that plain URL line (no
 
 Account / vendor RPC **after** that module is loaded (`POST /api/modules/<id>/rpc`). Lab serial: `module --list` / `module --rpc --id <id> --method …`. Do not invent methods — follow the module’s UI/docs or probe `status` first.
 
-Magnet event log via gateway:
-
-```json
-{"server_url":"http://127.0.0.1:18791","tool_name":"hub.api","arguments":{"method":"GET","path":"/api/points/history","query":"point_id=binary_sensor/miot_device_qgcg00&limit=20","body":""}}
-```
-
 Do **not** invent `point_id` values. Always call `points.list` first (optionally filtered) and use ids from the response.
 
 ## Recommended flow
@@ -179,13 +184,7 @@ When the user asks to link a magnet to lights/plugs:
 4. Prefer **one `then` object per rule** (most compatible). For multiple devices, use **multiple rules** with the same `when`, or after firmware supports it: `then` as an array of command objects (max 4).
 5. Do **not** invent `then` as anything other than object or array of objects. Do **not** include PIR `switch/miot_2s_d50400`, `switch/demo`, or onboard LED.
 
-Door open → light + real plug (four rules, one command each):
-
-```json
-{"server_url":"http://127.0.0.1:18791","tool_name":"rules.put","arguments":{"rules_json":"{\"rules\":[{\"id\":\"magnet_open_light\",\"enabled\":true,\"when\":{\"type\":\"point\",\"point_id\":\"binary_sensor/miot_device_qgcg00\",\"equals\":\"open\"},\"if\":[],\"then\":{\"type\":\"command\",\"point_id\":\"light/miot_device_322801\",\"cmd\":\"turn_on\"}},{\"id\":\"magnet_open_plug\",\"enabled\":true,\"when\":{\"type\":\"point\",\"point_id\":\"binary_sensor/miot_device_qgcg00\",\"equals\":\"open\"},\"if\":[],\"then\":{\"type\":\"command\",\"point_id\":\"switch/miot_3_413196\",\"cmd\":\"turn_on\"}},{\"id\":\"magnet_close_light\",\"enabled\":true,\"when\":{\"type\":\"point\",\"point_id\":\"binary_sensor/miot_device_qgcg00\",\"equals\":\"closed\"},\"if\":[],\"then\":{\"type\":\"command\",\"point_id\":\"light/miot_device_322801\",\"cmd\":\"turn_off\"}},{\"id\":\"magnet_close_plug\",\"enabled\":true,\"when\":{\"type\":\"point\",\"point_id\":\"binary_sensor/miot_device_qgcg00\",\"equals\":\"closed\"},\"if\":[],\"then\":{\"type\":\"command\",\"point_id\":\"switch/miot_3_413196\",\"cmd\":\"turn_off\"}}]}"}}
-```
-
-Replace ids from `points.list`. `switch/miot_2s_d50400` is a **PIR**, not a plug — never control it in this scene.
+Magnet → light/plug: build `rules.put` with one rule per action (open→turn_on, closed→turn_off). Replace all `point_id` values from `points.list`. Do not use PIR ids as plugs.
 
 After `rules.put`, say the scene is **active on events**. Do not ask to poll.
 
@@ -243,19 +242,9 @@ Read it back:
 
 This Function image **does** have LittleFS `modstore` mounted at `/store` (2MB). Catalog download and `.mhub` install can work **if** the store server implements MiniHub Store APIs.
 
-## Store vs website (do not confuse)
+## Store vs website
 
-The hub fetches **`GET {custom_url}/api/catalog`** and expects a **JSON array**. It does not open an HTML homepage.
-
-If `http_request` to `http://HOST:PORT/` or `/api/catalog` returns **404 on every path**, that host is a static website (or empty nginx), **not** `tools/store_server.py`. Tell the user to run:
-
-```text
-python3 tools/store_server.py --host 0.0.0.0 --port <PORT> --deploy ~/workspace/minihub_store
-```
-
-Do **not** conclude “this firmware cannot install adapters” from a remote 404. The missing piece is the store server, not the `/store` partition.
-
-`ESP_ERR_HTTP_CONNECT` to `http://172.168.10.13:8080` is the firmware **default** store (unreachable on this LAN). Ignore it when `disable_default` is true.
+Catalog is **`GET {custom_url}/api/catalog`** (JSON array), not an HTML homepage. 404 everywhere → run `tools/store_server.py`, not a static site. Ignore unreachable firmware default store when `disable_default` is true.
 
 ## Adapters (`adapters.get`)
 
@@ -297,15 +286,41 @@ Do **not** say you are waiting to confirm the activation channel.
 
 Claw may run with **zero** cloud plugins. Only Store-install what the user asks for.
 
+## Zigbee 配网 (permit_join)
+
+**List Zigbee devices:** `hub.api` GET `/api/points` with query `adapter=zigbee` (or `points.list` with `"adapter":"zigbee"`). **Status only:** GET `/api/zigbee`. Do **not** invent other `GET /api/zigbee/*` paths.
+
+When the user asks to open Zigbee pairing:
+
+1. Call `hub.api` POST `/api/zigbee/permit_join` with optional `{"seconds":120}`.
+2. Reply in IM that the window is open and how long it lasts (`user_reply` if present).
+3. **Do not** poll or busy-wait for new devices. While `permit_join` is active, the hub **automatically pushes WeChat** for each new Zigbee point (`Zigbee 新设备入网: <point_id> (<type>)`). Summarize those pushes for the user if they ask whether anything joined.
+4. After the window closes, new joins are silent unless the user opens pairing again.
+
+To remove devices from the Hub (NVS / adapters.json / point registry; does not factory-reset radios):
+
+```json
+{"server_url":"http://127.0.0.1:18791","tool_name":"hub.api","arguments":{"method":"POST","path":"/api/points/remove","body":"{\"adapter\":\"zigbee\",\"delete_all\":true}"}}
+```
+
+Single device: `"body":"{\"point_id\":\"light/zb_11dd\"}"` (adapter inferred from registry). Works for `zigbee`, `ble_mesh`, `matter`, and cloud adapters. Legacy Web paths `/api/zigbee/devices` etc. still work but prefer `/api/points/remove` for Agent.
+
 ## Errors
 
 | Response | Action |
 | --- | --- |
 | `HUB_NOT_READY` | Wait ~30s and retry. Do **not** call `restart_device` or busy-wait. |
+| `ESP_ERR_INVALID_STATE` / `ready:false` on Zigbee permit_join | Coordinator still forming — wait ~30s and retry; **reply in IM** with `user_reply`. |
+| `ESP_ERR_NOT_SUPPORTED` on Zigbee | Rebuild firmware with `zigbee` stack; reply in IM; do not restart. |
+| ETH-only builds (`MINIHUB_NET_WIFI_SOFTAP=n`) | `get_system_info` `ip.interface=ethernet` means online; Wi-Fi `disconnected` is normal. Prefer `hub.api` GET `/api/system` for `net.eth`. |
+| `user_reply` in hub.api JSON | Send that text to the user on the current IM channel verbatim (WeChat/TG/etc.). |
 | `ESP_ERR_INVALID_STATE` on MCP HTTP | Retry `server_url` `http://127.0.0.1:18791`. |
 | Empty `points.list` | Confirm which adapters/modules are loaded; install/login/sync as needed. |
 | `module not ready` / RPC fail | Module not loaded — Store-install + reload. |
 | `INVOKE_FAILED` / `SET_FAILED` | Report error; re-list points if ids may be stale. |
+| `DENIED` on `/api/modules/zigbee/rpc` or delete via module RPC | Wrong path — use **`POST /api/points/remove`**, not module RPC. |
+| `DENIED` on `/api/points/remove` | Firmware too old — flash build with unified remove API; do **not** claim deletion is unsupported without this call succeeding or failing on old FW. |
+| User asks 删除所有 Zigbee 设备 | One call: `POST /api/points/remove` body `{"adapter":"zigbee","delete_all":true}` — do not loop module RPC or invent `/api/zigbee` DELETE. |
 
 If `mcp_list_tools` returns no `points.*` tools, stop and tell the user MiniHub MCP is not registered yet.
 

@@ -154,10 +154,16 @@ menu "MiniHub"
     config MINIHUB_ZIGBEE_SDK
         bool "Enable Zigbee adapter (ESP-Zigbee-SDK coordinator)"
         default n
+        select ZB_ENABLED
+        select ZB_ZCZR
+        select ZB_RADIO_NATIVE if SOC_IEEE802154_SUPPORTED
+        select ESP_COEX_SW_COEXIST_ENABLE
         help
             Register the Zigbee adapter and use esp-zigbee-lib when the
             target supports IEEE 802.15.4 (or an external RCP). When
             disabled, the Zigbee adapter is not registered (no simulation).
+            Also selects ZB_ENABLED and coordinator/native-radio options for
+            esp-zigbee-lib.
 
     config MINIHUB_BLE_MESH_SDK
         bool "Enable BLE Mesh adapter (ESP-BLE-Mesh Provisioner)"

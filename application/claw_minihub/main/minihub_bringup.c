@@ -16,8 +16,11 @@
 #include "minihub_core.h"
 #include "minihub_mcp_server.h"
 #include "minihub_module.h"
+#include "minihub_net.h"
 #include "minihub_pack.h"
 #include "minihub_rules.h"
+
+#include "sdkconfig.h"
 
 extern const minihub_adapter_t zigbee_adapter;
 
@@ -26,7 +29,11 @@ static const char *TAG = "minihub_bringup";
 static esp_err_t register_mvp_adapters(void)
 {
     /* Vendor cloud adapters load via Store DYNAMIC_MODULES — not static register. */
+#if CONFIG_MINIHUB_ZIGBEE_SDK
     return minihub_adapter_register(&zigbee_adapter);
+#else
+    return ESP_OK;
+#endif
 }
 
 static esp_err_t register_demo_point(void)
@@ -103,7 +110,14 @@ esp_err_t minihub_bringup_start(void)
         ESP_LOGW(TAG, "IM notify init: %s (continuing)", esp_err_to_name(err));
     }
 
-    /* Claw wifi_manager owns STA/AP — do not start minihub_net Wi-Fi here. */
+#if CONFIG_MINIHUB_NET_WIFI_STA && !CONFIG_MINIHUB_NET_WIFI_SOFTAP
+    err = minihub_net_start_wifi();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "minihub_net Wi-Fi start: %s (continuing)", esp_err_to_name(err));
+    }
+#else
+    /* claw wifi_manager (MINIHUB_NET_WIFI_SOFTAP) or ETH-only: no minihub_net Wi-Fi here. */
+#endif
 
     err = minihub_adapter_start_all();
     if (err != ESP_OK) {

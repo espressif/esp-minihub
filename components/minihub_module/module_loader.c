@@ -845,6 +845,36 @@ static bool module_slot_installed(const module_slot_t *slot)
     return slot->rpc != NULL;
 }
 
+/** Radio host modules need the matching Kconfig SDK; hide them when not compiled in. */
+static bool module_radio_host_firmware_enabled(const char *module_id)
+{
+    if (!module_id || module_id[0] == '\0') {
+        return true;
+    }
+    if (strcmp(module_id, "zigbee") == 0) {
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+        return true;
+#else
+        return false;
+#endif
+    }
+    if (strcmp(module_id, "ble_mesh") == 0) {
+#if CONFIG_MINIHUB_BLE_MESH_SDK
+        return true;
+#else
+        return false;
+#endif
+    }
+    if (strcmp(module_id, "thread") == 0) {
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+        return true;
+#else
+        return false;
+#endif
+    }
+    return true;
+}
+
 static void remove_ephemeral_module_slot(const char *module_id)
 {
     for (size_t i = 0; i < s_module_count; i++) {
@@ -872,6 +902,9 @@ cJSON *minihub_module_list_json(void)
     cJSON *arr = cJSON_CreateArray();
     for (size_t i = 0; i < s_module_count; i++) {
         const minihub_module_info_t *info = &s_modules[i].info;
+        if (!module_radio_host_firmware_enabled(info->id)) {
+            continue;
+        }
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "id", info->id);
         cJSON_AddStringToObject(item, "name", info->name);
@@ -974,6 +1007,9 @@ static bool adapter_config_enabled(const char *adapter_name)
 bool minihub_module_overview_adapter_visible(const char *adapter_name)
 {
     if (!adapter_name || adapter_name[0] == '\0') {
+        return false;
+    }
+    if (!module_radio_host_firmware_enabled(adapter_name)) {
         return false;
     }
 
@@ -1180,6 +1216,10 @@ esp_err_t minihub_module_register_rpc(const char *module_id, minihub_module_rpc_
 {
     if (!module_id || !module_id[0] || !rpc) {
         return ESP_ERR_INVALID_ARG;
+    }
+    if (!module_radio_host_firmware_enabled(module_id)) {
+        ESP_LOGI(TAG, "skip host RPC '%s': radio SDK not enabled in firmware", module_id);
+        return ESP_ERR_NOT_SUPPORTED;
     }
 
     /* Remember so hub reload / clear_modules can re-bind. */

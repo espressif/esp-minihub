@@ -29,15 +29,7 @@ static esp_err_t rpc_permit_join(const cJSON *params, cJSON **out)
     }
     cJSON_AddStringToObject(resp, "result", err == ESP_OK ? "ok" : "fail");
     if (err != ESP_OK) {
-        if (err == ESP_ERR_INVALID_STATE && minihub_zigbee_permit_join_active()) {
-            cJSON_AddStringToObject(resp, "error", "Zigbee 正在入网，请勿重复开启");
-        } else if (err == ESP_ERR_INVALID_STATE && minihub_ble_mesh_provisioning_busy()) {
-            cJSON_AddStringToObject(resp, "error", "BLE Mesh 正在配网，无法同时开启 Zigbee 入网");
-        } else if (err == ESP_ERR_INVALID_ARG) {
-            cJSON_AddStringToObject(resp, "error", "seconds 无效（须 >= 0；0 关闭窗口）");
-        } else {
-            cJSON_AddStringToObject(resp, "error", esp_err_to_name(err));
-        }
+        minihub_zigbee_json_add_permit_join_error(resp, err);
     }
     cJSON_AddBoolToObject(resp, "permit_join", minihub_zigbee_permit_join_active());
     *out = resp;

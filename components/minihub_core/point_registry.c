@@ -127,6 +127,7 @@ esp_err_t minihub_point_register(const minihub_point_t *point)
     if (data) {
         cJSON_AddStringToObject(data, "point_id", point->point_id);
         cJSON_AddStringToObject(data, "type", point->type);
+        cJSON_AddStringToObject(data, "adapter", point->adapter);
         minihub_event_bus_publish("point.registered", data);
         cJSON_Delete(data);
     }

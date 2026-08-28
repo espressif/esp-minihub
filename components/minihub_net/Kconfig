@@ -6,6 +6,15 @@ menu "MiniHub Networking"
         help
             Start Wi-Fi station (credentials from Kconfig / NVS / SoftAP or BLE provision).
 
+    config MINIHUB_NET_WIFI_SOFTAP
+        bool "Wi-Fi SoftAP in use (external stack)"
+        default n
+        help
+            Product uses 2.4 GHz Wi-Fi SoftAP and/or STA outside minihub_net
+            (e.g. Claw wifi_manager) while MINIHUB_NET_WIFI_STA is disabled.
+            claw_minihub starts wifi_manager when this is set; set n for ETH-only.
+            Enables RF coexistence hooks (esp_coex_wifi_i154) for Zigbee on S31.
+
     config MINIHUB_NET_ETH
         bool "Enable Ethernet (native EMAC)"
         depends on SOC_EMAC_SUPPORTED

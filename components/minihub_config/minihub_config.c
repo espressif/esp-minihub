@@ -396,6 +396,38 @@ esp_err_t minihub_config_remove_adapter(const char *adapter_name)
     return err;
 }
 
+esp_err_t minihub_config_remove_adapter_device(const char *adapter_name, const char *point_id)
+{
+    if (!adapter_name || !adapter_name[0] || !point_id || !point_id[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_adapters_cfg) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    cJSON *adapters = cJSON_GetObjectItem(s_adapters_cfg, "adapters");
+    cJSON *ad = adapters ? cJSON_GetObjectItem(adapters, adapter_name) : NULL;
+    cJSON *devices = ad ? cJSON_GetObjectItem(ad, "devices") : NULL;
+    if (!cJSON_IsArray(devices)) {
+        return ESP_OK;
+    }
+
+    const int count = cJSON_GetArraySize(devices);
+    for (int i = 0; i < count; i++) {
+        cJSON *item = cJSON_GetArrayItem(devices, i);
+        const cJSON *pid = cJSON_GetObjectItem(item, "point_id");
+        if (cJSON_IsString(pid) && strcmp(pid->valuestring, point_id) == 0) {
+            cJSON_DeleteItemFromArray(devices, i);
+            esp_err_t err = minihub_config_save_adapters(s_adapters_cfg);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "removed %s from adapters.json %s.devices", point_id, adapter_name);
+            }
+            return err;
+        }
+    }
+    return ESP_OK;
+}
+
 esp_err_t minihub_config_save_rules(cJSON *rules_root)
 {
     if (!rules_root) {

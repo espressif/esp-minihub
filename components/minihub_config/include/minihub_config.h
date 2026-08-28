@@ -29,6 +29,8 @@ esp_err_t minihub_config_reload(void);
 esp_err_t minihub_config_save_adapters(cJSON *adapters_root);
 /** Remove one adapter key from adapters.json (no-op if missing). */
 esp_err_t minihub_config_remove_adapter(const char *adapter_name);
+/** Drop one manual devices[] entry from adapters.json (no-op if missing). */
+esp_err_t minihub_config_remove_adapter_device(const char *adapter_name, const char *point_id);
 /** Write rules.json to LittleFS and refresh cache */
 esp_err_t minihub_config_save_rules(cJSON *rules_root);
 /** Write scenes.json to LittleFS and refresh cache */

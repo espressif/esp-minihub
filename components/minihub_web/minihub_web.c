@@ -42,8 +42,12 @@
 #include "minihub_map.h"
 #include "minihub_map_tiles.h"
 #include "minihub_paths.h"
+#if CONFIG_MINIHUB_ZIGBEE_SDK
 #include "minihub_zigbee.h"
+#endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
 #include "minihub_ble_mesh.h"
+#endif
 #include "esp_chip_info.h"
 #include "esp_flash.h"
 #include "esp_heap_caps.h"
@@ -2257,6 +2261,7 @@ static esp_err_t handle_api_ota_upload(httpd_req_t *req)
     return err;
 }
 
+#if CONFIG_MINIHUB_ZIGBEE_SDK
 static esp_err_t handle_api_zigbee_permit(httpd_req_t *req)
 {
     esp_err_t err = api_auth(req);
@@ -2288,17 +2293,7 @@ static esp_err_t handle_api_zigbee_permit(httpd_req_t *req)
     }
     cJSON_AddStringToObject(resp, "result", zb_err == ESP_OK ? "ok" : "fail");
     if (zb_err != ESP_OK) {
-        if (zb_err == ESP_ERR_INVALID_STATE && minihub_zigbee_permit_join_active()) {
-            cJSON_AddStringToObject(resp, "error", "Zigbee 正在入网，请勿重复开启");
-        } else if (zb_err == ESP_ERR_INVALID_STATE && minihub_ble_mesh_provisioning_busy()) {
-            cJSON_AddStringToObject(resp, "error", "BLE Mesh 正在配网，无法同时开启 Zigbee 入网");
-        } else if (zb_err == ESP_ERR_INVALID_STATE && !minihub_zigbee_running()) {
-            cJSON_AddStringToObject(resp, "error", "Zigbee coordinator not ready (network forming)");
-        } else if (zb_err == ESP_ERR_INVALID_ARG) {
-            cJSON_AddStringToObject(resp, "error", "seconds 无效（须 >= 0；0 关闭窗口）");
-        } else {
-            cJSON_AddStringToObject(resp, "error", esp_err_to_name(zb_err));
-        }
+        minihub_zigbee_json_add_permit_join_error(resp, zb_err);
     }
     cJSON_AddBoolToObject(resp, "ready", minihub_zigbee_running());
     cJSON_AddBoolToObject(resp, "permit_join", minihub_zigbee_permit_join_active());
@@ -2358,7 +2353,9 @@ static esp_err_t handle_api_zigbee_install_code(httpd_req_t *req)
     cJSON_Delete(resp);
     return err;
 }
+#endif /* CONFIG_MINIHUB_ZIGBEE_SDK */
 
+#if CONFIG_MINIHUB_BLE_MESH_SDK
 static esp_err_t handle_api_ble_mesh_permit(httpd_req_t *req)
 {
     esp_err_t err = api_auth(req);
@@ -2392,8 +2389,10 @@ static esp_err_t handle_api_ble_mesh_permit(httpd_req_t *req)
     if (bm_err != ESP_OK) {
         if (bm_err == ESP_ERR_INVALID_STATE && minihub_ble_mesh_provisioning_busy()) {
             cJSON_AddStringToObject(resp, "error", "BLE Mesh 正在配网，请勿重复开启");
+#if CONFIG_MINIHUB_ZIGBEE_SDK
         } else if (bm_err == ESP_ERR_INVALID_STATE && minihub_zigbee_permit_join_active()) {
             cJSON_AddStringToObject(resp, "error", "Zigbee 正在入网，无法同时开启 BLE Mesh 配网");
+#endif
         } else if (bm_err == ESP_ERR_INVALID_ARG) {
             cJSON_AddStringToObject(resp, "error", "seconds 无效（须 >= 0；0 关闭窗口）");
         } else {
@@ -2405,6 +2404,7 @@ static esp_err_t handle_api_ble_mesh_permit(httpd_req_t *req)
     cJSON_Delete(resp);
     return err;
 }
+#endif /* CONFIG_MINIHUB_BLE_MESH_SDK */
 
 static esp_err_t handle_api_radio_provision_status(httpd_req_t *req)
 {
@@ -2417,9 +2417,28 @@ static esp_err_t handle_api_radio_provision_status(httpd_req_t *req)
     if (!resp) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
     }
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+    cJSON_AddBoolToObject(resp, "zigbee_available", true);
+#else
+    cJSON_AddBoolToObject(resp, "zigbee_available", false);
+#endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
+    cJSON_AddBoolToObject(resp, "ble_mesh_available", true);
+#else
+    cJSON_AddBoolToObject(resp, "ble_mesh_available", false);
+#endif
+#if CONFIG_MINIHUB_ZIGBEE_SDK
     const bool zb = minihub_zigbee_permit_join_active();
+#else
+    const bool zb = false;
+#endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
     const bool bm_permit = minihub_ble_mesh_permit_provision_active();
     const bool bm_busy = minihub_ble_mesh_provisioning_busy();
+#else
+    const bool bm_permit = false;
+    const bool bm_busy = false;
+#endif
     cJSON_AddBoolToObject(resp, "zigbee_permit_join", zb);
     cJSON_AddBoolToObject(resp, "ble_mesh_permit_provision", bm_permit);
     cJSON_AddBoolToObject(resp, "ble_mesh_provisioning", bm_busy);
@@ -2429,136 +2448,96 @@ static esp_err_t handle_api_radio_provision_status(httpd_req_t *req)
     return err;
 }
 
-/** Best-effort: drop manual devices[] entry from adapters.json for adapter name. */
-static void remove_adapters_json_device(const char *adapter_name, const char *point_id)
+static esp_err_t send_points_remove_response(httpd_req_t *req, cJSON *resp)
 {
-    if (!adapter_name || !point_id) {
-        return;
-    }
-    cJSON *root = minihub_config_get_adapters();
-    if (!root) {
-        return;
-    }
-    cJSON *adapters = cJSON_GetObjectItem(root, "adapters");
-    cJSON *ad = adapters ? cJSON_GetObjectItem(adapters, adapter_name) : NULL;
-    cJSON *devices = ad ? cJSON_GetObjectItem(ad, "devices") : NULL;
-    if (!cJSON_IsArray(devices)) {
-        return;
-    }
-    const int count = cJSON_GetArraySize(devices);
-    for (int i = 0; i < count; i++) {
-        cJSON *item = cJSON_GetArrayItem(devices, i);
-        const cJSON *pid = cJSON_GetObjectItem(item, "point_id");
-        if (cJSON_IsString(pid) && strcmp(pid->valuestring, point_id) == 0) {
-            cJSON_DeleteItemFromArray(devices, i);
-            (void)minihub_config_save_adapters(root);
-            ESP_LOGI(TAG, "removed %s from adapters.json %s.devices", point_id, adapter_name);
-            return;
+    const cJSON *ok = cJSON_GetObjectItem(resp, "ok");
+    if (cJSON_IsFalse(ok)) {
+        const cJSON *err_j = cJSON_GetObjectItem(resp, "error");
+        const char *code = cJSON_IsString(err_j) ? err_j->valuestring : "fail";
+        cJSON_Delete(resp);
+        if (strcmp(code, "NOT_FOUND") == 0) {
+            return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, code);
         }
+        if (strcmp(code, "INVALID_ARG") == 0) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, code);
+        }
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, code);
     }
+    esp_err_t err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
 }
 
+static esp_err_t handle_points_remove_json(httpd_req_t *req, cJSON *body)
+{
+    cJSON *resp = NULL;
+    esp_err_t err = minihub_hub_points_remove(body, &resp);
+    cJSON_Delete(body);
+    if (err == ESP_ERR_NO_MEM || !resp) {
+        cJSON_Delete(resp);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    return send_points_remove_response(req, resp);
+}
+
+static esp_err_t handle_api_points_remove(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char buf[384];
+    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (received <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    buf[received] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+    return handle_points_remove_json(req, root);
+}
+
+static esp_err_t handle_legacy_adapter_devices_delete(httpd_req_t *req, const char *adapter)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char buf[384];
+    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (received <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    buf[received] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+    if (!cJSON_GetObjectItem(root, "adapter")) {
+        cJSON_AddStringToObject(root, "adapter", adapter);
+    }
+    return handle_points_remove_json(req, root);
+}
+
+#if CONFIG_MINIHUB_ZIGBEE_SDK
 static esp_err_t handle_api_zigbee_devices(httpd_req_t *req)
 {
-    esp_err_t err = api_auth(req);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    char buf[256];
-    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (received <= 0) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
-    }
-    buf[received] = '\0';
-
-    cJSON *root = cJSON_Parse(buf);
-    if (!root) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
-    }
-
-    const cJSON *del = cJSON_GetObjectItem(root, "delete");
-    if (!cJSON_IsTrue(del)) {
-        cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "only delete supported");
-    }
-    const cJSON *point_id = cJSON_GetObjectItem(root, "point_id");
-    if (!cJSON_IsString(point_id) || !point_id->valuestring[0]) {
-        cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing point_id");
-    }
-    char point_buf[96];
-    strncpy(point_buf, point_id->valuestring, sizeof(point_buf) - 1);
-    point_buf[sizeof(point_buf) - 1] = '\0';
-    cJSON_Delete(root);
-
-    err = minihub_zigbee_remove_device(point_buf);
-    if (err != ESP_OK) {
-        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, esp_err_to_name(err));
-    }
-    remove_adapters_json_device("zigbee", point_buf);
-
-    cJSON *resp = cJSON_CreateObject();
-    if (!resp) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-    }
-    cJSON_AddStringToObject(resp, "result", "ok");
-    cJSON_AddStringToObject(resp, "point_id", point_buf);
-    err = send_json(req, resp);
-    cJSON_Delete(resp);
-    return err;
+    return handle_legacy_adapter_devices_delete(req, "zigbee");
 }
+#endif
 
+#if CONFIG_MINIHUB_BLE_MESH_SDK
 static esp_err_t handle_api_ble_mesh_devices(httpd_req_t *req)
 {
-    esp_err_t err = api_auth(req);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    char buf[256];
-    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (received <= 0) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
-    }
-    buf[received] = '\0';
-
-    cJSON *root = cJSON_Parse(buf);
-    if (!root) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
-    }
-
-    const cJSON *del = cJSON_GetObjectItem(root, "delete");
-    if (!cJSON_IsTrue(del)) {
-        cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "only delete supported");
-    }
-    const cJSON *point_id = cJSON_GetObjectItem(root, "point_id");
-    if (!cJSON_IsString(point_id) || !point_id->valuestring[0]) {
-        cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing point_id");
-    }
-    char point_buf[96];
-    strncpy(point_buf, point_id->valuestring, sizeof(point_buf) - 1);
-    point_buf[sizeof(point_buf) - 1] = '\0';
-    cJSON_Delete(root);
-
-    err = minihub_ble_mesh_remove_device(point_buf);
-    if (err != ESP_OK) {
-        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, esp_err_to_name(err));
-    }
-    remove_adapters_json_device("ble_mesh", point_buf);
-
-    cJSON *resp = cJSON_CreateObject();
-    if (!resp) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-    }
-    cJSON_AddStringToObject(resp, "result", "ok");
-    cJSON_AddStringToObject(resp, "point_id", point_buf);
-    err = send_json(req, resp);
-    cJSON_Delete(resp);
-    return err;
+    return handle_legacy_adapter_devices_delete(req, "ble_mesh");
 }
+#endif
 
 static esp_err_t handle_api_modules(httpd_req_t *req)
 {
@@ -3151,7 +3130,6 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
 
     const cJSON *del = cJSON_GetObjectItem(root, "delete");
     const cJSON *reload = cJSON_GetObjectItem(root, "reload");
-    bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
 
     if (cJSON_IsTrue(del)) {
         const cJSON *point_id = cJSON_GetObjectItem(root, "point_id");
@@ -3159,24 +3137,13 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
             cJSON_Delete(root);
             return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing point_id");
         }
-        char point_buf[96];
-        strncpy(point_buf, point_id->valuestring, sizeof(point_buf) - 1);
-        point_buf[sizeof(point_buf) - 1] = '\0';
-        err = minihub_matter_device_remove(point_buf);
-        cJSON_Delete(root);
-        if (err != ESP_OK) {
-            return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, esp_err_to_name(err));
+        if (!cJSON_GetObjectItem(root, "adapter")) {
+            cJSON_AddStringToObject(root, "adapter", "matter");
         }
-        if (do_reload) {
-            minihub_hub_reload();
+        if (cJSON_IsBool(reload)) {
+            cJSON_AddItemToObject(root, "reload", cJSON_Duplicate(reload, true));
         }
-        cJSON *resp = cJSON_CreateObject();
-        cJSON_AddStringToObject(resp, "result", "ok");
-        cJSON_AddStringToObject(resp, "point_id", point_buf);
-        cJSON_AddBoolToObject(resp, "reloaded", do_reload);
-        err = send_json(req, resp);
-        cJSON_Delete(resp);
-        return err;
+        return handle_points_remove_json(req, root);
     }
 
     const cJSON *code = cJSON_GetObjectItem(root, "pairing_code");
@@ -3460,6 +3427,8 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     httpd_uri_t points = { .uri = "/api/points", .method = HTTP_GET, .handler = handle_api_points };
     httpd_uri_t points_history = { .uri = "/api/points/history", .method = HTTP_GET,
                                    .handler = handle_api_points_history };
+    httpd_uri_t points_remove = { .uri = "/api/points/remove", .method = HTTP_POST,
+                                  .handler = handle_api_points_remove };
     httpd_uri_t command = { .uri = "/api/command", .method = HTTP_POST, .handler = handle_api_command };
     httpd_uri_t rules = { .uri = "/api/rules", .method = HTTP_GET, .handler = handle_api_rules };
     httpd_uri_t rules_import = { .uri = "/api/rules/import", .method = HTTP_POST,
@@ -3478,14 +3447,18 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     httpd_uri_t ota_status = { .uri = "/api/ota", .method = HTTP_GET, .handler = handle_api_ota_status };
     httpd_uri_t ota_start = { .uri = "/api/ota", .method = HTTP_POST, .handler = handle_api_ota_start };
     httpd_uri_t ota_upload = { .uri = "/api/ota/upload", .method = HTTP_POST, .handler = handle_api_ota_upload };
+#if CONFIG_MINIHUB_ZIGBEE_SDK
     httpd_uri_t zb_permit = { .uri = "/api/zigbee/permit_join", .method = HTTP_POST, .handler = handle_api_zigbee_permit };
     httpd_uri_t zb_install_code = { .uri = "/api/zigbee/install_code", .method = HTTP_POST,
                                     .handler = handle_api_zigbee_install_code };
     httpd_uri_t zb_devices = { .uri = "/api/zigbee/devices", .method = HTTP_POST, .handler = handle_api_zigbee_devices };
+#endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
     httpd_uri_t ble_mesh_permit = { .uri = "/api/ble_mesh/permit_provision", .method = HTTP_POST,
                                     .handler = handle_api_ble_mesh_permit };
     httpd_uri_t ble_mesh_devices = { .uri = "/api/ble_mesh/devices", .method = HTTP_POST,
                                      .handler = handle_api_ble_mesh_devices };
+#endif
     httpd_uri_t radio_prov = { .uri = "/api/radio/provision", .method = HTTP_GET,
                                .handler = handle_api_radio_provision_status };
     httpd_uri_t reload = { .uri = "/api/hub/reload", .method = HTTP_POST, .handler = handle_reload };
@@ -3520,6 +3493,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &location_api), TAG, "/api/location");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &points), TAG, "/api/points");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &points_history), TAG, "/api/points/history");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &points_remove), TAG, "/api/points/remove");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &command), TAG, "/api/command");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &rules), TAG, "/api/rules");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &rules_import), TAG, "/api/rules/import");
@@ -3535,11 +3509,15 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_status), TAG, "/api/ota");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_start), TAG, "/api/ota POST");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_upload), TAG, "/api/ota/upload");
+#if CONFIG_MINIHUB_ZIGBEE_SDK
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &zb_permit), TAG, "/api/zigbee/permit_join");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &zb_install_code), TAG, "/api/zigbee/install_code");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &zb_devices), TAG, "/api/zigbee/devices");
+#endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ble_mesh_permit), TAG, "/api/ble_mesh/permit_provision");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ble_mesh_devices), TAG, "/api/ble_mesh/devices");
+#endif
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &radio_prov), TAG, "/api/radio/provision");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &reload), TAG, "/api/hub/reload");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &module_rpc), TAG, "/api/modules/*");
