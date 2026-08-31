@@ -17,6 +17,15 @@ if(NOT EXISTS "${ESP_CLAW_DIR}/components")
         "  git submodule update --init application/claw_minihub/components/esp-claw")
 endif()
 
+# Matter/esp-matter (optional). Enable: MINIHUB_BUILD_MATTER=1 ESP_MATTER_PATH=...
+if(DEFINED ENV{ESP_MATTER_PATH} AND "$ENV{MINIHUB_BUILD_MATTER}" STREQUAL "1")
+    set(ESP_MATTER_PATH $ENV{ESP_MATTER_PATH})
+    set(MATTER_SDK_PATH ${ESP_MATTER_PATH}/connectedhomeip/connectedhomeip)
+    list(APPEND EXTRA_COMPONENT_DIRS
+        "${MATTER_SDK_PATH}/config/esp32/components"
+        "${ESP_MATTER_PATH}/components")
+endif()
+
 list(APPEND EXTRA_COMPONENT_DIRS
     "${ESP_CLAW_DIR}/components"
     # Shared MiniHub Core (same repo)
@@ -26,20 +35,30 @@ list(APPEND EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../../components/adapters/adapter_ble_mesh"
     # Store L3 plugins (e.g. miot) are loaded at runtime — not EXTRA_COMPONENT_DIRS.
 )
+if(DEFINED ENV{MINIHUB_BUILD_MATTER} AND "$ENV{MINIHUB_BUILD_MATTER}" STREQUAL "1")
+    list(APPEND EXTRA_COMPONENT_DIRS
+        "${CMAKE_CURRENT_LIST_DIR}/../../components/adapters/adapter_matter")
+endif()
 
 # Host MVP: Claw owns Wi-Fi; MiniHub web attaches to the Claw portal httpd.
-# Do not build LCD/Matter/USB/RTSP stacks.
+# minihub_matter stays in the build (stub or commissioner) — minihub_hub depends on it.
 set(EXCLUDE_COMPONENTS
     minihub_lcd
-    minihub_matter
     minihub_rtsp_cam
     minihub_usb_msc
-    adapter_matter
     adapter_modbus
     adapter_mqtt
 )
+if(NOT DEFINED ENV{MINIHUB_BUILD_MATTER} OR NOT "$ENV{MINIHUB_BUILD_MATTER}" STREQUAL "1")
+    list(APPEND EXCLUDE_COMPONENTS adapter_matter)
+endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+if(DEFINED ENV{MINIHUB_BUILD_MATTER} AND "$ENV{MINIHUB_BUILD_MATTER}" STREQUAL "1")
+    idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format;-Wno-error=unused-result" APPEND)
+endif()
+
 project(claw_minihub VERSION 0.1.0)
 
 set(EDGE_AGENT_FATFS_IMAGE_ROOT "${CMAKE_SOURCE_DIR}/fatfs_image")

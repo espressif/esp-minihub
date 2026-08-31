@@ -10,10 +10,12 @@
 
 #include "minihub_adapter.h"
 #include "minihub_matter.h"
+#include "minihub_module.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
+#include "cJSON.h"
 
 static const char *TAG = "adapter_matter";
 
@@ -87,6 +89,23 @@ static esp_err_t parse_devices(const cJSON *cfg)
     return ESP_OK;
 }
 
+static esp_err_t matter_module_rpc(const char *method, const cJSON *params, cJSON **out)
+{
+    (void)params;
+    if (!method || !out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (strcmp(method, "status") == 0) {
+        cJSON *status = minihub_matter_status_json();
+        if (!status) {
+            return ESP_ERR_NO_MEM;
+        }
+        *out = status;
+        return ESP_OK;
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
 static esp_err_t matter_adapter_init(const cJSON *config)
 {
     s_device_count = 0;
@@ -94,6 +113,7 @@ static esp_err_t matter_adapter_init(const cJSON *config)
     if (config) {
         parse_devices(config);
     }
+    (void)minihub_module_register_rpc("matter", matter_module_rpc);
     return ESP_OK;
 }
 
@@ -181,7 +201,7 @@ static esp_err_t matter_adapter_poll(void)
 
 const minihub_adapter_t matter_adapter = {
     .name = "matter",
-    .version = "0.2.0-matter",
+    .version = "0.1.0",
     .init = matter_adapter_init,
     .start = matter_adapter_start,
     .stop = matter_adapter_stop,

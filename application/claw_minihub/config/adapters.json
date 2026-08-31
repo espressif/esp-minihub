@@ -5,7 +5,11 @@
       "devices": []
     },
     "ble_mesh": {
-      "enabled": true,
+      "enabled": false,
+      "devices": []
+    },
+    "matter": {
+      "enabled": false,
       "devices": []
     }
   }

@@ -7,7 +7,7 @@
       "devices": []
     },
     "matter": {
-      "enabled": true,
+      "enabled": false,
       "devices": []
     },
     "zigbee": {
@@ -15,7 +15,7 @@
       "devices": []
     },
     "ble_mesh": {
-      "enabled": true,
+      "enabled": false,
       "provision": {
         "uuid_match_disabled": true,
         "bind_models": [

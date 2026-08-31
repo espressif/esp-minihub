@@ -765,7 +765,7 @@ void refresh_filter_chips()
 
     char auth_adapter[32] = {};
     const bool show_auth = minihub_module_pick_auth_adapter(auth_adapter, sizeof(auth_adapter));
-    const bool show_matter = minihub_module_overview_adapter_visible("thread");
+    const bool show_matter = minihub_module_overview_adapter_visible("matter");
     if (!show_auth && s_overview_filter == OverviewFilter::Auth) {
         s_overview_filter = OverviewFilter::All;
     }
@@ -908,7 +908,7 @@ void refresh_overview()
             (!auth_visible || strcmp(points[i].adapter, auth_adapter) != 0)) {
             continue;
         }
-        if (s_overview_filter == OverviewFilter::Matter && strcmp(points[i].adapter, "thread") != 0) {
+        if (s_overview_filter == OverviewFilter::Matter && strcmp(points[i].adapter, "matter") != 0) {
             continue;
         }
         s_overview_filtered.push_back(points[i]);

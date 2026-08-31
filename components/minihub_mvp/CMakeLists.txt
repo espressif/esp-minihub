@@ -20,6 +20,9 @@ endif()
 if(CONFIG_MINIHUB_BLE_MESH_SDK)
     list(APPEND _MVP_REQUIRES minihub_ble_mesh adapter_ble_mesh)
 endif()
+if(CONFIG_MINIHUB_MATTER_ADAPTER)
+    list(APPEND _MVP_REQUIRES minihub_matter adapter_matter)
+endif()
 
 idf_component_register(
     SRCS "minihub_mvp.c"

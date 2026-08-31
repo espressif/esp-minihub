@@ -866,6 +866,13 @@ static bool module_radio_host_firmware_enabled(const char *module_id)
         return false;
 #endif
     }
+    if (strcmp(module_id, "matter") == 0) {
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+        return true;
+#else
+        return false;
+#endif
+    }
     if (strcmp(module_id, "thread") == 0) {
 #if CONFIG_MINIHUB_THREAD_ADAPTER
         return true;

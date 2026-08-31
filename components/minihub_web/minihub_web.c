@@ -2444,6 +2444,13 @@ static esp_err_t handle_api_radio_provision_status(httpd_req_t *req)
     const bool bm_permit = false;
     const bool bm_busy = false;
 #endif
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+    cJSON_AddBoolToObject(resp, "matter_available", true);
+    cJSON_AddBoolToObject(resp, "matter_ready", minihub_matter_ready());
+#else
+    cJSON_AddBoolToObject(resp, "matter_available", false);
+    cJSON_AddBoolToObject(resp, "matter_ready", false);
+#endif
     cJSON_AddBoolToObject(resp, "zigbee_permit_join", zb);
     cJSON_AddBoolToObject(resp, "ble_mesh_permit_provision", bm_permit);
     cJSON_AddBoolToObject(resp, "ble_mesh_provisioning", bm_busy);
@@ -3111,8 +3118,7 @@ static esp_err_t parse_matter_endpoints(const cJSON *root, uint16_t *out, size_t
     }
 
     out[0] = 1;
-    out[1] = 2;
-    *out_count = 2;
+    *out_count = 1;
     return ESP_OK;
 }
 
@@ -3137,6 +3143,7 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
 
     const cJSON *del = cJSON_GetObjectItem(root, "delete");
     const cJSON *reload = cJSON_GetObjectItem(root, "reload");
+    bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
 
     if (cJSON_IsTrue(del)) {
         const cJSON *point_id = cJSON_GetObjectItem(root, "point_id");
@@ -3194,10 +3201,26 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     const char *ssid_s = cJSON_IsString(ssid) ? ssid->valuestring : NULL;
     const char *pass_s = cJSON_IsString(wpass) ? wpass->valuestring : NULL;
 
+    const bool want_commission = cJSON_IsString(code) && code->valuestring[0];
     esp_err_t commission_err = ESP_OK;
-    if (cJSON_IsString(code) && code->valuestring[0]) {
+    if (want_commission) {
         commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
                                                            ssid_s, pass_s);
+        if (commission_err != ESP_OK) {
+            cJSON *resp = cJSON_CreateObject();
+            cJSON_AddStringToObject(resp, "result", "error");
+            cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
+            cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
+            if (minihub_matter_last_error()) {
+                cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
+            } else {
+                cJSON_AddStringToObject(resp, "message", esp_err_to_name(commission_err));
+            }
+            cJSON_Delete(root);
+            err = send_json(req, resp);
+            cJSON_Delete(resp);
+            return err;
+        }
     }
 
     size_t synced = 0;
@@ -3216,14 +3239,7 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
     cJSON_AddNumberToObject(resp, "synced", (double)synced);
     cJSON_AddBoolToObject(resp, "reloaded", do_reload);
-    if (commission_err == ESP_OK) {
-        cJSON_AddStringToObject(resp, "commission", "started");
-    } else {
-        cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
-        if (minihub_matter_last_error()) {
-            cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
-        }
-    }
+    cJSON_AddStringToObject(resp, "commission", want_commission ? "started" : "skipped");
     err = send_json(req, resp);
     cJSON_Delete(resp);
     return err;

@@ -11,7 +11,6 @@
 #include <string.h>
 #include <string>
 #include "esp_log.h"
-#include "esp_wifi.h"
 #include "minihub_provision.h"
 #include <esp_matter.h>
 #include <esp_matter_controller_client.h>
@@ -186,14 +185,18 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
                                             const char *wifi_ssid, const char *wifi_password)
 {
     if (!s_started || !pairing_code || !pairing_code[0]) {
+        set_error(!s_started ? "matter commissioner not ready" : "empty pairing code");
+        ESP_LOGW(TAG, "commission refused: %s", minihub_matter_last_error());
         return ESP_ERR_INVALID_STATE;
     }
     esp_err_t err = validate_commission_node_id(node_id);
     if (err != ESP_OK) {
+        ESP_LOGW(TAG, "commission refused: bad node_id");
         return err;
     }
     if (s_pairing_in_progress) {
         set_error("pairing already in progress");
+        ESP_LOGW(TAG, "commission refused: pairing already in progress");
         return ESP_ERR_INVALID_STATE;
     }
 
