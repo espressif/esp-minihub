@@ -2,10 +2,11 @@
 # MIoT is NOT linked into firmware — install the Store L3 plugin at runtime.
 # Web UI attaches to the Claw portal at GET /minihub (no second httpd).
 #
-# RF coexistence (meeting constraint, see docs/29-MVP-Zigbee-Smoke-v2.md):
-#   - Wi-Fi STA (Claw wifi_manager) + Zigbee coordinator: OK on S31 (esp_coex_wifi_i154)
-#   - BLE Mesh SDK: OFF — Mesh provisioning and Zigbee permit_join must not run together
-#   - S3 DevKit compile smoke: Zigbee SDK OFF → adapter simulation points (no 802.15.4 radio)
+# RF coexistence on S31:
+#   - Wi-Fi STA (Claw wifi_manager) + Zigbee coordinator: esp_coex_wifi_i154
+#   - BLE Mesh: enable via build stack `ble_mesh` (see config/sdkconfig/feature/ble_mesh.defaults)
+#   - Do not run Zigbee permit_join and BLE Mesh permit_provision at the same time
+#   - S3 DevKit compile smoke: omit `zigbee`/`ble_mesh` stacks → adapters not registered
 #
 CONFIG_MINIHUB_WEB_UI=y
 CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB=n

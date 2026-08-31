@@ -2389,6 +2389,8 @@ static esp_err_t handle_api_ble_mesh_permit(httpd_req_t *req)
     if (bm_err != ESP_OK) {
         if (bm_err == ESP_ERR_INVALID_STATE && minihub_ble_mesh_provisioning_busy()) {
             cJSON_AddStringToObject(resp, "error", "BLE Mesh 正在配网，请勿重复开启");
+        } else if (bm_err == ESP_ERR_INVALID_STATE && !minihub_ble_mesh_running()) {
+            cJSON_AddStringToObject(resp, "error", "BLE Mesh 栈未就绪（启动失败或仍在初始化）");
 #if CONFIG_MINIHUB_ZIGBEE_SDK
         } else if (bm_err == ESP_ERR_INVALID_STATE && minihub_zigbee_permit_join_active()) {
             cJSON_AddStringToObject(resp, "error", "Zigbee 正在入网，无法同时开启 BLE Mesh 配网");
@@ -2400,6 +2402,7 @@ static esp_err_t handle_api_ble_mesh_permit(httpd_req_t *req)
         }
     }
     cJSON_AddBoolToObject(resp, "permit_provision", minihub_ble_mesh_permit_provision_active());
+    cJSON_AddBoolToObject(resp, "ready", minihub_ble_mesh_running());
     err = send_json(req, resp);
     cJSON_Delete(resp);
     return err;
@@ -2424,8 +2427,10 @@ static esp_err_t handle_api_radio_provision_status(httpd_req_t *req)
 #endif
 #if CONFIG_MINIHUB_BLE_MESH_SDK
     cJSON_AddBoolToObject(resp, "ble_mesh_available", true);
+    cJSON_AddBoolToObject(resp, "ble_mesh_running", minihub_ble_mesh_running());
 #else
     cJSON_AddBoolToObject(resp, "ble_mesh_available", false);
+    cJSON_AddBoolToObject(resp, "ble_mesh_running", false);
 #endif
 #if CONFIG_MINIHUB_ZIGBEE_SDK
     const bool zb = minihub_zigbee_permit_join_active();
@@ -2501,6 +2506,7 @@ static esp_err_t handle_api_points_remove(httpd_req_t *req)
     return handle_points_remove_json(req, root);
 }
 
+#if CONFIG_MINIHUB_ZIGBEE_SDK || CONFIG_MINIHUB_BLE_MESH_SDK
 static esp_err_t handle_legacy_adapter_devices_delete(httpd_req_t *req, const char *adapter)
 {
     esp_err_t err = api_auth(req);
@@ -2524,6 +2530,7 @@ static esp_err_t handle_legacy_adapter_devices_delete(httpd_req_t *req, const ch
     }
     return handle_points_remove_json(req, root);
 }
+#endif
 
 #if CONFIG_MINIHUB_ZIGBEE_SDK
 static esp_err_t handle_api_zigbee_devices(httpd_req_t *req)

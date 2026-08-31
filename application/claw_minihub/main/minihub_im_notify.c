@@ -26,6 +26,9 @@
 #if CONFIG_MINIHUB_ZIGBEE_SDK
 #include "minihub_zigbee.h"
 #endif
+#if CONFIG_MINIHUB_BLE_MESH_SDK
+#include "minihub_ble_mesh.h"
+#endif
 
 static const char *TAG = "im_notify";
 
@@ -233,14 +236,26 @@ static void on_point_registered(const minihub_event_t *event, void *user_data)
         return;
     }
     adapter_j = cJSON_GetObjectItem(event->data, "adapter");
-    if (!cJSON_IsString(adapter_j) || strcmp(adapter_j->valuestring, "zigbee") != 0) {
+    if (!cJSON_IsString(adapter_j) || !adapter_j->valuestring[0]) {
         return;
     }
+    if (strcmp(adapter_j->valuestring, "zigbee") == 0) {
 #if CONFIG_MINIHUB_ZIGBEE_SDK
-    if (!minihub_zigbee_permit_join_active()) {
+        if (!minihub_zigbee_permit_join_active()) {
+            return;
+        }
+#endif
+    } else if (strcmp(adapter_j->valuestring, "ble_mesh") == 0) {
+#if CONFIG_MINIHUB_BLE_MESH_SDK
+        if (!minihub_ble_mesh_permit_provision_active()) {
+            return;
+        }
+#else
+        return;
+#endif
+    } else {
         return;
     }
-#endif
     pid_j = cJSON_GetObjectItem(event->data, "point_id");
     type_j = cJSON_GetObjectItem(event->data, "type");
     if (!cJSON_IsString(pid_j) || !pid_j->valuestring[0]) {
@@ -250,9 +265,37 @@ static void on_point_registered(const minihub_event_t *event, void *user_data)
     if (!cooldown_ok(index)) {
         return;
     }
-    snprintf(msg, sizeof(msg), "Zigbee 新设备入网: %s (%s)",
-             pid_j->valuestring,
-             (cJSON_IsString(type_j) && type_j->valuestring[0]) ? type_j->valuestring : "device");
+    if (strcmp(adapter_j->valuestring, "ble_mesh") == 0) {
+        snprintf(msg, sizeof(msg), "BLE Mesh 新设备入网: %s (%s)",
+                 pid_j->valuestring,
+                 (cJSON_IsString(type_j) && type_j->valuestring[0]) ? type_j->valuestring : "device");
+    } else {
+        snprintf(msg, sizeof(msg), "Zigbee 新设备入网: %s (%s)",
+                 pid_j->valuestring,
+                 (cJSON_IsString(type_j) && type_j->valuestring[0]) ? type_j->valuestring : "device");
+    }
+    (void)minihub_im_notify_text(msg);
+}
+
+static void on_radio_permit_closed(const minihub_event_t *event, void *user_data)
+{
+    const cJSON *adapter_j;
+    char msg[MSG_MAX];
+    (void)user_data;
+    if (!event || !event->data) {
+        return;
+    }
+    adapter_j = cJSON_GetObjectItem(event->data, "adapter");
+    if (!cJSON_IsString(adapter_j) || !adapter_j->valuestring[0]) {
+        return;
+    }
+    if (strcmp(adapter_j->valuestring, "ble_mesh") == 0) {
+        snprintf(msg, sizeof(msg), "BLE Mesh 配网窗口已结束");
+    } else if (strcmp(adapter_j->valuestring, "zigbee") == 0) {
+        snprintf(msg, sizeof(msg), "Zigbee 入网窗口已结束");
+    } else {
+        return;
+    }
     (void)minihub_im_notify_text(msg);
 }
 
@@ -296,6 +339,10 @@ esp_err_t minihub_im_notify_init(void)
         return err;
     }
     err = minihub_event_bus_subscribe("point.registered", on_point_registered, NULL);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = minihub_event_bus_subscribe("radio.permit_closed", on_radio_permit_closed, NULL);
     if (err != ESP_OK) {
         return err;
     }

@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
+#include "minihub_core.h"
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -429,7 +430,11 @@ static void ble_mesh_register_mapped_points(void)
     }
 #endif
 
-    ESP_LOGI(TAG, "ble_mesh adapter started (%u devices)", (unsigned)n);
+    if (minihub_ble_mesh_running()) {
+        ESP_LOGI(TAG, "ble_mesh adapter started (%u devices)", (unsigned)n);
+    } else {
+        ESP_LOGW(TAG, "ble_mesh adapter up but stack not running (%u mapped devices)", (unsigned)n);
+    }
 }
 
 #if CONFIG_MINIHUB_BLE_MESH_SDK
@@ -450,9 +455,11 @@ static void ble_mesh_deferred_start_task(void *arg)
         }
     }
 #endif
+    minihub_heap_log();
     esp_err_t err = minihub_ble_mesh_start();
+    minihub_heap_log();
     if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
-        ESP_LOGW(TAG, "Host stack start: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Host stack start failed: %s — permit_provision unavailable", esp_err_to_name(err));
     }
     ble_mesh_register_mapped_points();
     vTaskDelete(NULL);

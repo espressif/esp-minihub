@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 MiniHub Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Optional internal-RAM headroom when Zigbee and/or BLE Mesh share the chip with Wi-Fi.
+# Applied automatically when building with zigbee / ble_mesh stacks (see build_firmware.py).
+# Disable: remove from stack build or add to local.overrides:
+#   # CONFIG_BT_NIMBLE_MAX_CONNECTIONS=5
+#
+# Wi-Fi DMA buffers stay in memory.defaults; this file trims BT controller / NimBLE peaks.
+
+# Keep a little more internal DRAM for BT controller init (DMA-capable allocations).
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=24576
+
+# Hub provisioner: PB-ADV + a few PB-GATT sessions; 5 links is overkill on S31.
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3
+CONFIG_BT_NIMBLE_MAX_CCCDS=6
+CONFIG_BT_NIMBLE_TRANSPORT_ACL_FROM_LL_COUNT=16
+CONFIG_BT_NIMBLE_MSYS_1_BLOCK_COUNT=16
+CONFIG_BT_NIMBLE_MSYS_2_BLOCK_COUNT=16
+
+# Scan/adv report queue during provisioning (default 100).
+CONFIG_BT_CTRL_BLE_ADV_REPORT_FLOW_CTRL_NUM=50

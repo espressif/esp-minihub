@@ -37,9 +37,10 @@ menu "MiniHub"
         config MINIHUB_WIFI_PROV_TRANSPORT_BLE
             bool "BLE (requires Bluetooth / NimBLE)"
             select BT_ENABLED
-            select BT_NIMBLE_ENABLED
             help
-                Enables CONFIG_BT_ENABLED + NimBLE via select.
+                Enables CONFIG_BT_ENABLED. Set NimBLE host via
+                sdkconfig defaults / ble_mesh.defaults (BT_NIMBLE_ENABLED is a
+                choice symbol — Kconfig select has no effect on it).
                 Prefer feature/wifi_ble_prov + feature/zigbee for the customer
                 RF profile. Do not enable BLE Mesh on the same profile if BLE must
                 be released after provision.
@@ -155,25 +156,39 @@ menu "MiniHub"
         bool "Enable Zigbee adapter (ESP-Zigbee-SDK coordinator)"
         default n
         select ZB_ENABLED
-        select ZB_ZCZR
-        select ZB_RADIO_NATIVE if SOC_IEEE802154_SUPPORTED
         select ESP_COEX_SW_COEXIST_ENABLE
         help
             Register the Zigbee adapter and use esp-zigbee-lib when the
             target supports IEEE 802.15.4 (or an external RCP). When
             disabled, the Zigbee adapter is not registered (no simulation).
-            Also selects ZB_ENABLED and coordinator/native-radio options for
-            esp-zigbee-lib.
+            Selects ZB_ENABLED. Coordinator/native-radio are choice symbols —
+            set them in zigbee.defaults (ZB_ZCZR / ZB_RADIO_NATIVE).
 
     config MINIHUB_BLE_MESH_SDK
         bool "Enable BLE Mesh adapter (ESP-BLE-Mesh Provisioner)"
         default n
+        select BT_ENABLED
+        select BT_NIMBLE_ROLE_CENTRAL
+        select BT_NIMBLE_ROLE_OBSERVER
+        select BT_NIMBLE_GATT_CLIENT
+        select BLE_MESH
+        select BLE_MESH_PROVISIONER
+        select BLE_MESH_PB_ADV
+        select BLE_MESH_PB_GATT
+        select BLE_MESH_CFG_CLI
+        select BLE_MESH_GENERIC_ONOFF_CLI
+        select BLE_MESH_GENERIC_LEVEL_CLI
+        select BLE_MESH_LIGHT_LIGHTNESS_CLI
+        select BLE_MESH_LIGHT_CTL_CLI
         help
             Register the BLE Mesh adapter and use ESP-IDF esp_ble_mesh
             Generic OnOff Client. When disabled, the adapter is not
             registered (no simulation). Mutual exclusion with Zigbee /
             Matter profiles is recommended until multi-radio coexistence
             is validated.
+            Selects BT_ENABLED, NimBLE roles/GATT Client, and BLE_MESH models.
+            NimBLE host (BT_NIMBLE_ENABLED) is a choice — set it in
+            ble_mesh.defaults, not via select.
 
     config MINIHUB_MATTER_ADAPTER
         bool "Enable Matter adapter / commissioner (Wi-Fi / Thread Matter over IP)"

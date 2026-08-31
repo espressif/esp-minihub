@@ -11,9 +11,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "cJSON.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "minihub_core.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
@@ -228,10 +230,30 @@ static esp_timer_handle_t s_meter_poll_timer;
 static bool s_task_started;
 static bool s_stack_ready;
 static int64_t s_permit_until_ms;
+/** True while a permit window is open and close IM not yet sent. */
+static bool s_permit_notify_pending;
 static minihub_zigbee_device_cb_t s_on_device;
 static minihub_zigbee_attr_cb_t s_on_attr;
 static zigbee_stack_ready_cb_t s_on_ready;
 static void *s_cb_ctx;
+
+static void publish_permit_closed(const char *reason)
+{
+    if (!s_permit_notify_pending) {
+        return;
+    }
+    s_permit_notify_pending = false;
+    cJSON *data = cJSON_CreateObject();
+    if (!data) {
+        return;
+    }
+    cJSON_AddStringToObject(data, "adapter", "zigbee");
+    if (reason && reason[0]) {
+        cJSON_AddStringToObject(data, "reason", reason);
+    }
+    (void)minihub_event_bus_publish("radio.permit_closed", data);
+    cJSON_Delete(data);
+}
 
 typedef enum {
     DISC_PHASE_IDLE = 0,
@@ -1629,6 +1651,7 @@ static bool app_signal_handler(const ezb_app_signal_t *app_signal)
                  ezb_nwk_get_current_channel());
         if (sec == 0) {
             s_permit_until_ms = 0;
+            publish_permit_closed("timeout");
         }
         break;
     }
@@ -2132,6 +2155,7 @@ esp_err_t zigbee_stack_permit_join(int seconds)
         s_permit_until_ms = 0;
         if (!s_stack_ready) {
             ESP_LOGI(TAG, "permit_join close (stack not ready — local only)");
+            publish_permit_closed("manual");
             return ESP_OK;
         }
         esp_zigbee_lock_acquire(portMAX_DELAY);
@@ -2142,6 +2166,8 @@ esp_err_t zigbee_stack_permit_join(int seconds)
         } else {
             ESP_LOGI(TAG, "permit_join closed");
         }
+        /* Prefer stack PERMIT_JOIN_STATUS(0) for notify; fall back if it never arrives. */
+        publish_permit_closed("manual");
         return ESP_OK;
     }
 
@@ -2181,6 +2207,7 @@ esp_err_t zigbee_stack_permit_join(int seconds)
         return esp_zigbee_err_to_esp(zb_err);
     }
     s_permit_until_ms = esp_timer_get_time() / 1000 + (int64_t)seconds * 1000;
+    s_permit_notify_pending = true;
     ESP_LOGI(TAG, "permit_join open %d s (PAN 0x%04x ch=%d short=0x%04x)", seconds, ezb_nwk_get_panid(),
              ezb_nwk_get_current_channel(), ezb_nwk_get_short_address());
     return ESP_OK;

@@ -21,8 +21,9 @@ extern "C" {
 
 /**
  * Initialize netif/event loop and start Ethernet (if enabled).
- * Wi-Fi STA / BLE provisioning is deferred to minihub_net_start_wifi() so
- * Zigbee can form on a quiet RF before NimBLE advertising starts.
+ * Wi-Fi driver init, STA connect, and provisioning are deferred to
+ * minihub_net_start_wifi() so Zigbee / BLE Mesh can claim internal BT heap
+ * before esp_wifi_init().
  */
 esp_err_t minihub_net_init(void);
 

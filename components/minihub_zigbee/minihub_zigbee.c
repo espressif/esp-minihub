@@ -201,6 +201,7 @@ void minihub_zigbee_json_add_permit_join_error(cJSON *obj, esp_err_t err)
     }
 }
 
+#if CONFIG_MINIHUB_ZIGBEE_SDK
 static int parse_install_code_hex(const char *hex, uint8_t *out, size_t out_cap, size_t *out_len)
 {
     if (!hex || !out || !out_len) {
@@ -232,6 +233,7 @@ static int parse_install_code_hex(const char *hex, uint8_t *out, size_t out_cap,
     *out_len = n;
     return 0;
 }
+#endif
 
 esp_err_t minihub_zigbee_add_install_code(uint64_t ieee, const char *ic_hex)
 {

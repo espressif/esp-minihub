@@ -7,7 +7,15 @@ CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
 CONFIG_BT_NIMBLE_MEM_OPTIMIZATION=y
 CONFIG_BT_NIMBLE_STATIC_TO_DYNAMIC=y
-CONFIG_BT_NIMBLE_MAX_CONNECTIONS=5
+# PB-GATT / scan need GATT client + observer (otherwise ble_gattc_* undefined at link)
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=y
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
+CONFIG_BT_NIMBLE_GATT_CLIENT=y
+# PB-GATT needs ≥2 ACL slots (provision + later Proxy); claw SoftAP/Wi-Fi
+# coexistence fails hard with MAX_CONNECTIONS=1 (connect hangs, no link open).
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3
+CONFIG_BT_NIMBLE_MAX_CCCDS=6
+# NimBLE MSYS/ACL headroom: radio_coexist_memory.defaults (when ble_mesh stack enabled)
 CONFIG_BLE_MESH=y
 CONFIG_BLE_MESH_PROVISIONER=y
 CONFIG_BLE_MESH_PB_ADV=y
