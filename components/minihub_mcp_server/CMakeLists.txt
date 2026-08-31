@@ -9,6 +9,9 @@ endif()
 if(CONFIG_MINIHUB_BLE_MESH_SDK)
     list(APPEND _MCP_REQUIRES minihub_ble_mesh)
 endif()
+if(CONFIG_MINIHUB_MATTER_ADAPTER)
+    list(APPEND _MCP_REQUIRES minihub_matter)
+endif()
 
 idf_component_register(
     SRCS "minihub_mcp_server.c" "hub_api_gateway.c"

@@ -498,6 +498,18 @@ def sdkconfig_defaults(stacks: list[str]) -> str:
             base.append("config/sdkconfig/feature/ble_mesh.defaults")
         if "zigbee" in stacks or "ble_mesh" in stacks:
             base.append("config/sdkconfig/feature/radio_coexist_memory.defaults")
+        if "matter" in stacks:
+            base.extend([
+                "config/sdkconfig/feature/matter.defaults",
+                "config/sdkconfig/feature/matter_memory.defaults",
+                "config/sdkconfig/feature/matter_ble.defaults",
+            ])
+            try:
+                feats, _board = app_feature_list(ROOT, APP_NAME)
+                if "eth" in feats:
+                    base.append("config/sdkconfig/feature/matter_over_eth.defaults")
+            except FileNotFoundError:
+                pass
         base.append("cmake/generated/sdkconfig_stacks.gen")
         paths = append_local_overrides(ROOT, APP_NAME, base)
         return ";".join(_sdkconfig_path_for_app(p) for p in paths)

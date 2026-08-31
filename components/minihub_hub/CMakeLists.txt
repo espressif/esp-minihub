@@ -2,6 +2,7 @@
 set(_HUB_REQUIRES
     minihub_core minihub_config minihub_adapter minihub_pack minihub_module minihub_js
     minihub_rules minihub_scenes minihub_rainmaker freertos
+    minihub_matter
 )
 
 if(CONFIG_MINIHUB_ZIGBEE_SDK)
@@ -9,9 +10,6 @@ if(CONFIG_MINIHUB_ZIGBEE_SDK)
 endif()
 if(CONFIG_MINIHUB_BLE_MESH_SDK)
     list(APPEND _HUB_REQUIRES minihub_ble_mesh)
-endif()
-if(CONFIG_MINIHUB_MATTER_ADAPTER)
-    list(APPEND _HUB_REQUIRES minihub_matter)
 endif()
 
 idf_component_register(

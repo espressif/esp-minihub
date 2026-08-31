@@ -1,30 +1,27 @@
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
 
+# Do NOT gate REQUIRES/SRCS on CONFIG_* here. Component CMakeLists is evaluated
+# during early requirement expansion when Kconfig values are unavailable; that
+# leaves commissioner sources (second pass) without esp_matter/minihub_provision
+# in REQUIRES (first pass). Same pattern as minihub_rainmaker.
 set(_matter_requires espressif__cjson nvs_flash minihub_config)
 
-# Real commissioner needs esp-matter on EXTRA_COMPONENT_DIRS (root CMakeLists)
-# and MINIHUB_BUILD_MATTER=1. CONFIG_MINIHUB_MATTER_ADAPTER=y without that
-# is a hard error — do not silently fall back to stub.
 set(_matter_real 0)
-if(DEFINED ENV{MINIHUB_BUILD_MATTER} AND "$ENV{MINIHUB_BUILD_MATTER}" STREQUAL "1")
+if(DEFINED ENV{ESP_MATTER_PATH} AND NOT "$ENV{MINIHUB_BUILD_MATTER}" STREQUAL "0")
+    # ENV=1 from build_firmware, or unset during board-manager cmake re-entry.
+    # Explicit ENV=0 → stub even when sdkconfig has MATTER_ADAPTER=y.
     set(_matter_real 1)
-endif()
-
-if(CONFIG_MINIHUB_MATTER_ADAPTER AND NOT _matter_real)
-    message(FATAL_ERROR
-        "CONFIG_MINIHUB_MATTER_ADAPTER=y requires a Matter build "
-        "(MINIHUB_BUILD_MATTER=1 + ESP_MATTER_PATH). "
-        "Use: ./tools/build_firmware.py … matter build "
-        "or clear CONFIG_MINIHUB_MATTER_ADAPTER for stub-only builds.")
 endif()
 
 set(_matter_srcs matter_sync.c)
 if(_matter_real)
     list(APPEND _matter_srcs matter_ctrl.cpp matter_wifi_bootstrap.c)
-    list(APPEND _matter_requires esp_matter esp_matter_controller chip minihub_provision)
+    list(APPEND _matter_requires esp_matter esp_matter_controller chip minihub_provision esp_wifi)
+    message(STATUS "minihub_matter: linking esp-matter commissioner")
 else()
     list(APPEND _matter_srcs matter_stub.c)
+    message(STATUS "minihub_matter: stub only")
 endif()
 
 idf_component_register(

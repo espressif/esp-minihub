@@ -795,6 +795,19 @@ void app_main(void)
     }
 
     start_wifi_and_portal();
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+    {
+        uint32_t wait_left = 15000;
+        while (wait_left > 0 && !host_has_uplink()) {
+            vTaskDelay(pdMS_TO_TICKS(200));
+            wait_left -= 200;
+        }
+        esp_err_t matter_err = minihub_bringup_matter_start();
+        if (matter_err != ESP_OK) {
+            ESP_LOGW(TAG, "Matter start: %s", esp_err_to_name(matter_err));
+        }
+    }
+#endif
     {
         void *httpd = http_server_httpd();
         if (httpd) {

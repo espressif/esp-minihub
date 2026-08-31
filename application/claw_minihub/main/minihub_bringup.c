@@ -20,11 +20,17 @@
 #include "minihub_pack.h"
 #include "minihub_rules.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
 #include "sdkconfig.h"
 
 extern const minihub_adapter_t zigbee_adapter;
 #if CONFIG_MINIHUB_BLE_MESH_SDK
 extern const minihub_adapter_t ble_mesh_adapter;
+#endif
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+extern const minihub_adapter_t matter_adapter;
+#include "minihub_matter.h"
 #endif
 
 static const char *TAG = "minihub_bringup";
@@ -41,6 +47,12 @@ static esp_err_t register_mvp_adapters(void)
 #endif
 #if CONFIG_MINIHUB_BLE_MESH_SDK
     err = minihub_adapter_register(&ble_mesh_adapter);
+    if (err != ESP_OK) {
+        return err;
+    }
+#endif
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+    err = minihub_adapter_register(&matter_adapter);
     if (err != ESP_OK) {
         return err;
     }
@@ -155,3 +167,35 @@ esp_err_t minihub_bringup_start(void)
              (unsigned)minihub_adapter_count());
     return ESP_OK;
 }
+
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+esp_err_t minihub_bringup_matter_start(void)
+{
+    cJSON *adapters_cfg = minihub_config_get_adapters();
+    bool matter_enabled = true;
+    if (adapters_cfg) {
+        const cJSON *section = cJSON_GetObjectItem(adapters_cfg, "adapters");
+        const cJSON *matter = cJSON_GetObjectItem(section ? section : adapters_cfg, "matter");
+        const cJSON *enabled = cJSON_IsObject(matter) ? cJSON_GetObjectItem(matter, "enabled") : NULL;
+        if (cJSON_IsBool(enabled)) {
+            matter_enabled = cJSON_IsTrue(enabled);
+        }
+    }
+    if (!matter_enabled) {
+        ESP_LOGI(TAG, "Matter skipped (adapters.json matter.enabled=false)");
+        return ESP_OK;
+    }
+
+    EventGroupHandle_t net_eg = minihub_net_event_group();
+    if (net_eg != NULL) {
+        (void)xEventGroupWaitBits(net_eg, MINIHUB_NET_GOT_IP_BIT, pdFALSE, pdFALSE,
+                                  pdMS_TO_TICKS(15000));
+    }
+
+    esp_err_t err = minihub_matter_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Matter bootstrap failed: %s", esp_err_to_name(err));
+    }
+    return err;
+}
+#endif
