@@ -15,6 +15,11 @@
 #include "minihub_rules.h"
 #include "minihub_scenes.h"
 #include "minihub_task.h"
+#include "sdkconfig.h"
+#if CONFIG_MINIHUB_MATTER_ADAPTER && CONFIG_MINIHUB_THREAD_ADAPTER
+#include "minihub_matter.h"
+#include "minihub_thread.h"
+#endif
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -123,6 +128,17 @@ static esp_err_t hub_reload_locked(void)
     }
 
     minihub_adapter_lifecycle_unlock();
+
+#if CONFIG_MINIHUB_MATTER_ADAPTER && CONFIG_MINIHUB_THREAD_ADAPTER
+    /* Boot path attaches in main/bringup; reload must re-bind CHIP→OT after
+     * Thread is (re)started so FindOperational keeps using OT DNS. */
+    if (minihub_thread_ready() && minihub_matter_ready()) {
+        esp_err_t aerr = minihub_matter_attach_thread();
+        if (aerr != ESP_OK && aerr != ESP_ERR_NOT_SUPPORTED) {
+            ESP_LOGW(TAG, "Matter Thread attach after reload: %s", esp_err_to_name(aerr));
+        }
+    }
+#endif
 
     /* L2 after built-in + L3 + pack merge (adapters already started). */
     minihub_js_unload_all();

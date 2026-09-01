@@ -23,6 +23,9 @@ endif()
 if(CONFIG_MINIHUB_MATTER_ADAPTER)
     list(APPEND _MVP_REQUIRES minihub_matter adapter_matter)
 endif()
+if(CONFIG_MINIHUB_THREAD_ADAPTER)
+    list(APPEND _MVP_REQUIRES adapter_thread)
+endif()
 
 idf_component_register(
     SRCS "minihub_mvp.c"

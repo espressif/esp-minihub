@@ -23,7 +23,11 @@ Compose: `tools/compose_sdkconfig.py`. Stacks file: `cmake/generated/sdkconfig_s
 
 ## Stacks
 
-`zigbee` · `ble_mesh` · `matter` (args to `build_firmware.py`). Default: `zigbee` + `ble_mesh`.
+`zigbee` · `ble_mesh` · `matter` · `thread` (args to `build_firmware.py`). Default: `zigbee` + `ble_mesh`.
+
+`thread` (OpenThread Border Router) and `zigbee` are **mutually exclusive** (shared IEEE 802.15.4). Matter is an application layer above RF — combine e.g. `thread matter` or `zigbee matter`.
+
+Runtime Thread BR: `adapters.thread.enabled` (default role = BR; no dataset → form network). Matter devices stay under `adapters.matter` with optional `transport`: `wifi` | `ethernet` | `thread`.
 
 Matter is **not** in the default stack (needs `ESP_MATTER_PATH` and extra flash/RAM). Enable Wi-Fi Matter devices:
 

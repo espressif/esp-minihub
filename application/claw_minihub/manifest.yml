@@ -12,6 +12,9 @@ board: esp32_s31_function_coreboard_1
 components:
   adapters:
   - name: zigbee
+  - name: ble_mesh
+  - name: matter
+  - name: thread
 sdkconfig_features:
 - common
 - memory

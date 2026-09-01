@@ -1,7 +1,7 @@
 ---
 {
   "name": "minihub_hub",
-  "description": "DEFAULT for 开灯/关灯/开插座/关插座/列出设备/删除设备, 米家/miot, and MiniHub Store 插件. Zigbee delete: hub.api POST /api/points/remove (NOT modules/zigbee/rpc). Use hub.api GET /api/store/catalog — NEVER skills_lab for 插件.",
+  "description": "DEFAULT for 开灯/关灯/开插座/关插座/列出设备/删除设备, Matter/Thread 配对码配网, 米家/miot, and MiniHub Store 插件. Zigbee delete: hub.api POST /api/points/remove (NOT modules/zigbee/rpc). Matter add: hub.api POST /api/matter/devices (NOT http_request, NOT modules/matter/rpc commission). Use hub.api GET /api/store/catalog — NEVER skills_lab for 插件.",
   "metadata": {
     "cap_groups": [
       "cap_minihub_local_mcp"
@@ -87,6 +87,11 @@ Do **not** invent paths outside the allowlist. Denied responses have `"error":"D
 | POST | `/api/zigbee/permit_join` | body optional `{"seconds":60}` |
 | POST | `/api/points/remove` | Hub-side remove: `{"point_id":"..."}` or `{"adapter":"zigbee","delete_all":true}` |
 | POST | `/api/ble_mesh/permit_provision` | body optional `{"seconds":60}` |
+| GET | `/api/matter/status` | Matter commissioner / `thread_br_ready` |
+| POST | `/api/matter/commission` | pairing only: `pairing_code` or `setup_pin` + `discovery` |
+| POST | `/api/matter/devices` | **Add Matter device** (pairing_code + upsert endpoints) — prefer this |
+| GET | `/api/thread/status` | Thread BR status (when Thread stack linked) |
+| GET | `/api/thread/dataset` | active dataset (when Thread stack linked) |
 | POST | `/api/store/install` | body `{"kind","id","reload"?}` |
 | POST | `/api/store/upgrade` | body `{"kind","id","reload"?}` |
 | POST | `/api/store/uninstall` | body `{"kind","id","reload"?}` |
@@ -285,6 +290,32 @@ Do **not** say you are waiting to confirm the activation channel.
 `store/uninstall` applies to Store-installed modules. Builtin radio adapters (if any) are disabled via `PUT /api/config/adapters`, not Store uninstall.
 
 Claw may run with **zero** cloud plugins. Only Store-install what the user asks for.
+
+## Matter / Thread 配网（pairing_code）
+
+**Do not** use `http_request` to `http://<lan-ip>/api/...` — that cap is not LLM-visible. **Do not** invent Matter RPC methods (`commission`, `start_pairing`, `help`) on `POST /api/modules/matter/rpc` — only `status` exists there.
+
+Correct path: `mcp_call_tool` → `hub.api`:
+
+1. Optional: `GET /api/matter/status` — confirm `ready` / `thread_br_ready`.
+2. **Add device:** `POST /api/matter/devices` with JSON body.
+
+`discovery` (required for first-time BLE):
+
+| discovery | when | extra body |
+| --- | --- | --- |
+| `network` | already on LAN / multi-admin temp code | — |
+| `ble_wifi` | unprovisioned Wi-Fi Matter | `wifi_ssid`, optional `wifi_password`, `transport":"wifi"` |
+| `ble_ethernet` | unprovisioned Ethernet Matter | `transport":"ethernet"` |
+| `ble_thread` | unprovisioned Thread Matter (needs `thread_br_ready`) | `transport":"thread"` |
+
+```json
+{"server_url":"http://127.0.0.1:18791","tool_name":"hub.api","arguments":{"method":"POST","path":"/api/matter/devices","query":"","body":"{\"pairing_code\":\"34970112332\",\"discovery\":\"ble_thread\",\"transport\":\"thread\",\"endpoints\":\"1\",\"merge\":true,\"reload\":true}"}}
+```
+
+Success: `"result":"ok"` and `"commission":"started"`. Then tell user to wait for BLE/Thread pairing; list points with `adapter=matter` after a short wait.
+
+If `http_request` is denied (`group_not_visible`), retry with **`hub.api`** above — never conclude the firmware lacks Matter commissioning.
 
 ## Zigbee 配网 (permit_join)
 

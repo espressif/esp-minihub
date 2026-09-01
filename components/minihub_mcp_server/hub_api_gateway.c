@@ -68,6 +68,10 @@ static const hub_api_rule_t s_rules[] = {
     {HUB_M_POST, "/api/matter/commission"},
     {HUB_M_POST, "/api/matter/devices"},
 #endif
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+    {HUB_M_GET, "/api/thread/status"},
+    {HUB_M_GET, "/api/thread/dataset"},
+#endif
     {HUB_M_GET, "/api/radio/provision"},
 #if CONFIG_MINIHUB_ZIGBEE_SDK
     {HUB_M_GET, "/api/zigbee"},
@@ -87,6 +91,11 @@ static const hub_api_rule_t s_rules[] = {
 #endif
 #if CONFIG_MINIHUB_BLE_MESH_SDK
     {HUB_M_POST, "/api/ble_mesh/permit_provision"},
+#endif
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+    {HUB_M_POST, "/api/thread/start"},
+    {HUB_M_POST, "/api/thread/stop"},
+    {HUB_M_POST, "/api/thread/dataset"},
 #endif
     {HUB_M_POST, "/api/store/install"},
     {HUB_M_POST, "/api/store/upgrade"},
@@ -910,6 +919,282 @@ static esp_err_t dispatch_get_zigbee(cJSON **out)
     return ESP_OK;
 }
 #endif /* CONFIG_MINIHUB_ZIGBEE_SDK */
+
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+
+static minihub_matter_discovery_t parse_matter_discovery(const cJSON *disc)
+{
+    if (cJSON_IsString(disc) && disc->valuestring) {
+        if (strcmp(disc->valuestring, "ble_wifi") == 0 ||
+            strcmp(disc->valuestring, "ble-wifi") == 0 ||
+            strcmp(disc->valuestring, "first_time") == 0) {
+            return MINIHUB_MATTER_DISCOVERY_BLE_WIFI;
+        }
+        if (strcmp(disc->valuestring, "ble_thread") == 0 ||
+            strcmp(disc->valuestring, "ble-thread") == 0) {
+            return MINIHUB_MATTER_DISCOVERY_BLE_THREAD;
+        }
+        if (strcmp(disc->valuestring, "ble_ethernet") == 0 ||
+            strcmp(disc->valuestring, "ble-ethernet") == 0 ||
+            strcmp(disc->valuestring, "ethernet") == 0) {
+            return MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET;
+        }
+    }
+    return MINIHUB_MATTER_DISCOVERY_NETWORK;
+}
+
+static esp_err_t parse_matter_endpoints_json(const cJSON *root, uint16_t *out, size_t max_out, size_t *out_count)
+{
+    if (!out || !out_count || max_out == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *out_count = 0;
+
+    const cJSON *eps = cJSON_GetObjectItem(root, "endpoints");
+    if (cJSON_IsArray(eps)) {
+        cJSON *item = NULL;
+        cJSON_ArrayForEach(item, eps) {
+            if (*out_count >= max_out) {
+                break;
+            }
+            if (cJSON_IsNumber(item)) {
+                out[(*out_count)++] = (uint16_t)item->valueint;
+            }
+        }
+        if (*out_count > 0) {
+            return ESP_OK;
+        }
+    }
+
+    if (cJSON_IsString(eps) && eps->valuestring[0]) {
+        char buf[64];
+        strncpy(buf, eps->valuestring, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        char *save = NULL;
+        for (char *tok = strtok_r(buf, ",", &save); tok != NULL; tok = strtok_r(NULL, ",", &save)) {
+            if (*out_count >= max_out) {
+                break;
+            }
+            while (*tok == ' ') {
+                tok++;
+            }
+            if (!tok[0]) {
+                continue;
+            }
+            unsigned long v = strtoul(tok, NULL, 10);
+            if (v > 0 && v < 65536) {
+                out[(*out_count)++] = (uint16_t)v;
+            }
+        }
+        if (*out_count > 0) {
+            return ESP_OK;
+        }
+    }
+
+    out[0] = 1;
+    *out_count = 1;
+    return ESP_OK;
+}
+
+static esp_err_t dispatch_get_matter_status(cJSON **out)
+{
+    cJSON *status = minihub_matter_status_json();
+    if (!status) {
+        *out = err_obj("INTERNAL", "matter status");
+        return ESP_OK;
+    }
+    if (!cJSON_GetObjectItem(status, "ok")) {
+        cJSON_AddBoolToObject(status, "ok", true);
+    }
+    *out = status;
+    return ESP_OK;
+}
+
+static esp_err_t dispatch_matter_commission(const char *body, cJSON **out)
+{
+    cJSON *root = body && body[0] ? cJSON_Parse(body) : NULL;
+    if (!root || !cJSON_IsObject(root)) {
+        cJSON_Delete(root);
+        *out = err_obj("INVALID_ARG", "JSON body required");
+        return ESP_OK;
+    }
+
+    const cJSON *node = cJSON_GetObjectItem(root, "node_id");
+    const cJSON *code = cJSON_GetObjectItem(root, "pairing_code");
+    const cJSON *pin = cJSON_GetObjectItem(root, "setup_pin");
+    const cJSON *disc = cJSON_GetObjectItem(root, "discovery");
+    const cJSON *ssid = cJSON_GetObjectItem(root, "wifi_ssid");
+    const cJSON *wpass = cJSON_GetObjectItem(root, "wifi_password");
+
+    uint64_t node_id = 2;
+    if (cJSON_IsString(node)) {
+        node_id = strtoull(node->valuestring, NULL, 0);
+    } else if (cJSON_IsNumber(node)) {
+        node_id = (uint64_t)node->valuedouble;
+    }
+
+    minihub_matter_discovery_t discovery = parse_matter_discovery(disc);
+    const char *ssid_s = cJSON_IsString(ssid) ? ssid->valuestring : NULL;
+    const char *pass_s = cJSON_IsString(wpass) ? wpass->valuestring : NULL;
+
+    esp_err_t err = ESP_ERR_INVALID_ARG;
+    if (cJSON_IsString(code)) {
+        err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery, ssid_s, pass_s);
+    } else if (cJSON_IsNumber(pin)) {
+        if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI ||
+            discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD ||
+            discovery == MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET) {
+            cJSON_Delete(root);
+            *out = err_obj("INVALID_ARG", "BLE discovery requires pairing_code");
+            return ESP_OK;
+        }
+        err = minihub_matter_commission_pin(node_id, (uint32_t)pin->valueint);
+    } else {
+        cJSON_Delete(root);
+        *out = err_obj("INVALID_ARG", "need pairing_code or setup_pin");
+        return ESP_OK;
+    }
+
+    cJSON_Delete(root);
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddBoolToObject(resp, "ok", err == ESP_OK);
+    cJSON_AddStringToObject(resp, "status", err == ESP_OK ? "started" : esp_err_to_name(err));
+    if (err != ESP_OK && minihub_matter_last_error()) {
+        cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
+    }
+    *out = resp;
+    return ESP_OK;
+}
+
+static esp_err_t dispatch_matter_devices(const char *body, cJSON **out)
+{
+    cJSON *root = body && body[0] ? cJSON_Parse(body) : NULL;
+    if (!root || !cJSON_IsObject(root)) {
+        cJSON_Delete(root);
+        *out = err_obj("INVALID_ARG", "JSON body required");
+        return ESP_OK;
+    }
+
+    const cJSON *del = cJSON_GetObjectItem(root, "delete");
+    const cJSON *reload = cJSON_GetObjectItem(root, "reload");
+    bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
+
+    if (cJSON_IsTrue(del)) {
+        if (!cJSON_GetObjectItem(root, "adapter")) {
+            cJSON_AddStringToObject(root, "adapter", "matter");
+        }
+        esp_err_t err = minihub_hub_points_remove(root, out);
+        cJSON_Delete(root);
+        if (err == ESP_ERR_NO_MEM) {
+            return err;
+        }
+        if (!*out) {
+            *out = err_obj("INTERNAL", "remove failed");
+        }
+        return ESP_OK;
+    }
+
+    const cJSON *code = cJSON_GetObjectItem(root, "pairing_code");
+    const cJSON *node = cJSON_GetObjectItem(root, "node_id");
+    const cJSON *merge = cJSON_GetObjectItem(root, "merge");
+    const cJSON *disc = cJSON_GetObjectItem(root, "discovery");
+    const cJSON *ssid = cJSON_GetObjectItem(root, "wifi_ssid");
+    const cJSON *wpass = cJSON_GetObjectItem(root, "wifi_password");
+    bool merge_existing = !cJSON_IsBool(merge) || cJSON_IsTrue(merge);
+
+    uint64_t node_id = 0;
+    if (cJSON_IsString(node)) {
+        node_id = strtoull(node->valuestring, NULL, 0);
+    } else if (cJSON_IsNumber(node)) {
+        node_id = (uint64_t)node->valuedouble;
+    }
+    if (node_id < 2) {
+        esp_err_t nid_err = minihub_matter_next_node_id(&node_id);
+        if (nid_err != ESP_OK) {
+            cJSON_Delete(root);
+            *out = err_obj("INTERNAL", esp_err_to_name(nid_err));
+            return ESP_OK;
+        }
+    }
+
+    uint16_t endpoints[16];
+    size_t ep_count = 0;
+    esp_err_t err = parse_matter_endpoints_json(root, endpoints, sizeof(endpoints) / sizeof(endpoints[0]),
+                                                &ep_count);
+    if (err != ESP_OK) {
+        cJSON_Delete(root);
+        *out = err_obj("INVALID_ARG", "invalid endpoints");
+        return ESP_OK;
+    }
+
+    minihub_matter_discovery_t discovery = parse_matter_discovery(disc);
+    const char *ssid_s = cJSON_IsString(ssid) ? ssid->valuestring : NULL;
+    const char *pass_s = cJSON_IsString(wpass) ? wpass->valuestring : NULL;
+    const cJSON *tr = cJSON_GetObjectItem(root, "transport");
+    const char *transport = cJSON_IsString(tr) ? tr->valuestring : NULL;
+    if (!transport) {
+        if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
+            transport = "wifi";
+        } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
+            transport = "thread";
+        } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET) {
+            transport = "ethernet";
+        }
+    }
+
+    esp_err_t commission_err = ESP_ERR_INVALID_ARG;
+    if (cJSON_IsString(code) && code->valuestring[0]) {
+        commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
+                                                           ssid_s, pass_s);
+    }
+    if (commission_err != ESP_OK) {
+        cJSON *resp = cJSON_CreateObject();
+        cJSON_Delete(root);
+        if (!resp) {
+            return ESP_ERR_NO_MEM;
+        }
+        cJSON_AddBoolToObject(resp, "ok", false);
+        cJSON_AddStringToObject(resp, "result", "error");
+        cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
+        if (minihub_matter_last_error()) {
+            cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
+        } else {
+            cJSON_AddStringToObject(resp, "message", "commission did not start");
+        }
+        *out = resp;
+        return ESP_OK;
+    }
+
+    size_t synced = 0;
+    err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing, &synced, transport);
+    cJSON_Delete(root);
+    if (err != ESP_OK) {
+        *out = err_obj("INTERNAL", esp_err_to_name(err));
+        return ESP_OK;
+    }
+
+    if (do_reload) {
+        (void)minihub_hub_reload();
+    }
+
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddBoolToObject(resp, "ok", true);
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
+    cJSON_AddNumberToObject(resp, "synced", (double)synced);
+    cJSON_AddBoolToObject(resp, "reloaded", do_reload);
+    cJSON_AddStringToObject(resp, "commission", "started");
+    *out = resp;
+    return ESP_OK;
+}
+
+#endif /* CONFIG_MINIHUB_MATTER_ADAPTER */
 
 #if CONFIG_MINIHUB_BLE_MESH_SDK
 static esp_err_t dispatch_ble_mesh_permit(const char *body, cJSON **out)

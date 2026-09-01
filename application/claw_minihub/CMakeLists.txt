@@ -17,7 +17,8 @@ if(NOT EXISTS "${ESP_CLAW_DIR}/components")
         "  git submodule update --init application/claw_minihub/components/esp-claw")
 endif()
 
-# Matter/esp-matter (optional). Enable: MINIHUB_BUILD_MATTER=1 ESP_MATTER_PATH=...
+# Matter/esp-matter (optional). Same gate as application/minihub:
+#   MINIHUB_BUILD_MATTER=1 + ESP_MATTER_PATH (build_firmware.py … matter)
 if(DEFINED ENV{ESP_MATTER_PATH} AND "$ENV{MINIHUB_BUILD_MATTER}" STREQUAL "1")
     set(ESP_MATTER_PATH $ENV{ESP_MATTER_PATH})
     set(MATTER_SDK_PATH ${ESP_MATTER_PATH}/connectedhomeip/connectedhomeip)
@@ -29,10 +30,11 @@ endif()
 list(APPEND EXTRA_COMPONENT_DIRS
     "${ESP_CLAW_DIR}/components"
     # Shared MiniHub Core (same repo)
-    "${CMAKE_CURRENT_LIST_DIR}/../../components"
+    "${MINIHUB_REPO_ROOT}/components"
     # MVP adapters only (avoid compiling every adapters/*)
-    "${CMAKE_CURRENT_LIST_DIR}/../../components/adapters/adapter_zigbee"
-    "${CMAKE_CURRENT_LIST_DIR}/../../components/adapters/adapter_ble_mesh"
+    "${MINIHUB_REPO_ROOT}/components/adapters/adapter_zigbee"
+    "${MINIHUB_REPO_ROOT}/components/adapters/adapter_ble_mesh"
+    "${MINIHUB_REPO_ROOT}/components/adapters/adapter_thread"
     # Store L3 plugins (e.g. miot) are loaded at runtime — not EXTRA_COMPONENT_DIRS.
 )
 if(DEFINED ENV{MINIHUB_BUILD_MATTER} AND "$ENV{MINIHUB_BUILD_MATTER}" STREQUAL "1")
@@ -41,7 +43,7 @@ if(DEFINED ENV{MINIHUB_BUILD_MATTER} AND "$ENV{MINIHUB_BUILD_MATTER}" STREQUAL "
 endif()
 
 # Host MVP: Claw owns Wi-Fi; MiniHub web attaches to the Claw portal httpd.
-# minihub_matter stays in the build (stub or commissioner) — minihub_hub depends on it.
+# Keep minihub_matter in the build (stub or commissioner) — minihub_hub depends on it.
 set(EXCLUDE_COMPONENTS
     minihub_lcd
     minihub_rtsp_cam

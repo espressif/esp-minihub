@@ -31,7 +31,7 @@ static uint64_t parse_node_id(const char *s, uint64_t fallback)
     return strtoull(s, NULL, 10);
 }
 
-/** Ensure matter exists; migrate devices/enabled from legacy thread once. */
+/** Ensure matter exists; migrate devices from legacy thread.devices once; keep RF thread. */
 static bool migrate_legacy_thread(cJSON *adapters)
 {
     if (!adapters) {
@@ -40,14 +40,19 @@ static bool migrate_legacy_thread(cJSON *adapters)
 
     cJSON *matter = cJSON_GetObjectItem(adapters, k_matter_adapter);
     cJSON *legacy = cJSON_GetObjectItem(adapters, k_legacy_thread_adapter);
-    if (!legacy) {
+    if (!legacy || !cJSON_IsObject(legacy)) {
         return false;
     }
 
-    const cJSON *legacy_devices = cJSON_GetObjectItem(legacy, "devices");
-    const bool legacy_has_devices = cJSON_IsArray(legacy_devices) && cJSON_GetArraySize(legacy_devices) > 0;
+    cJSON *legacy_devices = cJSON_GetObjectItem(legacy, "devices");
+    if (!cJSON_IsArray(legacy_devices)) {
+        return false;
+    }
+
+    const bool legacy_has_devices = cJSON_GetArraySize(legacy_devices) > 0;
     const cJSON *legacy_en = cJSON_GetObjectItem(legacy, "enabled");
     const bool legacy_enabled = cJSON_IsTrue(legacy_en);
+    bool changed = false;
 
     if (!matter) {
         matter = cJSON_CreateObject();
@@ -64,6 +69,7 @@ static bool migrate_legacy_thread(cJSON *adapters)
         } else {
             cJSON_AddItemToObject(matter, "devices", cJSON_CreateArray());
         }
+        changed = true;
     } else {
         cJSON *matter_devices = cJSON_GetObjectItem(matter, "devices");
         const bool matter_empty =
@@ -74,16 +80,23 @@ static bool migrate_legacy_thread(cJSON *adapters)
             if (dup) {
                 cJSON_AddItemToObject(matter, "devices", dup);
             }
+            changed = true;
         }
         if (!cJSON_HasObjectItem(matter, "enabled") && legacy_enabled) {
             cJSON_AddTrueToObject(matter, "enabled");
+            changed = true;
         }
         cJSON_DeleteItemFromObject(matter, "comment");
     }
 
-    /* Drop unused thread key — adapters.json only lists real adapters. */
-    cJSON_DeleteItemFromObject(adapters, k_legacy_thread_adapter);
-    return true;
+    cJSON_DeleteItemFromObject(legacy, "devices");
+    cJSON_DeleteItemFromObject(legacy, "enabled");
+    cJSON_AddBoolToObject(legacy, "enabled", false);
+    if (!cJSON_HasObjectItem(legacy, "dataset")) {
+        cJSON_AddNullToObject(legacy, "dataset");
+    }
+    changed = true;
+    return changed;
 }
 
 static cJSON *get_matter_devices(cJSON *adapters_root, bool create)
@@ -159,19 +172,7 @@ static cJSON *find_device_by_endpoint(cJSON *devices, uint64_t node_id, uint16_t
 
 static void make_point_id(uint64_t node_id, uint16_t endpoint_id, char *out, size_t out_len)
 {
-    if (node_id == 2 && endpoint_id == 1) {
-        snprintf(out, out_len, "light/matter_root");
-        return;
-    }
-    if (node_id == 2 && endpoint_id == 2) {
-        snprintf(out, out_len, "light/matter_bulb_1");
-        return;
-    }
-    if (endpoint_id == 1) {
-        snprintf(out, out_len, "light/matter_%" PRIu64 "_root", node_id);
-        return;
-    }
-    snprintf(out, out_len, "light/matter_%" PRIu64 "_ep%u", node_id, (unsigned)endpoint_id);
+    snprintf(out, out_len, "light/matter_n%" PRIu64 "_ep%u", node_id, (unsigned)endpoint_id);
 }
 
 esp_err_t minihub_matter_next_node_id(uint64_t *out_node_id)
@@ -207,7 +208,7 @@ esp_err_t minihub_matter_next_node_id(uint64_t *out_node_id)
 }
 
 esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoints, size_t endpoint_count,
-                                        bool merge_existing, size_t *synced_count)
+                                        bool merge_existing, size_t *synced_count, const char *transport)
 {
     if (!endpoints || endpoint_count == 0 || node_id < 2) {
         return ESP_ERR_INVALID_ARG;
@@ -246,12 +247,17 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
             cJSON_DeleteItemFromObject(existing, "node_id");
             cJSON_DeleteItemFromObject(existing, "endpoint_id");
             cJSON_DeleteItemFromObject(existing, "type");
+            cJSON_DeleteItemFromObject(existing, "point_id");
             char node_str[24];
             snprintf(node_str, sizeof(node_str), "%" PRIu64, node_id);
             cJSON_AddStringToObject(existing, "point_id", point_id);
             cJSON_AddStringToObject(existing, "type", "light");
             cJSON_AddStringToObject(existing, "node_id", node_str);
             cJSON_AddNumberToObject(existing, "endpoint_id", ep);
+            if (transport && transport[0]) {
+                cJSON_DeleteItemFromObject(existing, "transport");
+                cJSON_AddStringToObject(existing, "transport", transport);
+            }
             added++;
             continue;
         }
@@ -271,6 +277,9 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
         cJSON_AddStringToObject(entry, "type", "light");
         cJSON_AddStringToObject(entry, "node_id", node_str);
         cJSON_AddNumberToObject(entry, "endpoint_id", ep);
+        if (transport && transport[0]) {
+            cJSON_AddStringToObject(entry, "transport", transport);
+        }
         cJSON_AddItemToArray(devices, entry);
         added++;
     }

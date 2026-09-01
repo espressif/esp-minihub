@@ -11,6 +11,7 @@ extern const minihub_adapter_t zigbee_adapter;
 extern const minihub_adapter_t ble_mesh_adapter;
 extern const minihub_adapter_t modbus_adapter;
 extern const minihub_adapter_t matter_adapter;
+extern const minihub_adapter_t thread_adapter;
 
 static const char *TAG = "adapters_setup";
 
@@ -47,6 +48,13 @@ esp_err_t minihub_adapters_register_all(void)
     err = minihub_adapter_register(&matter_adapter);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "register matter adapter failed: %s", esp_err_to_name(err));
+        return err;
+    }
+#endif
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+    err = minihub_adapter_register(&thread_adapter);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "register thread adapter failed: %s", esp_err_to_name(err));
         return err;
     }
 #endif

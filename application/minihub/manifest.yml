@@ -53,6 +53,7 @@ variants:
       - minihub_ota
       - minihub_provision
       - minihub_matter
+      - minihub_thread
       - minihub_rainmaker
       - minihub_lcd
       - minihub_net
@@ -62,6 +63,7 @@ variants:
       - adapter_ble_mesh
       - adapter_modbus
       - adapter_matter
+      - adapter_thread
       - minihub_zigbee
       - minihub_ble_mesh
       - minihub_ble_gatt

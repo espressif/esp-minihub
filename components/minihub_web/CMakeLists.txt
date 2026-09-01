@@ -10,6 +10,8 @@ set(_REQUIRES
     minihub_core minihub_config minihub_rules minihub_hub minihub_pack minihub_module minihub_store
     minihub_scenes minihub_auth minihub_ota
     minihub_net
+    minihub_matter
+    minihub_thread
     esp_http_server esp_http_client esp_netif espressif__cjson
     spi_flash app_update joltwallet__littlefs
 )
@@ -18,9 +20,6 @@ if(CONFIG_MINIHUB_ZIGBEE_SDK)
 endif()
 if(CONFIG_MINIHUB_BLE_MESH_SDK)
     list(APPEND _REQUIRES minihub_ble_mesh)
-endif()
-if(CONFIG_MINIHUB_MATTER_ADAPTER)
-    list(APPEND _REQUIRES minihub_matter)
 endif()
 
 idf_component_register(

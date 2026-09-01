@@ -11,7 +11,9 @@
 #include "minihub_adapter.h"
 #include "minihub_matter.h"
 #include "minihub_module.h"
+#include "matter_rpc.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
@@ -24,6 +26,7 @@ static const char *TAG = "adapter_matter";
 typedef struct {
     char point_id[MINIHUB_POINT_ID_MAX];
     char type[MINIHUB_TYPE_MAX];
+    char transport[16];
     uint64_t node_id;
     uint16_t endpoint_id;
 } matter_device_t;
@@ -72,6 +75,7 @@ static esp_err_t parse_devices(const cJSON *cfg)
         const cJSON *type = cJSON_GetObjectItem(item, "type");
         const cJSON *node_id = cJSON_GetObjectItem(item, "node_id");
         const cJSON *endpoint_id = cJSON_GetObjectItem(item, "endpoint_id");
+        const cJSON *transport = cJSON_GetObjectItem(item, "transport");
 
         if (!cJSON_IsString(point_id)) {
             continue;
@@ -81,6 +85,9 @@ static esp_err_t parse_devices(const cJSON *cfg)
             strncpy(dev->type, type->valuestring, sizeof(dev->type) - 1);
         } else {
             strncpy(dev->type, "light", sizeof(dev->type) - 1);
+        }
+        if (cJSON_IsString(transport) && transport->valuestring[0]) {
+            strncpy(dev->transport, transport->valuestring, sizeof(dev->transport) - 1);
         }
         dev->node_id = cJSON_IsString(node_id) ? parse_node_id(node_id->valuestring) : 1;
         dev->endpoint_id = cJSON_IsNumber(endpoint_id) ? (uint16_t)endpoint_id->valueint : 1;
@@ -113,6 +120,7 @@ static esp_err_t matter_adapter_init(const cJSON *config)
     if (config) {
         parse_devices(config);
     }
+    /* Host-static RPC → Store 「已安装」shows as 内置 (managed=false). */
     (void)minihub_module_register_rpc("matter", matter_module_rpc);
     return ESP_OK;
 }
@@ -136,7 +144,23 @@ static esp_err_t matter_adapter_start(void)
         strncpy(point.adapter, "matter", sizeof(point.adapter) - 1);
         strncpy(point.value, "off", sizeof(point.value) - 1);
         point.online = minihub_matter_ready();
+        cJSON *props = cJSON_CreateObject();
+        if (props) {
+            char name[48];
+            snprintf(name, sizeof(name), "node%llu·ep%u",
+                     (unsigned long long)s_devices[i].node_id,
+                     (unsigned)s_devices[i].endpoint_id);
+            cJSON_AddStringToObject(props, "name", name);
+            if (s_devices[i].transport[0]) {
+                cJSON_AddStringToObject(props, "transport", s_devices[i].transport);
+            }
+            point.props = props;
+        }
         minihub_point_register(&point);
+        if (point.props) {
+            cJSON_Delete(point.props);
+            point.props = NULL;
+        }
     }
 
     s_started = true;

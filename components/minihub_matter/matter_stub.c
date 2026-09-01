@@ -86,6 +86,7 @@ cJSON *minihub_matter_status_json(void)
     }
     cJSON_AddBoolToObject(root, "ready", false);
     cJSON_AddBoolToObject(root, "commissioned", false);
+    cJSON_AddBoolToObject(root, "thread_br_ready", false);
     cJSON_AddStringToObject(root, "mode", "stub");
     cJSON *prefill = cJSON_CreateObject();
     if (prefill) {

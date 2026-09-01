@@ -39,6 +39,9 @@
 #if CONFIG_MINIHUB_MATTER_ADAPTER
 #include "minihub_matter.h"
 #endif
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+#include "minihub_thread.h"
+#endif
 #include "minihub_map.h"
 #include "minihub_map_tiles.h"
 #include "minihub_paths.h"
@@ -3038,6 +3041,13 @@ static esp_err_t handle_api_matter_commission(httpd_req_t *req)
             strcmp(disc->valuestring, "ble-wifi") == 0 ||
             strcmp(disc->valuestring, "first_time") == 0) {
             discovery = MINIHUB_MATTER_DISCOVERY_BLE_WIFI;
+        } else if (strcmp(disc->valuestring, "ble_thread") == 0 ||
+                   strcmp(disc->valuestring, "ble-thread") == 0) {
+            discovery = MINIHUB_MATTER_DISCOVERY_BLE_THREAD;
+        } else if (strcmp(disc->valuestring, "ble_ethernet") == 0 ||
+                   strcmp(disc->valuestring, "ble-ethernet") == 0 ||
+                   strcmp(disc->valuestring, "ethernet") == 0) {
+            discovery = MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET;
         }
     }
 
@@ -3047,10 +3057,12 @@ static esp_err_t handle_api_matter_commission(httpd_req_t *req)
     if (cJSON_IsString(code)) {
         err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery, ssid_s, pass_s);
     } else if (cJSON_IsNumber(pin)) {
-        if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
+        if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI ||
+            discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD ||
+            discovery == MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET) {
             cJSON_Delete(root);
             return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
-                                       "ble_wifi requires pairing_code (not setup_pin)");
+                                       "BLE discovery requires pairing_code (not setup_pin)");
         }
         err = minihub_matter_commission_pin(node_id, (uint32_t)pin->valueint);
     } else {
@@ -3167,6 +3179,7 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     const cJSON *ssid = cJSON_GetObjectItem(root, "wifi_ssid");
     const cJSON *wpass = cJSON_GetObjectItem(root, "wifi_password");
     bool merge_existing = !cJSON_IsBool(merge) || cJSON_IsTrue(merge);
+    bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
 
     uint64_t node_id = 0;
     if (cJSON_IsString(node)) {
@@ -3196,10 +3209,28 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
             strcmp(disc->valuestring, "ble-wifi") == 0 ||
             strcmp(disc->valuestring, "first_time") == 0) {
             discovery = MINIHUB_MATTER_DISCOVERY_BLE_WIFI;
+        } else if (strcmp(disc->valuestring, "ble_thread") == 0 ||
+                   strcmp(disc->valuestring, "ble-thread") == 0) {
+            discovery = MINIHUB_MATTER_DISCOVERY_BLE_THREAD;
+        } else if (strcmp(disc->valuestring, "ble_ethernet") == 0 ||
+                   strcmp(disc->valuestring, "ble-ethernet") == 0 ||
+                   strcmp(disc->valuestring, "ethernet") == 0) {
+            discovery = MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET;
         }
     }
     const char *ssid_s = cJSON_IsString(ssid) ? ssid->valuestring : NULL;
     const char *pass_s = cJSON_IsString(wpass) ? wpass->valuestring : NULL;
+    const cJSON *tr = cJSON_GetObjectItem(root, "transport");
+    const char *transport = cJSON_IsString(tr) ? tr->valuestring : NULL;
+    if (!transport) {
+        if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
+            transport = "wifi";
+        } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
+            transport = "thread";
+        } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET) {
+            transport = "ethernet";
+        }
+    }
 
     const bool want_commission = cJSON_IsString(code) && code->valuestring[0];
     esp_err_t commission_err = ESP_OK;
@@ -3222,9 +3253,25 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
             return err;
         }
     }
+    if (commission_err != ESP_OK) {
+        cJSON *resp = cJSON_CreateObject();
+        cJSON_AddStringToObject(resp, "result", "error");
+        cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
+        if (minihub_matter_last_error()) {
+            cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
+        } else {
+            cJSON_AddStringToObject(resp, "message", "commission did not start");
+        }
+        cJSON_Delete(root);
+        err = send_json(req, resp);
+        cJSON_Delete(resp);
+        return err;
+    }
 
+    /* Persist device entry only after PairDevice is armed — not on failed start.
+     * Full reachability still requires commissioning_success (CASE). */
     size_t synced = 0;
-    err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing, &synced);
+    err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing, &synced, transport);
     cJSON_Delete(root);
     if (err != ESP_OK) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
@@ -3246,6 +3293,143 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
 }
 
 #endif /* CONFIG_MINIHUB_MATTER_ADAPTER */
+
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+
+static esp_err_t handle_api_thread_status(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    cJSON *status = minihub_thread_status_json();
+    if (!status) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no status");
+    }
+    err = send_json(req, status);
+    cJSON_Delete(status);
+    return err;
+}
+
+static esp_err_t handle_api_thread_start(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = minihub_thread_start();
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "status", err == ESP_OK ? "ok" : esp_err_to_name(err));
+    if (err != ESP_OK && minihub_thread_last_error() && minihub_thread_last_error()[0]) {
+        cJSON_AddStringToObject(resp, "message", minihub_thread_last_error());
+    }
+    esp_err_t send_err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return send_err;
+}
+
+static esp_err_t handle_api_thread_stop(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = minihub_thread_stop();
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "status", err == ESP_OK ? "ok" : esp_err_to_name(err));
+    esp_err_t send_err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return send_err;
+}
+
+static esp_err_t handle_api_thread_dataset_get(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    uint8_t *tlvs = NULL;
+    size_t len = 0;
+    err = minihub_thread_dataset_get(&tlvs, &len);
+    cJSON *resp = cJSON_CreateObject();
+    if (err != ESP_OK) {
+        cJSON_AddStringToObject(resp, "status", esp_err_to_name(err));
+        if (minihub_thread_last_error() && minihub_thread_last_error()[0]) {
+            cJSON_AddStringToObject(resp, "message", minihub_thread_last_error());
+        }
+    } else {
+        char *hex = calloc(1, len * 2 + 1);
+        if (!hex) {
+            free(tlvs);
+            cJSON_Delete(resp);
+            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+        }
+        static const char *h = "0123456789abcdef";
+        for (size_t i = 0; i < len; i++) {
+            hex[i * 2] = h[(tlvs[i] >> 4) & 0xf];
+            hex[i * 2 + 1] = h[tlvs[i] & 0xf];
+        }
+        cJSON_AddStringToObject(resp, "dataset", hex);
+        cJSON_AddNumberToObject(resp, "length", (double)len);
+        free(hex);
+        free(tlvs);
+    }
+    esp_err_t send_err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return send_err;
+}
+
+static esp_err_t handle_api_thread_dataset_post(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char buf[1024];
+    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (received < 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "recv failed");
+    }
+    buf[received >= 0 ? received : 0] = '\0';
+
+    uint8_t raw[256];
+    size_t raw_len = 0;
+    if (received > 0) {
+        cJSON *root = cJSON_Parse(buf);
+        if (!root) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+        }
+        const cJSON *ds = cJSON_GetObjectItem(root, "dataset");
+        if (cJSON_IsString(ds) && ds->valuestring && ds->valuestring[0]) {
+            size_t n = strlen(ds->valuestring);
+            if (n % 2 != 0 || n / 2 > sizeof(raw)) {
+                cJSON_Delete(root);
+                return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad dataset hex");
+            }
+            for (size_t i = 0; i < n / 2; i++) {
+                unsigned int v = 0;
+                if (sscanf(ds->valuestring + i * 2, "%2x", &v) != 1) {
+                    cJSON_Delete(root);
+                    return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad dataset hex");
+                }
+                raw[i] = (uint8_t)v;
+            }
+            raw_len = n / 2;
+        }
+        cJSON_Delete(root);
+    }
+
+    err = minihub_thread_dataset_set(raw_len ? raw : NULL, raw_len);
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "status", err == ESP_OK ? "ok" : esp_err_to_name(err));
+    if (err != ESP_OK && minihub_thread_last_error() && minihub_thread_last_error()[0]) {
+        cJSON_AddStringToObject(resp, "message", minihub_thread_last_error());
+    }
+    esp_err_t send_err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return send_err;
+}
+#endif /* CONFIG_MINIHUB_THREAD_ADAPTER */
 
 static esp_err_t handle_reload(httpd_req_t *req)
 {
@@ -3397,6 +3581,106 @@ static esp_err_t handle_api_dev_fs_put(httpd_req_t *req)
 }
 #endif
 
+#if CONFIG_MINIHUB_WEB_UI
+/* Host console HTML/CSS/JS under /store/preinstall/web/ — curl without reflashing modstore. */
+#define DEV_WEB_UPLOAD_MAX_BYTES (512 * 1024)
+
+static esp_err_t mkdir_store_web_parents(const char *full_path)
+{
+    char dir[MINIHUB_PATH_MAX];
+    size_t n = strnlen(full_path, sizeof(dir) - 1);
+    if (n == 0 || n >= sizeof(dir)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    memcpy(dir, full_path, n);
+    dir[n] = '\0';
+    char *slash = strrchr(dir, '/');
+    if (!slash || slash == dir) {
+        return ESP_OK;
+    }
+    *slash = '\0';
+    for (char *p = dir + 1; *p; p++) {
+        if (*p != '/') {
+            continue;
+        }
+        *p = '\0';
+        if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
+            struct stat st;
+            if (stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+                *p = '/';
+                return ESP_FAIL;
+            }
+        }
+        *p = '/';
+    }
+    if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
+        struct stat st;
+        if (stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            return ESP_FAIL;
+        }
+    }
+    return ESP_OK;
+}
+
+static esp_err_t handle_api_dev_web_put(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    static const char prefix[] = "/api/dev/web/";
+    if (strncmp(req->uri, prefix, sizeof(prefix) - 1) != 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path");
+    }
+    const char *rel = req->uri + sizeof(prefix) - 1;
+    if (!web_path_safe(rel)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path");
+    }
+
+    char path[MINIHUB_PATH_MAX];
+    if (snprintf(path, sizeof(path), "%s/%s", MINIHUB_PREINSTALL_WEB_DIR, rel) >= (int)sizeof(path)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "path too long");
+    }
+
+    char *body = NULL;
+    size_t body_len = 0;
+    err = read_http_body(req, &body, &body_len, DEV_WEB_UPLOAD_MAX_BYTES);
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid body");
+    }
+
+    err = mkdir_store_web_parents(path);
+    if (err != ESP_OK) {
+        free(body);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "mkdir failed");
+    }
+
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        free(body);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "open failed");
+    }
+    if (body_len > 0 && fwrite(body, 1, body_len, f) != body_len) {
+        fclose(f);
+        free(body);
+        unlink(path);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "write failed");
+    }
+    fclose(f);
+    free(body);
+    ESP_LOGI(TAG, "dev web put %s (%u bytes)", path, (unsigned)body_len);
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddStringToObject(resp, "path", path);
+    cJSON_AddNumberToObject(resp, "bytes", (double)body_len);
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+#endif /* CONFIG_MINIHUB_WEB_UI */
+
 static esp_err_t minihub_web_add_uri(httpd_handle_t server, const httpd_uri_t *uri)
 {
     esp_err_t err = httpd_register_uri_handler(server, uri);
@@ -3496,6 +3780,18 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     httpd_uri_t matter_devices = { .uri = "/api/matter/devices", .method = HTTP_POST,
                                    .handler = handle_api_matter_devices };
 #endif
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+    httpd_uri_t thread_status = { .uri = "/api/thread/status", .method = HTTP_GET,
+                                  .handler = handle_api_thread_status };
+    httpd_uri_t thread_start = { .uri = "/api/thread/start", .method = HTTP_POST,
+                                 .handler = handle_api_thread_start };
+    httpd_uri_t thread_stop = { .uri = "/api/thread/stop", .method = HTTP_POST,
+                                .handler = handle_api_thread_stop };
+    httpd_uri_t thread_dataset_get = { .uri = "/api/thread/dataset", .method = HTTP_GET,
+                                       .handler = handle_api_thread_dataset_get };
+    httpd_uri_t thread_dataset_post = { .uri = "/api/thread/dataset", .method = HTTP_POST,
+                                        .handler = handle_api_thread_dataset_post };
+#endif
 
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &root), TAG, "index %s", index_uri);
 #if CONFIG_MINIHUB_WEB_UI
@@ -3550,6 +3846,13 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &matter_commission), TAG, "/api/matter/commission");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &matter_devices), TAG, "/api/matter/devices");
 #endif
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &thread_status), TAG, "/api/thread/status");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &thread_start), TAG, "/api/thread/start");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &thread_stop), TAG, "/api/thread/stop");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &thread_dataset_get), TAG, "/api/thread/dataset GET");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &thread_dataset_post), TAG, "/api/thread/dataset POST");
+#endif
 
 #if CONFIG_MINIHUB_STORE
     httpd_uri_t store_catalog = { .uri = "/api/store/catalog", .method = HTTP_GET,
@@ -3582,6 +3885,15 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
         .handler = handle_api_dev_fs_put,
     };
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_fs_put), TAG, "/api/dev/fs/*");
+#endif
+
+#if CONFIG_MINIHUB_WEB_UI
+    httpd_uri_t dev_web_put = {
+        .uri = "/api/dev/web/*",
+        .method = HTTP_PUT,
+        .handler = handle_api_dev_web_put,
+    };
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_web_put), TAG, "/api/dev/web/*");
 #endif
 
     if (local.start_websocket) {

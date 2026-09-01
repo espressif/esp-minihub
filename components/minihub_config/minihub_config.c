@@ -83,9 +83,9 @@ const char *minihub_paths_packs_dir(void)
 }
 
 /**
- * Legacy adapters used key "thread" for Matter devices.
- * Migrate into matter and drop the unused thread key (adapters.json is
- * for real adapter control only — no reserved stubs / comments).
+ * Legacy: adapters.thread held Matter devices[].
+ * New: adapters.thread is RF/TBR (enabled/dataset/channel) — keep the object.
+ * Migrate devices into matter and strip devices from thread.
  */
 static bool migrate_thread_to_matter(cJSON *adapters_root)
 {
@@ -95,13 +95,20 @@ static bool migrate_thread_to_matter(cJSON *adapters_root)
     }
 
     cJSON *legacy = cJSON_GetObjectItem(adapters, "thread");
-    cJSON *matter = cJSON_GetObjectItem(adapters, "matter");
-    if (!legacy) {
+    if (!legacy || !cJSON_IsObject(legacy)) {
         return false;
     }
 
-    const cJSON *legacy_devices = cJSON_GetObjectItem(legacy, "devices");
-    const bool legacy_has_devices = cJSON_IsArray(legacy_devices) && cJSON_GetArraySize(legacy_devices) > 0;
+    cJSON *legacy_devices = cJSON_GetObjectItem(legacy, "devices");
+    const bool legacy_has_devices_key = cJSON_IsArray(legacy_devices);
+    const bool legacy_has_devices =
+        legacy_has_devices_key && cJSON_GetArraySize(legacy_devices) > 0;
+    if (!legacy_has_devices_key) {
+        /* Already RF-shaped thread config. */
+        return false;
+    }
+
+    cJSON *matter = cJSON_GetObjectItem(adapters, "matter");
     const bool legacy_enabled = cJSON_IsTrue(cJSON_GetObjectItem(legacy, "enabled"));
     bool changed = false;
 
@@ -141,8 +148,19 @@ static bool migrate_thread_to_matter(cJSON *adapters_root)
         }
     }
 
-    cJSON_DeleteItemFromObject(adapters, "thread");
+    cJSON_DeleteItemFromObject(legacy, "devices");
+    /* RF enable is independent of legacy Matter enable. After moving devices to
+     * matter, keep Thread BR available when the devices[] key was only an empty
+     * leftover; only force-disable when we migrated real Matter devices (old
+     * "thread meant matter" layouts often left RF unused). */
+    cJSON_DeleteItemFromObject(legacy, "enabled");
+    cJSON_AddBoolToObject(legacy, "enabled", !legacy_has_devices);
+    if (!cJSON_HasObjectItem(legacy, "dataset")) {
+        cJSON_AddNullToObject(legacy, "dataset");
+    }
     changed = true;
+    ESP_LOGI(TAG, "migrated legacy thread.devices → matter; kept adapters.thread for RF (enabled=%d)",
+             legacy_has_devices ? 0 : 1);
     return changed;
 }
 

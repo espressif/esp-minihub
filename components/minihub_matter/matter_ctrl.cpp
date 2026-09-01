@@ -12,14 +12,29 @@
 #include <string>
 #include "esp_log.h"
 #include "minihub_provision.h"
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+#include "minihub_thread.h"
+#endif
 #include <esp_matter.h>
 #include <esp_matter_controller_client.h>
 #include <esp_matter_controller_cluster_command.h>
 #include <esp_matter_controller_pairing_command.h>
 #include <esp_matter_controller_read_command.h>
 #include <app-common/zap-generated/ids/Clusters.h>
+#include <controller/CHIPDeviceController.h>
 #include <controller/CommissioningDelegate.h>
+#include <controller/SetUpCodePairer.h>
+#include <lib/address_resolve/AddressResolve.h>
+#include <lib/dnssd/Advertiser.h>
+#include <lib/dnssd/Resolver.h>
 #include <platform/CHIPDeviceLayer.h>
+#include <platform/ThreadStackManager.h>
+#if CONFIG_ENABLE_MATTER_OVER_THREAD
+#include <platform/ESP32/OpenthreadLauncher.h>
+#include "esp_ot_config.h"
+#include "esp_openthread.h"
+#include "esp_openthread_types.h"
+#endif
 
 static const char *TAG = "matter_ctrl";
 
@@ -108,6 +123,29 @@ static esp_err_t validate_commission_node_id(uint64_t node_id)
     return ESP_OK;
 }
 
+/**
+ * DNS-SD discovery timeout often leaves PairingDelegate set without
+ * OnCommissioningFailure / OnPairingComplete — force-clear so the UI can retry.
+ */
+static bool ensure_pairing_slot_free(void)
+{
+    auto &client = esp_matter::controller::matter_controller_client::get_instance();
+    auto *commissioner = client.get_commissioner();
+    if (!commissioner) {
+        set_error("commissioner not ready");
+        return false;
+    }
+    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+    if (!s_pairing_in_progress && commissioner->GetPairingDelegate() == nullptr) {
+        return true;
+    }
+    ESP_LOGW(TAG, "clearing sticky pairing state (delegate=%d flag=%d)",
+             commissioner->GetPairingDelegate() != nullptr, s_pairing_in_progress);
+    commissioner->RegisterPairingDelegate(nullptr);
+    s_pairing_in_progress = false;
+    return true;
+}
+
 static std::string normalize_pairing_code(const char *pairing_code)
 {
     if (!pairing_code || !pairing_code[0]) {
@@ -168,6 +206,25 @@ esp_err_t minihub_matter_init(void)
         return err;
     }
 
+    /* Commissioner-only builds skip Matter Server / DnssdServer::StartServer().
+     * With chip_mdns=platform, FindOperational needs DiscoveryImplPlatform Init
+     * or ResolveNodeId returns CHIP_ERROR_INCORRECT_STATE immediately. */
+    {
+        CHIP_ERROR cerr = chip::Dnssd::Resolver::Instance().Init(chip::DeviceLayer::UDPEndPointManager());
+        if (cerr != CHIP_NO_ERROR && cerr != CHIP_ERROR_INCORRECT_STATE) {
+            ESP_LOGW(TAG, "Dnssd Resolver::Init: %" CHIP_ERROR_FORMAT, cerr.Format());
+        }
+        cerr = chip::Dnssd::ServiceAdvertiser::Instance().Init(chip::DeviceLayer::UDPEndPointManager());
+        if (cerr != CHIP_NO_ERROR && cerr != CHIP_ERROR_INCORRECT_STATE) {
+            ESP_LOGW(TAG, "Dnssd Advertiser::Init: %" CHIP_ERROR_FORMAT, cerr.Format());
+        }
+        /* CASESessionManager::Init normally does this; re-assert after Dnssd Init. */
+        cerr = chip::AddressResolve::Resolver::Instance().Init(&chip::DeviceLayer::SystemLayer());
+        if (cerr != CHIP_NO_ERROR) {
+            ESP_LOGW(TAG, "AddressResolve::Init: %" CHIP_ERROR_FORMAT, cerr.Format());
+        }
+    }
+
     register_pairing_callbacks();
     s_started = true;
     set_error(NULL);
@@ -175,9 +232,85 @@ esp_err_t minihub_matter_init(void)
     return ESP_OK;
 }
 
+esp_err_t minihub_matter_attach_thread(void)
+{
+#if !CONFIG_ENABLE_MATTER_OVER_THREAD
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    static bool s_attached;
+    if (!s_started) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    /* esp_openthread_get_instance() is always non-NULL (static Instance). */
+    if (!minihub_thread_ready()) {
+        ESP_LOGW(TAG, "attach_thread: Thread BR not ready");
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s_attached && chip::DeviceLayer::ConnectivityMgr().IsThreadProvisioned()) {
+        return ESP_OK;
+    }
+
+    /* openthread_init_stack() asserts s_platform_config before noticing OT is
+     * already up — seed the same platform config MiniHub used to start BR. */
+    static esp_openthread_platform_config_t s_plat = {
+        .radio_config = ESP_OPENTHREAD_DEFAULT_RADIO_CONFIG(),
+        .host_config = ESP_OPENTHREAD_DEFAULT_HOST_CONFIG(),
+        .port_config = ESP_OPENTHREAD_DEFAULT_PORT_CONFIG(),
+    };
+    esp_err_t err = set_openthread_platform_config(&s_plat);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "set_openthread_platform_config: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    /* Do not hold CHIP stack lock here: InitThreadStack takes the OT lock and
+     * may post platform events that need the CHIP lock. */
+    CHIP_ERROR cerr = chip::DeviceLayer::ThreadStackMgr().InitThreadStack();
+    if (cerr != CHIP_NO_ERROR) {
+        ESP_LOGW(TAG, "ThreadStackMgr InitThreadStack: %" CHIP_ERROR_FORMAT, cerr.Format());
+        set_error("thread stack attach failed");
+        return ESP_FAIL;
+    }
+
+    s_attached = true;
+    bool provisioned = chip::DeviceLayer::ConnectivityMgr().IsThreadProvisioned();
+    ESP_LOGI(TAG, "CHIP ThreadStack attached (provisioned=%d)", provisioned ? 1 : 0);
+    return ESP_OK;
+#endif
+}
+
 bool minihub_matter_ready(void)
 {
     return s_started;
+}
+
+static esp_err_t pairing_code_ble_ethernet(chip::NodeId node_id, const char *payload)
+{
+    /* BLE discovery, no Wi-Fi/Thread credentials — Ethernet (or already-linked) devices. */
+    chip::Controller::CommissioningParameters params;
+    auto &client = esp_matter::controller::matter_controller_client::get_instance();
+    auto *commissioner = client.get_commissioner();
+    if (!commissioner) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (commissioner->GetPairingDelegate() != nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    commissioner->RegisterPairingDelegate(&esp_matter::controller::pairing_command::get_instance());
+    CHIP_ERROR cerr = commissioner->PairDevice(node_id, payload, params, chip::Controller::DiscoveryType::kAll);
+    return (cerr == CHIP_NO_ERROR) ? ESP_OK : ESP_FAIL;
+}
+
+static void ensure_dnssd_ready(void)
+{
+    CHIP_ERROR err = chip::Dnssd::Resolver::Instance().Init(chip::DeviceLayer::UDPEndPointManager());
+    ESP_LOGI(TAG, "pre-commission Dnssd Resolver::Init -> %" CHIP_ERROR_FORMAT, err.Format());
+    err = chip::Dnssd::ServiceAdvertiser::Instance().Init(chip::DeviceLayer::UDPEndPointManager());
+    ESP_LOGI(TAG, "pre-commission Advertiser inited=%d -> %" CHIP_ERROR_FORMAT,
+             chip::Dnssd::ServiceAdvertiser::Instance().IsInitialized() ? 1 : 0, err.Format());
+    err = chip::AddressResolve::Resolver::Instance().Init(&chip::DeviceLayer::SystemLayer());
+    ESP_LOGI(TAG, "pre-commission AddressResolve::Init -> %" CHIP_ERROR_FORMAT " thread_prov=%d", err.Format(),
+             chip::DeviceLayer::ConnectivityMgr().IsThreadProvisioned() ? 1 : 0);
 }
 
 esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairing_code,
@@ -194,9 +327,7 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
         ESP_LOGW(TAG, "commission refused: bad node_id");
         return err;
     }
-    if (s_pairing_in_progress) {
-        set_error("pairing already in progress");
-        ESP_LOGW(TAG, "commission refused: pairing already in progress");
+    if (!ensure_pairing_slot_free()) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -208,6 +339,9 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
 
     char ssid[33] = {0};
     char pass[65] = {0};
+    uint8_t dataset_buf[256];
+    size_t dataset_len = 0;
+
     if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
         if (wifi_ssid && wifi_ssid[0]) {
             strncpy(ssid, wifi_ssid, sizeof(ssid) - 1);
@@ -230,24 +364,57 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
             set_error("ble_wifi needs wifi_ssid (or Hub provision Wi-Fi)");
             return ESP_ERR_INVALID_ARG;
         }
+    } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+        if (!minihub_thread_ready()) {
+            set_error("ble_thread needs Thread BR running (adapters.thread.enabled)");
+            return ESP_ERR_INVALID_STATE;
+        }
+        esp_err_t derr = minihub_thread_dataset_copy(dataset_buf, sizeof(dataset_buf), &dataset_len);
+        if (derr != ESP_OK || dataset_len == 0) {
+            set_error("ble_thread: no active Thread dataset");
+            return derr == ESP_OK ? ESP_ERR_INVALID_STATE : derr;
+        }
+#else
+        set_error("ble_thread requires CONFIG_MINIHUB_THREAD_ADAPTER");
+        return ESP_ERR_NOT_SUPPORTED;
+#endif
     }
 
     s_pairing_in_progress = true;
     set_error(NULL);
 
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+    ensure_dnssd_ready();
     if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
         ESP_LOGI(TAG, "commission BLE+WiFi node=%" PRIu64, node_id);
         err = esp_matter::controller::pairing_code_wifi(static_cast<chip::NodeId>(node_id), ssid, pass,
                                                         code.c_str());
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+    } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
+        ESP_LOGI(TAG, "commission BLE+Thread node=%" PRIu64 " dataset_len=%u", node_id,
+                 (unsigned)dataset_len);
+        err = esp_matter::controller::pairing_code_thread(static_cast<chip::NodeId>(node_id), code.c_str(),
+                                                          dataset_buf, static_cast<uint8_t>(dataset_len));
+#endif
+    } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET) {
+        ESP_LOGI(TAG, "commission BLE+Ethernet node=%" PRIu64, node_id);
+        err = pairing_code_ble_ethernet(static_cast<chip::NodeId>(node_id), code.c_str());
     } else {
         ESP_LOGI(TAG, "commission network-only node=%" PRIu64, node_id);
         err = esp_matter::controller::pairing_code(static_cast<chip::NodeId>(node_id), code.c_str());
     }
     if (err != ESP_OK) {
         s_pairing_in_progress = false;
-        set_error(discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI ? "pairing_code_wifi failed"
-                                                                : "pairing_code failed");
+        if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
+            set_error("pairing_code_wifi failed");
+        } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
+            set_error("pairing_code_thread failed");
+        } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET) {
+            set_error("pairing_code_ble_ethernet failed");
+        } else {
+            set_error("pairing_code failed");
+        }
         return err;
     }
     return ESP_OK;
@@ -268,8 +435,7 @@ esp_err_t minihub_matter_commission_pin(uint64_t node_id, uint32_t setup_pin)
     if (err != ESP_OK) {
         return err;
     }
-    if (s_pairing_in_progress) {
-        set_error("pairing already in progress");
+    if (!ensure_pairing_slot_free()) {
         return ESP_ERR_INVALID_STATE;
     }
     s_pairing_in_progress = true;
@@ -331,6 +497,11 @@ cJSON *minihub_matter_status_json(void)
     cJSON_AddBoolToObject(root, "commissioned", s_commissioned);
     cJSON_AddBoolToObject(root, "pairing", s_pairing_in_progress);
     cJSON_AddStringToObject(root, "mode", "commissioner");
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+    cJSON_AddBoolToObject(root, "thread_br_ready", minihub_thread_ready());
+#else
+    cJSON_AddBoolToObject(root, "thread_br_ready", false);
+#endif
     if (s_last_error[0]) {
         cJSON_AddStringToObject(root, "last_error", s_last_error);
     }
