@@ -23,8 +23,6 @@
 #include "esp_coexist.h"
 #endif
 
-static const char *TAG = "bm_stack";
-
 static minihub_ble_mesh_device_cb_t s_on_device;
 static minihub_ble_mesh_attr_cb_t s_on_attr;
 static ble_mesh_stack_ready_cb_t s_on_ready;
@@ -32,6 +30,8 @@ static void *s_cb_ctx;
 static int64_t s_permit_until_ms;
 static bool s_running;
 #if CONFIG_MINIHUB_BLE_MESH_SDK
+static const char *TAG = "bm_stack";
+
 static bool s_mesh_inited; /* esp_ble_mesh_init done; survives soft disable */
 /** True while provisioner is enabled (VALID_PROV). Idle=off so Zigbee can TX. */
 static bool s_prov_scan_on;

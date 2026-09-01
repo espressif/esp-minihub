@@ -30,6 +30,7 @@ profiles:
       - minihub_ota
       - minihub_provision
       - minihub_matter
+      - minihub_thread
       - minihub_rainmaker
       - minihub_net
       - gen_bmgr_codes
@@ -38,6 +39,7 @@ profiles:
       - adapter_ble_mesh
       - adapter_modbus
       - adapter_matter
+      - adapter_thread
       - minihub_zigbee
       - minihub_ble_mesh
       - minihub_ble_gatt
@@ -60,6 +62,9 @@ profiles:
       - name: matter
         kconfig: MINIHUB_MATTER_ADAPTER
         dynamic: true
+        host_static: true
+      - name: thread
+        kconfig: MINIHUB_THREAD_ADAPTER
         host_static: true
     idf_dependencies:
       joltwallet/littlefs: ~=1.21.0

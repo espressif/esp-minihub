@@ -6,6 +6,11 @@
       "port": 1883,
       "devices": []
     },
+    "thread": {
+      "enabled": false,
+      "dataset": null,
+      "channel": null
+    },
     "matter": {
       "enabled": false,
       "devices": []

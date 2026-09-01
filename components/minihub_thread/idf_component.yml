@@ -1,0 +1,6 @@
+## dependencies:
+##   espressif/esp_rcp_update: "*"
+## CHIP OpenThread BR builds expect this component name (espressif__esp_rcp_update).
+
+dependencies:
+  espressif/esp_rcp_update: "^1.0.0"

@@ -11,6 +11,9 @@ endif()
 if(CONFIG_MINIHUB_BLE_MESH_SDK)
     list(APPEND _HUB_REQUIRES minihub_ble_mesh)
 endif()
+if(CONFIG_MINIHUB_THREAD_ADAPTER)
+    list(APPEND _HUB_REQUIRES minihub_thread)
+endif()
 
 idf_component_register(
     SRCS "hub_reload.c" "hub_point_remove.c"

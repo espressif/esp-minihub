@@ -1,14 +1,19 @@
 {
   "adapters": {
-    "zigbee": {
-      "enabled": true,
-      "devices": []
+    "thread": {
+      "enabled": false,
+      "dataset": null,
+      "channel": null
     },
-    "ble_mesh": {
+    "matter": {
       "enabled": false,
       "devices": []
     },
-    "matter": {
+    "zigbee": {
+      "enabled": false,
+      "devices": []
+    },
+    "ble_mesh": {
       "enabled": false,
       "devices": []
     }

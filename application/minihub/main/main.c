@@ -39,6 +39,9 @@
 #if CONFIG_MINIHUB_MATTER_ADAPTER
 #include "minihub_matter.h"
 #endif
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+#include "minihub_thread.h"
+#endif
 #if CONFIG_MINIHUB_RAINMAKER
 #include "minihub_rainmaker.h"
 #endif
@@ -161,7 +164,7 @@ void app_main(void)
         return;
     }
 
-    /* Net before Matter so the stack starts after ETH (or Wi-Fi) has an address. */
+    /* Net before Matter/Thread so stacks start after ETH (or Wi-Fi) has an address. */
     err = minihub_net_init();
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "net init failed: %s (continuing for local UI)", esp_err_to_name(err));
@@ -169,7 +172,9 @@ void app_main(void)
 
 #if CONFIG_MINIHUB_MATTER_ADAPTER
     /* Matter/CHIP brings up NimBLE; only start when adapters.json enables it.
-     * Otherwise Zigbee ED joining shares RF with idle BLE for no benefit. */
+     * Otherwise Zigbee ED joining shares RF with idle BLE for no benefit.
+     * Start Matter before Thread so CHIP EspDnssdInit can call mdns_init()
+     * first (it requires ESP_OK, not ESP_ERR_INVALID_STATE). */
     bool matter_enabled = true;
     if (adapters_cfg) {
         const cJSON *section = cJSON_GetObjectItem(adapters_cfg, "adapters");
@@ -193,6 +198,28 @@ void app_main(void)
         minihub_heap_log();
     } else {
         ESP_LOGI(TAG, "Matter skipped (adapters.json matter.enabled=false)");
+    }
+#endif
+
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+    {
+        EventGroupHandle_t net_eg = minihub_net_event_group();
+        if (net_eg != NULL) {
+            (void)xEventGroupWaitBits(net_eg, MINIHUB_NET_GOT_IP_BIT, pdFALSE, pdFALSE,
+                                      pdMS_TO_TICKS(15000));
+        }
+        err = minihub_thread_init();
+        if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
+            ESP_LOGW(TAG, "Thread BR init failed: %s", esp_err_to_name(err));
+        }
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+        else if (minihub_matter_ready()) {
+            err = minihub_matter_attach_thread();
+            if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
+                ESP_LOGW(TAG, "Matter Thread attach: %s", esp_err_to_name(err));
+            }
+        }
+#endif
     }
 #endif
 

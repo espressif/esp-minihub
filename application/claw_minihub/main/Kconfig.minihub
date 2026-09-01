@@ -200,13 +200,16 @@ menu "MiniHub"
             separate option (MINIHUB_THREAD_ADAPTER).
 
     config MINIHUB_THREAD_ADAPTER
-        bool "Enable Thread adapter (border router / radio — future)"
+        bool "Enable Thread radio (OpenThread Border Router)"
         default n
-        select MINIHUB_MATTER_ADAPTER
+        select OPENTHREAD_ENABLED
+        select ESP_COEX_SW_COEXIST_ENABLE
         help
-            Future Thread border router / radio path. Selecting this also
-            enables the Matter adapter (Thread Matter devices). Wi-Fi-only
-            Matter does not require this option.
+            Build OpenThread as a Border Router (IEEE 802.15.4). Runtime enable
+            is adapters.json → adapters.thread.enabled. Mutual exclusion with
+            the Zigbee stack is enforced by build_firmware.py (shared radio).
+            Matter is a separate layer (MINIHUB_MATTER_ADAPTER); enable both
+            stacks to commission Matter-over-Thread devices.
 
     config MINIHUB_MODBUS
         bool "Enable Modbus client (esp-modbus TCP / RTU)"
