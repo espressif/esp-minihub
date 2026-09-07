@@ -1,0 +1,13 @@
+---
+description: Host firmware product (application/, Kconfig, seeds, radio stacks)
+globs: application/**,config/**,components/minihub_*/**,components/adapters/**
+alwaysApply: false
+---
+
+# Host product changes
+
+1. Read `.cursor/skills/minihub-host/SKILL.md`.
+2. Change a **product** (`application/<app>/`) for board, partitions, `manifest.yml`, `config/sdkconfig/app.yml`, and JSON seeds. Change `config/minihub_manifest.yml` `_host_base` only when all Host products need it.
+3. Radio stacks are CLI args to `tools/build_firmware.py` (`zigbee`, `ble_mesh`, `matter`, `thread`). `thread` and `zigbee` are mutually exclusive.
+4. Do not add Store plugins as Host `require`. Factory preinstall uses `store_preinstall` in the app manifest.
+5. After manifest edits: `MINIHUB_APP=<app> python3 tools/sync_host_manifest.py`.

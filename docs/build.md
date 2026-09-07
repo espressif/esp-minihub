@@ -11,7 +11,7 @@
 | **Runtime config seed** | `application/<app>/config/{adapters,rules,scenes}.json` → else repo `config/` |
 | **Sdkconfig recipe** | `application/<app>/config/sdkconfig/app.yml` (one per product) |
 
-Sync: `MINIHUB_APP=<app> python tools/sync_host_manifest.py`. New Host-style products add an app folder + `manifest.yml`; do not edit the shared base unless changing Core requires. Claw-style apps set `hand_maintained: true` to skip generated `idf_component.yml` / `adapters_setup`. Factory Store modules: `store_preinstall: [<id>, …]`.
+Sync: `MINIHUB_APP=<app> python tools/sync_host_manifest.py`. New Host-style products add an app folder + `manifest.yml`; do not edit the shared base unless changing Core requires. Products that keep `idf_component.yml` / `adapters_setup` by hand may set `hand_maintained: true`. Factory Store modules: `store_preinstall: [<id>, …]`.
 
 There is no separate `MINIHUB_PROFILE`. Optional HW recipes live under `variants/` (sdkconfig) or `manifest.yml` → `variants.lcd`; apply sdkconfig variants with `tools/apply_sdkconfig_variant.sh`.
 

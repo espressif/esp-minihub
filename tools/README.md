@@ -5,6 +5,7 @@
 | `build_firmware.py` | Build product (`-app` / `MINIHUB_APP`) / modules / merge |
 | `apply_sdkconfig_variant.sh` | Copy `variants/<name>.yml` → `app.yml` |
 | `compose_sdkconfig.py` | Compose sdkconfig defaults from `app.yml` + features |
+| `new_store_module.py` | Scaffold L1/L2/L3 from `docs/module_sdk/templates/` |
 | `pack_store_module.py` | `pack` → `.mhub`; `mhmd` → MHMD wrap |
 | `build_store_modules.py` | Build + pack native Store modules |
 | `product_assets.py` | Resolve app/repo config JSON; list `store_preinstall` |

@@ -1,9 +1,19 @@
 # Store-installable modules
 
 Place module sources as siblings under this directory (`components/store_modules/<id>/`).
-Public Host ships **`miot`** here as an L3 Store plugin (pack to `miot.mhub`); it is not a Host `require`.
+They ship as Store `.mhub`, not as Host `require`.
 
-Factory preinstall into device `/store/modules/<id>/` is **product-scoped**: list ids in `application/<app>/manifest.yml` as `store_preinstall: [miot, …]`. The optional `"preinstall"` field in `module.json` is **not** used for factory bundling (kept for tooling/docs only).
+New modules (use templates, not an existing vendor plugin):
+
+```bash
+python3 tools/new_store_module.py --tier l1 --id my_pack
+python3 tools/new_store_module.py --tier l2 --id my_js
+python3 tools/new_store_module.py --tier l3 --id my_native
+```
+
+Templates: `docs/module_sdk/templates/`. Agent skills: `.cursor/skills/minihub-plugin-l1` … `l3`.
+
+Factory preinstall into device `/store/modules/<id>/` is **product-scoped**: list ids in `application/<app>/manifest.yml` as `store_preinstall: [<id>, …]`. The optional `"preinstall"` field in `module.json` is **not** used for factory bundling (kept for tooling/docs only).
 
 | Tier | Typical contents | Deploy artifact |
 |------|------------------|-----------------|

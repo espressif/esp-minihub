@@ -1,0 +1,9 @@
+{
+  "id": "PLACEHOLDER_ID",
+  "name": "PLACEHOLDER_NAME",
+  "version": "0.1.0",
+  "enabled": true,
+  "kind": "module",
+  "runtime": "js",
+  "description": "L2 JS hello: log once via host.log"
+}

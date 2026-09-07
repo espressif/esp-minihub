@@ -262,7 +262,7 @@ def iter_packable_ids() -> list[str]:
     if not STORE_MODULES.is_dir():
         return ids
     for d in sorted(STORE_MODULES.iterdir()):
-        if not d.is_dir() or d.name.startswith("."):
+        if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
             continue
         if (d / "module.json").is_file():
             ids.append(d.name)
