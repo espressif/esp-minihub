@@ -19,6 +19,7 @@ Do not add vendor cloud credentials or default device rules to Host `config/` fo
 
 Sources (optional): `components/store_modules/<id>/`.  
 Scaffold: `python3 tools/new_store_module.py --tier l1|l2|l3 --id <id>` (templates in `docs/module_sdk/templates/`).  
+IDE MCP for authors: `python3 tools/minihub_plugin_mcp.py` (see `docs/module_sdk/README.md`).  
 Deploy root: `MINIHUB_STORE_DEPLOY` (default `~/workspace/minihub_store`).
 
 ```bash

@@ -11,6 +11,8 @@ description: Create or edit MiniHub Store L3 native plugins (MHMD .so, minihub_m
 python3 tools/new_store_module.py --tier l3 --id my_native --name "My native"
 ```
 
+IDE MCP can scaffold L3 files but **cannot** compile `.so`.
+
 Start from the L3 template, not an existing vendor adapter.
 
 ## Must

@@ -13,6 +13,8 @@ Needs `CONFIG_MINIHUB_DYNAMIC_MODULES` and `CONFIG_MINIHUB_JS_PLUGINS` on the Ho
 python3 tools/new_store_module.py --tier l2 --id my_js --name "My JS"
 ```
 
+Or IDE MCP: `scaffold_plugin` with `tier=l2`. Do not invent `host.*` fields; ask `plugin_guide` topic `js_api`.
+
 ## Files
 
 - `module.json`: `"runtime": "js"`, `kind`: `"module"`

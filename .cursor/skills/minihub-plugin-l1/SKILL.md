@@ -13,6 +13,8 @@ L1 is **config only**: `module.json` (+ optional `inject` / `requires`). No `mai
 python3 tools/new_store_module.py --tier l1 --id my_pack --name "My pack"
 ```
 
+Or IDE MCP: `scaffold_plugin` with `tier=l1` (`python3 tools/minihub_plugin_mcp.py`).
+
 ## `module.json`
 
 - `id` = directory name under `components/store_modules/`
