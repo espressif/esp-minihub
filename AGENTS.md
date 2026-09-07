@@ -22,6 +22,6 @@ Host firmware must stay **ecosystem-agnostic**: do not bake vendor cloud tokens,
 | Product | Notes |
 |---------|--------|
 | `application/minihub` | Public Host (default) |
-| `application/claw_minihub` | Optional Claw + MCP when that tree is present |
 
-MCP (`components/minihub_mcp_server`) path-depends on `esp-claw` under `claw_minihub` when that product is built.
+Optional on-device MCP tools: `components/minihub_mcp_server`, enabled with
+`CONFIG_MINIHUB_MCP_SERVER` in menuconfig (requires `components/esp-claw` submodule).

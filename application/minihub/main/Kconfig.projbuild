@@ -252,6 +252,15 @@ menu "MiniHub"
             (CONFIG_ESP_RMAKER_SELF_CLAIM) with BLE Mesh. Not a build_firmware
             radio stack — enable via sdkconfig / product defaults.
 
+    config MINIHUB_MCP_SERVER
+        bool "Enable on-device MCP tool server (Hub tools for agents)"
+        default n
+        help
+            Register MiniHub REST-equivalent tools (points.*, hub.api,
+            command.invoke, …) via components/minihub_mcp_server.
+            Requires git submodule components/esp-claw (cap_mcp_server).
+            LAN agents may still use REST/WebSocket when this is disabled.
+
     config MINIHUB_HEAP_LOG_INTERVAL_SEC
         int "Periodic internal/PSRAM heap log interval (seconds, 0=off)"
         default 30

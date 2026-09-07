@@ -11,9 +11,8 @@ Usage:
 
 Apps (-app / --app; folder under application/):
   minihub         Public Host (default)
-  claw_minihub    Claw + MCP product
 
-  Product = application/<app>/ (MINIHUB_APP), e.g. minihub / claw_minihub.
+  Product = application/<app>/ (MINIHUB_APP), e.g. minihub.
   Sdkconfig recipe: application/<app>/config/sdkconfig/app.yml
 
 Stacks (lowercase):
@@ -138,7 +137,7 @@ def usage(code: int = 0) -> None:
   ./tools/build_firmware.py modules [all|module_id ...]
   ./tools/build_firmware.py merge
 
-Apps: minihub (default) | claw_minihub
+Apps: minihub (default)
 Product: -app / MINIHUB_APP (application/<name>/)
 Stacks: ble_mesh | zigbee | matter | thread (default: zigbee ble_mesh)
 thread and zigbee are mutually exclusive (IEEE 802.15.4).
@@ -218,7 +217,7 @@ def parse_argv(argv: list[str]) -> tuple[str, str, list[str], list[str]]:
 
     if not stacks:
         app = resolve_app(cli_app)
-        stacks = [] if app == "claw_minihub" else list(DEFAULT_STACKS)
+        stacks = list(DEFAULT_STACKS)
     else:
         app = resolve_app(cli_app)
     return app, stacks, idf_args
@@ -426,29 +425,6 @@ def sync_stack_symbols_in_sdkconfig(stacks: list[str]) -> None:
         path.write_text(text, encoding="utf-8")
 
 
-def sync_claw_wifi_bss_in_sdkconfig() -> None:
-    """Keep net80211/Wi-Fi .bss in internal DRAM (Claw S31 + FAT before Wi-Fi init)."""
-    if APP_NAME != "claw_minihub":
-        return
-    path = APP_DIR / "sdkconfig"
-    if not path.is_file():
-        return
-    text = path.read_text(encoding="utf-8", errors="replace")
-    patches = [
-        (r"(?m)^CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=.*$", "CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=n"),
-        (r"(?m)^CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY=.*$", "CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY=n"),
-        (r"(?m)^CONFIG_ESP_ALLOW_BSS_SEG_EXTERNAL_MEMORY=.*$", "# CONFIG_ESP_ALLOW_BSS_SEG_EXTERNAL_MEMORY is not set"),
-    ]
-    changed = False
-    for pattern, replacement in patches:
-        new_text, n = re.subn(pattern, replacement, text)
-        if n:
-            text = new_text
-            changed = True
-    if changed:
-        path.write_text(text, encoding="utf-8")
-
-
 def sync_radio_memory_in_sdkconfig(stacks: list[str]) -> None:
     """Ensure radio+Wi-Fi builds keep enough internal DRAM (see radio_coexist_memory.defaults)."""
     if not any(s in stacks for s in ("thread", "zigbee", "ble_mesh")):
@@ -616,44 +592,6 @@ def ensure_thread_stack(stacks: list[str]) -> list[str]:
 
 def sdkconfig_defaults(stacks: list[str]) -> str:
     # Do not list board_manager.defaults here. esp_board_manager 0.5+ injects it.
-    if APP_NAME == "claw_minihub":
-        base = [
-            "sdkconfig.defaults",
-            "sdkconfig.defaults.minihub",
-            "sdkconfig.defaults.claw_board",
-        ]
-        # Optional shared eth fragments if this app defines the profile
-        feats: list[str] = []
-        try:
-            feats, _board = app_feature_list(ROOT, APP_NAME)
-            base.extend(expand_features(ROOT, APP_NAME, feats))
-        except FileNotFoundError:
-            pass
-        if "zigbee" in stacks:
-            base.append("config/sdkconfig/feature/zigbee.defaults")
-        if "ble_mesh" in stacks:
-            base.append("config/sdkconfig/feature/ble_mesh.defaults")
-        if "thread" in stacks:
-            base.append("config/sdkconfig/feature/thread.defaults")
-        if "matter" in stacks:
-            base.extend(
-                [
-                    "config/sdkconfig/feature/matter.defaults",
-                    "config/sdkconfig/feature/matter_memory.defaults",
-                    "config/sdkconfig/feature/matter_ble.defaults",
-                ]
-            )
-            if app_has_feature(ROOT, APP_NAME, "eth") or "eth" in feats:
-                base.append("config/sdkconfig/feature/matter_over_eth.defaults")
-        # After matter_memory (16384 reserve): radio coexist wins for Thread/BT+Wi-Fi headroom.
-        if "zigbee" in stacks or "ble_mesh" in stacks or "thread" in stacks:
-            base.append("config/sdkconfig/feature/radio_coexist_memory.defaults")
-        # After shared memory.defaults (BSS external=y): Claw Wi-Fi safety wins.
-        base.append("config/sdkconfig/claw_wifi_bss.defaults")
-        base.append("cmake/generated/sdkconfig_stacks.gen")
-        paths = append_local_overrides(ROOT, APP_NAME, base)
-        return ";".join(_sdkconfig_path_for_app(p) for p in paths)
-
     features, _board = app_feature_list(ROOT, APP_NAME)
     if rainmaker_build_enabled() and "rainmaker" not in features:
         features = list(features) + ["rainmaker"]
@@ -779,7 +717,7 @@ def ensure_board_manager() -> None:
             if line.startswith("board:"):
                 current = line.split(":", 1)[1].strip()
                 break
-    # claw_minihub (minihub_v2 style): local boards/ carries CONFIG_SPIRAM / FLASHSIZE.
+    # Local boards/ may carry CONFIG_SPIRAM / FLASHSIZE overrides for the product.
     # Without -c ./boards, bmgr uses the managed catalog board (codec-only) and PSRAM stays off.
     defaults_text = defaults.read_text(encoding="utf-8") if defaults.is_file() else ""
     local_boards_stale = boards_dir.is_dir() and "CONFIG_SPIRAM=y" not in defaults_text
@@ -857,7 +795,6 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
     write_stacks_gen(stacks)
     sync_stack_symbols_in_sdkconfig(stacks)
     sync_radio_memory_in_sdkconfig(stacks)
-    sync_claw_wifi_bss_in_sdkconfig()
     defaults = sdkconfig_defaults(stacks)
     idf_path = Path(os.environ.get("IDF_PATH", str(ROOT / "esp-idf")))
     espbaud = os.environ.get("ESPBAUD", "2000000")
@@ -887,11 +824,10 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
         env={**os.environ, "MINIHUB_APP": APP_NAME},
         check=True,
     )
-    # App git submodules (path-scoped; claw build never inits esp-rainmaker).
-    if APP_NAME == "claw_minihub":
-        ensure_git_submodule("application/claw_minihub/components/esp-claw")
     if use_rainmaker:
         ensure_esp_rainmaker()
+    if sdkconfig_has("CONFIG_MINIHUB_MCP_SERVER"):
+        ensure_git_submodule("components/esp-claw")
     # Re-apply local patches to managed_components/ (gitignored, re-downloaded by IDF CM).
     subprocess.run(
         [str(ROOT / "tools/apply_component_patches.sh")],

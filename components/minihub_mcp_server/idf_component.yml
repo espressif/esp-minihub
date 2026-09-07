@@ -1,5 +1,7 @@
-## MiniHub MCP server — Core via CMake REQUIRES; cap_mcp_server via esp-claw path (not on EXTRA_COMPONENT_DIRS).
+## MiniHub MCP server. cap_mcp_server is local (esp-claw submodule), not on the registry.
 dependencies:
   espressif/cjson: "^1.7.19"
   cap_mcp_server:
-    path: ../../application/claw_minihub/components/esp-claw/components/claw_capabilities/cap_mcp_server
+    path: ../esp-claw/components/claw_capabilities/cap_mcp_server
+    rules:
+      - if: "$CONFIG{MINIHUB_MCP_SERVER} == True"

@@ -1,3 +1,10 @@
+# Default Host builds leave components/esp-claw uninitialized. Register a stub so
+# IDF can still scan this directory without REQUIRES cap_mcp_server.
+if(NOT CONFIG_MINIHUB_MCP_SERVER)
+    idf_component_register()
+    return()
+endif()
+
 set(_MCP_REQUIRES
     minihub_core minihub_hub minihub_rules minihub_config minihub_store
     minihub_module minihub_ota minihub_net json cap_mcp_server

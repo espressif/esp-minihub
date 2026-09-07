@@ -19,12 +19,6 @@ list(APPEND EXTRA_COMPONENT_DIRS
     "${MINIHUB_REPO_ROOT}/components/adapters"
     "${MINIHUB_REPO_ROOT}/components/store_modules")
 
-# Claw-only facades (cap_mcp_server / MVP aggregator) — not part of public Host.
-set(EXCLUDE_COMPONENTS
-    minihub_mcp_server
-    minihub_mvp
-)
-
 # RainMaker: git submodule at application/minihub/components/esp-rainmaker.
 # Sibling ../esp-rainmaker still works as a fallback for local overrides.
 # Record MINIHUB_HAS_ESP_RAINMAKER in the CMake cache so board-manager / later

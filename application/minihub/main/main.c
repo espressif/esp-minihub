@@ -45,6 +45,10 @@
 #if CONFIG_MINIHUB_RAINMAKER
 #include "minihub_rainmaker.h"
 #endif
+#if CONFIG_MINIHUB_MCP_SERVER
+#include "cap_mcp_server.h"
+#include "minihub_mcp_server.h"
+#endif
 
 static const char *TAG = "minihub";
 
@@ -121,6 +125,23 @@ void app_main(void)
     if (err != ESP_OK) {
         return;
     }
+
+#if CONFIG_MINIHUB_MCP_SERVER
+    err = cap_mcp_server_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "cap_mcp_server_init failed: %s", esp_err_to_name(err));
+    } else {
+        err = minihub_mcp_server_init();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "MCP server init failed: %s", esp_err_to_name(err));
+        } else {
+            err = minihub_mcp_server_register_tools();
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "MCP register tools failed: %s", esp_err_to_name(err));
+            }
+        }
+    }
+#endif
 
     err = minihub_config_init();
     if (err != ESP_OK) {
@@ -342,6 +363,9 @@ void app_main(void)
         net_state = "up";
     }
     minihub_event_bus_publish("hub.ready", NULL);
+#if CONFIG_MINIHUB_MCP_SERVER
+    minihub_mcp_set_hub_ready(true);
+#endif
     ESP_LOGI(TAG, "MiniHub ready (net=%s prov=%s web_ui=%s lcd_ui=%s eth=%d wifi=%d)",
              net_state,
              minihub_provision_active() ? "active" : "off",

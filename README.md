@@ -11,7 +11,6 @@ Third-party ecosystems (e.g. MIoT) ship as **Store plugins**, not Host dependenc
 | Product | Path | Summary |
 |---------|------|---------|
 | **minihub** | [`application/minihub/`](application/minihub/) | Public Host (Web / Store / adapters). Default networking is Ethernet-oriented; optional LCD recipe in that app’s README. Select with `-app minihub` / `MINIHUB_APP`. |
-| **claw_minihub** | `application/claw_minihub/` (optional) | Claw shell + MiniHub Core (local MCP) when that tree is present. |
 
 See [`application/README.md`](application/README.md) and [application/minihub/README.md](application/minihub/README.md).
 

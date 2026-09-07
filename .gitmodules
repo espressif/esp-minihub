@@ -1,5 +1,5 @@
-[submodule "application/claw_minihub/components/esp-claw"]
-	path = application/claw_minihub/components/esp-claw
+[submodule "components/esp-claw"]
+	path = components/esp-claw
 	url = https://github.com/espressif/esp-claw.git
 [submodule "application/minihub/components/esp-rainmaker"]
 	path = application/minihub/components/esp-rainmaker

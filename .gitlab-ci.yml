@@ -84,7 +84,6 @@ build:app:
     matrix:
       - APP:
           - minihub
-          - claw_minihub
   variables:
     MINIHUB_APP: "$APP"
   script:

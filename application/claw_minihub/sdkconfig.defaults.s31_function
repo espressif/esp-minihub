@@ -1,9 +1,0 @@
-# ESP32-S31-Function-CoreBoard-1 networking (v2 slim — no USB/RTSP/Modbus from v1)
-# PHY: Motorcomm YT8531DC-CA (RGMII). Board sdkconfig.defaults.board also sets these.
-# Claw wifi_manager owns STA; keep MINIHUB_NET_WIFI_STA=n (sdkconfig.defaults.minihub).
-CONFIG_MINIHUB_NET_ETH=y
-CONFIG_MINIHUB_NET_ETH_YT8531_INIT=y
-CONFIG_ETH_USE_ESP32_EMAC=y
-CONFIG_SPIRAM_SPEED_250M=y
-# S31 is IDF_ENV_BRINGUP → esptool defaults to --no-stub; force stub for 2Mbps flash.
-# CONFIG_ESPTOOLPY_NO_STUB is not set
