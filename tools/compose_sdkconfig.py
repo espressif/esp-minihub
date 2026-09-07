@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Compose SDKCONFIG_DEFAULTS from shared + per-app sdkconfig fragments.
 
-Product = application/<app>/ folder (MINIHUB_APP), e.g. minihub / claw_minihub.
+Product = application/<app>/ folder (MINIHUB_APP), e.g. minihub.
 Each product has one recipe: application/<app>/config/sdkconfig/app.yml
 Optional HW recipes: variants/*.yml (copy over app.yml when needed).
 """

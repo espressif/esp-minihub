@@ -4,7 +4,8 @@
 
 | Concept | Meaning |
 |---------|---------|
-| **Product** | `application/<name>/`, selected by `-app` / `MINIHUB_APP` (`minihub`, `claw_minihub`, …) |
+| **Product** | `application/<name>/`, selected by `-app` / `MINIHUB_APP` (`minihub`, …) |
+| **MCP tools** | Optional: `CONFIG_MINIHUB_MCP_SERVER=y` in menuconfig + `git submodule update --init components/esp-claw` |
 | **Product manifest** | `application/<app>/manifest.yml` (board / features / adapters / `store_preinstall`; may `extends: _host_base`) |
 | **Shared Host base** | `config/minihub_manifest.yml` (`profiles._host_base` only) |
 | **Runtime config seed** | `application/<app>/config/{adapters,rules,scenes}.json` → else repo `config/` |
@@ -34,10 +35,10 @@ Matter is **not** in the default stack (needs `ESP_MATTER_PATH` and extra flash/
 ```bash
 export ESP_MATTER_PATH=/path/to/esp-matter   # or use build_firmware default bootstrap
 ./tools/build_firmware.py -app minihub matter build
-./tools/build_firmware.py -app claw_minihub matter build
+./tools/build_firmware.py -app minihub matter build
 ```
 
-**Partition note:** default OTA app slots (e.g. claw `partitions.csv` 5 MiB) are often too small for a Matter commissioner image (~5.3 MiB+). Do **not** treat shrinking FAT/modstore in-tree as the product fix — enlarge `ota_0`/`ota_1` (or drop other stacks) in a local/custom partition table if the link step reports the binary does not fit, then flash that table once.
+**Partition note:** default OTA app slots (e.g. 5 MiB) are often too small for a Matter commissioner image (~5.3 MiB+). Do **not** treat shrinking FAT/modstore in-tree as the product fix — enlarge `ota_0`/`ota_1` (or drop other stacks) in a local/custom partition table if the link step reports the binary does not fit, then flash that table once.
 
 Runtime: set `adapters.matter.enabled: true` in `adapters.json` (product seeds keep Matter / BLE Mesh **off** by default). Commission via Web UI or MCP/API:
 

@@ -37,6 +37,10 @@ endif()
 # Always link USB MSC + RTSP recorder when present (also listed in manifest).
 list(APPEND MINIHUB_MAIN_REQUIRES minihub_usb_msc minihub_rtsp_cam minihub_js)
 
+if(CONFIG_MINIHUB_MCP_SERVER)
+    list(APPEND MINIHUB_MAIN_REQUIRES minihub_mcp_server)
+endif()
+
 # Store L3 plugins: pull into the IDF build graph so libadapter_*.so can be linked
 # from their archives. They are NOT registered as Host adapters when
 # CONFIG_MINIHUB_DYNAMIC_MODULES=y (see REGISTER_ADAPTER guards in store_modules).

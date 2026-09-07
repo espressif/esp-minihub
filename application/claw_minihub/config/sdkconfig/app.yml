@@ -1,8 +1,0 @@
-board: esp32_s31_function_coreboard_1
-features:
-  - common
-  - memory
-  - eth
-  - wifi_sta
-  - dynamic_modules
-  - main_task_stack

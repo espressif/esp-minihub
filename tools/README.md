@@ -17,6 +17,6 @@
 | `ui_font/` | LCD font subset |
 | `git-hooks/` | Local hooks |
 
-**Product** = `application/<name>/` only (`minihub`, `claw_minihub`).
+**Product** = `application/<name>/` only (`minihub`).
 
 See [docs/build.md](../docs/build.md).

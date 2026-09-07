@@ -40,10 +40,10 @@ while IFS= read -r app; do
   echo "======== build + merge application/${app} ========"
   # Per-app submodule init only (do not init the other app's deps).
   case "$app" in
-    claw_minihub)
-      git submodule update --init --depth 1 application/claw_minihub/components/esp-claw
-      ;;
     minihub)
+      if grep -q '^CONFIG_MINIHUB_MCP_SERVER=y' "application/${app}/sdkconfig" 2>/dev/null; then
+        git submodule update --init --depth 1 components/esp-claw
+      fi
       # RainMaker may be enabled by defaults / MINIHUB_BUILD_RAINMAKER
       if [[ "${MINIHUB_BUILD_RAINMAKER:-}" != "0" ]]; then
         git submodule update --init --depth 1 application/minihub/components/esp-rainmaker
