@@ -164,7 +164,7 @@ void app_main(void)
         return;
     }
 
-    /* Net before Matter/Thread so stacks start after ETH (or Wi-Fi) has an address. */
+    /* Net before Matter/Thread. Default route follows GOT_IP (ETH, else Wi-Fi, else prefer). */
     err = minihub_net_init();
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "net init failed: %s (continuing for local UI)", esp_err_to_name(err));
@@ -185,11 +185,6 @@ void app_main(void)
         }
     }
     if (matter_enabled) {
-        EventGroupHandle_t net_eg = minihub_net_event_group();
-        if (net_eg != NULL) {
-            (void)xEventGroupWaitBits(net_eg, MINIHUB_NET_GOT_IP_BIT, pdFALSE, pdFALSE,
-                                      pdMS_TO_TICKS(15000));
-        }
         minihub_heap_log();
         err = minihub_matter_init();
         if (err != ESP_OK) {
@@ -203,11 +198,6 @@ void app_main(void)
 
 #if CONFIG_MINIHUB_THREAD_ADAPTER
     {
-        EventGroupHandle_t net_eg = minihub_net_event_group();
-        if (net_eg != NULL) {
-            (void)xEventGroupWaitBits(net_eg, MINIHUB_NET_GOT_IP_BIT, pdFALSE, pdFALSE,
-                                      pdMS_TO_TICKS(15000));
-        }
         err = minihub_thread_init();
         if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
             ESP_LOGW(TAG, "Thread BR init failed: %s", esp_err_to_name(err));

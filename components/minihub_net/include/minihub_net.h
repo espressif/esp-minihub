@@ -36,11 +36,22 @@ esp_err_t minihub_net_start_wifi(void);
 /** True if any enabled uplink has a non-zero IPv4 address. */
 bool minihub_net_has_ip(void);
 
-/** Copy dotted IPv4 of preferred uplink into buf; false if none. */
+/**
+ * Copy dotted IPv4 of the uplink that currently has an address
+ * (Ethernet first, else Wi-Fi). False if neither has IPv4.
+ */
 bool minihub_net_get_ip(char *buf, size_t len);
 
-/** Preferred netif (ETH if preferred+up, else first with IP, else NULL). */
+/**
+ * Netif with IPv4: Ethernet first, else Wi-Fi, else NULL.
+ */
 esp_netif_t *minihub_net_get_netif(void);
+
+/**
+ * Select the default netif: Ethernet if it has IPv4, else Wi-Fi if it has IPv4,
+ * else Ethernet (if built) or Wi-Fi. Called on GOT_IP and link loss.
+ */
+void minihub_net_refresh_default_netif(void);
 
 /**
  * Log IPv4/gateway/DNS servers on the preferred netif, then resolve hostname

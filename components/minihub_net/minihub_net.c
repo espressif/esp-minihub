@@ -89,6 +89,57 @@ static void log_netif_dns(const char *ifname, esp_netif_t *netif)
     }
 }
 
+static bool netif_has_ip(esp_netif_t *netif)
+{
+    if (!netif) {
+        return false;
+    }
+    esp_netif_ip_info_t info;
+    return esp_netif_get_ip_info(netif, &info) == ESP_OK && info.ip.addr != 0;
+}
+
+/** Fallback when neither uplink has IPv4 yet: Ethernet if present, else Wi-Fi. */
+static esp_netif_t *preferred_netif(void)
+{
+#if CONFIG_MINIHUB_NET_ETH
+    if (s_eth_netif) {
+        return s_eth_netif;
+    }
+#endif
+#if CONFIG_MINIHUB_NET_WIFI_STA
+    return s_sta_netif;
+#else
+    return NULL;
+#endif
+}
+
+/** ETH with IPv4, else Wi-Fi with IPv4, else Ethernet (if built) / Wi-Fi. */
+static void refresh_default_netif(void)
+{
+    esp_netif_t *chosen = NULL;
+#if CONFIG_MINIHUB_NET_ETH
+    if (netif_has_ip(s_eth_netif)) {
+        chosen = s_eth_netif;
+    }
+#endif
+#if CONFIG_MINIHUB_NET_WIFI_STA
+    if (!chosen && netif_has_ip(s_sta_netif)) {
+        chosen = s_sta_netif;
+    }
+#endif
+    if (!chosen) {
+        chosen = preferred_netif();
+    }
+    if (chosen) {
+        esp_netif_set_default_netif(chosen);
+    }
+}
+
+void minihub_net_refresh_default_netif(void)
+{
+    refresh_default_netif();
+}
+
 /** If DHCP only gave one DNS (often the router), add a public backup for resolve failures. */
 static void ensure_dns_backup(esp_netif_t *netif)
 {
@@ -118,13 +169,7 @@ static void on_got_ip(const char *ifname, esp_netif_t *netif)
         xEventGroupSetBits(s_net_eg, MINIHUB_NET_GOT_IP_BIT);
     }
 
-#if CONFIG_MINIHUB_NET_PREFER_ETH
-    if (netif && s_eth_netif && netif == s_eth_netif) {
-        esp_netif_set_default_netif(s_eth_netif);
-    }
-#else
-    (void)netif;
-#endif
+    refresh_default_netif();
 
     ensure_dns_backup(netif);
     ESP_LOGI(TAG, "%s got IP", ifname ? ifname : "netif");
@@ -139,7 +184,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 {
     (void)arg;
     (void)event_data;
-#if !CONFIG_MINIHUB_MATTER_ADAPTER
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         /* During BLE/SoftAP provisioning the manager owns connect; auto-connect
          * here races set_config and yields ESP_ERR_WIFI_STATE. */
@@ -147,19 +191,16 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             esp_wifi_connect();
         }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        refresh_default_netif();
         if (!minihub_provision_busy()) {
             esp_wifi_connect();
         }
-    } else
-#endif
-    if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         on_got_ip("wifi", s_sta_netif);
-#if !CONFIG_MINIHUB_MATTER_ADAPTER
         esp_err_t err = esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "Wi-Fi set_ps failed: %s", esp_err_to_name(err));
         }
-#endif
     }
 }
 
@@ -192,14 +233,8 @@ static esp_err_t prepare_wifi(void)
 
 static esp_err_t start_wifi_sta(void)
 {
-#if CONFIG_MINIHUB_MATTER_ADAPTER
-    /* Matter owns connect/start; only hook IP status. */
-    esp_netif_ip_info_t ip_info;
-    if (s_sta_netif && esp_netif_get_ip_info(s_sta_netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
-        on_got_ip("wifi", s_sta_netif);
-    }
-    return ESP_OK;
-#else
+    /* CHIP ENABLE_WIFI_STATION is off (Matter over Thread/Eth); MiniHub still
+     * brings up STA for host IP. Default route follows GOT_IP (ETH, else Wi-Fi). */
     ESP_RETURN_ON_ERROR(ensure_wifi_driver_init(), TAG, "wifi init");
 
     wifi_config_t wifi_config = {0};
@@ -211,6 +246,12 @@ static esp_err_t start_wifi_sta(void)
         err = esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "Wi-Fi set_ps(MIN_MODEM) failed: %s", esp_err_to_name(err));
+        }
+        if (!minihub_provision_busy()) {
+            esp_err_t cerr = esp_wifi_connect();
+            if (cerr != ESP_OK && cerr != ESP_ERR_WIFI_CONN) {
+                ESP_LOGW(TAG, "Wi-Fi connect: %s", esp_err_to_name(cerr));
+            }
         }
         return ESP_OK;
     }
@@ -234,7 +275,6 @@ static esp_err_t start_wifi_sta(void)
     ESP_LOGE(TAG, "no Wi-Fi credentials and provisioning disabled");
     return err;
 #endif
-#endif /* MATTER */
 }
 #endif /* WIFI_STA */
 
@@ -293,6 +333,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base, int32_t ev
         break;
     case ETHERNET_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "Ethernet link down");
+        refresh_default_netif();
         break;
     case ETHERNET_EVENT_START:
         ESP_LOGI(TAG, "Ethernet started");
@@ -350,10 +391,6 @@ static esp_err_t start_eth(void)
     ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &eth_got_ip_handler, NULL),
                         TAG, "eth got ip");
 
-#if CONFIG_MINIHUB_NET_PREFER_ETH
-    esp_netif_set_default_netif(s_eth_netif);
-#endif
-
     ESP_RETURN_ON_ERROR(esp_eth_start(s_eth_handle), TAG, "eth start");
     return ESP_OK;
 }
@@ -403,18 +440,14 @@ esp_err_t minihub_net_init(void)
 
     s_started = true;
     (void)minihub_net_apply_saved_configs();
-    ESP_LOGI(TAG, "uplinks prepared: wifi=%d eth=%d prefer_eth=%d (wifi STA deferred)",
+    refresh_default_netif();
+    ESP_LOGI(TAG, "uplinks prepared: wifi=%d eth=%d (wifi STA deferred)",
 #if CONFIG_MINIHUB_NET_WIFI_STA
              1,
 #else
              0,
 #endif
 #if CONFIG_MINIHUB_NET_ETH
-             1,
-#else
-             0,
-#endif
-#if CONFIG_MINIHUB_NET_PREFER_ETH
              1
 #else
              0
@@ -446,18 +479,9 @@ esp_err_t minihub_net_start_wifi(void)
 #endif
 }
 
-static bool netif_has_ip(esp_netif_t *netif)
-{
-    if (!netif) {
-        return false;
-    }
-    esp_netif_ip_info_t info;
-    return esp_netif_get_ip_info(netif, &info) == ESP_OK && info.ip.addr != 0;
-}
-
 esp_netif_t *minihub_net_get_netif(void)
 {
-#if CONFIG_MINIHUB_NET_PREFER_ETH && CONFIG_MINIHUB_NET_ETH
+#if CONFIG_MINIHUB_NET_ETH
     if (netif_has_ip(s_eth_netif)) {
         return s_eth_netif;
     }
@@ -465,11 +489,6 @@ esp_netif_t *minihub_net_get_netif(void)
 #if CONFIG_MINIHUB_NET_WIFI_STA
     if (netif_has_ip(s_sta_netif)) {
         return s_sta_netif;
-    }
-#endif
-#if CONFIG_MINIHUB_NET_ETH
-    if (netif_has_ip(s_eth_netif)) {
-        return s_eth_netif;
     }
 #endif
     return NULL;

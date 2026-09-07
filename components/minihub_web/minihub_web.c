@@ -3179,7 +3179,6 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     const cJSON *ssid = cJSON_GetObjectItem(root, "wifi_ssid");
     const cJSON *wpass = cJSON_GetObjectItem(root, "wifi_password");
     bool merge_existing = !cJSON_IsBool(merge) || cJSON_IsTrue(merge);
-    bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
 
     uint64_t node_id = 0;
     if (cJSON_IsString(node)) {

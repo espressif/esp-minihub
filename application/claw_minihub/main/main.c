@@ -100,19 +100,6 @@ static void log_wifi_startup_config(const app_config_t *config)
              config->ap_behavior[0] ? config->ap_behavior : "keep");
 }
 
-#if CONFIG_MINIHUB_NET_ETH && CONFIG_MINIHUB_NET_PREFER_ETH
-static void prefer_eth_default_route(void)
-{
-    esp_netif_t *eth = minihub_net_eth_netif();
-    esp_netif_ip_info_t info = {0};
-
-    if (!eth || esp_netif_get_ip_info(eth, &info) != ESP_OK || info.ip.addr == 0) {
-        return;
-    }
-    esp_netif_set_default_netif(eth);
-}
-#endif
-
 static bool host_has_uplink(void)
 {
 #if CONFIG_MINIHUB_NET_ETH
@@ -145,11 +132,9 @@ static void on_wifi_state_changed(bool connected, void *user_ctx)
              status.mode ? status.mode : "off",
              ap_ssid ? ap_ssid : "(none)");
 
-#if CONFIG_MINIHUB_NET_ETH && CONFIG_MINIHUB_NET_PREFER_ETH
     if (connected) {
-        prefer_eth_default_route();
+        minihub_net_refresh_default_netif();
     }
-#endif
 
     esp_err_t err = app_claw_set_network_status(host_has_uplink(), ap_ssid);
     if (err != ESP_OK) {
@@ -560,9 +545,7 @@ static void start_wifi_and_portal(void)
         if (wait_err == ESP_OK) {
             wifi_manager_get_status(&status);
             ESP_LOGI(TAG, "Wi-Fi STA ready: %s", status.sta_ip);
-#if CONFIG_MINIHUB_NET_ETH && CONFIG_MINIHUB_NET_PREFER_ETH
-            prefer_eth_default_route();
-#endif
+            minihub_net_refresh_default_netif();
         } else if (wait_err == ESP_ERR_TIMEOUT) {
             wifi_manager_get_status(&status);
             ESP_LOGW(TAG,
