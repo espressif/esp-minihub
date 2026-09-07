@@ -96,23 +96,6 @@ static esp_err_t parse_devices(const cJSON *cfg)
     return ESP_OK;
 }
 
-static esp_err_t matter_module_rpc(const char *method, const cJSON *params, cJSON **out)
-{
-    (void)params;
-    if (!method || !out) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (strcmp(method, "status") == 0) {
-        cJSON *status = minihub_matter_status_json();
-        if (!status) {
-            return ESP_ERR_NO_MEM;
-        }
-        *out = status;
-        return ESP_OK;
-    }
-    return ESP_ERR_NOT_FOUND;
-}
-
 static esp_err_t matter_adapter_init(const cJSON *config)
 {
     s_device_count = 0;

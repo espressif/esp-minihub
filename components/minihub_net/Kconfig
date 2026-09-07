@@ -26,11 +26,6 @@ menu "MiniHub Networking"
             on Korvo1; Function CoreBoard has RJ45 and no LCD). Enable ETH only when
             LCD UI is disabled (MINIHUB_LCD_UI depends on !MINIHUB_NET_ETH).
 
-    config MINIHUB_NET_PREFER_ETH
-        bool "Prefer Ethernet as default route when both are up"
-        depends on MINIHUB_NET_WIFI_STA && MINIHUB_NET_ETH
-        default y
-
     config MINIHUB_NET_ETH_PHY_ADDR
         int "Ethernet PHY address (-1 = auto)"
         depends on MINIHUB_NET_ETH
