@@ -15,5 +15,5 @@ Examples:
 
 | Avoid | Use |
 |-------|-----|
-| `feature/miot-car-probe` | `feature/miot_car_probe` |
+| `feature/mqtt-cloud-probe` | `feature/mqtt_cloud_probe` |
 | `fix/ble-mesh-uuid` | `fix/ble_mesh_uuid` |

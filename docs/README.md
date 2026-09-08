@@ -6,4 +6,6 @@
 | [plugins_and_store.md](plugins_and_store.md) | Adapters, `.mhub`, Store packing |
 | [module_sdk/host_export_allowlist.json](module_sdk/host_export_allowlist.json) | Host ELF symbols plugins may leave undefined |
 
+Scripts under `tools/`: [tools/README.md](../tools/README.md).
+
 Agent policy: root [AGENTS.md](../AGENTS.md).

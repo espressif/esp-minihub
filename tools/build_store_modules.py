@@ -51,7 +51,7 @@ def list_binary_modules(store: Path = STORE) -> list[str]:
     if not store.is_dir():
         return ids
     for d in sorted(store.iterdir()):
-        if not d.is_dir():
+        if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
             continue
         mj, cm = d / "module.json", d / "CMakeLists.txt"
         if not mj.is_file() or not cm.is_file():

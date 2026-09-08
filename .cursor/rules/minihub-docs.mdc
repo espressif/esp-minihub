@@ -1,0 +1,14 @@
+---
+description: MiniHub programming guide (RST / Markdown) and docs build
+globs: docs/**/*.rst,docs/**/*.md,docs/conf_common.py,docs/Doxyfile,tools/build_docs.sh,tools/ci/build_docs.sh
+alwaysApply: false
+---
+
+# Documentation
+
+1. Read `.cursor/skills/minihub-docs/SKILL.md`.
+2. Prefer `docs/en/` + `docs/zh_CN/` RST when those trees exist; keep the same relative `.rst` paths in both languages.
+3. If only Markdown exists (`docs/build.md`, `docs/plugins_and_store.md`), edit those — do not invent a second RST tree on this branch.
+4. Build: `./tools/build_docs.sh` (uses `.venv-docs` when present). Warnings fail the build.
+5. Do not document deleted Kconfig (e.g. `CONFIG_MINIHUB_NET_PREFER_ETH`) or removed products (`application/claw_minihub`).
+6. Default route is `minihub_net_refresh_default_netif()` (Ethernet if it has IPv4, else Wi-Fi).

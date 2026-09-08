@@ -1,0 +1,21 @@
+{
+  "id": "PLACEHOLDER_ID",
+  "name": "PLACEHOLDER_NAME",
+  "version": "0.1.0",
+  "enabled": true,
+  "kind": "pack",
+  "runtime": "pack",
+  "description": "L1 pack: inject demo MQTT device (Host mqtt adapter must be enabled).",
+  "inject": {
+    "adapter": "mqtt",
+    "devices": [
+      {
+        "id": "PLACEHOLDER_ID_demo",
+        "name": "PLACEHOLDER_NAME demo",
+        "type": "switch",
+        "state_topic": "minihub/PLACEHOLDER_ID/state",
+        "command_topic": "minihub/PLACEHOLDER_ID/set"
+      }
+    ]
+  }
+}

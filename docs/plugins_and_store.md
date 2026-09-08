@@ -17,7 +17,9 @@ Do not add vendor cloud credentials or default device rules to Host `config/` fo
 | L2 | + `main.js` (+ `ui/` / `web/`) | `<id>.mhub` |
 | L3 | + native `.so` (MHMD) | `<id>.mhub` (+ MHMD intermediate) |
 
-Sources (optional): `components/store_modules/<id>/` (e.g. `miot` L3 plugin).  
+Sources (optional): `components/store_modules/<id>/`.  
+Scaffold: `python3 tools/new_store_module.py --tier l1|l2|l3 --id <id>` (templates in `docs/module_sdk/templates/`).  
+IDE MCP for authors: `python3 tools/minihub_plugin_mcp.py` (see `docs/module_sdk/README.md`).  
 Deploy root: `MINIHUB_STORE_DEPLOY` (default `~/workspace/minihub_store`).
 
 ```bash
@@ -54,10 +56,10 @@ Clear / retry:
 ```bash
 # Clear sticky guard and reload
 curl -X POST http://$HUB/api/modules -H 'Content-Type: application/json' \
-  -d '{"id":"miot","clear_load_guard":true,"reload":true}'
+  -d '{"id":"my_native","clear_load_guard":true,"reload":true}'
 # Or enable=true (also clears the guard)
 curl -X POST http://$HUB/api/modules -H 'Content-Type: application/json' \
-  -d '{"id":"miot","enabled":true,"reload":true}'
+  -d '{"id":"my_native","enabled":true,"reload":true}'
 ```
 
 `GET /api/modules` reports `load_guard` and `load_blocked`.

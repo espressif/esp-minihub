@@ -30,7 +30,7 @@ def iter_module_dirs() -> list[Path]:
     if not STORE_MODULES.is_dir():
         return dirs
     for d in sorted(STORE_MODULES.iterdir()):
-        if not d.is_dir() or d.name.startswith(".") or d.name in SKIP_DIRS:
+        if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_") or d.name in SKIP_DIRS:
             continue
         if (d / "module.json").is_file():
             dirs.append(d)
