@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rebuild deploy catalog.json from store_modules/*/module.json; sync .hub packages."""
+"""Rebuild deploy catalog.json from minihub_plugins/*/module.json; sync .hub packages."""
 
 from __future__ import annotations
 

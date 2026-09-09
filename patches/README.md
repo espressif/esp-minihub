@@ -12,6 +12,8 @@ Local fixes live here as unified diffs and are re-applied with:
 
 Run after `idf.py update-dependencies`, `idf.py reconfigure`, deleting an app
 `managed_components/`, or after refreshing a submodule (`git submodule update`).
+`build_firmware.py` also re-runs this after set-target / board-manager fetch so
+managed Soft SHA (etc.) applies on fresh CI before the final `idf.py build`.
 
 Optional patch header:
 
@@ -27,7 +29,8 @@ override with `MINIHUB_APP_DIR`). Patch paths still start with `managed_componen
 | Patch | Component | Purpose |
 |-------|-----------|---------|
 | `esp-boost-0.6.0-isr-safe-syscalls.patch` | `espressif/esp-boost` 0.6.0 (`e5a6e838`) | Zigbee + Wi-Fi coexistence: avoid `std::mutex` in `__wrap_write` for normal fds (ISR-safe). |
-| `esp-rainmaker-1.16.0-soft-sha-fallback.patch` | `esp-rainmaker` v1.16.0 (`afda50d`) | Soft SHA-256 when `CONFIG_MBEDTLS_HARDWARE_SHA` is off (GDMA hang workaround). |
+| `esp-rainmaker-1.16.0-soft-sha-fallback.patch` | Host git submodule `esp-rainmaker` v1.16.0 | Soft SHA-256 when `CONFIG_MBEDTLS_HARDWARE_SHA` is off (GDMA hang workaround). |
+| `esp-rainmaker-1.16.0-soft-sha-fallback-managed.patch` | `managed_components/espressif__esp_rainmaker` | Same Soft SHA fix for the registry package (`minihub_rainmaker` yml). |
 | `esp-rainmaker-1.16.0-defer-chal-resp-self-claim.patch` | `esp-rainmaker` v1.16.0 (`afda50d`) | Defer Challenge Response init during Self Claim so on-network APP mapping can start after claim. |
 | `esp-matter-chipoble-null-peer-write.patch` | `../esp-matter` CHIP nimble BLE | Null-check peer in `SendWriteRequest` after GAP disconnect (CHIPoBLE StandAloneAck race → Load access fault). |
 

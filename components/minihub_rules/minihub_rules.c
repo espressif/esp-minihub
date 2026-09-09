@@ -147,9 +147,6 @@ static bool point_is_light_or_plug(const minihub_point_t *p)
     if (!p || p->adapter[0] == '\0' || strcmp(p->adapter, "mock") == 0) {
         return false;
     }
-    if (strcmp(p->point_id, "switch/demo") == 0) {
-        return false;
-    }
     if (str_has_token(p->point_id, "pir") || str_has_token(p->point_id, "motion")) {
         return false;
     }

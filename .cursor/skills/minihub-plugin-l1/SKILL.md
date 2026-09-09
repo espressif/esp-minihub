@@ -17,7 +17,7 @@ Or IDE MCP: `scaffold_plugin` with `tier=l1` (`python3 tools/minihub_plugin_mcp.
 
 ## `module.json`
 
-- `id` = directory name under `components/store_modules/`
+- `id` = directory name under `components/minihub_plugins/`
 - `kind`: `"pack"` (or omit if `runtime` is `"pack"` / `config_only: true`)
 - `inject.adapter` must be a Host adapter that already exists (`mqtt`, `zigbee`, `ble_mesh`, `modbus`, …)
 - Do not invent a new radio stack here — that is Host or L3

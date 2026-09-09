@@ -1,0 +1,26 @@
+# Top-level MiniHub menu. Fragment files are Kconfig.minihub (not named
+# Kconfig) so IDF does not also mount them at the project root.
+# This file is auto-loaded when minihub_bundle is in the build graph.
+menu "MiniHub"
+
+    rsource "../../components/minihub_core/Kconfig.minihub"
+    rsource "../../components/minihub_auth/Kconfig.minihub"
+    rsource "../../components/minihub_ble_mesh/Kconfig.minihub"
+    rsource "../../components/minihub_js/Kconfig.minihub"
+    rsource "../../components/minihub_lcd/Kconfig.minihub"
+    rsource "../../components/minihub_matter/Kconfig.minihub"
+    rsource "../../components/minihub_mcp_server/Kconfig.minihub"
+    rsource "../../components/minihub_module/Kconfig.minihub"
+    rsource "../../components/minihub_net/Kconfig.minihub"
+    rsource "../../components/minihub_provision/Kconfig.minihub"
+    rsource "../../components/minihub_rainmaker/Kconfig.minihub"
+    rsource "../../components/minihub_rtsp_cam/Kconfig.minihub"
+    rsource "../../components/minihub_store/Kconfig.minihub"
+    rsource "../../components/minihub_thread/Kconfig.minihub"
+    rsource "../../components/minihub_usb_msc/Kconfig.minihub"
+    rsource "../../components/minihub_web/Kconfig.minihub"
+    rsource "../../components/minihub_zigbee/Kconfig.minihub"
+    rsource "../../components/minihub_adapters/adapter_modbus/Kconfig.minihub"
+    rsource "../../components/minihub_adapters/adapter_mqtt/Kconfig.minihub"
+
+endmenu

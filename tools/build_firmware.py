@@ -665,25 +665,18 @@ def needs_esp32s31_set_target() -> bool:
 
 
 def gen_bmgr_codes_dir() -> Path:
-    """Directory that holds gen_bmgr_codes (follows app symlink into repo components/)."""
-    link = APP_DIR / "components" / "gen_bmgr_codes"
-    if link.is_symlink() or not link.exists():
-        # Symlink may point at a not-yet-created tree (CI fresh checkout).
-        raw = os.readlink(link) if link.is_symlink() else None
-        if raw:
-            target = (link.parent / raw).resolve()
-            target.mkdir(parents=True, exist_ok=True)
-            return target
-    link.mkdir(parents=True, exist_ok=True)
-    return link.resolve() if link.exists() else link
+    """Product-local gen_bmgr_codes (application/<app>/components/, gitignored)."""
+    dest = APP_DIR / "components" / "gen_bmgr_codes"
+    dest.mkdir(parents=True, exist_ok=True)
+    return dest
 
 
 def ensure_gen_bmgr_placeholder() -> None:
     """Create a minimal gen_bmgr_codes component so set-target/cmake can resolve REQUIRES.
 
-    Fresh CI: minihub only has a symlink to gitignored components/gen_bmgr_codes/;
-    claw gitignores its local copy. Real codes are generated after Component Manager
-    fetches esp_board_manager (see shell_bmgr_codegen).
+    Fresh CI: application/<app>/components/gen_bmgr_codes/ is gitignored.
+    Real codes are generated after Component Manager fetches esp_board_manager
+    (see shell_bmgr_codegen).
     """
     dest = gen_bmgr_codes_dir()
     meta = dest / "gen_board_metadata.yaml"
@@ -828,7 +821,9 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
         ensure_esp_rainmaker()
     if sdkconfig_has("CONFIG_MINIHUB_MCP_SERVER"):
         ensure_git_submodule("components/esp-claw")
-    # Re-apply local patches to managed_components/ (gitignored, re-downloaded by IDF CM).
+    # Early patch pass (no-op skip when managed_components not fetched yet).
+    # Fresh CI: CM download happens inside set-target / reconfigure / build below —
+    # re-apply again just before the final idf.py so Soft SHA etc. land on disk.
     subprocess.run(
         [str(ROOT / "tools/apply_component_patches.sh")],
         cwd=str(ROOT),
@@ -842,6 +837,10 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
     ensure_board_manager()
 
     idf_cmd = "idf.py --preview " + " ".join(shlex.quote(a) for a in idf_args)
+    patch_cmd = (
+        f'export MINIHUB_APP_DIR={shlex.quote(str(APP_DIR))} && '
+        f"{shlex.quote(str(ROOT / 'tools/apply_component_patches.sh'))}"
+    )
     shell_parts = [
         "set -euo pipefail",
         f'cd "{APP_DIR}"',
@@ -870,6 +869,11 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
     shell_parts.append("export IDF_TARGET=esp32s31")
     # gen_bmgr_codes is gitignored / symlink-to-ignored — generate after CM fetch
     shell_parts.extend(shell_bmgr_codegen())
+    # Managed RainMaker (and peers) exist only after the cmake steps above.
+    shell_parts.append(
+        'echo "Re-applying managed component patches after Component Manager fetch"'
+    )
+    shell_parts.append(patch_cmd)
     shell_parts.append(idf_cmd)
 
     script = "\n".join(shell_parts) + "\n"

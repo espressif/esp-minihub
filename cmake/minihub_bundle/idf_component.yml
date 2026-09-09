@@ -1,0 +1,66 @@
+## One path dependency for products: cmake/minihub_bundle
+## Managed packages (cjson, network_provisioning, flash dispatcher)
+## live here so products only `path:` this folder. cap_mcp_server is not listed:
+## minihub_import.cmake finds it in the product's esp-claw tree.
+## esp_flash_dispatcher is the registry package (not a Core source tree).
+## elf_loader: minihub_module/idf_component.yml when CONFIG_MINIHUB_DYNAMIC_MODULES.
+## gen_bmgr_codes is product-local (idf.py bmgr → application/<app>/components/).
+## Does not include components/minihub_plugins (runtime Store plugins).
+dependencies:
+  json:
+    path: ../../components/json
+  minihub_core:
+    path: ../../components/minihub_core
+  minihub_config:
+    path: ../../components/minihub_config
+  minihub_adapter:
+    path: ../../components/minihub_adapter
+  minihub_rules:
+    path: ../../components/minihub_rules
+  minihub_scenes:
+    path: ../../components/minihub_scenes
+  minihub_web:
+    path: ../../components/minihub_web
+  minihub_pack:
+    path: ../../components/minihub_pack
+  minihub_module:
+    path: ../../components/minihub_module
+  minihub_store:
+    path: ../../components/minihub_store
+  minihub_hub:
+    path: ../../components/minihub_hub
+  minihub_auth:
+    path: ../../components/minihub_auth
+  minihub_ota:
+    path: ../../components/minihub_ota
+  minihub_provision:
+    path: ../../components/minihub_provision
+  minihub_net:
+    path: ../../components/minihub_net
+  minihub_matter:
+    path: ../../components/minihub_matter
+  minihub_thread:
+    path: ../../components/minihub_thread
+  minihub_rainmaker:
+    path: ../../components/minihub_rainmaker
+  minihub_js:
+    path: ../../components/minihub_js
+  minihub_zigbee:
+    path: ../../components/minihub_zigbee
+  minihub_ble_mesh:
+    path: ../../components/minihub_ble_mesh
+  minihub_ble_gatt:
+    path: ../../components/minihub_ble_gatt
+  minihub_mcp_server:
+    path: ../../components/minihub_mcp_server
+  minihub_product_params:
+    path: ../../components/minihub_product_params
+  adapter_zigbee:
+    path: ../../components/minihub_adapters/adapter_zigbee
+  adapter_ble_mesh:
+    path: ../../components/minihub_adapters/adapter_ble_mesh
+  adapter_matter:
+    path: ../../components/minihub_adapters/adapter_matter
+  espressif/cjson: "^1.7.19"
+  espressif/network_provisioning: "^1.1.0"
+  espressif/esp_flash_dispatcher: "^1.0.2"

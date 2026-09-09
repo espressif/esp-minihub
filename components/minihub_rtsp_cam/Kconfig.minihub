@@ -1,0 +1,41 @@
+menu "RTSP camera"
+
+    config MINIHUB_RTSP_CAM
+        bool "Enable RTSP → USB H.265 recorder"
+        default y if IDF_TARGET_ESP32S31
+        default n
+        depends on MINIHUB_USB_MSC
+        help
+            Pull one RTSP stream and write Annex-B H.265 segments to the USB stick.
+
+    config MINIHUB_RTSP_CAM_DEFAULT_URL
+        string "Default RTSP URL"
+        depends on MINIHUB_RTSP_CAM
+        default "rtsp://172.168.51.89:554/stream1"
+
+    config MINIHUB_RTSP_CAM_DEFAULT_SEGMENT_SEC
+        int "Default segment length (seconds)"
+        depends on MINIHUB_RTSP_CAM
+        range 60 3600
+        default 600
+        help
+            1–60 minutes expressed in seconds (default 10 min).
+
+    config MINIHUB_RTSP_CAM_AUTO_START
+        bool "Auto-start recording when USB mounts"
+        depends on MINIHUB_RTSP_CAM
+        default n
+        help
+            Unattended bring-up: start H.265 recording once /usb0 is mounted.
+            Leave disabled for manual start via Web/RPC/command (turn_on/start).
+            Default is off so the hub does not pull the camera stream until asked.
+
+    config MINIHUB_RTSP_CAM_RELAY_PORT
+        int "RTSP relay listen port (VLC/phone)"
+        depends on MINIHUB_RTSP_CAM
+        range 1024 65535
+        default 8554
+        help
+            MiniHub serves rtsp://<hub-ip>:<port>/cam0 for one interleaved TCP viewer.
+
+endmenu

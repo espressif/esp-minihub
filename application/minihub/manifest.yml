@@ -2,7 +2,7 @@
 # Sync: MINIHUB_APP=minihub python tools/sync_host_manifest.py
 #
 # Config JSON: application/minihub/config/{adapters,rules,scenes}.json → else repo config/
-# Factory Store modules: store_preinstall (ids under components/store_modules/)
+# Factory Store modules: store_preinstall (ids under components/minihub_plugins/)
 extends: _host_base
 store_preinstall: []
 partition_table: partitions.csv

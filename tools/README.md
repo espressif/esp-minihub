@@ -79,7 +79,7 @@ Ids: lowercase + underscores, no hyphens (`^[a-z][a-z0-9_]{0,30}$`).
 
 ### `new_store_module.py`
 
-Copy `docs/module_sdk/templates/l{1,2,3}/` → `components/store_modules/<id>/`.
+Copy `docs/module_sdk/templates/l{1,2,3}/` → `components/minihub_plugins/<id>/`.
 
 ```bash
 python3 tools/new_store_module.py --tier l1 --id my_pack --name "My pack"
@@ -195,4 +195,4 @@ MINIHUB_FONT_UI_ONLY=1 ./tools/ui_font/build_subset.sh   # smaller, UI ASCII onl
 
 `collect_chars.py` / `gen_chars_3000.py` feed the subset list; you usually run the shell wrapper.
 
-Vendor-only helpers (not this directory): `components/store_modules/<id>/tools/`.
+Vendor-only helpers (not this directory): `components/minihub_plugins/<id>/tools/`.

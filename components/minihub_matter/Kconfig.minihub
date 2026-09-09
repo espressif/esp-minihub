@@ -1,0 +1,7 @@
+menu "Matter"
+
+    config MINIHUB_MATTER_ADAPTER
+        bool "Enable Matter adapter / commissioner"
+        default n
+
+endmenu

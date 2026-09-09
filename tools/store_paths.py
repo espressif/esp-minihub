@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared paths for Store module sources vs deploy artifacts.
 
-Sources stay under components/store_modules/<id>/ (module.json, sources, ui).
+Sources stay under components/minihub_plugins/<id>/ (module.json, sources, ui).
 Built artifacts go to:
 
   build/<id>.so                 — L3 MHMD+ELF intermediate (local only)
@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STORE_MODULES = ROOT / "components" / "store_modules"
+STORE_MODULES = ROOT / "components" / "minihub_plugins"
 
 
 def default_deploy_dir() -> Path:
@@ -36,7 +36,7 @@ def resolve_deploy_dir(explicit: str | Path | None = None) -> Path:
 
 
 def module_source_dir(module_id: str, *, root: Path = ROOT) -> Path:
-    return root / "components" / "store_modules" / module_id
+    return root / "components" / "minihub_plugins" / module_id
 
 
 def module_deploy_dir(module_id: str, deploy: Path | None = None) -> Path:

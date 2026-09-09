@@ -28,8 +28,8 @@
 #include <lib/dnssd/Advertiser.h>
 #include <lib/dnssd/Resolver.h>
 #include <platform/CHIPDeviceLayer.h>
-#include <platform/ThreadStackManager.h>
 #if CONFIG_ENABLE_MATTER_OVER_THREAD
+#include <platform/ThreadStackManager.h>
 #include <platform/ESP32/OpenthreadLauncher.h>
 #include "esp_ot_config.h"
 #include "esp_openthread.h"

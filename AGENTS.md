@@ -53,7 +53,7 @@ Repo configs: `.cursor/mcp.json`, `.vscode/mcp.json`. Tools: `plugin_guide`, `sc
 ## Host constraints
 
 - Product = `application/<name>/`. Default public Host: `application/minihub`.
-- Shared Core: `components/`. Do not put ecosystem-specific rules in Core.
+- Shared Core: `components/minihub_*`, Hub adapters under `components/minihub_adapters/`, Store plugins under `components/minihub_plugins/`. Products include `cmake/minihub_bundle/minihub_import.cmake` then `minihub_register_kconfig()`; or one yml path `cmake/minihub_bundle`. Do not put ecosystem-specific rules in Core.
 - Vendor adapters ship as Store `.mhub`, not Host `require`.
 - ESP-IDF **~6.2** + target **esp32s31** (`idf.py --preview`). IDF 5.x has no S31 toolchain.
 - Optional **on-device** MCP: `CONFIG_MINIHUB_MCP_SERVER=y` + `git submodule update --init components/esp-claw`. Unrelated to the plugin-author IDE MCP above.

@@ -59,7 +59,7 @@ def store_preinstall_ids(repo: Path, app: str) -> list[str]:
             f"application/{app}/manifest.yml: store_preinstall must be a list of module ids"
         )
     ids: list[str] = []
-    store_root = repo / "components" / "store_modules"
+    store_root = repo / "components" / "minihub_plugins"
     for item in raw:
         if not isinstance(item, str) or not item.strip():
             raise SystemExit(f"application/{app}/manifest.yml: invalid store_preinstall entry {item!r}")

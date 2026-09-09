@@ -17,7 +17,7 @@ Do not add vendor cloud credentials or default device rules to Host `config/` fo
 | L2 | + `main.js` (+ `ui/` / `web/`) | `<id>.mhub` |
 | L3 | + native `.so` (MHMD) | `<id>.mhub` (+ MHMD intermediate) |
 
-Sources (optional): `components/store_modules/<id>/`.  
+Sources (optional): `components/minihub_plugins/<id>/`.  
 Scaffold: `python3 tools/new_store_module.py --tier l1|l2|l3 --id <id>` (templates in `docs/module_sdk/templates/`).  
 IDE MCP for authors: `python3 tools/minihub_plugin_mcp.py` (see `docs/module_sdk/README.md`).  
 Deploy root: `MINIHUB_STORE_DEPLOY` (default `~/workspace/minihub_store`).
@@ -39,7 +39,7 @@ Host unpack today: `hub_zip.c` (zip only).
 ## Config
 
 - Runtime adapters / rules / scenes: `application/<app>/config/{adapters,rules,scenes}.json` if present, else repo `config/`
-- Factory Store modules: `application/<app>/manifest.yml` → `store_preinstall: [<id>, …]` (into `/store/modules/`); `module.json` `"preinstall"` is ignored for factory bundling. Catalog + `/store/files/<id>.mhub` still stage all `store_modules/` for on-device install.
+- Factory Store modules: `application/<app>/manifest.yml` → `store_preinstall: [<id>, …]` (into `/store/modules/`); `module.json` `"preinstall"` is ignored for factory bundling. Catalog + `/store/files/<id>.mhub` still stage all `minihub_plugins/` for on-device install.
 - Manifest / component require: `config/minihub_manifest.yml` (`_host_base`) + `application/<app>/manifest.yml` + `tools/sync_host_manifest.py`
 
 ## Native load guard

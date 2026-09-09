@@ -1,0 +1,26 @@
+menu "Modbus"
+
+    config MINIHUB_MODBUS
+        bool "Enable Modbus client (esp-modbus TCP / RTU)"
+        default y
+
+    if MINIHUB_MODBUS
+        config MINIHUB_MODBUS_UART_NUM
+            int "Default UART port for Modbus RTU"
+            default 1
+            range 0 2
+
+        config MINIHUB_MODBUS_UART_TXD
+            int "Default Modbus RTU TX GPIO (-1 = require adapters.json)"
+            default -1
+
+        config MINIHUB_MODBUS_UART_RXD
+            int "Default Modbus RTU RX GPIO (-1 = require adapters.json)"
+            default -1
+
+        config MINIHUB_MODBUS_UART_RTS
+            int "Default Modbus RTU RTS / DE~RE GPIO (-1 = no RS485 direction pin)"
+            default -1
+    endif
+
+endmenu

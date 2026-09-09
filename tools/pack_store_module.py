@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Pack store_modules/<id>/ into deploy/<id>/<id>.mhub, or wrap native .so (MHMD).
+"""Pack minihub_plugins/<id>/ into deploy/<id>/<id>.mhub, or wrap native .so (MHMD).
 
 Two orthogonal steps (do not conflate):
 
@@ -281,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_pack = sub.add_parser(
         "pack",
-        help="Pack store_modules/<id>/ → deploy/<id>/<id>.mhub",
+        help="Pack minihub_plugins/<id>/ → deploy/<id>/<id>.mhub",
     )
     p_pack.add_argument("module_id", nargs="+", help="module id(s), or 'all'")
     p_pack.add_argument(
