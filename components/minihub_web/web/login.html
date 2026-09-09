@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MiniHub 登录</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#0b0f1a;color:#eef2ff;
+display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px}
+.box{width:100%;max-width:360px;border:1px solid #243049;border-radius:14px;padding:24px;background:#151c2f}
+h1{font-size:1.1rem;margin:0 0 8px}
+p{color:#8b9bb4;font-size:.85rem;margin:0 0 16px}
+label{display:block;font-size:.8rem;margin:10px 0 4px;color:#8b9bb4}
+input{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #243049;
+background:#0b0f1a;color:#eef2ff}
+button{margin-top:16px;width:100%;padding:10px;border:0;border-radius:8px;
+background:#4f46e5;color:#fff;font-weight:600;cursor:pointer}
+.err{color:#f87171;font-size:.8rem;min-height:1.2em}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1 id="title">MiniHub</h1>
+  <p id="hint">首次访问请为管理员 admin 设置密码（写入 NVS）。之后用该密码登录。</p>
+  <form id="f">
+    <label>用户名</label>
+    <input id="user" value="admin" readonly>
+    <label>密码</label>
+    <input id="pw" type="password" minlength="6" maxlength="64" autocomplete="current-password">
+    <div class="err" id="err"></div>
+    <button type="submit" id="go">确定</button>
+  </form>
+</div>
+<script>
+const hint = document.getElementById('hint');
+const err = document.getElementById('err');
+const title = document.getElementById('title');
+let setup = false;
+fetch('/api/auth/status').then(r => r.json()).then(j => {
+  if (j.login_auth === false) { location.href = '/'; return; }
+  setup = !j.password_set;
+  title.textContent = setup ? '设置密码' : '登录';
+  hint.textContent = setup
+    ? '用户名固定为 admin，请设置至少 6 位密码。'
+    : '输入 admin 密码进入控制台。';
+  if (j.logged_in) location.href = '/';
+}).catch(() => {});
+document.getElementById('f').onsubmit = async (e) => {
+  e.preventDefault();
+  err.textContent = '';
+  const body = JSON.stringify({
+    username: document.getElementById('user').value,
+    password: document.getElementById('pw').value
+  });
+  const url = setup ? '/api/auth/setup' : '/api/auth/login';
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    if (r.ok) { location.href = '/'; return; }
+    err.textContent = setup
+      ? '设置失败（密码至少 6 位，且只能设置一次）'
+      : '用户名或密码错误';
+  } catch (e) {
+    err.textContent = '网络错误';
+  }
+};
+</script>
+</body>
+</html>

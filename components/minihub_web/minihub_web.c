@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <math.h>
 #include <stdint.h>
 #include <errno.h>
@@ -76,7 +77,8 @@ __attribute__((weak)) void minihub_lcd_request_refresh(void)
 }
 
 #if CONFIG_MINIHUB_WEB_UI
-extern const char MINIHUB_INDEX_HTML_FALLBACK[];
+extern const char MINIHUB_INDEX_HTML_FALLBACK_ZH[];
+extern const char MINIHUB_INDEX_HTML_FALLBACK_EN[];
 #endif
 
 static httpd_handle_t s_server;
@@ -86,6 +88,7 @@ static const char *s_index_override;
 static const char *s_index_uri = "/";
 
 static esp_err_t read_http_body(httpd_req_t *req, char **out_buf, size_t *out_len, size_t max_bytes);
+static esp_err_t send_json(httpd_req_t *req, cJSON *json);
 
 #if CONFIG_MINIHUB_WEB_UI
 static const char *content_type_for_path(const char *path)
@@ -161,7 +164,7 @@ static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
         if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) {
             free(buf);
             fclose(f);
-            /* Peer likely reset (errno 104). Do not send a final empty chunk. */
+            /* Peer reset (errno 104) or SO_SNDTIMEO (errno 11). No empty trailer. */
             return sent_any ? ESP_ERR_INVALID_STATE : ESP_FAIL;
         }
         sent_any = true;
@@ -169,6 +172,15 @@ static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
     free(buf);
     fclose(f);
     return httpd_resp_send_chunk(req, NULL, 0);
+}
+
+static bool http_want_zh(httpd_req_t *req)
+{
+    char lang[96] = {0};
+    if (httpd_req_get_hdr_value_str(req, "Accept-Language", lang, sizeof(lang)) != ESP_OK) {
+        return false;
+    }
+    return strcasestr(lang, "zh") != NULL;
 }
 
 static esp_err_t send_preinstall_index_or_fallback(httpd_req_t *req)
@@ -198,11 +210,144 @@ static esp_err_t send_preinstall_index_or_fallback(httpd_req_t *req)
              MINIHUB_PREINSTALL_WEB_INDEX,
              s_index_override ? " and " : "",
              s_index_override ? s_index_override : "");
+    const char *html = http_want_zh(req) ? MINIHUB_INDEX_HTML_FALLBACK_ZH : MINIHUB_INDEX_HTML_FALLBACK_EN;
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    return httpd_resp_send(req, MINIHUB_INDEX_HTML_FALLBACK, HTTPD_RESP_USE_STRLEN);
+    return httpd_resp_send(req, html, HTTPD_RESP_USE_STRLEN);
 }
 #endif
+
+static esp_err_t send_login_redirect(httpd_req_t *req)
+{
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "/login");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, NULL, 0);
+}
+
+static esp_err_t handle_login_page(httpd_req_t *req)
+{
+#if CONFIG_MINIHUB_WEB_UI
+    struct stat st;
+    if (stat(MINIHUB_PREINSTALL_WEB_LOGIN, &st) == 0 && S_ISREG(st.st_mode)) {
+        return send_file_chunked(req, MINIHUB_PREINSTALL_WEB_LOGIN);
+    }
+    ESP_LOGW(TAG, "missing %s", MINIHUB_PREINSTALL_WEB_LOGIN);
+    httpd_resp_set_status(req, "404 Not Found");
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    return httpd_resp_send(req,
+                           http_want_zh(req) ? "登录页未安装" : "login page not installed",
+                           HTTPD_RESP_USE_STRLEN);
+#else
+    return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+#endif
+}
+
+static esp_err_t handle_api_auth_status(httpd_req_t *req)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "username", MINIHUB_WEB_USERNAME);
+    cJSON_AddBoolToObject(root, "login_auth", minihub_auth_web_login_enabled());
+    cJSON_AddBoolToObject(root, "password_set", minihub_auth_password_set());
+    cJSON_AddBoolToObject(root, "logged_in", minihub_auth_check(req) == ESP_OK);
+    esp_err_t err = send_json(req, root);
+    cJSON_Delete(root);
+    return err;
+}
+
+static esp_err_t handle_api_auth_setup(httpd_req_t *req)
+{
+    char *buf = NULL;
+    size_t buflen = 0;
+    esp_err_t body_err = read_http_body(req, &buf, &buflen, 512);
+    if (body_err != ESP_OK || !buf) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid body");
+    }
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+    const cJSON *user = cJSON_GetObjectItem(root, "username");
+    const cJSON *pw = cJSON_GetObjectItem(root, "password");
+    char u[16] = {0};
+    char p[80] = {0};
+    if (cJSON_IsString(user) && user->valuestring) {
+        strncpy(u, user->valuestring, sizeof(u) - 1);
+    }
+    if (cJSON_IsString(pw) && pw->valuestring) {
+        strncpy(p, pw->valuestring, sizeof(p) - 1);
+    }
+    cJSON_Delete(root);
+    esp_err_t err = minihub_auth_setup_password(u, p);
+    if (err == ESP_ERR_INVALID_STATE) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_set_type(req, "text/plain");
+        return httpd_resp_send(req, "password already set", HTTPD_RESP_USE_STRLEN);
+    }
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "username must be admin; password 6-64 chars");
+    }
+    char sess[MINIHUB_AUTH_SESS_HEX_LEN + 1];
+    err = minihub_auth_login(u, p, sess);
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "login after setup failed");
+    }
+    minihub_auth_set_session_cookie(req, sess);
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_auth_login(httpd_req_t *req)
+{
+    char *buf = NULL;
+    size_t buflen = 0;
+    esp_err_t body_err = read_http_body(req, &buf, &buflen, 512);
+    if (body_err != ESP_OK || !buf) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid body");
+    }
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+    const cJSON *user = cJSON_GetObjectItem(root, "username");
+    const cJSON *pw = cJSON_GetObjectItem(root, "password");
+    char u[16] = {0};
+    char p[80] = {0};
+    if (cJSON_IsString(user) && user->valuestring) {
+        strncpy(u, user->valuestring, sizeof(u) - 1);
+    }
+    if (cJSON_IsString(pw) && pw->valuestring) {
+        strncpy(p, pw->valuestring, sizeof(p) - 1);
+    }
+    cJSON_Delete(root);
+    char sess[MINIHUB_AUTH_SESS_HEX_LEN + 1];
+    esp_err_t err = minihub_auth_login(u, p, sess);
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "unauthorized");
+    }
+    minihub_auth_set_session_cookie(req, sess);
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_auth_logout(httpd_req_t *req)
+{
+    minihub_auth_logout();
+    minihub_auth_clear_session_cookie(req);
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    esp_err_t err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
 
 static esp_err_t api_auth(httpd_req_t *req)
 {
@@ -437,6 +582,9 @@ static esp_err_t handle_api_module_preview(httpd_req_t *req)
 static esp_err_t handle_root(httpd_req_t *req)
 {
 #if CONFIG_MINIHUB_WEB_UI
+    if (minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
+        return send_login_redirect(req);
+    }
     return send_preinstall_index_or_fallback(req);
 #else
     httpd_resp_set_status(req, "404 Not Found");
@@ -447,6 +595,9 @@ static esp_err_t handle_root(httpd_req_t *req)
 #if CONFIG_MINIHUB_WEB_UI
 static esp_err_t handle_web_asset(httpd_req_t *req)
 {
+    if (minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
+        return send_login_redirect(req);
+    }
     const char *prefix = "/web/";
     if (strncmp(req->uri, prefix, strlen(prefix)) != 0) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
@@ -498,6 +649,9 @@ static bool module_web_id_ok(const char *id)
  */
 static esp_err_t handle_module_web_asset(httpd_req_t *req)
 {
+    if (minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
+        return send_login_redirect(req);
+    }
     const char *prefix = "/modules/";
     if (strncmp(req->uri, prefix, strlen(prefix)) != 0) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
@@ -572,6 +726,7 @@ static esp_err_t handle_api_info(httpd_req_t *req)
     cJSON_AddStringToObject(root, "version", MINIHUB_PRODUCT_VERSION);
     cJSON_AddNumberToObject(root, "api_version", MINIHUB_CORE_API_VERSION);
     cJSON_AddBoolToObject(root, "auth_required", minihub_auth_enabled());
+    cJSON_AddBoolToObject(root, "password_set", minihub_auth_password_set());
     cJSON_AddNumberToObject(root, "uptime_ms", (double)uptime_ms);
     cJSON_AddNumberToObject(root, "uptime_s", (double)(uptime_ms / 1000));
     esp_err_t err = send_json(req, root);
@@ -3714,6 +3869,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
 
     httpd_uri_t root = { .uri = index_uri, .method = HTTP_GET, .handler = handle_root };
 #if CONFIG_MINIHUB_WEB_UI
+    httpd_uri_t login_page = { .uri = "/login", .method = HTTP_GET, .handler = handle_login_page };
     httpd_uri_t web_assets = { .uri = "/web/*", .method = HTTP_GET, .handler = handle_web_asset };
 #endif
 #if CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB
@@ -3722,6 +3878,14 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
 #endif
     httpd_uri_t favicon = { .uri = "/favicon.ico", .method = HTTP_GET, .handler = handle_favicon };
     httpd_uri_t api = { .uri = "/api/", .method = HTTP_GET, .handler = handle_api_info };
+    httpd_uri_t api_auth_status = { .uri = "/api/auth/status", .method = HTTP_GET,
+                                    .handler = handle_api_auth_status };
+    httpd_uri_t api_auth_setup = { .uri = "/api/auth/setup", .method = HTTP_POST,
+                                   .handler = handle_api_auth_setup };
+    httpd_uri_t api_auth_login = { .uri = "/api/auth/login", .method = HTTP_POST,
+                                   .handler = handle_api_auth_login };
+    httpd_uri_t api_auth_logout = { .uri = "/api/auth/logout", .method = HTTP_POST,
+                                    .handler = handle_api_auth_logout };
     httpd_uri_t api_system = { .uri = "/api/system", .method = HTTP_GET, .handler = handle_api_system };
     httpd_uri_t api_net_cfg = { .uri = "/api/net/config", .method = HTTP_POST, .handler = handle_api_net_config };
     httpd_uri_t adapters_api = { .uri = "/api/adapters", .method = HTTP_GET, .handler = handle_api_adapters };
@@ -3794,6 +3958,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
 
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &root), TAG, "index %s", index_uri);
 #if CONFIG_MINIHUB_WEB_UI
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &login_page), TAG, "/login");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &web_assets), TAG, "/web/*");
 #endif
 #if CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB
@@ -3803,6 +3968,10 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
         ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &favicon), TAG, "/favicon.ico");
     }
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api), TAG, "/api/");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_auth_status), TAG, "/api/auth/status");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_auth_setup), TAG, "/api/auth/setup");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_auth_login), TAG, "/api/auth/login");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_auth_logout), TAG, "/api/auth/logout");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system), TAG, "/api/system");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_net_cfg), TAG, "/api/net/config");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &adapters_api), TAG, "/api/adapters");
@@ -3930,11 +4099,12 @@ esp_err_t minihub_web_start(uint16_t port)
     /* Default ctrl_port (32768) collides with RainMaker protocomm_httpd
      * (on-network chal_resp) which also uses HTTPD_DEFAULT_CONFIG. */
     config.ctrl_port = ESP_HTTPD_DEF_CTRL_PORT + 1;
-    config.max_uri_handlers = 60;
+    config.max_uri_handlers = 68;
     config.max_open_sockets = 20;
     /* Store install/upgrade may HTTP-download .mhub on this task (esp_http_client
      * + local buffers). 8K overflows; 16K matches typical IDF httpd+client use. */
     config.stack_size = 16384;
+    config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
     esp_err_t err = httpd_start(&s_server, &config);

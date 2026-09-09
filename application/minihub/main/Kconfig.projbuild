@@ -96,9 +96,22 @@ menu "MiniHub"
             Enable only if the board/profile installs espressif/usb_host_uac.
             Default off for Function/Korvo Wi-Fi+Zigbee profiles.
 
-    config MINIHUB_API_TOKEN
-        string "REST API Bearer token (empty = auth disabled)"
+    config MINIHUB_WEB_LOGIN_AUTH
+        bool "Require Web login (admin + NVS password)"
+        depends on MINIHUB_WEB_UI
+        default y
+        help
+            Browser must sign in as admin. First visit sets the password (NVS
+            minihub/web_pw). Session cookie mh_sess lasts 5 minutes (idle).
+            Off: the console and REST are open (no cookie, no Bearer).
+
+    config MINIHUB_WEB_LOGIN_AUTH_TOKEN
+        string "REST Bearer token (empty = cookie only)"
+        depends on MINIHUB_WEB_LOGIN_AUTH
         default ""
+        help
+            Optional machine token for Authorization: Bearer. Scripts can use
+            this instead of the admin cookie. NVS fallback key remains api_token.
 
     config MINIHUB_POINT_DEBOUNCE_MS
         int "Point update debounce (ms, 0=off)"
