@@ -155,7 +155,7 @@ static void ws_event_handler(const minihub_event_t *event, void *user_data)
 #if CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT
 static esp_err_t ws_auth_from_query(httpd_req_t *req)
 {
-    if (!minihub_auth_enabled()) {
+    if (minihub_auth_check(req) == ESP_OK) {
         return ESP_OK;
     }
 
