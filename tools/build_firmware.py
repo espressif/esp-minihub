@@ -835,8 +835,11 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
         env={**os.environ, "MINIHUB_APP_DIR": str(APP_DIR)},
         check=True,
     )
-    ensure_board_manager()
+    # Placeholder first: app has a symlink to gitignored components/gen_bmgr_codes/.
+    # Creating the target lets board-manager os.makedirs(exist_ok=True) succeed
+    # (dangling symlink → Errno 17 File exists).
     ensure_gen_bmgr_placeholder()
+    ensure_board_manager()
 
     idf_cmd = "idf.py --preview " + " ".join(shlex.quote(a) for a in idf_args)
     shell_parts = [
