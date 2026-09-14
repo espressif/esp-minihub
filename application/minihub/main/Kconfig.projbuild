@@ -292,6 +292,18 @@ menu "MiniHub"
                 If missing, a tiny ROM fallback page is shown. REST /api/* still works when
                 this is disabled. Required for third-party module web pages.
 
+        config MINIHUB_WEB_STATIC_SRC
+            string "Host Web UI static source directory (repo-relative)"
+            depends on MINIHUB_WEB_UI
+            default "components/minihub_web/web"
+            help
+                Build-time directory of Host console HTML/CSS/JS, relative to the
+                MiniHub repo root (or an absolute path). Copied into the modstore
+                image at /store/preinstall/web/. Runtime URL /web/* is unchanged.
+                Must contain index.html or the build fails. OEMs can point this at
+                a product skin (e.g. application/<app>/web) via menuconfig or
+                sdkconfig.defaults.
+
         config MINIHUB_MODULE_THIRD_PARTY_UI_WEB
             bool "Enable third-party module web UI pages"
             depends on MINIHUB_WEB_UI
