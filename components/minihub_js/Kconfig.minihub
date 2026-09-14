@@ -1,0 +1,8 @@
+menu "JS plugins"
+
+    config MINIHUB_JS_PLUGINS
+        bool "Enable L2 JS plugins (QuickJS-NG + Host API v0)"
+        depends on MINIHUB_DYNAMIC_MODULES
+        default y
+
+endmenu

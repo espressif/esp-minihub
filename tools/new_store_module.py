@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Copy docs/module_sdk/templates/l{1,2,3} → components/store_modules/<id>/."""
+"""Copy docs/module_sdk/templates/l{1,2,3} → components/minihub_plugins/<id>/."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "docs" / "module_sdk" / "templates"
-STORE = ROOT / "components" / "store_modules"
+STORE = ROOT / "components" / "minihub_plugins"
 
 ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
 
@@ -33,7 +33,7 @@ def main() -> int:
     parser.add_argument("--tier", required=True, choices=("l1", "l2", "l3"))
     parser.add_argument("--id", required=True, help="directory name / module.json id (lowercase, underscores)")
     parser.add_argument("--name", default="", help="display name (default: id)")
-    parser.add_argument("--force", action="store_true", help="overwrite existing store_modules/<id>/")
+    parser.add_argument("--force", action="store_true", help="overwrite existing minihub_plugins/<id>/")
     args = parser.parse_args()
 
     module_id = args.id.strip()

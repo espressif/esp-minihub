@@ -1,6 +1,6 @@
 ---
-description: Store plugins L1/L2/L3 under components/store_modules
-globs: components/store_modules/**,docs/module_sdk/**,tools/pack_store_module.py,tools/new_store_module.py,tools/sync_store_catalog.py
+description: Store plugins L1/L2/L3 under components/minihub_plugins
+globs: components/minihub_plugins/**,docs/module_sdk/**,tools/pack_store_module.py,tools/new_store_module.py,tools/sync_store_catalog.py
 alwaysApply: false
 ---
 

@@ -8,7 +8,7 @@ Serves catalog.json and /files/<id>.mhub from the deploy directory:
   MINIHUB_STORE_DEPLOY  (default ~/workspace/minihub_store)
 
 Layout: catalog.json and <id>/<id>.mhub (zip only; MHMD .so stays in repo build/).
-Sources remain under the MiniHub repo components/store_modules/.
+Sources remain under the MiniHub repo components/minihub_plugins/.
 
 Also assists MIoT Spec sync on Hub:
   POST /api/miot-spec/resolve   {"models":[…]} → {"urns":{model:{type,version,status}}}

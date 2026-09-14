@@ -1,6 +1,6 @@
 ---
 description: Host firmware product (application/, Kconfig, seeds, radio stacks)
-globs: application/**,config/**,components/minihub_*/**,components/adapters/**
+globs: application/**,config/**,components/minihub_*/**,components/minihub_adapters/**
 alwaysApply: false
 ---
 

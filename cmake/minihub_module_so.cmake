@@ -59,10 +59,10 @@ function(minihub_add_module_so module_id component_name)
 endfunction()
 
 function(minihub_register_module_sos)
-    # Prefer repo-root store_modules (monorepo: application/<app> is CMAKE_SOURCE_DIR).
-    set(_store_root "${CMAKE_SOURCE_DIR}/components/store_modules")
-    if(DEFINED MINIHUB_REPO_ROOT AND EXISTS "${MINIHUB_REPO_ROOT}/components/store_modules")
-        set(_store_root "${MINIHUB_REPO_ROOT}/components/store_modules")
+    # Prefer repo-root minihub_plugins (monorepo: application/<app> is CMAKE_SOURCE_DIR).
+    set(_store_root "${CMAKE_SOURCE_DIR}/components/minihub_plugins")
+    if(DEFINED MINIHUB_REPO_ROOT AND EXISTS "${MINIHUB_REPO_ROOT}/components/minihub_plugins")
+        set(_store_root "${MINIHUB_REPO_ROOT}/components/minihub_plugins")
     endif()
     file(GLOB _STORE_MOD_CMAKE "${_store_root}/*/CMakeLists.txt")
     foreach(_CMAKE ${_STORE_MOD_CMAKE})

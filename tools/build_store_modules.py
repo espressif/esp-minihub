@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Discover and pack store_modules binary adapters into build MHMD .so + deploy .mhub zip."""
+"""Discover and pack minihub_plugins binary adapters into build MHMD .so + deploy .mhub zip."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def resolve_modules_dir(*, root: Path = ROOT) -> Path:
 
 
 def list_binary_modules(store: Path = STORE) -> list[str]:
-    """Dynamically list packable module directory names under store_modules."""
+    """Dynamically list packable module directory names under minihub_plugins."""
     ids: list[str] = []
     if not store.is_dir():
         return ids
@@ -258,7 +258,7 @@ def pack_modules(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Pack store_modules binary adapters into MHMD .so (build/) + .mhub (deploy)."
+        description="Pack minihub_plugins binary adapters into MHMD .so (build/) + .mhub (deploy)."
     )
     parser.add_argument(
         "module_id",

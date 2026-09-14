@@ -1,0 +1,21 @@
+menu "Web UI"
+
+    config MINIHUB_WEB_UI
+        bool "Enable Host Web UI (browser dashboard)"
+        default y
+
+    config MINIHUB_MODULE_THIRD_PARTY_UI_WEB
+        bool "Enable third-party module web UI pages"
+        depends on MINIHUB_WEB_UI
+        default y
+        help
+            Served at GET /modules/<id>/web/* when MINIHUB_WEB_UI is on.
+
+    config MINIHUB_DEV_FS_UPLOAD
+        bool "Allow HTTP PUT of LCD UI JSON files (dev)"
+        default y
+        help
+            PUT /api/dev/fs/ui/... under /data/ui/. Consumed by LCD UI at boot;
+            not a compile-time dependency on MINIHUB_LCD_UI.
+
+endmenu

@@ -1,0 +1,9 @@
+menu "Zigbee"
+
+    config MINIHUB_ZIGBEE_SDK
+        bool "Enable Zigbee adapter (ESP-Zigbee-SDK coordinator)"
+        default n
+        select ZB_ENABLED
+        select ESP_COEX_SW_COEXIST_ENABLE
+
+endmenu

@@ -91,7 +91,11 @@ def gen_adapters_setup(adapters: list[Any]) -> str:
         # Store-only plugins: no host .c symbol; loaded via module loader.
         if dynamic and not host_static:
             continue
+        if kconfig:
+            externs.append(f"#if CONFIG_{kconfig}")
         externs.append(f"extern const minihub_adapter_t {name}_adapter;")
+        if kconfig:
+            externs.append("#endif")
         guard_open = []
         guard_close = []
         if kconfig:

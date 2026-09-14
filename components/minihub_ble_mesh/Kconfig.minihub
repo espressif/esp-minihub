@@ -1,0 +1,20 @@
+menu "BLE Mesh"
+
+    config MINIHUB_BLE_MESH_SDK
+        bool "Enable BLE Mesh adapter (ESP-BLE-Mesh Provisioner)"
+        default n
+        select BT_ENABLED
+        select BT_NIMBLE_ROLE_CENTRAL
+        select BT_NIMBLE_ROLE_OBSERVER
+        select BT_NIMBLE_GATT_CLIENT
+        select BLE_MESH
+        select BLE_MESH_PROVISIONER
+        select BLE_MESH_PB_ADV
+        select BLE_MESH_PB_GATT
+        select BLE_MESH_CFG_CLI
+        select BLE_MESH_GENERIC_ONOFF_CLI
+        select BLE_MESH_GENERIC_LEVEL_CLI
+        select BLE_MESH_LIGHT_LIGHTNESS_CLI
+        select BLE_MESH_LIGHT_CTL_CLI
+
+endmenu

@@ -1,0 +1,59 @@
+menu "Provisioning"
+
+    config MINIHUB_WIFI_SSID
+        string "WiFi SSID"
+        default "YOUR_SSID"
+        help
+            Leave as YOUR_SSID to use NVS / SoftAP provisioning instead.
+
+    config MINIHUB_WIFI_PASS
+        string "WiFi Password"
+        default "YOUR_PASSWORD"
+
+    config MINIHUB_WIFI_PROVISIONING
+        bool "Enable Wi-Fi provisioning when SSID not set"
+        default y
+        help
+            When Kconfig/NVS have no Wi-Fi credentials, start provisioning.
+
+    choice MINIHUB_WIFI_PROV_TRANSPORT
+        prompt "Wi-Fi provisioning transport"
+        depends on MINIHUB_WIFI_PROVISIONING
+        default MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
+
+        config MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
+            bool "SoftAP (no Bluetooth)"
+
+        config MINIHUB_WIFI_PROV_TRANSPORT_BLE
+            bool "BLE (requires Bluetooth / NimBLE)"
+            select BT_ENABLED
+
+    endchoice
+
+    config MINIHUB_WIFI_PROV_BLE_FREE_BTDM
+        bool "Release Bluetooth (BTDM) after BLE Wi-Fi provisioning"
+        depends on MINIHUB_WIFI_PROV_TRANSPORT_BLE
+        default y
+
+    config MINIHUB_FACTORY_RESET_BUTTON
+        bool "BOOT button long-press factory reset (erase NVS)"
+        default n
+
+    config MINIHUB_FACTORY_RESET_GPIO
+        int "Factory-reset button GPIO"
+        depends on MINIHUB_FACTORY_RESET_BUTTON
+        default 61
+        range 0 61
+
+    config MINIHUB_FACTORY_RESET_HOLD_MS
+        int "Factory-reset hold time (ms)"
+        depends on MINIHUB_FACTORY_RESET_BUTTON
+        default 5000
+        range 1000 30000
+
+    config MINIHUB_FACTORY_RESET_ACTIVE_LOW
+        bool "Factory-reset button is active low"
+        depends on MINIHUB_FACTORY_RESET_BUTTON
+        default y
+
+endmenu

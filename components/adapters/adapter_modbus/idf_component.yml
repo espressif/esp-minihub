@@ -1,3 +1,0 @@
-## Modbus TCP client via Espressif esp-modbus (gated by CONFIG_MINIHUB_MODBUS).
-dependencies:
-  espressif/esp-modbus: "^2.1.3"

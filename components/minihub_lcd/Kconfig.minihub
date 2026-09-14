@@ -1,0 +1,16 @@
+menu "LCD UI"
+
+    config MINIHUB_LCD_UI
+        bool "Enable LCD UI (esp-brookesia JSON UI)"
+        depends on !MINIHUB_NET_ETH
+        default n
+        help
+            Mutually exclusive with Ethernet on some boards (EMAC vs RGB LCD).
+
+    config MINIHUB_LCD_UI_REFRESH_MS
+        int "LCD UI data refresh interval (ms)"
+        depends on MINIHUB_LCD_UI
+        default 2000
+        range 500 30000
+
+endmenu

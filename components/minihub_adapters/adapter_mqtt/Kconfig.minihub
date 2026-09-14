@@ -1,0 +1,10 @@
+menu "MQTT adapter"
+
+    config MINIHUB_MQTT_ADAPTER
+        bool "Enable MQTT Hub adapter"
+        default y
+        help
+            Local MQTT broker client for Hub points. Disable on products that
+            do not use adapter_mqtt.
+
+endmenu

@@ -1,0 +1,19 @@
+menu "Core"
+
+    config CODEC_UAC_SUPPORT
+        bool "USB Audio Class (UAC) codec support"
+        default n
+        help
+            Stub for esp_codec_dev optional dep. Default off.
+
+    config MINIHUB_POINT_DEBOUNCE_MS
+        int "Point update debounce (ms, 0=off)"
+        default 1000
+        range 0 10000
+
+    config MINIHUB_HEAP_LOG_INTERVAL_SEC
+        int "Periodic heap log interval (seconds, 0=off)"
+        default 30
+        range 0 3600
+
+endmenu

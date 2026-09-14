@@ -16,7 +16,6 @@ if(CONFIG_MINIHUB_DYNAMIC_MODULES)
     else()
         list(APPEND MOD_SRCS host_elf_symbols_generated.c)
     endif()
-    list(APPEND MOD_REQ espressif__elf_loader)
 endif()
 
 idf_component_register(

@@ -43,10 +43,10 @@ endif()
 
 # Store L3 plugins: pull into the IDF build graph so libadapter_*.so can be linked
 # from their archives. They are NOT registered as Host adapters when
-# CONFIG_MINIHUB_DYNAMIC_MODULES=y (see REGISTER_ADAPTER guards in store_modules).
+# CONFIG_MINIHUB_DYNAMIC_MODULES=y (see REGISTER_ADAPTER guards in minihub_plugins).
 # --gc-sections drops unused objects from the app ELF when nothing references them.
 if(CONFIG_MINIHUB_DYNAMIC_MODULES)
-    file(GLOB _MINIHUB_STORE_MOD_CMAKE "${MINIHUB_REPO_ROOT}/components/store_modules/*/CMakeLists.txt")
+    file(GLOB _MINIHUB_STORE_MOD_CMAKE "${MINIHUB_REPO_ROOT}/components/minihub_plugins/*/CMakeLists.txt")
     foreach(_SM_CMAKE ${_MINIHUB_STORE_MOD_CMAKE})
         get_filename_component(_SM_DIR ${_SM_CMAKE} DIRECTORY)
         get_filename_component(_SM ${_SM_DIR} NAME)
@@ -111,7 +111,7 @@ file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/modules)
 file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/packs)
 file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/files)
 
-set(_MINIHUB_STORE_ROOT ${MINIHUB_REPO_ROOT}/components/store_modules)
+set(_MINIHUB_STORE_ROOT ${MINIHUB_REPO_ROOT}/components/minihub_plugins)
 # Built .mhub (zip) / .so / catalog live under deploy dir (not in the source tree).
 if(DEFINED ENV{MINIHUB_STORE_DEPLOY} AND NOT "$ENV{MINIHUB_STORE_DEPLOY}" STREQUAL "")
     set(_MINIHUB_STORE_DEPLOY "$ENV{MINIHUB_STORE_DEPLOY}")
@@ -269,5 +269,3 @@ if(_pp_modstore)
 endif()
 
 littlefs_create_partition_image(modstore ${MINIHUB_MODSTORE_DIR} FLASH_IN_PROJECT)
-
-include(${MINIHUB_REPO_ROOT}/cmake/matter_no_rtti.cmake)

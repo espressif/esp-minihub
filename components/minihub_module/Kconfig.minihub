@@ -1,0 +1,13 @@
+menu "Modules"
+
+    config MINIHUB_DYNAMIC_MODULES
+        bool "Enable dynamic adapter module loader (.mhub / .so via elf_loader)"
+        default n
+
+    config MINIHUB_HUB_MAX_BYTES
+        int "Max .mhub package size downloaded into PSRAM (bytes)"
+        depends on MINIHUB_DYNAMIC_MODULES
+        default 1048576
+        range 65536 4194304
+
+endmenu

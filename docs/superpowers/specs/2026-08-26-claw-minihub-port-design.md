@@ -9,7 +9,7 @@ Add product `application/claw_minihub` (Claw shell + MiniHub Core + local MCP) f
 | Topic | Choice |
 |-------|--------|
 | Source | Copy from `MiniHub/application/claw_minihub`, then sanitize |
-| MIoT | Store `.mhub` only; no `EXTRA_COMPONENT_DIRS` for `store_modules/miot`; no fatfs preseed of `minihub/modules/miot/` |
+| MIoT | Store `.mhub` only; no `EXTRA_COMPONENT_DIRS` for `minihub_plugins/miot`; no fatfs preseed of `minihub/modules/miot/` |
 | Credentials | No `CONFIG_MINIHUB_MIOT_*` preload in Kconfig |
 | `cap_account_bind` | **B**: keep non-MIoT (WeChat HTTP/cmd paths); remove built-in MIoT provider |
 | `cmd_miot` | Optional lab console via `minihub_module_invoke_rpc("miot", …)` when plugin is loaded |
