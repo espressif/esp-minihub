@@ -31,6 +31,9 @@ typedef struct {
     uint16_t unicast;
     uint8_t elem_num;
     uint8_t caps;
+    uint16_t cid; /* Composition Company ID (Bluetooth SIG) */
+    uint16_t pid; /* Product ID */
+    uint16_t vid; /* Version ID */
 } minihub_ble_mesh_device_t;
 
 /** Device UUID prefix filter (OR'd). accept_all or empty filter_count → any UUID. */

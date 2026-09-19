@@ -85,6 +85,9 @@ typedef struct {
     uint8_t elem_num;
     uint8_t onoff;
     uint8_t caps;
+    uint16_t cid;
+    uint16_t pid;
+    uint16_t vid;
 } node_info_t;
 
 typedef struct {
@@ -356,6 +359,9 @@ static void notify_device_ready(const node_info_t *node)
     dev.unicast = node->unicast;
     dev.elem_num = node->elem_num;
     dev.caps = caps;
+    dev.cid = node->cid;
+    dev.pid = node->pid;
+    dev.vid = node->vid;
     s_on_device(&dev, s_cb_ctx);
 }
 
@@ -425,6 +431,9 @@ static void ingest_composition(node_info_t *node, const uint8_t *data, uint16_t 
         return;
     }
     node->caps = 0;
+    node->cid = (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+    node->pid = (uint16_t)data[2] | ((uint16_t)data[3] << 8);
+    node->vid = (uint16_t)data[4] | ((uint16_t)data[5] << 8);
     size_t off = 10; /* CID PID VID CRPL Features */
     uint16_t elem_addr = node->unicast;
     while (off + 4 <= len) {
@@ -457,8 +466,9 @@ static void ingest_composition(node_info_t *node, const uint8_t *data, uint16_t 
             bind_job_add(node->unicast, s_policy.bind_models[i].model_id);
         }
     }
-    ESP_LOGI(TAG, "composition 0x%04x caps=0x%02x bind_jobs=%u",
-             node->unicast, node->caps, (unsigned)s_bind_job_count);
+    ESP_LOGI(TAG, "composition 0x%04x cid=0x%04x pid=0x%04x vid=0x%04x caps=0x%02x bind_jobs=%u",
+             node->unicast, node->cid, node->pid, node->vid, node->caps,
+             (unsigned)s_bind_job_count);
 }
 
 static esp_err_t send_comp_data_get(node_info_t *node)
