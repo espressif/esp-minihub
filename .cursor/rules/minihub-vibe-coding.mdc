@@ -6,7 +6,7 @@ alwaysApply: true
 # MiniHub vibe coding map
 
 - **Host product** = `application/<name>/` (default `minihub`). Shared Core lives in `components/`.
-- **Vendor / ecosystem logic** = Store plugin under `components/minihub_plugins/<id>/`, packed to `.mhub`. Do not bake cloud tokens or default vendor devices into Core or public `config/` seeds.
+- **Vendor / ecosystem logic** = Store plugin (L1/L2/L3 → `.mhub`), usually `components/minihub_plugins/<id>/`. Standalone demos: `examples/plugins/<id>/` + `MINIHUB_PLUGIN_DIRS` — not Host `require`, not default `store_preinstall`. Do not bake cloud tokens or default vendor devices into Core or public `config/` seeds.
 - **IDF**: ~6.2 with preview target `esp32s31`. Do not assume IDF 5.x.
 - **On-device MCP** is optional (`CONFIG_MINIHUB_MCP_SERVER`); LAN agents can use REST without it.
 - **Plugin-author IDE MCP** (`python3 tools/minihub_plugin_mcp.py`) is for Cursor/VS Code Store development, not the Hub.

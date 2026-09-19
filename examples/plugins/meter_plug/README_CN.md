@@ -33,6 +33,14 @@
 
 ## 构建
 
+### 独立编译（无需 IDF）
+
+```bash
+python3 tools/build_plugin_standalone.py meter_plug
+```
+
+### 随 Host 树内编译
+
 ```bash
 python3 tools/generate_devices_property_from_json.py \
     examples/plugins/meter_plug/devices.json \

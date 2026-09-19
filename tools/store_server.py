@@ -877,7 +877,7 @@ def main() -> int:
     srv = HTTPServer((args.host, args.port), Handler)
     print(f"MiniHub Store listening on http://{args.host}:{args.port}")
     print(f"  deploy:  {deploy}")
-    print(f"  catalog: {catalog if catalog.exists() else '(missing — run sync_store_catalog.py)'}")
+    print(f"  catalog: {catalog if catalog.exists() else '(missing — run sync_store_catalog.py --from-store)'}")
     print(f"  modules: {deploy}/<id>/<id>.mhub")
     print("  Spec:    POST /api/miot-spec/resolve|profiles")
     print("  Bridge:  POST /api/bridge/huawei/login|snapshot")

@@ -12,16 +12,20 @@
  * devices.json is an array of instances, or a single object:
  *   - device : endpoint id (second segment of point_id)
  *   - type   : catalog device_id (e.g. "light")
- *   - params : name, init; optional access / visible / min / max / step / unit
+ *   - params : name, init; optional access / visible / min / max / step / unit / requires
  *
  * Model: one device = one minihub_point_t.
  *   point_id = sim.<device>
  *   command routing uses CB_ADAPTER (== module id), not the type string.
  */
+#ifdef MINIHUB_PLUGIN_STANDALONE
+#include "minihub_plugin_sdk.h"
+#else
 #include "esp_log.h"
 #include "minihub_module_abi.h"
 #include "minihub_adapter.h"
 #include "minihub_core.h"
+#endif
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -159,6 +163,7 @@ static cJSON *cb_params_from_desc(const cJSON *params_arr)
         const cJSON *jmax = cJSON_GetObjectItemCaseSensitive(p, "max");
         const cJSON *jstep = cJSON_GetObjectItemCaseSensitive(p, "step");
         const cJSON *junit = cJSON_GetObjectItemCaseSensitive(p, "unit");
+        const cJSON *jreq = cJSON_GetObjectItemCaseSensitive(p, "requires");
 
         char value[MINIHUB_VALUE_MAX];
         cb_json_to_point_str(cJSON_GetObjectItemCaseSensitive(p, "init"), value, sizeof(value));
@@ -185,6 +190,14 @@ static cJSON *cb_params_from_desc(const cJSON *params_arr)
         }
         if (cJSON_IsString(junit) && junit->valuestring && junit->valuestring[0]) {
             cJSON_AddStringToObject(ent, "unit", junit->valuestring);
+        }
+        if (cJSON_IsString(jreq) && jreq->valuestring && jreq->valuestring[0]) {
+            cJSON_AddStringToObject(ent, "requires", jreq->valuestring);
+        } else if (cJSON_IsObject(jreq)) {
+            cJSON *dup = cJSON_Duplicate(jreq, true);
+            if (dup) {
+                cJSON_AddItemToObject(ent, "requires", dup);
+            }
         }
         cJSON_AddItemToObject(out, name->valuestring, ent);
     }
@@ -421,7 +434,7 @@ static esp_err_t cb_stop(void)
 
 const minihub_adapter_t color_bulb_adapter = {
     .name = "color_bulb",
-    .version = "0.3.0",
+    .version = "0.1.0",
     .init = cb_init,
     .start = cb_start,
     .stop = cb_stop,

@@ -11,10 +11,14 @@
  * Demo metering: power toggle; when on, voltage≈220 V, current>0, power_w≈V*I;
  * when off, current/power near 0 (line voltage still present).
  */
+#ifdef MINIHUB_PLUGIN_STANDALONE
+#include "minihub_plugin_sdk.h"
+#else
 #include "esp_log.h"
 #include "minihub_module_abi.h"
 #include "minihub_adapter.h"
 #include "minihub_core.h"
+#endif
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>

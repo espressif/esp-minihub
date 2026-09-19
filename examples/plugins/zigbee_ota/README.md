@@ -34,6 +34,14 @@ file API.
 
 ## Build
 
+### Standalone (no IDF)
+
+```bash
+python3 tools/build_plugin_standalone.py zigbee_ota
+```
+
+### In-tree with Host
+
 ```bash
 export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"   # or .../examples/plugins/zigbee_ota
 ./tools/build_firmware.py -app minihub build

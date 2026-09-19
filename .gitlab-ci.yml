@@ -109,6 +109,23 @@ build:app:
     - test -f "ci_artifacts/${APP}/firmware/${APP}_merged.bin"
     - test -f "application/${APP}/build/minihub_merged.bin"
 
+# Standalone L3 demos: CMake + Plugin SDK, no IDF project. Parallel with firmware.
+build:plugin_standalone:
+  extends: .idf_env
+  stage: build
+  needs: []
+  script:
+    - bash tools/ci/build_plugin_standalone.sh
+  artifacts:
+    when: on_success
+    expire_in: 7 days
+    name: "minihub-plugin-standalone-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ci_artifacts/plugin_standalone/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
 # Store pack (no-op success when minihub built no libadapter_*.so)
 pack:mhub:
   extends: .idf_env

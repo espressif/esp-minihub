@@ -22,6 +22,14 @@ Thread end-devices are Matter points (not `adapter=thread`).
 
 ## Build
 
+### Standalone (no IDF)
+
+```bash
+python3 tools/build_plugin_standalone.py matter_ota
+```
+
+### In-tree with Host
+
 ```bash
 export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"   # or .../examples/plugins/matter_ota
 export ESP_MATTER_PATH=/path/to/esp-matter

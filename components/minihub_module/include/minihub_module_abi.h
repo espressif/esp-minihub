@@ -49,12 +49,64 @@ extern "C" {
 /** @brief Optional module RPC symbol (POST /api/modules/{id}/rpc) */
 #define MINIHUB_MODULE_RPC_SYMBOL    "minihub_module_rpc"
 
-#ifdef DOXYGEN
 /** @brief Module RPC dispatch callback (optional symbol MINIHUB_MODULE_RPC_SYMBOL) */
-typedef esp_err_t minihub_module_rpc_fn(const char *method, const cJSON *params, cJSON **out);
-#else
 typedef esp_err_t (*minihub_module_rpc_fn)(const char *method, const cJSON *params, cJSON **out);
-#endif
+
+/**
+ * @brief Read a file from the calling module's Store install directory.
+ *
+ * Resolves the install dir via the module registry (adapter_name to the
+ * manifest parent dir). Does not accept absolute paths from the plugin.
+ *
+ * @param adapter_name Module adapter name (usually equals module id)
+ * @param rel_name     Relative name under that dir (e.g. "devices.json").
+ *                     Rejects absolute paths and ".." segments.
+ * @param[out] out     Malloc'd NUL-terminated buffer; caller must free().
+ * @param[out] out_len Optional length excluding NUL (may be NULL).
+ * @return ESP_OK, ESP_ERR_INVALID_ARG, ESP_ERR_NOT_FOUND, ESP_ERR_NO_MEM, ESP_FAIL
+ */
+typedef esp_err_t (*minihub_module_read_file_fn)(const char *adapter_name, const char *rel_name,
+                                                 char **out, size_t *out_len);
+
+/**
+ * @brief Subscribe to the Core event bus (for example point.updated).
+ *
+ * Appended at the vtable tail. Check struct_size before calling on older Hosts.
+ *
+ * @param event_type Event name
+ * @param handler    Callback
+ * @param user_data  Passed through to handler
+ * @return ESP_OK on success
+ */
+typedef esp_err_t (*minihub_module_event_subscribe_fn)(const char *event_type,
+                                                       minihub_event_handler_t handler,
+                                                       void *user_data);
+
+/**
+ * @brief Merge props.params only (keeps identity / ota top-level keys).
+ *
+ * Appended at the vtable tail. Check struct_size before calling on older Hosts.
+ *
+ * @param point_id Device point id
+ * @param value    Optional compact summary; may be NULL
+ * @param params   Params object to merge
+ * @return ESP_OK on success
+ */
+typedef esp_err_t (*minihub_module_point_merge_params_fn)(const char *point_id, const char *value,
+                                                          cJSON *params);
+
+/**
+ * @brief Shallow-merge top-level props keys (identity / ota / ...).
+ *
+ * Appended at the vtable tail. Check struct_size before calling on older Hosts.
+ *
+ * @param point_id     Device point id
+ * @param value        Optional compact summary; may be NULL
+ * @param props_patch  Top-level props keys to merge
+ * @return ESP_OK on success
+ */
+typedef esp_err_t (*minihub_module_point_merge_props_fn)(const char *point_id, const char *value,
+                                                         cJSON *props_patch);
 
 /**
  * @brief Core services Host exposes to dynamic modules
@@ -80,39 +132,10 @@ typedef struct {
     esp_err_t (*hub_reload)(void);
     esp_err_t (*adapter_soft_reload)(const char *adapter_name);
 
-    /**
-     * Read a file from the calling module's Store install directory.
-     *
-     * Resolves the install dir via the module registry (adapter_name →
-     * manifest parent dir). Does not accept absolute paths from the plugin.
-     *
-     * @param adapter_name Module adapter name (usually equals module id)
-     * @param rel_name     Relative name under that dir (e.g. "devices.json").
-     *                     Rejects absolute paths and ".." segments.
-     * @param[out] out     Malloc'd NUL-terminated buffer; caller must free().
-     * @param[out] out_len Optional length excluding NUL (may be NULL).
-     * @return ESP_OK, ESP_ERR_INVALID_ARG, ESP_ERR_NOT_FOUND, ESP_ERR_NO_MEM, ESP_FAIL
-     */
-    esp_err_t (*module_read_file)(const char *adapter_name, const char *rel_name,
-                                  char **out, size_t *out_len);
-
-    /**
-     * Subscribe to Core event bus (e.g. ``point.updated`` / ``point.registered``).
-     * Appended at tail — check ``struct_size`` before calling on older Hosts.
-     */
-    esp_err_t (*event_subscribe)(const char *event_type, minihub_event_handler_t handler, void *user_data);
-
-    /**
-     * Merge ``props.params`` only (keeps identity / ota top-level keys).
-     * Appended at tail — check ``struct_size`` before calling on older Hosts.
-     */
-    esp_err_t (*point_merge_params)(const char *point_id, const char *value, cJSON *params);
-
-    /**
-     * Shallow-merge top-level props keys (identity / ``ota`` / …).
-     * Appended at tail — check ``struct_size`` before calling on older Hosts.
-     */
-    esp_err_t (*point_merge_props)(const char *point_id, const char *value, cJSON *props_patch);
+    minihub_module_read_file_fn module_read_file;           /**< See minihub_module_read_file_fn */
+    minihub_module_event_subscribe_fn event_subscribe;     /**< See minihub_module_event_subscribe_fn */
+    minihub_module_point_merge_params_fn point_merge_params; /**< See minihub_module_point_merge_params_fn */
+    minihub_module_point_merge_props_fn point_merge_props; /**< See minihub_module_point_merge_props_fn */
 } minihub_module_host_api_t;
 
 /** @brief Module metadata (manifest / runtime registry) */
@@ -128,20 +151,13 @@ typedef struct {
     bool loaded;
 } minihub_module_info_t;
 
-#ifdef DOXYGEN
 /**
  * @brief Required module entry export (symbol MINIHUB_MODULE_ENTRY_SYMBOL)
  */
-typedef esp_err_t minihub_module_entry_fn(
-    const minihub_module_host_api_t *host,
-    const cJSON *config,
-    const minihub_adapter_t **out_adapter);
-#else
 typedef esp_err_t (*minihub_module_entry_fn)(
     const minihub_module_host_api_t *host,
     const cJSON *config,
     const minihub_adapter_t **out_adapter);
-#endif
 
 /** @brief .mhub image header (little-endian, prepended to ELF) */
 typedef struct __attribute__((packed)) {

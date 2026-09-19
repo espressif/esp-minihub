@@ -26,7 +26,19 @@ Web UI —— **无真实硬件**。
 
 ## 构建
 
-先生成头文件，再用环境变量把本目录拉进 Host configure：
+### 独立编译（无需 IDF）
+
+```bash
+python3 tools/build_plugin_standalone.py color_bulb
+# 可选：--pack（examples 需设置 MINIHUB_PLUGIN_DIRS）
+```
+
+MHMD 输出：`application/minihub/build/color_bulb.so`。CMake 会根据
+`devices.json` 重新生成 `device_desc.gen.h`。
+
+### 随 Host 树内编译
+
+先生成头文件（如需），再用环境变量把本目录拉进 Host configure：
 
 ```bash
 python3 tools/generate_devices_property_from_json.py \

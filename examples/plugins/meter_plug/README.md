@@ -33,6 +33,14 @@ Uses the Host `switch` catalog. Does **not** ship labels / widgets / CSS / icons
 
 ## Build
 
+### Standalone (no IDF)
+
+```bash
+python3 tools/build_plugin_standalone.py meter_plug
+```
+
+### In-tree with Host
+
 ```bash
 python3 tools/generate_devices_property_from_json.py \
     examples/plugins/meter_plug/devices.json \

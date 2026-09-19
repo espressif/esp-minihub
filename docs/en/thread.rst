@@ -16,4 +16,12 @@ Enable ``CONFIG_MINIHUB_THREAD_ADAPTER`` (exclusive with Zigbee). Dataset:
 ``GET`` / ``POST /api/thread/dataset``. Fields: :doc:`data_model`
 (:ref:`adapters-json`).
 
+Start or stop the border router (no body; same login as other writes). These
+routes exist only with that option:
+
+* ``POST /api/thread/start`` — JSON ``status`` is ``ok``, or an ``esp_err``
+  name plus optional ``message``
+* ``POST /api/thread/stop`` — same ``status`` field; ``ok`` when the stack was
+  already down
+
 Do not L1-inject a Thread device list, and do not ship a ``thread_ota`` plugin.

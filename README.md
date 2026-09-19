@@ -1,42 +1,119 @@
 # MiniHub
 
-ESP32 Host firmware: Web UI, REST, Store dynamic modules (`.mhub`), and multi-protocol adapters (Zigbee / BLE Mesh / Matter / MQTT / Modbus).
+[English](README.md) | [中文](README_CN.md)
 
-Third-party ecosystems (e.g. MIoT) ship as **Store plugins**, not Host dependencies.
+ESP32 Host firmware for multi-protocol IoT hubs: Web UI, REST, WebSocket events,
+Store modules (`.mhub`), and Host adapters (Zigbee / BLE Mesh / Matter / MQTT /
+Modbus / Thread Border Router).
 
-## Products (applications)
+Third-party ecosystems ship as **Store plugins** (L1 / L2 / L3), not Host Core
+dependencies. Public Host `store_preinstall` stays empty.
 
-**Product name = folder under [`application/`](application/).** Shared Core lives in [`components/`](components/).
+**License:** [Apache 2.0](LICENSE)
+
+## Who this repo is for
+
+| Goal | Start here | You should not need to… |
+|------|------------|-------------------------|
+| Understand architecture | [Introduction](docs/en/introduction.rst) · [Architecture](docs/en/architecture.rst) | Read Core `.c` |
+| Build and flash the reference Host | [Getting started](docs/en/getting_started.rst) | Fork `components/minihub_*` |
+| Ship an OEM Host product | [Host customization](docs/en/host_customization.rst) → [Production](docs/en/production.rst) | Copy Core into `application/` |
+| Develop a Store plugin (L1/L2/L3) | [Plugin overview](docs/en/plugins/overview.rst) · [examples/](examples/README.md) | Change Host bring-up |
+| REST / MCP / rules | [Data model](docs/en/data_model.rst) · [Rules](docs/en/rules.rst) · [API](docs/en/api/index.rst) | Implement adapters in C |
+| Radios, claim, OTA | [Radios](docs/en/radios.rst) | Treat Thread as a device point |
+
+Programming Guide (HTML): [docs/README.md](docs/README.md). RST:
+[docs/en/index.rst](docs/en/index.rst) · [docs/zh_CN/index.rst](docs/zh_CN/index.rst).
+
+## Why MiniHub
+
+* **Host / plugin split** — Espressif stacks and hub services stay in Host;
+  vendor clouds and OEM extras ship as `.mhub`
+* **Point-centric** — UI, REST, rules, and scenes use `point_id`, not vendor APIs
+* **OEM without Core fork** — product = `application/APP/` (board, partitions, seeds)
+* **Field plugin upgrade** — install/upgrade Store modules without reflashing Host (ABI match)
+* **Soft reload** — `POST /api/hub/reload` applies config and plugins without a full reboot
+
+## Products
+
+**Product name = folder under [`application/`](application/).** Shared Core:
+[`components/`](components/).
 
 | Product | Path | Summary |
 |---------|------|---------|
-| **minihub** | [`application/minihub/`](application/minihub/) | Public Host (Web / Store / adapters). Default networking is Ethernet-oriented; optional LCD recipe in that app’s README. Select with `-app minihub` / `MINIHUB_APP`. |
+| **minihub** | [`application/minihub/`](application/minihub/) | Generic Host (Web / Store / adapters). Ethernet-first; optional LCD in that app’s README. `-app minihub` / `MINIHUB_APP`. |
 
-See [`application/README.md`](application/README.md) and [application/minihub/README.md](application/minihub/README.md).
+See [`application/README.md`](application/README.md).
 
 ## Requirements
 
-- ESP-IDF ~6.2 (ESP32-S31 / project CI image)
-- Python 3.10+
+* ESP-IDF ~6.2 (ESP32-S31 / project CI image)
+* Python 3.10+ and PyYAML
+* Optional: `ESP_MATTER_PATH` when Matter is compiled in
 
 ## Quick start
 
 ```bash
-./tools/build_firmware.py -app minihub zigbee build flash monitor
+./tools/build_firmware.py -app minihub build
+./tools/build_firmware.py -app minihub -p /dev/ttyUSB0 app-flash monitor
 ```
 
-Radio stacks: `zigbee` · `ble_mesh` · `matter`.
+Stacks: `zigbee` · `ble_mesh` · `matter` · `thread` (Thread is **BR only**, not
+a device adapter). Details: [getting started](docs/en/getting_started.rst).
 
-## Layout
+## Repository layout
 
 | Path | Role |
 |------|------|
 | `application/` | Per-product firmware (folder name = product) |
-| `components/` | Shared Core, adapters, Store |
-| `config/` | Shared manifest / adapters / sdkconfig fragments |
-| `tools/` | Build, pack, Store, CI |
-| `docs/` | Developer docs |
+| `components/` | Shared Core, Host adapters, Store runtime |
+| `config/` | Shared manifest base, adapter seeds, sdkconfig fragments |
+| `examples/` | Standalone Store demos — one directory: [`plugins/`](examples/README.md) |
+| `tools/` | Build, pack, Store server, CI |
+| `docs/` | Programming Guide (RST / esp-docs) |
+| `docs/module_sdk/` | L3 Host export allowlist |
 
-## Docs
+## Data model (short)
 
-- [Build](docs/build.md) · [Plugins & Store](docs/plugins_and_store.md) · [AGENTS.md](AGENTS.md)
+Core is **type-agnostic**. One physical device = one `minihub_point_t`
+(`point_id` / `type` string / summary `value` / `props` / `adapter` / `online`).
+Matter is **one endpoint = one point** (`light/matter_n{node}_ep{ep}`). Thread
+does not register device points.
+
+* Live parameters: `props.params.<name>`. Identity (`manufacturer`, `category`,
+  `owner`, `ota`, …) is **top-level** `props`, not catalog params.
+* UI widgets come from the Host **type catalog** (CSV), protocol-agnostic.
+* Plugins that own a device `point_register` once. Vendor claim / OTA on a Host
+  radio point uses the **same** `point_id` and `merge_props` — never a second
+  point. Commands still use `point.adapter` (the radio).
+* Telemetry updates: `merge_params` / `merge_props`, not a full `props` replace.
+* Rules (`command` / `command_by_type` / `delay` / `notify`): [rules](docs/en/rules.rst).
+  Scenes are a separate REST path.
+
+## Store plugins
+
+| Tier | Package | Demo |
+|------|---------|------|
+| L1 | `module.json` + `inject` | [`ble_mesh_pack`](examples/plugins/ble_mesh_pack/) |
+| L2 | `module.json` + `main.js` | [`color_bulb_js`](examples/plugins/color_bulb_js/) |
+| L3 | `module.json` + `.so` | [`color_bulb`](examples/plugins/color_bulb/), [`meter_plug`](examples/plugins/meter_plug/), `*_ota` |
+
+Index: [examples/README.md](examples/README.md). Do not add demos to public
+`store_preinstall`.
+
+```bash
+export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"
+python3 tools/pack_store_module.py pack <id>
+```
+
+## Documentation
+
+* [English index](docs/en/index.rst) · [中文索引](docs/zh_CN/index.rst)
+* [Build HTML](docs/README.md)
+* [Contributing](docs/en/contributing.rst) · [AGENTS.md](AGENTS.md)
+
+## Contributing
+
+[docs/en/contributing.rst](docs/en/contributing.rst): conventional commits,
+underscores in branch names (no hyphens), Host Core stays ecosystem-agnostic,
+vendor logic belongs in Store plugins.

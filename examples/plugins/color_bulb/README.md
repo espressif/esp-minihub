@@ -20,13 +20,25 @@ values in each point's `props.params`.
 | `module.json` | Manifest (`id=color_bulb`, runtime `native`) |
 | `module_entry.c` | `minihub_module_entry` — adapter + Host API table |
 | `color_bulb_adapter.c` | `start()` registers each `sim.<device>` + commands by `point_id` |
-| `devices.json` | Array of instances: `device` / `type` / `params[]` (`name`, `init`, optional `access` / `visible` / bounds). Omitted bounds use catalog defaults. Packed into `.mhub` and factory-preinstall when present |
+| `devices.json` | Array of instances: `device` / `type` / `params[]` (`name`, `init`, optional `access` / `visible` / bounds / `requires`). Omitted bounds use catalog defaults. Packed into `.mhub` and factory-preinstall when present |
 | `CMakeLists.txt` | IDF component via `MINIHUB_PLUGIN_DIRS`; packs to MHMD `.so` |
 | `device_desc.gen.h` | Generated from `devices.json`; required before build; **do not edit** (embed fallback) |
 
 ## Build
 
-Generate the header, then pull this tree into the Host configure:
+### Standalone (no IDF)
+
+```bash
+python3 tools/build_plugin_standalone.py color_bulb
+# optional: --pack  (needs MINIHUB_PLUGIN_DIRS for examples/)
+```
+
+Writes MHMD to `application/minihub/build/color_bulb.so`. Regenerates
+`device_desc.gen.h` from `devices.json` as part of the CMake build.
+
+### In-tree with Host
+
+Generate the header (if needed), then pull this tree into the Host configure:
 
 ```bash
 python3 tools/generate_devices_property_from_json.py \

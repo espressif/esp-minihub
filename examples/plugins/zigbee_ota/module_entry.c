@@ -4,9 +4,13 @@
  * zigbee_ota L3 module entry. Does not register device points — Host zigbee
  * adapter owns zigbee.zb_* ; this plugin only merges props.ota.
  */
+#ifdef MINIHUB_PLUGIN_STANDALONE
+#include "minihub_plugin_sdk.h"
+#else
 #include "minihub_module_abi.h"
 #include "minihub_adapter.h"
 #include "cJSON.h"
+#endif
 #include <string.h>
 
 extern const minihub_adapter_t zigbee_ota_adapter;

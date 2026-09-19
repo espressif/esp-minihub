@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rebuild deploy catalog.json from minihub_plugins/*/module.json; sync .hub packages."""
+"""Pack Store modules and rewrite deploy catalog.json.
+
+``--from-store`` scans ``DEPLOY/ID/ID.mhub`` only (no plugin sources) and
+rewrites ``catalog.json`` from each zip's ``module.json``.
+"""
 
 from __future__ import annotations
 
@@ -188,6 +192,48 @@ def catalog_entry(manifest: dict, module_dir: Path, deploy_mod: Path) -> dict:
     return entry
 
 
+def rebuild_catalog_from_store(deploy: Path) -> list[dict]:
+    """Build catalog.json by reading module.json inside each ``<id>/<id>.mhub``.
+
+    Does not need plugin sources. Layout: ``deploy/<id>/<id>.mhub``.
+    """
+    catalog: list[dict] = []
+    if not deploy.is_dir():
+        raise FileNotFoundError(f"missing store dir {deploy}")
+    for child in sorted(deploy.iterdir()):
+        if not child.is_dir() or child.name.startswith(".") or child.name == "files":
+            continue
+        pkg = child / f"{child.name}.mhub"
+        if not pkg.is_file():
+            continue
+        try:
+            with zipfile.ZipFile(pkg) as zf:
+                if "module.json" not in zf.namelist():
+                    print(f"WARN: {pkg} has no module.json", file=sys.stderr)
+                    continue
+                manifest = json.loads(zf.read("module.json"))
+                ui_blob = None
+                if "ui.json" in zf.namelist():
+                    ui_blob = json.loads(zf.read("ui.json"))
+        except (OSError, zipfile.BadZipFile, json.JSONDecodeError) as exc:
+            print(f"WARN: skip {pkg}: {exc}", file=sys.stderr)
+            continue
+        if not manifest.get("id"):
+            manifest["id"] = child.name
+        entry = catalog_entry(manifest, child, child)
+        # Prefer the packaged .so size over any Host build tree the script can see.
+        packed = binary_size_from_mhub(pkg, manifest["id"])
+        if packed is not None:
+            entry["binary_size"] = packed
+        if ui_blob is not None:
+            entry["ui"] = ui_blob
+        catalog.append(entry)
+    deploy.mkdir(parents=True, exist_ok=True)
+    path = deploy / "catalog.json"
+    path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return catalog
+
+
 def rebuild_catalog(deploy: Path) -> list[dict]:
     catalog: list[dict] = []
     for module_dir in iter_module_dirs():
@@ -247,11 +293,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--catalog-only",
         action="store_true",
-        help="rewrite catalog.json sizes from existing deploy/*.mhub (no repack)",
+        help="rewrite catalog.json sizes from existing deploy/*.mhub (no repack; needs sources)",
+    )
+    parser.add_argument(
+        "--from-store",
+        action="store_true",
+        help="write catalog.json by scanning deploy/<id>/<id>.mhub (no plugin sources)",
     )
     args = parser.parse_args(argv)
     deploy = resolve_deploy_dir(args.deploy)
     arg = args.module_id
+
+    if args.from_store:
+        try:
+            catalog = rebuild_catalog_from_store(deploy)
+        except FileNotFoundError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        print(
+            f"sync_store_catalog: wrote {deploy / 'catalog.json'} "
+            f"({len(catalog)} modules, from store .mhub)"
+        )
+        return 0
 
     if args.catalog_only:
         catalog = rebuild_catalog(deploy)

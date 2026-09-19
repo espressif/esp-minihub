@@ -1,0 +1,147 @@
+Networking
+==========
+
+:link_to_translation:`zh_CN:[中文]`
+
+MiniHub brings up IP uplinks in ``components/minihub_net`` on top of ESP-IDF
+ESP-NETIF, the Wi-Fi driver, and (on EMAC SoCs) Ethernet.
+
+Upstream:
+
+* `ESP-IDF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/>`_
+* `ESP-NETIF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_netif.html>`_
+* `Wi-Fi Driver <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi-driver/index.html>`_
+
+Matter controller networking is covered in :doc:`matter`. C API details:
+:doc:`api/net_api`.
+
+Kconfig
+-------
+
+* ``CONFIG_MINIHUB_NET_WIFI_STA`` — Create ``WIFI_STA_DEF``, connect with credentials
+* ``CONFIG_MINIHUB_NET_ETH`` — Native EMAC + PHY (S31 Function CoreBoard: YT8531)
+* ``CONFIG_MINIHUB_NET_WIFI_SOFTAP`` — SoftAP/STA owned outside ``minihub_net``
+* ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — SoftAP and/or BLE provisioning when no NVS creds
+
+Fragments: ``config/sdkconfig/feature/wifi_sta.defaults``, ``eth.defaults``.
+
+Boot order
+----------
+
+1. ``minihub_net_init()`` — netif/event loop; start Ethernet; **prepare** Wi-Fi handlers only (log: ``wifi STA deferred``).
+2. Adapters that need radio / BT heap start (Zigbee, BLE Mesh, Matter).
+3. ``minihub_net_start_wifi()`` — ``esp_wifi_start`` + connect, or provisioning.
+
+Default route vs STA connect
+----------------------------
+
+**Having Ethernet IPv4 does not skip Wi-Fi association.**
+
+* **STA credentials present** (Kconfig ``CONFIG_MINIHUB_WIFI_SSID`` or NVS) —
+  ``minihub_net_start_wifi()`` runs ``esp_wifi_start`` and ``connect``; Ethernet
+  IPv4 does not skip that. No credentials → provisioning (or fail). No
+  ``connect`` while provisioning is busy
+* **Default route** — ``minihub_net_refresh_default_netif()``: Ethernet if it has
+  IPv4, else Wi-Fi if it has IPv4, else Ethernet (if built) or Wi-Fi
+* **Ethernet link down** — log ``Ethernet link down``, then refresh the default
+  netif; still Ethernet-first if that netif still has IPv4
+
+Credentials and provisioning
+----------------------------
+
+Wi-Fi SSID/PSK live in NVS, loaded by ``minihub_provision_load_credentials()``.
+
+When **no credentials** exist and ``CONFIG_MINIHUB_WIFI_PROVISIONING`` is on:
+
+* ``minihub_provision_start()`` runs after ``minihub_net_start_wifi()``
+* Transports depend on Kconfig: SoftAP (``CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP``)
+  and/or BLE (``CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE``)
+
+REST: network configuration
+---------------------------
+
+``POST /api/net/config`` applies static or DHCP settings per interface.
+
+**Request body**
+
+.. code-block:: json
+
+   {
+     "iface": "eth",
+     "dhcp": false,
+     "ip": "192.168.1.50",
+     "netmask": "255.255.255.0",
+     "gw": "192.168.1.1",
+     "dns": ["8.8.8.8", "1.1.1.1"]
+   }
+
+Or use ``dns_main`` / ``dns_backup`` instead of the ``dns`` array.
+
+* ``iface`` — ``"eth"`` or ``"wifi"`` (required)
+* ``dhcp`` — boolean (required)
+* ``ip``, ``netmask``, ``gw`` — required when ``dhcp`` is false
+
+**Response**
+
+.. code-block:: json
+
+   { "result": "ok" }
+
+On failure: ``{ "result": "fail", "error": "ESP_ERR_..." }``.
+
+Example (curl):
+
+.. code-block:: bash
+
+   curl -s -X POST http://HUB/api/net/config \
+     -H 'Content-Type: application/json' \
+     -d '{"iface":"wifi","dhcp":true}'
+
+Expected logs
+-------------
+
+* ``Ethernet started`` — EMAC started (link may still be down)
+* ``Ethernet link up, MAC …`` — physical link is up
+* ``eth got IP`` / ``wifi got IP`` — that uplink has IPv4
+* ``MiniHub ready (net=… prov=… web_ui=… lcd_ui=… eth=… wifi=…)`` — features
+  prepared, not proof of IPv4
+
+Troubleshooting
+---------------
+
+**Ethernet is the default route but Wi-Fi has no IP**
+
+Check that NVS has STA credentials and that ``minihub_net_start_wifi()`` ran after
+adapters. Default-route selection does not skip STA connect.
+
+**STA never connects**
+
+* Confirm provisioning finished (Web UI or SoftAP/BLE flow)
+* Look for ``wifi got IP``; if missing, check SSID/PSK in NVS
+* Ensure Matter/CHIP is not owning a second STA (see :doc:`matter`)
+
+**Both interfaces up — which route?**
+
+Traffic uses Ethernet when it has IPv4; otherwise Wi-Fi. Unplugging Ethernet
+should fall back once Wi-Fi has IP (``minihub_net_refresh_default_netif``).
+
+**REST net config returns fail**
+
+Static IP fields must be valid when ``dhcp`` is false. Body max ~2 KB.
+
+C API
+-----
+
+Declared in ``components/minihub_net/include/minihub_net.h``:
+
+* ``minihub_net_init`` / ``minihub_net_start_wifi``
+* ``minihub_net_has_ip`` / ``minihub_net_get_ip`` / ``minihub_net_get_netif``
+* ``minihub_net_refresh_default_netif`` — pick default netif from IPv4 uplinks
+* ``minihub_net_dns_probe`` (host-exported for Store modules)
+
+Interface DHCP / static IP lives in ``minihub_net_cfg.h``:
+
+* ``minihub_net_set_iface_config`` — used by ``POST /api/net/config``
+* ``minihub_net_get_iface_status`` · ``minihub_net_apply_saved_configs``
+
+See :doc:`api/net_api` for struct fields and return codes.

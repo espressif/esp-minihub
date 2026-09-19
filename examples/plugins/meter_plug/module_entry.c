@@ -5,8 +5,12 @@
  * time; we hand back the adapter and stash the Host service table so the
  * adapter can register points / command handlers through it.
  */
+#ifdef MINIHUB_PLUGIN_STANDALONE
+#include "minihub_plugin_sdk.h"
+#else
 #include "minihub_module_abi.h"
 #include "minihub_adapter.h"
+#endif
 
 extern const minihub_adapter_t meter_plug_adapter;
 /* shared with meter_plug_adapter.c */

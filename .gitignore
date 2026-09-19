@@ -45,3 +45,7 @@ docs/_build/
 # Staged by docs/_extensions/stage_catalog.py at Sphinx configure time
 docs/_static/catalog/
 docs/_static/catalog.zip
+docs/_static/module_sdk.zip
+
+# Local design notes (keep on disk; do not commit)
+docs/superpowers/

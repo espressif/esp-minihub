@@ -1,0 +1,2 @@
+# SPDX-FileCopyrightText: 2026 MiniHub Contributors
+# SPDX-License-Identifier: Apache-2.0

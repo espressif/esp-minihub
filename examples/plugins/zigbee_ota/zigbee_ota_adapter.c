@@ -12,6 +12,9 @@
  * moves the card under the vendor section. point.adapter stays "zigbee" so
  * radio commands still route to the Host. ZCL 0x0019 air path remains a stub.
  */
+#ifdef MINIHUB_PLUGIN_STANDALONE
+#include "minihub_plugin_sdk.h"
+#else
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
@@ -21,6 +24,7 @@
 #include "minihub_module.h"
 #include "minihub_http_worker.h"
 #include "minihub_net.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>

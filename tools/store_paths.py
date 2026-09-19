@@ -126,6 +126,21 @@ def module_deploy_dir(module_id: str, deploy: Path | None = None) -> Path:
 
 
 def module_mhmd_path(module_id: str, *, root: Path = ROOT) -> Path:
-    """Local MHMD intermediate: application/<app>/build/<id>.so (not under deploy)."""
+    """MHMD .so for pack: Host build first, else standalone plugin/build/<id>.so."""
     app = os.environ.get("MINIHUB_APP", "minihub").strip() or "minihub"
-    return root / "application" / app / "build" / f"{module_id}.so"
+    host_so = root / "application" / app / "build" / f"{module_id}.so"
+    if host_so.is_file():
+        return host_so
+
+    candidates: list[Path] = [
+        root / "examples" / "plugins" / module_id / "build" / f"{module_id}.so",
+    ]
+    for d in plugin_dir_env():
+        if d.name == module_id:
+            candidates.append(d / "build" / f"{module_id}.so")
+        elif (d / module_id / "module.json").is_file():
+            candidates.append(d / module_id / "build" / f"{module_id}.so")
+    for cand in candidates:
+        if cand.is_file():
+            return cand
+    return host_so
