@@ -1,0 +1,12 @@
+{
+  "id": "color_bulb",
+  "name": "Color Bulb (simulated)",
+  "version": "0.1.0",
+  "kind": "module",
+  "runtime": "native",
+  "adapter": "color_bulb",
+  "description": "L3 plugin that simulates two online color bulbs (kitchen_lamp + living_lamp; power/brightness/hue/saturation/cct) with no real hardware. Registers sim.* points and answers UI control commands by point_id.",
+  "binary": "color_bulb.so",
+  "abi_version": 1,
+  "core_api_min": 1
+}
