@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "clusters": [
+    { "id": "0x0006", "cap": "onoff" },
+    { "id": "0x0402", "cap": "temp" },
+    { "id": "0x0405", "cap": "humidity" },
+    { "id": "0x0500", "cap": "ias_zone" },
+    { "id": "0x0b04", "cap": "electrical" },
+    { "id": "0x0702", "cap": "energy" }
+  ],
+  "classify": [
+    {
+      "type": "sensor",
+      "priority": 100,
+      "any_caps": ["temp", "humidity", "ias_zone"]
+    },
+    {
+      "type": "light",
+      "priority": 50,
+      "ha_device_ids": ["0x0100", "0x0101", "0x0102", "0x010C", "0x010D"]
+    },
+    {
+      "type": "switch",
+      "priority": 10,
+      "any_caps": ["onoff"]
+    }
+  ],
+  "attrs": [
+    {
+      "cluster": "0x0006",
+      "attr": "0x0000",
+      "param": "power",
+      "access": "RW",
+      "report": "onoff",
+      "summary": true
+    },
+    {
+      "cluster": "0x0402",
+      "attr": "0x0000",
+      "param": "temperature",
+      "access": "R",
+      "report": "temp_c",
+      "summary": true
+    },
+    {
+      "cluster": "0x0405",
+      "attr": "0x0000",
+      "param": "humidity",
+      "access": "R",
+      "report": "humidity_pct"
+    },
+    {
+      "cluster": "0x0500",
+      "attr": "0x0002",
+      "param": "contact",
+      "access": "R",
+      "report": "contact",
+      "field": "open_closed",
+      "summary": true
+    },
+    {
+      "cluster": "0x0500",
+      "attr": "0x0002",
+      "param": "zone_status",
+      "access": "R",
+      "report": "contact",
+      "field": "zone_status"
+    },
+    {
+      "cluster": "0x0500",
+      "attr": "0x0002",
+      "param": "tamper",
+      "access": "R",
+      "report": "contact",
+      "field": "tamper"
+    },
+    {
+      "cluster": "0x0500",
+      "attr": "0x0002",
+      "param": "battery_low",
+      "access": "R",
+      "report": "contact",
+      "field": "battery_low"
+    },
+    {
+      "cluster": "0x0b04",
+      "attr": "0x050b",
+      "param": "power_w",
+      "access": "R",
+      "report": "power_w"
+    },
+    {
+      "cluster": "0x0b04",
+      "attr": "0x0505",
+      "param": "voltage_v",
+      "access": "R",
+      "report": "voltage_v"
+    },
+    {
+      "cluster": "0x0b04",
+      "attr": "0x0508",
+      "param": "current_a",
+      "access": "R",
+      "report": "current_a"
+    },
+    {
+      "cluster": "0x0702",
+      "attr": "0x0000",
+      "param": "energy_wh",
+      "access": "R",
+      "report": "energy_wh"
+    }
+  ],
+  "controls": [
+    {
+      "param": "power",
+      "aliases": ["onoff", "on_off"],
+      "kind": "on_off",
+      "cluster": "0x0006"
+    },
+    {
+      "param": "brightness",
+      "kind": "move_to_level",
+      "cluster": "0x0008",
+      "note": "Map present; stack returns NOT_SUPPORTED until Level Control writer exists"
+    }
+  ]
+}

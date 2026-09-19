@@ -5,58 +5,56 @@
  */
 
 #include "zigbee_map.h"
+#include "zigbee_cluster_map.h"
 #include "minihub_zigbee_types.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* Zigbee HA profile application device IDs (lighting). */
-#define ZB_HA_ON_OFF_LIGHT            0x0100
-#define ZB_HA_DIMMABLE_LIGHT          0x0101
-#define ZB_HA_COLOR_DIMMABLE_LIGHT    0x0102
-#define ZB_HA_COLOR_TEMPERATURE_LIGHT 0x010C
-#define ZB_HA_EXTENDED_COLOR_LIGHT    0x010D
-
-static bool is_ha_light_device(uint16_t app_device_id)
-{
-    switch (app_device_id) {
-    case ZB_HA_ON_OFF_LIGHT:
-    case ZB_HA_DIMMABLE_LIGHT:
-    case ZB_HA_COLOR_DIMMABLE_LIGHT:
-    case ZB_HA_COLOR_TEMPERATURE_LIGHT:
-    case ZB_HA_EXTENDED_COLOR_LIGHT:
-        return true;
-    default:
-        return false;
-    }
-}
-
 const char *minihub_zb_classify_type(uint8_t caps, uint16_t app_device_id)
 {
-    if (caps & MINIHUB_ZB_CAP_SENSOR_MASK) {
-        return "sensor";
-    }
-    if (is_ha_light_device(app_device_id)) {
-        return "light";
-    }
-    if (caps & MINIHUB_ZB_CAP_ONOFF) {
-        return "switch";
-    }
-    /* Interview incomplete — never invent a switch/light. */
-    return "unknown";
+    (void)minihub_zb_cluster_map_init();
+    return minihub_zb_map_classify_type(caps, app_device_id);
 }
 
-int minihub_zb_format_point_id(char *out, size_t out_len, const char *type, uint16_t short_addr)
+int minihub_zb_format_point_id(char *out, size_t out_len, uint16_t short_addr)
 {
-    if (!out || out_len == 0 || !type || type[0] == '\0') {
+    if (!out || out_len == 0) {
         return -1;
     }
-    int n = snprintf(out, out_len, "%s/zb_%04x", type, (unsigned)short_addr);
+    int n = snprintf(out, out_len, "zigbee.zb_%04x", (unsigned)short_addr);
     if (n < 0 || (size_t)n >= out_len) {
         return -1;
     }
     return 0;
+}
+
+bool minihub_zb_normalize_point_id(char *point_id, size_t len)
+{
+    if (!point_id || len == 0 || point_id[0] == '\0') {
+        return false;
+    }
+    if (strncmp(point_id, "zigbee.", 7) == 0) {
+        return false;
+    }
+    /* Legacy discovery form: "{type}/zb_XXXX" */
+    const char *slash = strchr(point_id, '/');
+    if (!slash || slash[1] != 'z' || slash[2] != 'b' || slash[3] != '_') {
+        return false;
+    }
+    const char *stable = slash + 1;
+    char buf[MINIHUB_POINT_ID_MAX];
+    int n = snprintf(buf, sizeof(buf), "zigbee.%s", stable);
+    if (n < 0 || (size_t)n >= len || (size_t)n >= sizeof(buf)) {
+        return false;
+    }
+    if (strcmp(point_id, buf) == 0) {
+        return false;
+    }
+    strncpy(point_id, buf, len - 1);
+    point_id[len - 1] = '\0';
+    return true;
 }
 
 int minihub_zb_parse_ieee(const char *s, uint64_t *out)

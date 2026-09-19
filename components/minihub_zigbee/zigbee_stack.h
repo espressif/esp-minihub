@@ -47,6 +47,13 @@ void zigbee_stack_notify_attr(const minihub_zigbee_attr_evt_t *evt);
 /** After device mapped: read quirk-declared ZCL attrs (Basic app/hw version, etc.). */
 void zigbee_stack_subscribe_product_params(uint16_t short_addr, uint8_t endpoint, uint64_t ieee);
 
-/** Write a ZCL attribute (for product_params access=rw). */
+/** Write a ZCL attribute (for product_params access=rw / control map write_attr). */
 esp_err_t zigbee_stack_write_attr(uint16_t short_addr, uint8_t endpoint, uint16_t cluster_id,
                                   uint16_t attr_id, uint8_t attr_type, void *value, uint16_t value_size);
+
+/**
+ * Level Control move-to-level (optional). Returns ESP_ERR_NOT_SUPPORTED until
+ * the writer is implemented; control map may still declare brightness.
+ */
+esp_err_t zigbee_stack_move_to_level(uint16_t short_addr, uint8_t endpoint, uint8_t level,
+                                     uint16_t transition_time);

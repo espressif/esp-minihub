@@ -83,6 +83,16 @@ esp_err_t zigbee_stack_write_attr(uint16_t short_addr, uint8_t endpoint, uint16_
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t zigbee_stack_move_to_level(uint16_t short_addr, uint8_t endpoint, uint8_t level,
+                                     uint16_t transition_time)
+{
+    (void)short_addr;
+    (void)endpoint;
+    (void)level;
+    (void)transition_time;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 void zigbee_stack_set_hooks(minihub_zigbee_device_cb_t on_device, minihub_zigbee_attr_cb_t on_attr,
                             zigbee_stack_ready_cb_t on_ready, void *ctx)
 {

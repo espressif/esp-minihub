@@ -131,8 +131,25 @@ esp_err_t minihub_zb_nvs_load(minihub_zigbee_device_t *out, size_t cap, size_t *
     }
     err = devices_from_json(root, out, cap, count);
     cJSON_Delete(root);
+    if (err != ESP_OK) {
+        return err;
+    }
+    /* Migrate legacy "{type}/zb_XXXX" → "zigbee.zb_XXXX" so UI sees dotted ids. */
+    bool dirty = false;
+    for (size_t i = 0; i < *count; i++) {
+        if (minihub_zb_normalize_point_id(out[i].point_id, sizeof(out[i].point_id))) {
+            dirty = true;
+            ESP_LOGI(TAG, "migrated point_id → %s", out[i].point_id);
+        }
+    }
+    if (dirty) {
+        esp_err_t serr = minihub_zb_nvs_save(out, *count);
+        if (serr != ESP_OK) {
+            ESP_LOGW(TAG, "NVS rewrite after migrate: %s", esp_err_to_name(serr));
+        }
+    }
     ESP_LOGI(TAG, "loaded %u devices from NVS", (unsigned)*count);
-    return err;
+    return ESP_OK;
 }
 
 esp_err_t minihub_zb_nvs_save(const minihub_zigbee_device_t *devs, size_t count)
