@@ -29,10 +29,13 @@ override with `MINIHUB_APP_DIR`). Patch paths still start with `managed_componen
 | Patch | Component | Purpose |
 |-------|-----------|---------|
 | `esp-boost-0.6.0-isr-safe-syscalls.patch` | `espressif/esp-boost` 0.6.0 (`e5a6e838`) | Zigbee + Wi-Fi coexistence: avoid `std::mutex` in `__wrap_write` for normal fds (ISR-safe). |
+| `esp-elf-loader-1.3.3-s31-psram-text-exec.patch` | `espressif/elf_loader` ≥1.3.3 | PSRAM `.so` text must allocate with `MALLOC_CAP_EXEC` (else Instruction access fault MCAUSE=1, and nearby PSRAM heap such as the device_widget registry can be smashed around `module_dl`). |
 | `esp-rainmaker-1.16.0-soft-sha-fallback.patch` | Host git submodule `esp-rainmaker` v1.16.0 | Soft SHA-256 when `CONFIG_MBEDTLS_HARDWARE_SHA` is off (GDMA hang workaround). |
 | `esp-rainmaker-1.16.0-soft-sha-fallback-managed.patch` | `managed_components/espressif__esp_rainmaker` | Same Soft SHA fix for the registry package (`minihub_rainmaker` yml). |
 | `esp-rainmaker-1.16.0-defer-chal-resp-self-claim.patch` | `esp-rainmaker` v1.16.0 (`afda50d`) | Defer Challenge Response init during Self Claim so on-network APP mapping can start after claim. |
 | `esp-matter-chipoble-null-peer-write.patch` | `../esp-matter` CHIP nimble BLE | Null-check peer in `SendWriteRequest` after GAP disconnect (CHIPoBLE StandAloneAck race → Load access fault). |
+
+**Note (S31 PSRAM I-cache):** `elf_loader` **1.3.3+** already uses full `Cache_WriteBack_All` / `Cache_Invalidate_All` on ESP32-S31 (ranged `*_Addr` APIs no-op on unaligned `seg_size`). No local icache patch is needed when the lockfile pins ≥1.3.3. Do not re-introduce a 1.3.2-era `esp_elf_arch_flush(addr,size)` patch against current sources.
 
 Check whether patches are applied (exit 1 if any are missing):
 

@@ -328,3 +328,111 @@ esp_err_t minihub_point_list_by_adapter(const char *adapter, minihub_point_t **o
 {
     return filter_points(match_adapter, adapter, out, count);
 }
+
+/* Free a point list previously returned by minihub_point_list*(). The registry
+ * deep-copies each point's props via cJSON_Duplicate, so callers must free them
+ * too - a bare free() on the array leaks every props object. */
+void minihub_point_list_free(minihub_point_t *list, size_t count)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < count; i++) {
+        if (list[i].props) {
+            cJSON_Delete(list[i].props);
+            list[i].props = NULL;
+        }
+    }
+    free(list);
+}
+
+/* ---- internal locked accessors ----
+ * state_store's minihub_point_set must resolve an index, dereference the
+ * pointer and write the value atomically against concurrent
+ * register/unregister (which left-shifts the point array). These helpers let
+ * it keep s_mutex held across that whole sequence. Callers MUST bracket them
+ * with minihub_point_registry_lock()/unlock(). */
+void minihub_point_registry_lock(void)
+{
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+}
+
+void minihub_point_registry_unlock(void)
+{
+    xSemaphoreGive(s_mutex);
+}
+
+int16_t minihub_point_index_of_locked(const char *point_id)
+{
+    return find_index_locked(point_id);
+}
+
+minihub_point_t *minihub_point_get_by_index_locked(uint16_t index)
+{
+    return (index < s_point_count) ? &s_points[index] : NULL;
+}
+
+static bool point_props_has_param(const cJSON *props, const char *parameter)
+{
+    if (!props || !parameter || parameter[0] == '\0') {
+        return false;
+    }
+    const cJSON *params = cJSON_GetObjectItemCaseSensitive(props, "params");
+    if (cJSON_IsObject(params)) {
+        return cJSON_GetObjectItemCaseSensitive(params, parameter) != NULL;
+    }
+    if (cJSON_IsArray(params)) {
+        const cJSON *it = NULL;
+        cJSON_ArrayForEach(it, params) {
+            const cJSON *n = cJSON_GetObjectItemCaseSensitive(it, "name");
+            if (cJSON_IsString(n) && n->valuestring && strcmp(n->valuestring, parameter) == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+esp_err_t minihub_point_resolve_by_type_param(const char *type, const char *parameter,
+                                              char *out, size_t size)
+{
+    if (!type || type[0] == '\0' || !parameter || parameter[0] == '\0' || !out || size == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    /* Preferred: one device = one point, point_id "<protocol>.<device>", with
+     * live params in props.params.<parameter>. Legacy: per-param ids
+     * "<protocol>.<device>.<parameter>" still match by suffix. */
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    for (size_t i = 0; i < s_point_count; i++) {
+        const minihub_point_t *p = &s_points[i];
+        if (strcmp(p->type, type) != 0) {
+            continue;
+        }
+        bool match = false;
+        if (point_props_has_param(p->props, parameter)) {
+            match = true;
+        } else {
+            const char *first = strchr(p->point_id, '.');
+            if (first) {
+                const char *second = strchr(first + 1, '.');
+                if (second && strcmp(second + 1, parameter) == 0) {
+                    match = true;
+                }
+            }
+        }
+        if (!match) {
+            continue;
+        }
+        size_t len = strlen(p->point_id);
+        if (len >= size) {
+            xSemaphoreGive(s_mutex);
+            return ESP_ERR_INVALID_SIZE;
+        }
+        memcpy(out, p->point_id, len + 1);
+        xSemaphoreGive(s_mutex);
+        return ESP_OK;
+    }
+    xSemaphoreGive(s_mutex);
+    return ESP_ERR_NOT_FOUND;
+}

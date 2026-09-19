@@ -95,6 +95,17 @@ const TYPE_LABEL = {
     appliance: '家电'
 };
 
+/* Prefer props.category (product name) over catalog type label. Widgets still use p.type. */
+function dwTypeDisplay(p) {
+    const pr = (p && p.props && typeof p.props === 'object') ? p.props : {};
+    const cat = pr.category || pr.product || pr.product_name;
+    if (cat != null && String(cat) !== '') {
+        return String(cat);
+    }
+    const t = p && p.type;
+    return (TYPE_LABEL[t] || t || '');
+}
+
 function adapterEnabled(ad) {
     if (ADAPTER_HIDDEN[ad]) return false;
     const v = enabledAdapters[ad];
@@ -171,9 +182,31 @@ function fillTpl(s, vars) {
     return String(s || '').replace(/\{(\w+)\}/g, (m, k) => vars[k] != null ? vars[k] : m);
 }
 
+/* Protocol prefix on the point (`thread.color_bulb` → thread), not hardcoded. */
+/* Vendor plugin claim. Radio commands still use p.adapter. */
+function pointGroup(p) {
+    const owner = p && p.props && typeof p.props.owner === 'string' ? p.props.owner : '';
+    if (owner && adapterEnabled(owner)) return owner;
+    return (p && p.adapter) || '';
+}
+
+function pointProtocol(p) {
+    if (!p) return '';
+    if (p.protocol) return String(p.protocol);
+    if (p.props && p.props.protocol) return String(p.props.protocol);
+    const id = String(p.point_id || '');
+    const dot = id.indexOf('.');
+    return dot > 0 ? id.slice(0, dot) : '';
+}
+
 function pointDisplayName(p) {
     const n = p && p.props && p.props.name;
-    return (n && String(n).trim()) ? String(n).trim() : (p.point_id || '').split('/').pop();
+    if (n && String(n).trim()) return String(n).trim();
+    const id = (p && p.point_id) || '';
+    /* Device ids are <protocol>.<endpoint>[.<param>]; show the endpoint. */
+    const dot = id.split('.');
+    if (dot.length >= 2) return dot[dot.length - (dot.length >= 3 ? 2 : 1)];
+    return id.split('/').pop();
 }
 
 function pointRoomName(p) {
@@ -238,9 +271,12 @@ function esc(s) {
 }
 
 function switchView(v) {
+    /* Devices list lives on Overview only; no separate Devices nav page. */
+    if (v === 'devices') v = 'overview';
     view = v;
     document.querySelectorAll('.view').forEach(el => el.hidden = true);
-    document.getElementById('view-' + v).hidden = false;
+    const viewEl = document.getElementById('view-' + v);
+    if (viewEl) viewEl.hidden = false;
     document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === v));
     document.getElementById('page-title').textContent = TITLES[v] || v;
     document.getElementById('sidebar').classList.remove('open');
@@ -328,7 +364,8 @@ async function loadMeta() {
             };
         }
         const hub = await (await fetch('/api/')).json();
-        document.getElementById('hub-ver').textContent = 'v' + hub.version;
+        const hv = document.getElementById('hub-ver');
+        if (hv) hv.textContent = 'v' + (hub && hub.version ? hub.version : '?');
         if (view === 'overview') renderOverview();
     } catch (e) {}
 }
@@ -348,31 +385,8 @@ async function loadPoints() {
         if (changed) {
             if (view === 'overview') renderOverview();
             if (view === 'map' && window.L) renderMap();
-            if (lightDetailId) {
-                const lp = pts.find(x => x.point_id === lightDetailId);
-                if (lp) {
-                    syncLightPowerUi(lp);
-                    if (lightHasBright(lp)) {
-                        const b = lightBrightVal(lp);
-                        const bi = document.getElementById('light-bright');
-                        const bv = document.getElementById('light-bright-val');
-                        if (bi && document.activeElement !== bi) {
-                            bi.value = b;
-                            if (bv) bv.textContent = b + '%';
-                        }
-                    }
-                    if (lightHasCt(lp)) {
-                        const ct = lightCtVal(lp);
-                        const ci = document.getElementById('light-ct');
-                        const cv = document.getElementById('light-ct-val');
-                        if (ci && document.activeElement !== ci) {
-                            ci.value = ct;
-                            if (cv) cv.textContent = '色温 ' + ct + 'K';
-                            renderLightCtPresets(ct, !!lp.online);
-                        }
-                    }
-                }
-            }
+            /* Open detail modal: re-render from point via catalog widgets (any type). */
+            if (typeof refreshDeviceDetail === 'function') refreshDeviceDetail();
         }
     } catch (e) {
         const c = document.getElementById('content');
@@ -399,15 +413,25 @@ async function loadModulesForAuth() {
 }
 function renderOverview() {
     const q = query.toLowerCase();
-    let base = pts.filter(p => adapterEnabled(p.adapter));
+    /* Warm type catalog so Overview cards can show /img/devices/<type>.svg. */
+    if (typeof ensureDwCatalog === 'function' && typeof dwCatalog !== 'undefined' && !dwCatalog) {
+        ensureDwCatalog().then(function () {
+            if (view === 'overview') renderOverview();
+        }).catch(function () {});
+    }
+    /* Collapse registry rows to devices before filter/stats/cards.
+     * Otherwise legacy per-param points (thread.color_bulb.brightness …)
+     * inflate 能力点 and render a fake toggle per parameter. */
+    let base = overviewCollapsePoints(pts.filter(p => adapterEnabled(p.adapter)));
     refreshOverviewFilterOptions(base);
-    let list = base.filter(p => (filter === 'all' || p.adapter === filter) && pointMatchesQuery(p, q) && (!roomFilter || pointRoomName(p) === roomFilter) && (!typeFilter || p.type === typeFilter));
+    let list = base.filter(p => (filter === 'all' || pointGroup(p) === filter) && pointMatchesQuery(p, q) && (!roomFilter || pointRoomName(p) === roomFilter) && (!typeFilter || p.type === typeFilter));
     document.getElementById('s-total').textContent = list.length;
     document.getElementById('s-online').textContent = list.filter(p => p.online).length;
-    document.getElementById('s-adapters').textContent = new Set(list.map(p => p.adapter)).size;
+    document.getElementById('s-adapters').textContent = new Set(list.map(pointGroup)).size;
     const groups = {};
     list.forEach(p => {
-        (groups[p.adapter] = groups[p.adapter] || []).push(p)
+        const g = pointGroup(p);
+        (groups[g] = groups[g] || []).push(p)
     });
     authModules().forEach(m => {
         const ad = m.adapter;
@@ -458,7 +482,7 @@ function renderOverview() {
         return;
     }
     html += groupKeys.map(ad => {
-        const chips = adapterRoomChipsHtml(base.filter(p => p.adapter === ad));
+        const chips = adapterRoomChipsHtml(base.filter(p => pointGroup(p) === ad));
         return '<div class="section">' + sectionHeader(ad, groups[ad].length) + chips + '<div class="grid">' + groups[ad].map(cardHtml).join('') + '</div></div>';
     }).join('');
     el.innerHTML = html;

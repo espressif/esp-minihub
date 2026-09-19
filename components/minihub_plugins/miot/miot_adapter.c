@@ -2456,6 +2456,17 @@ static void register_miot_point(const miot_device_t *dev, bool online, const cha
         }
         if (dev->model[0]) {
             cJSON_AddStringToObject(props, "model", dev->model);
+            /* Brand = first segment of MIoT model (yeelink.light.xxx → yeelink). */
+            char brand[40];
+            size_t n = 0;
+            while (dev->model[n] && dev->model[n] != '.' && n + 1 < sizeof(brand)) {
+                brand[n] = dev->model[n];
+                n++;
+            }
+            brand[n] = '\0';
+            if (n > 0) {
+                cJSON_AddStringToObject(props, "manufacturer", brand);
+            }
         }
         if (dev->room_name[0]) {
             cJSON_AddStringToObject(props, "room_name", dev->room_name);

@@ -240,6 +240,7 @@ def render_c(symbols: list[str], so_name: str) -> str:
         "#include <stdlib.h>",
         "#include <string.h>",
         "#include <strings.h>",
+        "#include <sys/stat.h>",
         "#include <time.h>",
         "#include <unistd.h>",
         '#include "esp_elf.h"',
@@ -393,6 +394,18 @@ def main() -> int:
             "esp_timer_get_time",
             "minihub_net_dns_probe",
             "heap_caps_get_free_size",
+            "mkdir",
+            "stat",
+            "unlink",
+            "rmdir",
+            "esp_http_client_open",
+            "esp_http_client_fetch_headers",
+            "esp_http_client_get_content_length",
+            "esp_http_client_read",
+            "esp_http_client_close",
+            "minihub_point_list_by_adapter",
+            "minihub_point_list_free",
+            "minihub_command_invoke",
         }
         allow_syms = sorted(set(symbols) | always)
         allow_path = args.allowlist_json

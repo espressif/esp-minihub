@@ -13,4 +13,7 @@ idf_component_register(
     REQUIRES minihub_core minihub_adapter espressif__cjson esp_netif driver
 )
 
-idf_component_optional_requires(PUBLIC espressif__esp-modbus)
+# Empty SRCS (CONFIG off) makes an INTERFACE lib; PUBLIC link is illegal then.
+if(CONFIG_MINIHUB_MODBUS)
+    idf_component_optional_requires(PUBLIC espressif__esp-modbus)
+endif()

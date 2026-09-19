@@ -621,13 +621,24 @@ def make_handler(deploy: Path, catalog: Path):
         return profiles
 
     class Handler(BaseHTTPRequestHandler):
+        def _cors(self) -> None:
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
         def _json(self, code: int, obj) -> None:
             body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self._cors()
             self.end_headers()
             self.wfile.write(body)
+
+        def do_OPTIONS(self) -> None:
+            self.send_response(204)
+            self._cors()
+            self.end_headers()
 
         def do_GET(self) -> None:
             if self.path == "/api/catalog":
@@ -643,6 +654,7 @@ def make_handler(deploy: Path, catalog: Path):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/octet-stream")
                 self.send_header("Content-Length", str(len(data)))
+                self._cors()
                 self.end_headers()
                 self.wfile.write(data)
                 return

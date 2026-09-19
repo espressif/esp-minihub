@@ -18,6 +18,8 @@ from store_paths import (  # noqa: E402
     STORE_MODULES,
     module_deploy_dir,
     module_mhmd_path,
+    module_source_dir,
+    plugin_dir_env,
     resolve_deploy_dir,
 )
 
@@ -46,26 +48,43 @@ def resolve_modules_dir(*, root: Path = ROOT) -> Path:
 
 
 def list_binary_modules(store: Path = STORE) -> list[str]:
-    """Dynamically list packable module directory names under minihub_plugins."""
+    """Dynamically list packable module directory names.
+
+    Searches built-in ``components/minihub_plugins`` plus any dirs supplied via
+    ``MINIHUB_PLUGIN_DIRS`` (each entry may be a single module dir or a parent
+    dir holding several modules).
+    """
     ids: list[str] = []
-    if not store.is_dir():
-        return ids
-    for d in sorted(store.iterdir()):
+    seen: set[str] = set()
+
+    def consider(d: Path) -> None:
         if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
-            continue
+            return
         mj, cm = d / "module.json", d / "CMakeLists.txt"
         if not mj.is_file() or not cm.is_file():
-            continue
+            return
         try:
             meta = json.loads(mj.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             print(f"WARN: skip {d.name}: bad module.json ({exc})", file=sys.stderr)
-            continue
+            return
         if meta.get("config_only"):
-            continue
+            return
         if meta.get("inject") and not meta.get("binary"):
-            continue
-        ids.append(d.name)
+            return
+        if d.name not in seen:
+            ids.append(d.name)
+            seen.add(d.name)
+
+    if store.is_dir():
+        for d in sorted(store.iterdir()):
+            consider(d)
+    for d in plugin_dir_env():
+        if (d / "module.json").is_file():
+            consider(d)
+        elif d.is_dir():
+            for sub in sorted(d.iterdir()):
+                consider(sub)
     return ids
 
 
@@ -111,7 +130,7 @@ def pack_one(
     try:
         from sync_store_catalog import read_adapter_version
 
-        expected_av = read_adapter_version(STORE / module_id, module_id)
+        expected_av = read_adapter_version(module_source_dir(module_id, root=root), module_id)
     except Exception:
         expected_av = ""
     if expected_av:

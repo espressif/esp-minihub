@@ -12,6 +12,7 @@ set(_REQUIRES
     minihub_net
     minihub_matter
     minihub_thread
+    minihub_device_widget
     esp_http_server esp_http_client esp_netif espressif__cjson
     spi_flash app_update joltwallet__littlefs
 )

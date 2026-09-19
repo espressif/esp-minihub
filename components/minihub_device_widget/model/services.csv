@@ -1,0 +1,5 @@
+service_id,parameters
+ota,"ota_url, ota_status, ota_info"
+schedule,schedules
+time,"tz, tz_posix"
+system,"reboot, factory-reset, wi-fi-reset"

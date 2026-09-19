@@ -46,9 +46,9 @@ endif()
 # CONFIG_MINIHUB_DYNAMIC_MODULES=y (see REGISTER_ADAPTER guards in minihub_plugins).
 # --gc-sections drops unused objects from the app ELF when nothing references them.
 if(CONFIG_MINIHUB_DYNAMIC_MODULES)
-    file(GLOB _MINIHUB_STORE_MOD_CMAKE "${MINIHUB_REPO_ROOT}/components/minihub_plugins/*/CMakeLists.txt")
-    foreach(_SM_CMAKE ${_MINIHUB_STORE_MOD_CMAKE})
-        get_filename_component(_SM_DIR ${_SM_CMAKE} DIRECTORY)
+    # Pull plugin components into the IDF build graph (built-in + MINIHUB_PLUGINS).
+    minihub_plugin_dirs(_MINIHUB_STORE_MOD_DIRS)
+    foreach(_SM_DIR ${_MINIHUB_STORE_MOD_DIRS})
         get_filename_component(_SM ${_SM_DIR} NAME)
         if(EXISTS "${_SM_DIR}/module.json")
             list(APPEND MINIHUB_MAIN_REQUIRES ${_SM})
@@ -86,6 +86,29 @@ if(_pp_src)
     file(MAKE_DIRECTORY ${MINIHUB_FS_DIR}/config/product_params)
     file(COPY ${_pp_src}/ DESTINATION ${MINIHUB_FS_DIR}/config/product_params)
 endif()
+# Device control icons → /data/images (label storage). The Web console resolves
+# the icon for a control from its attributes at render time, so the images must
+# be in storage rather than baked into the app binary. .stamp doubles as the
+# littlefs target dependency (it is re-created whenever the image dir is wiped).
+set(_minihub_img_dep)
+set(_MINIHUB_DW_IMAGES_SRC ${MINIHUB_REPO_ROOT}/components/minihub_device_widget/images)
+if(EXISTS ${_MINIHUB_DW_IMAGES_SRC})
+    file(GLOB_RECURSE _minihub_img_src CONFIGURE_DEPENDS ${_MINIHUB_DW_IMAGES_SRC}/*)
+    add_custom_command(
+        OUTPUT ${MINIHUB_FS_DIR}/images/.stamp
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${MINIHUB_FS_DIR}/images
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${_MINIHUB_DW_IMAGES_SRC} ${MINIHUB_FS_DIR}/images
+        COMMAND ${CMAKE_COMMAND} -E touch ${MINIHUB_FS_DIR}/images/.stamp
+        DEPENDS ${_minihub_img_src}
+        COMMENT "Sync device widget images into littlefs image"
+        VERBATIM
+    )
+    set(_minihub_img_dep ${MINIHUB_FS_DIR}/images/.stamp)
+else()
+    message(WARNING "device widget images missing: ${_MINIHUB_DW_IMAGES_SRC}")
+endif()
+
 set(_minihub_ui_dep)
 if(CONFIG_MINIHUB_LCD_UI AND EXISTS ${MINIHUB_REPO_ROOT}/components/minihub_lcd/ui/root.json)
     file(GLOB_RECURSE _minihub_ui_src CONFIGURE_DEPENDS
@@ -103,7 +126,7 @@ if(CONFIG_MINIHUB_LCD_UI AND EXISTS ${MINIHUB_REPO_ROOT}/components/minihub_lcd/
     set(_minihub_ui_dep ${MINIHUB_FS_DIR}/ui/.stamp)
 endif()
 littlefs_create_partition_image(storage ${MINIHUB_FS_DIR} FLASH_IN_PROJECT
-    DEPENDS ${_minihub_ui_dep})
+    DEPENDS ${_minihub_ui_dep} ${_minihub_img_dep})
 
 set(MINIHUB_MODSTORE_DIR ${CMAKE_BINARY_DIR}/modstore_image)
 file(REMOVE_RECURSE ${MINIHUB_MODSTORE_DIR})
@@ -111,20 +134,25 @@ file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/modules)
 file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/packs)
 file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/files)
 
-set(_MINIHUB_STORE_ROOT ${MINIHUB_REPO_ROOT}/components/minihub_plugins)
 # Built .mhub (zip) / .so / catalog live under deploy dir (not in the source tree).
 if(DEFINED ENV{MINIHUB_STORE_DEPLOY} AND NOT "$ENV{MINIHUB_STORE_DEPLOY}" STREQUAL "")
     set(_MINIHUB_STORE_DEPLOY "$ENV{MINIHUB_STORE_DEPLOY}")
 else()
     set(_MINIHUB_STORE_DEPLOY "$ENV{HOME}/workspace/minihub_store")
 endif()
-if(EXISTS ${_MINIHUB_STORE_DEPLOY}/catalog.json)
-    file(COPY ${_MINIHUB_STORE_DEPLOY}/catalog.json DESTINATION ${MINIHUB_MODSTORE_DIR})
-endif()
+# Catalog is copied AFTER packing below so size/binary_size match staged .mhub.
 # Stage /store/files from deploy/<id>/<id>.mhub (zip package)
 minihub_store_preinstall_list(MINIHUB_STORE_PREINSTALL)
 message(STATUS "store_preinstall: ${MINIHUB_STORE_PREINSTALL}")
-file(GLOB _STORE_MOD_JSONS "${_MINIHUB_STORE_ROOT}/*/module.json")
+# All Store modules (L1/L2/L3) for .mhub staging — includes runtime js/pack under
+# MINIHUB_PLUGIN_DIRS. Native .so ninja rules use minihub_plugin_dirs instead.
+set(_STORE_MOD_JSONS "")
+minihub_store_module_dirs(_MH_STORE_MOD_DIRS)
+foreach(_pd ${_MH_STORE_MOD_DIRS})
+    if(EXISTS "${_pd}/module.json")
+        list(APPEND _STORE_MOD_JSONS "${_pd}/module.json")
+    endif()
+endforeach()
 foreach(_MOD_JSON ${_STORE_MOD_JSONS})
     get_filename_component(_MOD_DIR ${_MOD_JSON} DIRECTORY)
     get_filename_component(_MOD ${_MOD_DIR} NAME)
@@ -136,8 +164,10 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
         set(_LIBAD ${CMAKE_SOURCE_DIR}/build/modules/libadapter_${_MOD}.so)
     endif()
     set(_PKG ${_DEPLOY_MOD}/${_MOD}.mhub)
-    # MHMD intermediate: wrap libadapter_*.so when build/<id>.so is missing.
-    if(NOT EXISTS ${_SO_BUILD} AND EXISTS ${_LIBAD})
+    # Always refresh MHMD from libadapter_*.so when present. A stale
+    # build/<id>.so previously blocked refresh because the wrap step only
+    # ran when build/<id>.so was missing.
+    if(EXISTS ${_LIBAD})
         execute_process(
             COMMAND ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py mhmd
                     ${_LIBAD} ${_SO_BUILD}
@@ -148,10 +178,23 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
             message(WARNING "pack_store_module.py mhmd failed for ${_MOD} (rc=${_PACK_MHMD_RC})")
         endif()
     endif()
-    if(NOT EXISTS ${_SO} AND EXISTS ${_SO_BUILD})
+    # Prefer freshly wrapped build/<id>.so over deploy or extracted zip copies.
+    if(EXISTS ${_SO_BUILD})
         set(_SO ${_SO_BUILD})
+    elseif(NOT EXISTS ${_SO} AND EXISTS ${_PKG})
+        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/modstore_so_extract)
+        execute_process(
+            COMMAND ${Python3_EXECUTABLE} -c
+                "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); n=sys.argv[2]+'.so'; open(sys.argv[3],'wb').write(z.read(n)) if n in z.namelist() else sys.exit(1)"
+                ${_PKG} ${_MOD} ${CMAKE_BINARY_DIR}/modstore_so_extract/${_MOD}.so
+            RESULT_VARIABLE _EXTRACT_SO_RC
+        )
+        if(_EXTRACT_SO_RC EQUAL 0)
+            set(_SO ${CMAKE_BINARY_DIR}/modstore_so_extract/${_MOD}.so)
+        endif()
     endif()
-    if(NOT EXISTS ${_PKG})
+    # Repack .mhub whenever we have a fresh MHMD so factory/store files are not stale.
+    if(EXISTS ${_SO_BUILD})
         execute_process(
             COMMAND ${CMAKE_COMMAND} -E env
                     MINIHUB_STORE_DEPLOY=${_MINIHUB_STORE_DEPLOY}
@@ -163,21 +206,18 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
         if(NOT _PACK_HUB_RC EQUAL 0)
             message(WARNING "pack_store_module.py failed for ${_MOD} (rc=${_PACK_HUB_RC})")
         endif()
-    endif()
-    # Prefer MHMD from build/ when deploy has only the zip (pack_store_module strips bare .so).
-    if(NOT EXISTS ${_SO} AND EXISTS ${_SO_BUILD})
-        set(_SO ${_SO_BUILD})
-    endif()
-    if(NOT EXISTS ${_SO} AND EXISTS ${_PKG})
-        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/modstore_so_extract)
+        set(_PKG ${_DEPLOY_MOD}/${_MOD}.mhub)
+    elseif(NOT EXISTS ${_PKG})
         execute_process(
-            COMMAND ${Python3_EXECUTABLE} -c
-                "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); n=sys.argv[2]+'.so'; open(sys.argv[3],'wb').write(z.read(n)) if n in z.namelist() else sys.exit(1)"
-                ${_PKG} ${_MOD} ${CMAKE_BINARY_DIR}/modstore_so_extract/${_MOD}.so
-            RESULT_VARIABLE _EXTRACT_SO_RC
+            COMMAND ${CMAKE_COMMAND} -E env
+                    MINIHUB_STORE_DEPLOY=${_MINIHUB_STORE_DEPLOY}
+                    ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py
+                    ${_MOD} --deploy ${_MINIHUB_STORE_DEPLOY}
+            WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
+            RESULT_VARIABLE _PACK_HUB_RC
         )
-        if(_EXTRACT_SO_RC EQUAL 0)
-            set(_SO ${CMAKE_BINARY_DIR}/modstore_so_extract/${_MOD}.so)
+        if(NOT _PACK_HUB_RC EQUAL 0)
+            message(WARNING "pack_store_module.py failed for ${_MOD} (rc=${_PACK_HUB_RC})")
         endif()
     endif()
     if(EXISTS ${_PKG})
@@ -231,6 +271,10 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
             execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${_MOD_DIR}/ui.json
                             ${MINIHUB_MODSTORE_DIR}/modules/${_MOD}/ui.json)
         endif()
+        if(EXISTS ${_MOD_DIR}/devices.json)
+            execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${_MOD_DIR}/devices.json
+                            ${MINIHUB_MODSTORE_DIR}/modules/${_MOD}/devices.json)
+        endif()
         if(EXISTS ${_MOD_DIR}/web)
             file(COPY ${_MOD_DIR}/web DESTINATION ${MINIHUB_MODSTORE_DIR}/modules/${_MOD})
         endif()
@@ -239,6 +283,27 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
         message(STATUS "modstore: ${_MOD} available as files/${_MOD}.mhub (not preinstalled)")
     endif()
 endforeach()
+
+# Atomic with staged files/*.mhub: rewrite catalog sizes from deploy packages, then copy.
+execute_process(
+    COMMAND ${CMAKE_COMMAND} -E env
+            MINIHUB_STORE_DEPLOY=${_MINIHUB_STORE_DEPLOY}
+            MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
+            MINIHUB_APP=$ENV{MINIHUB_APP}
+            ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/sync_store_catalog.py
+            --catalog-only --deploy ${_MINIHUB_STORE_DEPLOY}
+    WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
+    RESULT_VARIABLE _CATALOG_RC
+)
+if(NOT _CATALOG_RC EQUAL 0)
+    message(WARNING "sync_store_catalog --catalog-only failed (rc=${_CATALOG_RC})")
+endif()
+if(EXISTS ${_MINIHUB_STORE_DEPLOY}/catalog.json)
+    file(COPY ${_MINIHUB_STORE_DEPLOY}/catalog.json DESTINATION ${MINIHUB_MODSTORE_DIR})
+    message(STATUS "modstore: staged catalog.json from ${_MINIHUB_STORE_DEPLOY}")
+else()
+    message(WARNING "modstore: catalog.json missing under ${_MINIHUB_STORE_DEPLOY}")
+endif()
 
 # Host Web console → /store/preinstall/web/ (source dir from CONFIG_MINIHUB_WEB_STATIC_SRC)
 if(CONFIG_MINIHUB_WEB_UI)

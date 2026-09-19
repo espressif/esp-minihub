@@ -1,7 +1,7 @@
 # Build every application/ firmware (+ merged flash bin).
 # Pack Store .mhub once in pack:mhub when libadapter_*.so exist (skip OK if none).
 #
-# IDF: ESP32-S31 / MiniHub expects IDF ~6.2 (see docs/build.md).
+# IDF: ESP32-S31 / MiniHub expects IDF ~6.2 (see docs/en/getting_started.rst).
 # Override IDF_CI_IMAGE in GitLab CI/CD variables for an internal 6.2 / S31 image.
 #
 # Pre-commit: .gitlab/ci/pre_check.yml (esp-at style).
@@ -42,9 +42,22 @@ variables:
   GIT_DEPTH: "50"
   # Path-scoped init in tools/ci/build_apps.sh (avoid pulling all submodules)
   GIT_SUBMODULE_STRATEGY: "none"
+  # External plugins repo (esp-minihub-plugins) compiled alongside Core below.
+  # Derived from predefined vars (CI_SERVER_URL + CI_PROJECT_NAMESPACE) so the
+  # host/namespace is never hardcoded into this file.
+  MINIHUB_PLUGINS_REPO_URL: "${CI_SERVER_URL}/${CI_PROJECT_NAMESPACE}/esp-minihub-plugins.git"
+  MINIHUB_PLUGINS_REF: "$CI_COMMIT_REF_NAME"
+  # Cloned into a subdir of the Core checkout (so it is not mistaken for the
+  # Core repo itself, which also has a .git).
+  MINIHUB_PLUGINS_DIR: "$CI_PROJECT_DIR/.ci/esp-minihub-plugins"
+  # Build plugins with the same IDF image as Core so the SDK matches.
+  MINIHUB_IDF_IMAGE: "$IDF_CI_IMAGE"
 
 include:
   - local: .gitlab/ci/pre_check.yml
+  - project: '../esp-minihub-plugins'
+    ref: 'master'
+    file: 'ci/plugins.gitlab-ci.yml'
 
 .idf_env:
   image:

@@ -6,17 +6,76 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include "esp_err.h"
 
-typedef esp_err_t (*minihub_http_worker_fn_t)(void *ctx);
-typedef void (*minihub_http_worker_done_cb_t)(esp_err_t result, void *user_ctx);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/** Run HTTPS work on a dedicated task (avoids httpd stack overflow). Blocks until complete. */
+/**
+ * @brief HTTP / TLS worker callback
+ *
+ * @param ctx User context from ``minihub_http_run_worker`` / ``_async``
+ *
+ * @return Result propagated to the caller or done callback
+ */
+#ifdef DOXYGEN
+typedef esp_err_t minihub_http_worker_fn_t(void *ctx);
+#else
+typedef esp_err_t (*minihub_http_worker_fn_t)(void *ctx);
+#endif
+
+/**
+ * @brief Completion callback for ``minihub_http_run_worker_async``
+ *
+ * @param result Worker function return value
+ * @param user_ctx User context passed to ``minihub_http_run_worker_async``
+ */
+#ifdef DOXYGEN
+typedef void minihub_http_worker_done_cb_t(esp_err_t result, void *user_ctx);
+#else
+typedef void (*minihub_http_worker_done_cb_t)(esp_err_t result, void *user_ctx);
+#endif
+
+/**
+ * @brief Run HTTPS / heavy TLS work on a dedicated task
+ *
+ * Avoids httpd task stack overflow. Blocks until ``fn`` returns.
+ *
+ * @param fn  Worker function
+ * @param ctx Passed to ``fn``
+ *
+ * @return
+ *     - ESP_OK: succeed
+ *     - other: from ``fn`` or scheduling failure
+ */
 esp_err_t minihub_http_run_worker(minihub_http_worker_fn_t fn, void *ctx);
 
-/** Queue HTTPS work; callback runs on the worker task when finished (does not block caller). */
+/**
+ * @brief Queue HTTPS work without blocking the caller
+ *
+ * ``cb`` runs on the worker task when finished.
+ *
+ * @param fn       Worker function
+ * @param ctx      Passed to ``fn``
+ * @param cb       Optional completion callback (may be NULL)
+ * @param user_ctx Passed to ``cb``
+ *
+ * @return
+ *     - ESP_OK: queued
+ *     - ESP_ERR_NO_MEM: queue full / OOM
+ */
 esp_err_t minihub_http_run_worker_async(minihub_http_worker_fn_t fn, void *ctx,
                                         minihub_http_worker_done_cb_t cb, void *user_ctx);
 
-/** True when called from the dedicated http_worker task (safe to run HTTPS inline). */
+/**
+ * @brief True when called from the dedicated http_worker task
+ *
+ * Safe to run HTTPS inline when this returns true.
+ */
 bool minihub_http_is_worker_task(void);
+
+#ifdef __cplusplus
+}
+#endif

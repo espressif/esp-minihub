@@ -235,6 +235,14 @@ def pack_store_module(
             if ui.is_file():
                 zf.write(ui, "ui.json")
                 names.append("ui.json")
+            devices = module_dir / "devices.json"
+            if devices.is_file():
+                zf.write(devices, "devices.json")
+                names.append("devices.json")
+            catalog = module_dir / "catalog.json"
+            if catalog.is_file():
+                zf.write(catalog, "catalog.json")
+                names.append("catalog.json")
             web = module_dir / "web"
             if web.is_dir():
                 for path in sorted(web.rglob("*")):
@@ -258,14 +266,27 @@ def pack_store_module(
 
 
 def iter_packable_ids() -> list[str]:
+    from store_paths import plugin_dir_env
+
     ids: list[str] = []
-    if not STORE_MODULES.is_dir():
-        return ids
-    for d in sorted(STORE_MODULES.iterdir()):
-        if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
-            continue
+    seen: set[str] = set()
+    if STORE_MODULES.is_dir():
+        for d in sorted(STORE_MODULES.iterdir()):
+            if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
+                continue
+            if (d / "module.json").is_file():
+                ids.append(d.name)
+                seen.add(d.name)
+    for d in plugin_dir_env():
         if (d / "module.json").is_file():
-            ids.append(d.name)
+            if d.name not in seen:
+                ids.append(d.name)
+                seen.add(d.name)
+        elif d.is_dir():
+            for sub in sorted(d.iterdir()):
+                if sub.is_dir() and (sub / "module.json").is_file() and sub.name not in seen:
+                    ids.append(sub.name)
+                    seen.add(sub.name)
     return ids
 
 

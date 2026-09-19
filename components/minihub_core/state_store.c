@@ -40,18 +40,27 @@ static bool props_equal(const cJSON *a, const cJSON *b)
 
 esp_err_t minihub_point_set(const char *point_id, const char *value, cJSON *props)
 {
-    uint16_t index = minihub_point_index_of(point_id);
-    if (index == UINT16_MAX) {
-        return ESP_ERR_NOT_FOUND;
+    if (!point_id || point_id[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
     }
-
-    minihub_point_t *point = minihub_point_get_by_index(index);
-    if (!point) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
     if (!value) {
         value = "";
+    }
+
+    /* Hold the registry lock for the whole index -> pointer -> write sequence so
+     * a concurrent unregister (which left-shifts s_points) cannot move the slot
+     * out from under us. Previously the lock was dropped between index_of and the
+     * write, letting us store into the wrong point / double-free its props. */
+    minihub_point_registry_lock();
+    int16_t index = minihub_point_index_of_locked(point_id);
+    if (index < 0) {
+        minihub_point_registry_unlock();
+        return ESP_ERR_NOT_FOUND;
+    }
+    minihub_point_t *point = minihub_point_get_by_index_locked((uint16_t)index);
+    if (!point) {
+        minihub_point_registry_unlock();
+        return ESP_ERR_NOT_FOUND;
     }
 
     char old_value[MINIHUB_VALUE_MAX];
@@ -70,37 +79,107 @@ esp_err_t minihub_point_set(const char *point_id, const char *value, cJSON *prop
     }
 
     if (!changed) {
+        minihub_point_registry_unlock();
         return ESP_OK;
     }
 
     int64_t now_ms = esp_timer_get_time() / 1000;
+    bool debounced = false;
 #if CONFIG_MINIHUB_POINT_DEBOUNCE_MS > 0
-    if (s_last_publish_ms[index] != 0 &&
-        (now_ms - s_last_publish_ms[index]) < CONFIG_MINIHUB_POINT_DEBOUNCE_MS) {
+    if (s_last_publish_ms[(uint16_t)index] != 0 &&
+        (now_ms - s_last_publish_ms[(uint16_t)index]) < CONFIG_MINIHUB_POINT_DEBOUNCE_MS) {
         strncpy(point->value, value, sizeof(point->value) - 1);
         point->value[sizeof(point->value) - 1] = '\0';
         point->updated_ms = now_ms;
-        return ESP_OK;
+        debounced = true;
     }
 #endif
 
     bool value_changed = (strcmp(old_value, value) != 0);
-    strncpy(point->value, value, sizeof(point->value) - 1);
-    point->value[sizeof(point->value) - 1] = '\0';
-    point->updated_ms = now_ms;
-    point->online = true;
+    if (!debounced) {
+        strncpy(point->value, value, sizeof(point->value) - 1);
+        point->value[sizeof(point->value) - 1] = '\0';
+        point->updated_ms = now_ms;
+        point->online = true;
+    }
+    minihub_point_registry_unlock();
+
+    if (debounced) {
+        return ESP_OK;
+    }
 
     if (value_changed) {
         minihub_point_history_record(point_id, old_value, value);
     }
 
-    esp_err_t err = minihub_event_bus_publish_point_updated(index, old_value, value);
+    esp_err_t err = minihub_event_bus_publish_point_updated((uint16_t)index, old_value, value);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "event publish failed: %s", esp_err_to_name(err));
     } else {
-        s_last_publish_ms[index] = now_ms;
+        s_last_publish_ms[(uint16_t)index] = now_ms;
     }
     return ESP_OK;
+}
+
+esp_err_t minihub_point_merge_props(const char *point_id, const char *value, cJSON *props_patch)
+{
+    if (!point_id || point_id[0] == '\0' || !props_patch) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    minihub_point_t snap = {0};
+    esp_err_t err = minihub_point_get_snapshot(point_id, &snap);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    cJSON *merged = snap.props ? cJSON_Duplicate(snap.props, true) : cJSON_CreateObject();
+    if (snap.props) {
+        cJSON_Delete(snap.props);
+        snap.props = NULL;
+    }
+    if (!merged) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    const cJSON *item = NULL;
+    cJSON_ArrayForEach(item, props_patch) {
+        if (!item->string || !item->string[0]) {
+            continue;
+        }
+        cJSON *dup = cJSON_Duplicate(item, true);
+        if (!dup) {
+            cJSON_Delete(merged);
+            return ESP_ERR_NO_MEM;
+        }
+        cJSON_DeleteItemFromObject(merged, item->string);
+        cJSON_AddItemToObject(merged, item->string, dup);
+    }
+
+    const char *use_value = value ? value : snap.value;
+    err = minihub_point_set(point_id, use_value, merged);
+    cJSON_Delete(merged);
+    return err;
+}
+
+esp_err_t minihub_point_merge_params(const char *point_id, const char *value, cJSON *params)
+{
+    if (!point_id || point_id[0] == '\0' || !params) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    cJSON *patch = cJSON_CreateObject();
+    if (!patch) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON *dup = cJSON_Duplicate(params, true);
+    if (!dup) {
+        cJSON_Delete(patch);
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddItemToObject(patch, "params", dup);
+    esp_err_t err = minihub_point_merge_props(point_id, value, patch);
+    cJSON_Delete(patch);
+    return err;
 }
 
 esp_err_t minihub_point_get_snapshot(const char *point_id, minihub_point_t *out)

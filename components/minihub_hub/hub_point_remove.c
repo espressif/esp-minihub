@@ -139,7 +139,7 @@ static esp_err_t collect_ids_for_adapter(const char *adapter, char ids[][MINIHUB
         strlcpy(ids[*count], points[i].point_id, MINIHUB_POINT_ID_MAX);
         (*count)++;
     }
-    free(points);
+    minihub_point_list_free(points, n);
     return ESP_OK;
 }
 

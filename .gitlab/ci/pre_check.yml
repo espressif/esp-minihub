@@ -49,3 +49,22 @@ check_pre_commit:
       else
         pre-commit run --show-diff-on-failure --all-files
       fi
+
+# Programming Guide (esp-docs HTML). Does not wait for firmware.
+docs:html:
+  extends:
+    - .pre_check_template
+  image: python:3.12-bookworm
+  before_script:
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq doxygen graphviz git
+    - pip install -r docs/requirements.txt
+    - git config --global --add safe.directory "$CI_PROJECT_DIR" || true
+  script:
+    - bash tools/ci/build_docs.sh
+  artifacts:
+    when: on_success
+    expire_in: 30 days
+    name: "minihub-docs-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ci_artifacts/docs/

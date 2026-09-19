@@ -1,6 +1,6 @@
 /* MiniHub web — startup */
 /* mhWebBuild:2026-08-17-scenes-cam */
-window.mhWebBuild = '2026-09-01-matter-card-v7';
+window.mhWebBuild = '2026-09-17-module-upg-overview';
 document.querySelectorAll('.nav-item').forEach(n => n.onclick = () => switchView(n.dataset.view));
 document.getElementById('menu-btn').onclick = () => document.getElementById('sidebar').classList.toggle('open');
 
@@ -28,7 +28,6 @@ loadAdapters().then(async () => {
     loadRtspCamStatusSafe();
     loadStoreData();
 });
-bindLightDetailControls();
 renderLocalUser();
 setInterval(loadPoints, 8000);
 setInterval(loadRtspCamStatusSafe, 12000);
@@ -40,3 +39,35 @@ setInterval(() => {
     if (!(adapterEnabled('zigbee') || adapterEnabled('ble_mesh'))) return;
     refreshRadioProv();
 }, 5000);
+
+/* Push path: point.updated → reload pts → refresh open device detail. */
+(function connectEventsWs() {
+    let ws;
+    let retryMs = 2000;
+    function connect() {
+        try {
+            const proto = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+            ws = new WebSocket(proto + location.host + '/ws/events');
+        } catch (e) {
+            setTimeout(connect, retryMs);
+            return;
+        }
+        ws.onopen = function () { retryMs = 2000; };
+        ws.onmessage = function (ev) {
+            try {
+                const msg = JSON.parse(ev.data);
+                if (msg && msg.event_type === 'point.updated' && typeof loadPoints === 'function') {
+                    loadPoints();
+                }
+            } catch (e) {}
+        };
+        ws.onclose = function () {
+            setTimeout(connect, retryMs);
+            if (retryMs < 15000) retryMs *= 1.5;
+        };
+        ws.onerror = function () {
+            try { ws.close(); } catch (e) {}
+        };
+    }
+    connect();
+})();

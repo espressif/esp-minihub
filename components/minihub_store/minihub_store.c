@@ -979,64 +979,6 @@ static bool pack_installed(const char *id)
 
 #if CONFIG_MINIHUB_DYNAMIC_MODULES
 
-/**
- * Ensure adapters.json has an enabled slot for this adapter.
- * - Missing key → create { enabled: true, devices: [] }.
- * - Fresh install → force enabled true.
- * - Upgrade with existing key → leave user's enabled / devices alone.
- */
-static esp_err_t ensure_adapter_slot_on_install(const char *adapter_name, bool force_enable)
-{
-    if (!adapter_name || !adapter_name[0]) {
-        return ESP_OK;
-    }
-
-    cJSON *root = minihub_config_get_adapters();
-    if (!root) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    cJSON *adapters = cJSON_GetObjectItem(root, "adapters");
-    if (!cJSON_IsObject(adapters)) {
-        adapters = cJSON_CreateObject();
-        if (!adapters) {
-            return ESP_ERR_NO_MEM;
-        }
-        cJSON_AddItemToObject(root, "adapters", adapters);
-    }
-
-    cJSON *slot = cJSON_GetObjectItem(adapters, adapter_name);
-    bool created = false;
-    if (!slot) {
-        slot = cJSON_CreateObject();
-        if (!slot) {
-            return ESP_ERR_NO_MEM;
-        }
-        cJSON_AddItemToObject(adapters, adapter_name, slot);
-        created = true;
-        cJSON_AddTrueToObject(slot, "enabled");
-        cJSON_AddItemToObject(slot, "devices", cJSON_CreateArray());
-    } else if (force_enable) {
-        cJSON_DeleteItemFromObject(slot, "enabled");
-        cJSON_AddTrueToObject(slot, "enabled");
-        if (!cJSON_GetObjectItem(slot, "devices")) {
-            cJSON_AddItemToObject(slot, "devices", cJSON_CreateArray());
-        }
-    } else {
-        return ESP_OK;
-    }
-
-    esp_err_t err = minihub_config_save_adapters(root);
-    if (err == ESP_OK) {
-        ESP_LOGI(TAG, "%s adapters.json slot '%s' (enabled)",
-                 created ? "created" : "updated", adapter_name);
-    } else {
-        ESP_LOGW(TAG, "adapters.json slot '%s' save failed: %s",
-                 adapter_name, esp_err_to_name(err));
-    }
-    return err;
-}
-
 static size_t hub_max_bytes(void)
 {
 #if defined(CONFIG_MINIHUB_HUB_MAX_BYTES)
@@ -1553,8 +1495,14 @@ static esp_err_t install_module(const cJSON *item, bool upgrade)
     unlink(legacy_bin);
 
     const cJSON *adapter_j = cJSON_GetObjectItem(item, "adapter");
-    if (kind == HUB_KIND_NATIVE && cJSON_IsString(adapter_j)) {
-        (void)ensure_adapter_slot_on_install(adapter_j->valuestring, !upgrade);
+    /* L2 JS and L3 native both need an adapters.json slot so Overview
+     * adapterEnabled() shows their points (chips + card filter). */
+    if ((kind == HUB_KIND_NATIVE || kind == HUB_KIND_JS) && cJSON_IsString(adapter_j)) {
+        /* Fresh install force-enables; upgrade leaves an existing slot alone. */
+        (void)minihub_config_ensure_adapter_slot(adapter_j->valuestring, !upgrade);
+    } else if (kind == HUB_KIND_JS && (!adapter_j || !cJSON_IsString(adapter_j))) {
+        /* Catalog omitted adapter — fall back to package id (usual L2 convention). */
+        (void)minihub_config_ensure_adapter_slot(id, !upgrade);
     }
 
     {

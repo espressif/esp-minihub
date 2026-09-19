@@ -16,25 +16,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from store_paths import (  # noqa: E402
     ROOT,
-    STORE_MODULES,
+    iter_module_source_dirs,
     module_deploy_dir,
     module_mhmd_path,
+    module_source_dir,
     resolve_deploy_dir,
 )
 
-SKIP_DIRS = {"files"}
-
 
 def iter_module_dirs() -> list[Path]:
-    dirs: list[Path] = []
-    if not STORE_MODULES.is_dir():
-        return dirs
-    for d in sorted(STORE_MODULES.iterdir()):
-        if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_") or d.name in SKIP_DIRS:
-            continue
-        if (d / "module.json").is_file():
-            dirs.append(d)
-    return dirs
+    """Plugin sources for catalog: minihub_plugins + MINIHUB_PLUGIN_DIRS."""
+    return iter_module_source_dirs(root=ROOT)
 
 
 def read_adapter_version(module_dir: Path, module_id: str) -> str:
@@ -211,7 +203,7 @@ def rebuild_catalog(deploy: Path) -> list[dict]:
 
 
 def sync_module(module_id: str, deploy: Path) -> int:
-    module_dir = STORE_MODULES / module_id
+    module_dir = module_source_dir(module_id)
     manifest_path = module_dir / "module.json"
     deploy_mod = module_deploy_dir(module_id, deploy)
     pkg = deploy_mod / f"{module_id}.mhub"
@@ -252,9 +244,22 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="deploy root (default: MINIHUB_STORE_DEPLOY or ~/workspace/minihub_store)",
     )
+    parser.add_argument(
+        "--catalog-only",
+        action="store_true",
+        help="rewrite catalog.json sizes from existing deploy/*.mhub (no repack)",
+    )
     args = parser.parse_args(argv)
     deploy = resolve_deploy_dir(args.deploy)
     arg = args.module_id
+
+    if args.catalog_only:
+        catalog = rebuild_catalog(deploy)
+        print(
+            f"sync_store_catalog: wrote {deploy / 'catalog.json'} "
+            f"({len(catalog)} modules, catalog-only)"
+        )
+        return 0
 
     if arg in ("all", "--all", "-a"):
         for module_dir in iter_module_dirs():

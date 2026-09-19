@@ -1,0 +1,6 @@
+id,label,description,binds
+ui.toggle,开关,布尔开/关控件,Bool 值（如 power）
+ui.slider,滑杆,带 min/max/step 的数值控件；光谱观感由参数名 / CSS tone 决定，不是单独控件类型,Int/Float 有界设定值（亮度、颜色 hue、色温、饱和度等）
+ui.dropdown,下拉框,从固定选项集中选取,Int/String；选项来自 parameters.csv 的 options JSON（如 light-mode）
+ui.text,文本,字符串输入或只读展示,String（如 name）或计量读数（voltage_v / current_a / power_w / energy_wh）；access:R 时只读
+ui.hidden,隐藏,类型级「永不渲染」；参数仍可在目录中存在,任意类型；与实例 props.visible:false 不同（见 README）
