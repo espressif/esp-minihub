@@ -5,6 +5,15 @@
  *
  * L2 JS plugins: QuickJS-NG + Host API v0 (host.log / point / command / http / config).
  * Also runs main.js for runtime:hybrid packages (after native load).
+ *
+ * Host API highlights for Devices-page demos:
+ *   host.point.register({ ..., props | params })
+ *   host.point.set(id, value, props?)
+ *   host.point.mergeProps(id, patch, value?)
+ *   host.point.mergeParams(id, params, value?)
+ *   host.command.on(adapter, fn)  — route Core commands into JS
+ *   host.command.invoke({ point_id, cmd, params? })
+ *   host.event.subscribe(type, fn) — point.updated / point.registered / …
  */
 
 #include "minihub_js.h"
@@ -32,9 +41,29 @@ static const char *TAG = "minihub_js";
 
 #define MINIHUB_JS_HTTP_BODY_MAX 16384
 #define MINIHUB_JS_SCRIPT_MAX    (256 * 1024)
+#define MINIHUB_JS_CMD_HANDLERS_MAX 8
+#define MINIHUB_JS_EVENT_SUBS_MAX   8
 
 static JSRuntime *s_rt;
 static JSContext *s_ctx;
+
+typedef struct {
+    char adapter[MINIHUB_ADAPTER_MAX];
+    JSValue fn;
+} js_cmd_slot_t;
+
+static js_cmd_slot_t s_js_cmds[MINIHUB_JS_CMD_HANDLERS_MAX];
+static size_t s_js_cmd_count;
+
+typedef struct {
+    char event_type[MINIHUB_EVENT_MAX];
+    JSValue fn;
+    bool active;
+} js_event_slot_t;
+
+static js_event_slot_t s_js_events[MINIHUB_JS_EVENT_SUBS_MAX];
+static size_t s_js_event_count;
+static bool s_js_event_bus_hooked;
 
 static char *read_file_alloc(const char *path, size_t max_len, size_t *out_len)
 {
@@ -112,6 +141,169 @@ static const char *js_get_str_prop(JSContext *ctx, JSValueConst obj, const char 
     return s;
 }
 
+static cJSON *js_value_to_cjson(JSContext *ctx, JSValueConst v)
+{
+    if (JS_IsUndefined(v) || JS_IsNull(v)) {
+        return NULL;
+    }
+    JSValue json = JS_JSONStringify(ctx, v, JS_UNDEFINED, JS_UNDEFINED);
+    if (JS_IsException(json)) {
+        return NULL;
+    }
+    const char *s = JS_ToCString(ctx, json);
+    JS_FreeValue(ctx, json);
+    if (!s) {
+        return NULL;
+    }
+    cJSON *cj = cJSON_Parse(s);
+    JS_FreeCString(ctx, s);
+    return cj;
+}
+
+static JSValue cjson_to_js(JSContext *ctx, const cJSON *cj)
+{
+    if (!cj) {
+        return JS_NULL;
+    }
+    char *printed = cJSON_PrintUnformatted(cj);
+    if (!printed) {
+        return JS_NULL;
+    }
+    JSValue v = JS_ParseJSON(ctx, printed, strlen(printed), "<json>");
+    free(printed);
+    return v;
+}
+
+static void dump_exception(JSContext *ctx);
+static void js_event_dispatch(const minihub_event_t *event, void *user_data);
+
+static void clear_js_cmd_handlers(JSContext *ctx)
+{
+    for (size_t i = 0; i < s_js_cmd_count; i++) {
+        if (ctx) {
+            JS_FreeValue(ctx, s_js_cmds[i].fn);
+        }
+        s_js_cmds[i].fn = JS_UNDEFINED;
+        s_js_cmds[i].adapter[0] = '\0';
+    }
+    s_js_cmd_count = 0;
+}
+
+static void clear_js_event_handlers(JSContext *ctx)
+{
+    if (s_js_event_bus_hooked) {
+        (void)minihub_event_bus_unsubscribe("*", js_event_dispatch);
+        s_js_event_bus_hooked = false;
+    }
+    for (size_t i = 0; i < s_js_event_count; i++) {
+        if (ctx) {
+            JS_FreeValue(ctx, s_js_events[i].fn);
+        }
+        s_js_events[i].fn = JS_UNDEFINED;
+        s_js_events[i].event_type[0] = '\0';
+        s_js_events[i].active = false;
+    }
+    s_js_event_count = 0;
+}
+
+static void js_event_dispatch(const minihub_event_t *event, void *user_data)
+{
+    (void)user_data;
+    if (!event || !s_ctx) {
+        return;
+    }
+    for (size_t i = 0; i < s_js_event_count; i++) {
+        if (!s_js_events[i].active) {
+            continue;
+        }
+        if (strcmp(s_js_events[i].event_type, event->event_type) != 0 &&
+            strcmp(s_js_events[i].event_type, "*") != 0) {
+            continue;
+        }
+        if (!JS_IsFunction(s_ctx, s_js_events[i].fn)) {
+            continue;
+        }
+        JSValue arg = JS_NewObject(s_ctx);
+        JS_SetPropertyStr(s_ctx, arg, "event_type", JS_NewString(s_ctx, event->event_type));
+        JS_SetPropertyStr(s_ctx, arg, "timestamp_ms", JS_NewInt64(s_ctx, event->timestamp_ms));
+        if (strcmp(event->event_type, "point.updated") == 0) {
+            minihub_point_t *pt = minihub_point_get_by_index(event->point_index);
+            if (pt) {
+                JS_SetPropertyStr(s_ctx, arg, "point_id", JS_NewString(s_ctx, pt->point_id));
+                JS_SetPropertyStr(s_ctx, arg, "value", JS_NewString(s_ctx, pt->value));
+                if (pt->props) {
+                    JS_SetPropertyStr(s_ctx, arg, "props", cjson_to_js(s_ctx, pt->props));
+                }
+            }
+            JS_SetPropertyStr(s_ctx, arg, "old_value", JS_NewString(s_ctx, event->old_value));
+            JS_SetPropertyStr(s_ctx, arg, "new_value", JS_NewString(s_ctx, event->new_value));
+        }
+        if (event->data) {
+            JS_SetPropertyStr(s_ctx, arg, "data", cjson_to_js(s_ctx, event->data));
+        }
+        JSValue ret = JS_Call(s_ctx, s_js_events[i].fn, JS_UNDEFINED, 1, &arg);
+        JS_FreeValue(s_ctx, arg);
+        if (JS_IsException(ret)) {
+            dump_exception(s_ctx);
+        }
+        JS_FreeValue(s_ctx, ret);
+    }
+}
+
+static JSValue *find_js_cmd_fn(const char *adapter)
+{
+    if (!adapter || !adapter[0]) {
+        return NULL;
+    }
+    for (size_t i = 0; i < s_js_cmd_count; i++) {
+        if (strcmp(s_js_cmds[i].adapter, adapter) == 0) {
+            return &s_js_cmds[i].fn;
+        }
+    }
+    return NULL;
+}
+
+static esp_err_t js_command_dispatch(const minihub_command_t *cmd)
+{
+    if (!cmd || !s_ctx) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    minihub_point_t *pt = minihub_point_get(cmd->point_id);
+    if (!pt) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    JSValue *fnp = find_js_cmd_fn(pt->adapter);
+    if (!fnp || !JS_IsFunction(s_ctx, *fnp)) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    JSValue arg = JS_NewObject(s_ctx);
+    JS_SetPropertyStr(s_ctx, arg, "point_id", JS_NewString(s_ctx, cmd->point_id));
+    JS_SetPropertyStr(s_ctx, arg, "cmd", JS_NewString(s_ctx, cmd->cmd));
+    if (cmd->params) {
+        JS_SetPropertyStr(s_ctx, arg, "params", cjson_to_js(s_ctx, cmd->params));
+    } else {
+        JS_SetPropertyStr(s_ctx, arg, "params", JS_NULL);
+    }
+
+    JSValue ret = JS_Call(s_ctx, *fnp, JS_UNDEFINED, 1, &arg);
+    JS_FreeValue(s_ctx, arg);
+    if (JS_IsException(ret)) {
+        dump_exception(s_ctx);
+        JS_FreeValue(s_ctx, ret);
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = ESP_OK;
+    if (JS_IsBool(ret) && !JS_ToBool(s_ctx, ret)) {
+        err = ESP_FAIL;
+    }
+    JS_FreeValue(s_ctx, ret);
+    return err;
+}
+
 static JSValue js_point_register(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     (void)this_val;
@@ -155,7 +347,30 @@ static JSValue js_point_register(JSContext *ctx, JSValueConst this_val, int argc
     pt.online = JS_ToBool(ctx, online_v);
     JS_FreeValue(ctx, online_v);
 
+    /* props: full props object; or params: shorthand → { params: <obj> } */
+    JSValue props_v = JS_GetPropertyStr(ctx, argv[0], "props");
+    JSValue params_v = JS_GetPropertyStr(ctx, argv[0], "params");
+    if (JS_IsObject(props_v)) {
+        pt.props = js_value_to_cjson(ctx, props_v);
+    } else if (JS_IsObject(params_v)) {
+        cJSON *params = js_value_to_cjson(ctx, params_v);
+        if (params) {
+            pt.props = cJSON_CreateObject();
+            if (pt.props) {
+                cJSON_AddItemToObject(pt.props, "params", params);
+            } else {
+                cJSON_Delete(params);
+            }
+        }
+    }
+    JS_FreeValue(ctx, props_v);
+    JS_FreeValue(ctx, params_v);
+
     esp_err_t err = minihub_point_register(&pt);
+    if (pt.props) {
+        cJSON_Delete(pt.props);
+        pt.props = NULL;
+    }
     if (err != ESP_OK) {
         return JS_ThrowInternalError(ctx, "point_register failed %s", esp_err_to_name(err));
     }
@@ -183,6 +398,11 @@ static JSValue js_point_get(JSContext *ctx, JSValueConst this_val, int argc, JSV
     JS_SetPropertyStr(ctx, obj, "value", JS_NewString(ctx, p->value));
     JS_SetPropertyStr(ctx, obj, "adapter", JS_NewString(ctx, p->adapter));
     JS_SetPropertyStr(ctx, obj, "online", JS_NewBool(ctx, p->online));
+    if (p->props) {
+        JS_SetPropertyStr(ctx, obj, "props", cjson_to_js(ctx, p->props));
+    } else {
+        JS_SetPropertyStr(ctx, obj, "props", JS_NULL);
+    }
     return obj;
 }
 
@@ -190,7 +410,7 @@ static JSValue js_command_invoke(JSContext *ctx, JSValueConst this_val, int argc
 {
     (void)this_val;
     if (argc < 1 || !JS_IsObject(argv[0])) {
-        return JS_ThrowTypeError(ctx, "invoke expects {point_id, cmd}");
+        return JS_ThrowTypeError(ctx, "invoke expects {point_id, cmd, params?}");
     }
     minihub_command_t cmd = {0};
     const char *pid = js_get_str_prop(ctx, argv[0], "point_id");
@@ -209,9 +429,67 @@ static JSValue js_command_invoke(JSContext *ctx, JSValueConst this_val, int argc
     JS_FreeCString(ctx, pid);
     JS_FreeCString(ctx, cname);
 
+    JSValue params_v = JS_GetPropertyStr(ctx, argv[0], "params");
+    if (JS_IsObject(params_v)) {
+        cmd.params = js_value_to_cjson(ctx, params_v);
+    }
+    JS_FreeValue(ctx, params_v);
+
     esp_err_t err = minihub_command_invoke(&cmd);
+    if (cmd.params) {
+        cJSON_Delete(cmd.params);
+        cmd.params = NULL;
+    }
     if (err != ESP_OK) {
         return JS_ThrowInternalError(ctx, "command_invoke failed %s", esp_err_to_name(err));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_command_on(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 2) {
+        return JS_ThrowTypeError(ctx, "on(adapter, handler)");
+    }
+    const char *adapter = JS_ToCString(ctx, argv[0]);
+    if (!adapter || !adapter[0]) {
+        if (adapter) {
+            JS_FreeCString(ctx, adapter);
+        }
+        return JS_ThrowTypeError(ctx, "adapter required");
+    }
+    if (!JS_IsFunction(ctx, argv[1])) {
+        JS_FreeCString(ctx, adapter);
+        return JS_ThrowTypeError(ctx, "handler must be a function");
+    }
+
+    js_cmd_slot_t *slot = NULL;
+    for (size_t i = 0; i < s_js_cmd_count; i++) {
+        if (strcmp(s_js_cmds[i].adapter, adapter) == 0) {
+            slot = &s_js_cmds[i];
+            break;
+        }
+    }
+    if (!slot) {
+        if (s_js_cmd_count >= MINIHUB_JS_CMD_HANDLERS_MAX) {
+            JS_FreeCString(ctx, adapter);
+            return JS_ThrowInternalError(ctx, "too many JS command handlers");
+        }
+        slot = &s_js_cmds[s_js_cmd_count++];
+        strncpy(slot->adapter, adapter, sizeof(slot->adapter) - 1);
+        slot->adapter[sizeof(slot->adapter) - 1] = '\0';
+        slot->fn = JS_UNDEFINED;
+    }
+
+    JS_FreeValue(ctx, slot->fn);
+    slot->fn = JS_DupValue(ctx, argv[1]);
+    JS_FreeCString(ctx, adapter);
+
+    esp_err_t err = minihub_command_register_adapter(slot->adapter, js_command_dispatch);
+    if (err != ESP_OK) {
+        return JS_ThrowInternalError(ctx, "command_register_adapter failed %s",
+                                     esp_err_to_name(err));
     }
     return JS_UNDEFINED;
 }
@@ -220,7 +498,7 @@ static JSValue js_point_set(JSContext *ctx, JSValueConst this_val, int argc, JSV
 {
     (void)this_val;
     if (argc < 2) {
-        return JS_ThrowTypeError(ctx, "set(id, value)");
+        return JS_ThrowTypeError(ctx, "set(id, value, props?)");
     }
     const char *pid = JS_ToCString(ctx, argv[0]);
     const char *val = JS_ToCString(ctx, argv[1]);
@@ -233,11 +511,92 @@ static JSValue js_point_set(JSContext *ctx, JSValueConst this_val, int argc, JSV
         }
         return JS_EXCEPTION;
     }
-    esp_err_t err = minihub_point_set(pid, val, NULL);
+
+    cJSON *props = NULL;
+    if (argc >= 3 && JS_IsObject(argv[2])) {
+        props = js_value_to_cjson(ctx, argv[2]);
+    }
+
+    esp_err_t err = minihub_point_set(pid, val, props);
+    if (props) {
+        cJSON_Delete(props);
+    }
     JS_FreeCString(ctx, pid);
     JS_FreeCString(ctx, val);
     if (err != ESP_OK) {
         return JS_ThrowInternalError(ctx, "point_set failed %s", esp_err_to_name(err));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_point_merge_props(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 2 || !JS_IsObject(argv[1])) {
+        return JS_ThrowTypeError(ctx, "mergeProps(id, propsPatch, value?)");
+    }
+    const char *pid = JS_ToCString(ctx, argv[0]);
+    if (!pid) {
+        return JS_EXCEPTION;
+    }
+    cJSON *patch = js_value_to_cjson(ctx, argv[1]);
+    if (!patch) {
+        JS_FreeCString(ctx, pid);
+        return JS_ThrowTypeError(ctx, "propsPatch must be object");
+    }
+    const char *val = NULL;
+    if (argc >= 3 && !JS_IsUndefined(argv[2]) && !JS_IsNull(argv[2])) {
+        val = JS_ToCString(ctx, argv[2]);
+        if (!val) {
+            cJSON_Delete(patch);
+            JS_FreeCString(ctx, pid);
+            return JS_EXCEPTION;
+        }
+    }
+    esp_err_t err = minihub_point_merge_props(pid, val, patch);
+    cJSON_Delete(patch);
+    JS_FreeCString(ctx, pid);
+    if (val) {
+        JS_FreeCString(ctx, val);
+    }
+    if (err != ESP_OK) {
+        return JS_ThrowInternalError(ctx, "point_merge_props failed %s", esp_err_to_name(err));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_point_merge_params(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 2 || !JS_IsObject(argv[1])) {
+        return JS_ThrowTypeError(ctx, "mergeParams(id, params, value?)");
+    }
+    const char *pid = JS_ToCString(ctx, argv[0]);
+    if (!pid) {
+        return JS_EXCEPTION;
+    }
+    cJSON *params = js_value_to_cjson(ctx, argv[1]);
+    if (!params) {
+        JS_FreeCString(ctx, pid);
+        return JS_ThrowTypeError(ctx, "params must be object");
+    }
+    const char *val = NULL;
+    if (argc >= 3 && !JS_IsUndefined(argv[2]) && !JS_IsNull(argv[2])) {
+        val = JS_ToCString(ctx, argv[2]);
+        if (!val) {
+            cJSON_Delete(params);
+            JS_FreeCString(ctx, pid);
+            return JS_EXCEPTION;
+        }
+    }
+    esp_err_t err = minihub_point_merge_params(pid, val, params);
+    cJSON_Delete(params);
+    JS_FreeCString(ctx, pid);
+    if (val) {
+        JS_FreeCString(ctx, val);
+    }
+    if (err != ESP_OK) {
+        return JS_ThrowInternalError(ctx, "point_merge_params failed %s", esp_err_to_name(err));
     }
     return JS_UNDEFINED;
 }
@@ -357,6 +716,50 @@ static JSValue js_config_get(JSContext *ctx, JSValueConst this_val, int argc, JS
     return v;
 }
 
+static JSValue js_event_subscribe(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 2) {
+        return JS_ThrowTypeError(ctx, "subscribe(event_type, handler)");
+    }
+    const char *etype = JS_ToCString(ctx, argv[0]);
+    if (!etype || !etype[0]) {
+        if (etype) {
+            JS_FreeCString(ctx, etype);
+        }
+        return JS_ThrowTypeError(ctx, "event_type required");
+    }
+    if (!JS_IsFunction(ctx, argv[1])) {
+        JS_FreeCString(ctx, etype);
+        return JS_ThrowTypeError(ctx, "handler must be a function");
+    }
+    if (s_js_event_count >= MINIHUB_JS_EVENT_SUBS_MAX) {
+        JS_FreeCString(ctx, etype);
+        return JS_ThrowInternalError(ctx, "too many JS event subscriptions");
+    }
+
+    js_event_slot_t *slot = &s_js_events[s_js_event_count++];
+    strncpy(slot->event_type, etype, sizeof(slot->event_type) - 1);
+    slot->event_type[sizeof(slot->event_type) - 1] = '\0';
+    slot->fn = JS_DupValue(ctx, argv[1]);
+    slot->active = true;
+    JS_FreeCString(ctx, etype);
+
+    if (!s_js_event_bus_hooked) {
+        esp_err_t err = minihub_event_bus_subscribe("*", js_event_dispatch, NULL);
+        if (err != ESP_OK) {
+            slot->active = false;
+            JS_FreeValue(ctx, slot->fn);
+            slot->fn = JS_UNDEFINED;
+            s_js_event_count--;
+            return JS_ThrowInternalError(ctx, "event_bus_subscribe failed %s",
+                                         esp_err_to_name(err));
+        }
+        s_js_event_bus_hooked = true;
+    }
+    return JS_UNDEFINED;
+}
+
 static JSValue make_host_object(JSContext *ctx)
 {
     JSValue host = JS_NewObject(ctx);
@@ -370,11 +773,18 @@ static JSValue make_host_object(JSContext *ctx)
     JS_SetPropertyStr(ctx, point, "register", JS_NewCFunction(ctx, js_point_register, "register", 1));
     JS_SetPropertyStr(ctx, point, "get", JS_NewCFunction(ctx, js_point_get, "get", 1));
     JS_SetPropertyStr(ctx, point, "set", JS_NewCFunction(ctx, js_point_set, "set", 2));
+    JS_SetPropertyStr(ctx, point, "mergeProps", JS_NewCFunction(ctx, js_point_merge_props, "mergeProps", 2));
+    JS_SetPropertyStr(ctx, point, "mergeParams", JS_NewCFunction(ctx, js_point_merge_params, "mergeParams", 2));
     JS_SetPropertyStr(ctx, host, "point", point);
 
     JSValue command = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, command, "invoke", JS_NewCFunction(ctx, js_command_invoke, "invoke", 1));
+    JS_SetPropertyStr(ctx, command, "on", JS_NewCFunction(ctx, js_command_on, "on", 2));
     JS_SetPropertyStr(ctx, host, "command", command);
+
+    JSValue event = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, event, "subscribe", JS_NewCFunction(ctx, js_event_subscribe, "subscribe", 2));
+    JS_SetPropertyStr(ctx, host, "event", event);
 
     JSValue http = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, http, "request", JS_NewCFunction(ctx, js_http_request, "request", 1));
@@ -506,8 +916,12 @@ static bool manifest_is_js_enabled(const char *path, char *id_out, size_t id_len
 void minihub_js_unload_all(void)
 {
     if (s_ctx) {
+        clear_js_cmd_handlers(s_ctx);
+        clear_js_event_handlers(s_ctx);
         JS_FreeContext(s_ctx);
         s_ctx = NULL;
+    } else {
+        clear_js_event_handlers(NULL);
     }
     if (s_rt) {
         JS_FreeRuntime(s_rt);
