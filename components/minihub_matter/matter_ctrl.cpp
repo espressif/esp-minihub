@@ -20,7 +20,14 @@
 #include <esp_matter_controller_cluster_command.h>
 #include <esp_matter_controller_pairing_command.h>
 #include <esp_matter_controller_read_command.h>
+#include <esp_matter_controller_utils.h>
+#include <app-common/zap-generated/ids/Attributes.h>
 #include <app-common/zap-generated/ids/Clusters.h>
+#include <app/AttributePathParams.h>
+#include <app/EventPathParams.h>
+#include <app/data-model/Decode.h>
+#include <lib/support/Span.h>
+#include <lib/core/TLV.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/CommissioningDelegate.h>
 #include <controller/SetUpCodePairer.h>
@@ -46,6 +53,7 @@ static constexpr uint32_t k_onoff_cluster = chip::app::Clusters::OnOff::Id;
 static constexpr uint32_t k_onoff_on_cmd = chip::app::Clusters::OnOff::Commands::On::Id;
 static constexpr uint32_t k_onoff_off_cmd = chip::app::Clusters::OnOff::Commands::Off::Id;
 static constexpr uint32_t k_onoff_attr = chip::app::Clusters::OnOff::Attributes::OnOff::Id;
+static constexpr uint32_t k_basic_cluster = chip::app::Clusters::BasicInformation::Id;
 
 static char s_last_error[128];
 static bool s_started;
@@ -61,6 +69,20 @@ typedef struct {
 
 static matter_read_slot_t s_last_read;
 
+#define IDENTITY_SLOT_MAX 16
+
+typedef struct {
+    uint64_t node_id;
+    minihub_matter_identity_t id;
+    char sw_num[16];
+    char hw_num[16];
+    bool in_use;
+} identity_slot_t;
+
+static identity_slot_t s_id_slots[IDENTITY_SLOT_MAX];
+static minihub_matter_identity_cb_t s_identity_cb;
+static void *s_identity_ctx;
+
 static void set_error(const char *msg)
 {
     if (!msg) {
@@ -69,6 +91,113 @@ static void set_error(const char *msg)
     }
     strncpy(s_last_error, msg, sizeof(s_last_error) - 1);
     s_last_error[sizeof(s_last_error) - 1] = '\0';
+}
+
+static identity_slot_t *identity_slot(uint64_t node_id, bool create)
+{
+    identity_slot_t *empty = NULL;
+    for (size_t i = 0; i < IDENTITY_SLOT_MAX; i++) {
+        if (s_id_slots[i].in_use && s_id_slots[i].node_id == node_id) {
+            return &s_id_slots[i];
+        }
+        if (!s_id_slots[i].in_use && !empty) {
+            empty = &s_id_slots[i];
+        }
+    }
+    if (!create || !empty) {
+        return NULL;
+    }
+    memset(empty, 0, sizeof(*empty));
+    empty->node_id = node_id;
+    empty->in_use = true;
+    return empty;
+}
+
+static bool tlv_copy_string(chip::TLV::TLVReader *data, char *out, size_t out_len)
+{
+    if (!data || !out || out_len == 0) {
+        return false;
+    }
+    chip::CharSpan span;
+    CHIP_ERROR err = chip::app::DataModel::Decode(*data, span);
+    if (err != CHIP_NO_ERROR) {
+        err = data->Get(span);
+    }
+    if (err != CHIP_NO_ERROR || span.size() == 0) {
+        return false;
+    }
+    size_t n = span.size() < out_len - 1 ? span.size() : out_len - 1;
+    memcpy(out, span.data(), n);
+    out[n] = '\0';
+    return true;
+}
+
+static void on_identity_attr(uint64_t node_id, const chip::app::ConcreteDataAttributePath &path,
+                             chip::TLV::TLVReader *data, const chip::app::StatusIB &status)
+{
+    if (status.ToChipError() != CHIP_NO_ERROR || !data) {
+        return;
+    }
+    if (path.mClusterId != k_basic_cluster) {
+        return;
+    }
+    identity_slot_t *slot = identity_slot(node_id, true);
+    if (!slot) {
+        return;
+    }
+    using namespace chip::app::Clusters::BasicInformation::Attributes;
+    if (path.mAttributeId == VendorName::Id) {
+        (void)tlv_copy_string(data, slot->id.manufacturer, sizeof(slot->id.manufacturer));
+    } else if (path.mAttributeId == ProductName::Id) {
+        (void)tlv_copy_string(data, slot->id.model, sizeof(slot->id.model));
+    } else if (path.mAttributeId == SoftwareVersionString::Id) {
+        (void)tlv_copy_string(data, slot->id.sw_version, sizeof(slot->id.sw_version));
+    } else if (path.mAttributeId == HardwareVersionString::Id) {
+        (void)tlv_copy_string(data, slot->id.hw_version, sizeof(slot->id.hw_version));
+    } else if (path.mAttributeId == SoftwareVersion::Id) {
+        uint32_t v = 0;
+        if (chip::app::DataModel::Decode(*data, v) != CHIP_NO_ERROR) {
+            (void)data->Get(v);
+        }
+        if (v || data) {
+            snprintf(slot->sw_num, sizeof(slot->sw_num), "%" PRIu32, v);
+        }
+    } else if (path.mAttributeId == HardwareVersion::Id) {
+        uint16_t v = 0;
+        if (chip::app::DataModel::Decode(*data, v) != CHIP_NO_ERROR) {
+            uint32_t w = 0;
+            if (data->Get(w) == CHIP_NO_ERROR) {
+                v = (uint16_t)w;
+            }
+        }
+        snprintf(slot->hw_num, sizeof(slot->hw_num), "%u", (unsigned)v);
+    }
+}
+
+static void on_identity_done(uint64_t node_id,
+                             const chip::Platform::ScopedMemoryBufferWithSize<chip::app::AttributePathParams> &attr_paths,
+                             const chip::Platform::ScopedMemoryBufferWithSize<chip::app::EventPathParams> &event_paths)
+{
+    (void)attr_paths;
+    (void)event_paths;
+    identity_slot_t *slot = identity_slot(node_id, false);
+    if (!slot) {
+        return;
+    }
+    if (!slot->id.sw_version[0] && slot->sw_num[0]) {
+        strncpy(slot->id.sw_version, slot->sw_num, sizeof(slot->id.sw_version) - 1);
+    }
+    if (!slot->id.hw_version[0] && slot->hw_num[0]) {
+        strncpy(slot->id.hw_version, slot->hw_num, sizeof(slot->id.hw_version) - 1);
+    }
+    ESP_LOGI(TAG, "Basic Information node=%" PRIu64 " vendor=%s model=%s sw=%s hw=%s", node_id,
+             slot->id.manufacturer[0] ? slot->id.manufacturer : "-",
+             slot->id.model[0] ? slot->id.model : "-",
+             slot->id.sw_version[0] ? slot->id.sw_version : "-",
+             slot->id.hw_version[0] ? slot->id.hw_version : "-");
+    if (s_identity_cb) {
+        s_identity_cb(node_id, &slot->id, s_identity_ctx);
+    }
 }
 
 static void on_pairing_complete(CHIP_ERROR err)
@@ -85,6 +214,7 @@ static void on_commissioning_success(chip::ScopedNodeId peer_id)
     s_commissioned = true;
     s_pairing_in_progress = false;
     set_error(NULL);
+    (void)minihub_matter_interview_identity(peer_id.GetNodeId());
 }
 
 static void on_commissioning_failure(chip::ScopedNodeId peer_id, CHIP_ERROR error,
@@ -226,6 +356,13 @@ esp_err_t minihub_matter_init(void)
     }
 
     register_pairing_callbacks();
+    {
+        extern esp_err_t minihub_matter_ota_provider_install(void);
+        esp_err_t ota_err = minihub_matter_ota_provider_install();
+        if (ota_err != ESP_OK && ota_err != ESP_ERR_NOT_SUPPORTED) {
+            ESP_LOGW(TAG, "OTA Provider install: %s", esp_err_to_name(ota_err));
+        }
+    }
     s_started = true;
     set_error(NULL);
     ESP_LOGI(TAG, "Matter commissioner ready");
@@ -530,4 +667,51 @@ cJSON *minihub_matter_status_json(void)
 const char *minihub_matter_last_error(void)
 {
     return s_last_error[0] ? s_last_error : NULL;
+}
+
+esp_err_t minihub_matter_set_identity_cb(minihub_matter_identity_cb_t cb, void *ctx)
+{
+    s_identity_cb = cb;
+    s_identity_ctx = ctx;
+    return ESP_OK;
+}
+
+esp_err_t minihub_matter_interview_identity(uint64_t node_id)
+{
+    if (!s_started) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (node_id < 2) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    using chip::Platform::ScopedMemoryBufferWithSize;
+    using chip::app::AttributePathParams;
+    using chip::app::EventPathParams;
+    using namespace chip::app::Clusters::BasicInformation::Attributes;
+
+    const uint32_t attrs[] = {
+        VendorName::Id,
+        ProductName::Id,
+        SoftwareVersionString::Id,
+        SoftwareVersion::Id,
+        HardwareVersionString::Id,
+        HardwareVersion::Id,
+    };
+    const size_t n = sizeof(attrs) / sizeof(attrs[0]);
+    ScopedMemoryBufferWithSize<AttributePathParams> attr_paths;
+    ScopedMemoryBufferWithSize<EventPathParams> event_paths;
+    attr_paths.Alloc(n);
+    if (!attr_paths.Get()) {
+        return ESP_ERR_NO_MEM;
+    }
+    for (size_t i = 0; i < n; i++) {
+        attr_paths[i] = AttributePathParams(0, k_basic_cluster, attrs[i]);
+    }
+    auto *cmd = chip::Platform::New<esp_matter::controller::read_command>(
+        node_id, std::move(attr_paths), std::move(event_paths), on_identity_attr, on_identity_done, nullptr);
+    if (!cmd) {
+        return ESP_ERR_NO_MEM;
+    }
+    ESP_LOGI(TAG, "interview Basic Information node=%" PRIu64, node_id);
+    return cmd->send_command();
 }

@@ -9,6 +9,7 @@
 #if CONFIG_MINIHUB_MATTER_ADAPTER
 
 #include "minihub_adapter.h"
+#include "minihub_core.h"
 #include "minihub_matter.h"
 #include "minihub_module.h"
 #include "matter_rpc.h"
@@ -54,6 +55,66 @@ static matter_device_t *find_device(const char *point_id)
         }
     }
     return NULL;
+}
+
+static void apply_identity_props(const matter_device_t *dev, const minihub_matter_identity_t *id)
+{
+    if (!dev || !dev->point_id[0]) {
+        return;
+    }
+    cJSON *patch = cJSON_CreateObject();
+    if (!patch) {
+        return;
+    }
+    char nid[24];
+    snprintf(nid, sizeof(nid), "%llu", (unsigned long long)dev->node_id);
+    cJSON_AddStringToObject(patch, "node_id", nid);
+    if (id) {
+        if (id->manufacturer[0]) {
+            cJSON_AddStringToObject(patch, "manufacturer", id->manufacturer);
+        }
+        if (id->model[0]) {
+            cJSON_AddStringToObject(patch, "model", id->model);
+        }
+        if (id->sw_version[0]) {
+            cJSON_AddStringToObject(patch, "sw_version", id->sw_version);
+        }
+        if (id->hw_version[0]) {
+            cJSON_AddStringToObject(patch, "hw_version", id->hw_version);
+        }
+    }
+    (void)minihub_point_merge_props(dev->point_id, NULL, patch);
+    cJSON_Delete(patch);
+}
+
+static void on_matter_identity(uint64_t node_id, const minihub_matter_identity_t *id, void *ctx)
+{
+    (void)ctx;
+    if (!id) {
+        return;
+    }
+    for (size_t i = 0; i < s_device_count; i++) {
+        if (s_devices[i].node_id == node_id) {
+            apply_identity_props(&s_devices[i], id);
+        }
+    }
+}
+
+static void interview_unique_nodes(void)
+{
+    for (size_t i = 0; i < s_device_count; i++) {
+        bool already = false;
+        for (size_t j = 0; j < i; j++) {
+            if (s_devices[j].node_id == s_devices[i].node_id) {
+                already = true;
+                break;
+            }
+        }
+        if (already || s_devices[i].node_id < 2) {
+            continue;
+        }
+        (void)minihub_matter_interview_identity(s_devices[i].node_id);
+    }
 }
 
 static esp_err_t parse_devices(const cJSON *cfg)
@@ -105,6 +166,7 @@ static esp_err_t matter_adapter_init(const cJSON *config)
     }
     /* Host-static RPC → Store 「已安装」shows as 内置 (managed=false). */
     (void)minihub_module_register_rpc("matter", matter_module_rpc);
+    (void)minihub_matter_set_identity_cb(on_matter_identity, NULL);
     return ESP_OK;
 }
 
@@ -144,9 +206,13 @@ static esp_err_t matter_adapter_start(void)
             cJSON_Delete(point.props);
             point.props = NULL;
         }
+        apply_identity_props(&s_devices[i], NULL);
     }
 
     s_started = true;
+    if (minihub_matter_ready()) {
+        interview_unique_nodes();
+    }
     ESP_LOGI(TAG, "Matter adapter started (%u devices, commissioner=%d)",
              (unsigned)s_device_count, minihub_matter_ready() ? 1 : 0);
     return ESP_OK;
@@ -168,6 +234,22 @@ static esp_err_t matter_adapter_handle_command(const minihub_command_t *cmd)
     if (!dev) {
         return ESP_ERR_NOT_FOUND;
     }
+
+    if (strcmp(cmd->cmd, "ota") == 0 || strcmp(cmd->cmd, "start_ota") == 0) {
+        const char *path = NULL;
+        const cJSON *pj = cmd->params ? cJSON_GetObjectItem(cmd->params, "path") : NULL;
+        if (!cJSON_IsString(pj) || !pj->valuestring) {
+            pj = cmd->params ? cJSON_GetObjectItem(cmd->params, "file_path") : NULL;
+        }
+        if (!cJSON_IsString(pj) || !pj->valuestring) {
+            pj = cmd->params ? cJSON_GetObjectItem(cmd->params, "url") : NULL;
+        }
+        if (cJSON_IsString(pj) && pj->valuestring) {
+            path = pj->valuestring;
+        }
+        return minihub_matter_ota_offer(cmd->point_id, path);
+    }
+
     if (!minihub_matter_ready()) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -202,7 +284,12 @@ static esp_err_t matter_adapter_poll(void)
         return ESP_OK;
     }
     /* Matter read/invoke needs deep CHIP stack; adapter_poll runs on a small task.
-     * Async attribute poll is not wired up yet — state updates come from commands. */
+     * Retry Basic Information if CASE was not ready at start. */
+    static int s_ticks;
+    s_ticks++;
+    if (s_ticks <= 60 && (s_ticks % 20) == 0) {
+        interview_unique_nodes();
+    }
     return ESP_OK;
 }
 
