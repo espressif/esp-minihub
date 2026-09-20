@@ -32,6 +32,13 @@ LIBGCC_EXTERNS: dict[str, str] = {
     "__divdf3": "extern double __divdf3(double, double);",
     "__fixdfdi": "extern long long __fixdfdi(double);",
     "__floatdidf": "extern double __floatdidf(long long);",
+    # Soft-float compares (libgcc); plugins may emit any of these for double ops.
+    "__eqdf2": "extern int __eqdf2(double, double);",
+    "__nedf2": "extern int __nedf2(double, double);",
+    "__gtdf2": "extern int __gtdf2(double, double);",
+    "__gedf2": "extern int __gedf2(double, double);",
+    "__ltdf2": "extern int __ltdf2(double, double);",
+    "__ledf2": "extern int __ledf2(double, double);",
 }
 
 

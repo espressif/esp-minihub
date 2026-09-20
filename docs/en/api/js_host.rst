@@ -300,13 +300,55 @@ Parameters
 Returns
 ^^^^^^^
 
-``{ status: number, body: string }``.
+``{ status: number, body: string, headers?: { location?: string, "set-cookie"?: string, "extension-pragma"?: string } }``.
 
 Attention
 ^^^^^^^^^
 
-Response body cap **16384** bytes; ``main.js`` max **256 KiB**. URLs must pass Host
-network policy.
+Response body cap **65536** bytes; ``main.js`` max **1 MiB**. URLs must pass Host
+network policy. Optional ``headers`` object sets request headers (e.g. ``Cookie``,
+``Content-Type``). Auto-redirect is **disabled** so callers can capture
+``Location`` / ``Set-Cookie`` (passport login). ``DELETE`` is accepted in addition
+to GET/POST/PUT.
+
+Methods — host.net
+------------------
+
+IPv4 UDP helpers for LAN protocols (e.g. miIO). Binary payloads use **base64**.
+Implementation: ``components/minihub_js/minihub_js_ext.c``.
+
+host.net.udp.open(opts?)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+``opts.broadcast`` (bool, optional) enables ``SO_BROADCAST``.
+
+Returns a small integer socket handle (slot index).
+
+host.net.udp.sendto(fd, { ip, port, data_b64 })
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+host.net.udp.recvfrom(fd, { timeout_ms, max_len? })
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Returns ``{ ip, port, data_b64 }`` or ``null`` on timeout.
+
+host.net.udp.close(fd)
+~~~~~~~~~~~~~~~~~~~~~~
+
+Methods — host.crypto
+---------------------
+
+Digest / HMAC / AES helpers. Digests return **lowercase hex**; HMAC and AES
+return **base64**. Inputs accept a string or ``{ data }`` / ``{ data_b64 }``.
+
+* ``host.crypto.md5(input)``
+* ``host.crypto.sha1(input)``
+* ``host.crypto.sha256(input)``
+* ``host.crypto.hmacSha256({ key_b64, data_b64 })`` → base64
+* ``host.crypto.aes128CbcEncrypt({ key_b64, iv_b64, data_b64 })`` → base64 (PKCS7)
+* ``host.crypto.aes128CbcDecrypt({ key_b64, iv_b64, data_b64 })`` → base64
+
+Demo: ``examples/plugins/miot_js/`` (pure L2 cloud + miIO LAN).
 
 Methods — host.config
 ---------------------
@@ -321,10 +363,70 @@ Returns
 
 JavaScript object or ``null``.
 
-Attention
-^^^^^^^^^
+host.config.save(adaptersRoot)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-JS cannot persist config; use REST ``PUT /api/config/adapters`` or L3 vtable
-``config_save_adapters`` (:doc:`module_abi`).
+Persist the full ``adapters.json`` object (``minihub_config_save_adapters``).
+
+Parameters
+^^^^^^^^^^
+
+``adaptersRoot`` (object, required)
+    Entire adapters document to write.
+
+Returns
+^^^^^^^
+
+``undefined``; failures **throw**.
+
+Methods — host.module
+---------------------
+
+host.module.rpc(moduleId, method, params?)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Invoke another loaded module's RPC (``minihub_module_invoke_rpc``), e.g. one
+Store module calling into another for shared helpers.
+
+Parameters
+^^^^^^^^^^
+
+``moduleId`` (string, required)
+    Target module id.
+
+``method`` (string, required)
+    RPC method name.
+
+``params`` (object, optional)
+    JSON parameters.
+
+Returns
+^^^^^^^
+
+Parsed JSON object (or ``null``). Failures **throw**.
+
+host.module.registerRpc(method, handler)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Register an RPC handler for **this** module id (only valid inside ``setup``).
+Web UI and ``POST /api/modules/<id>/rpc`` call ``handler(method, params)``.
+
+On **hybrid** modules, JS handlers become the primary RPC; methods not
+registered in JS fall through to the native ``minihub_module_rpc`` (e.g.
+``lan_*`` in ``miot_js``).
+
+Parameters
+^^^^^^^^^^
+
+``method`` (string, required)
+    Method name (e.g. ``login``, ``sync``).
+
+``handler`` (function, required)
+    Return a JSON-serializable object. Return ``false`` or throw → RPC failure.
+
+Returns
+^^^^^^^
+
+``undefined``.
 
 See :doc:`../plugins/develop_l2`.

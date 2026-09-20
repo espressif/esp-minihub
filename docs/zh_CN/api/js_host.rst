@@ -295,12 +295,50 @@ Parameters
 Returns
 ^^^^^^^
 
-``{ status: number, body: string }`` — ``status`` 为 HTTP 状态码。
+``{ status: number, body: string, headers?: { location?: string, "set-cookie"?: string, "extension-pragma"?: string } }`` — ``status`` 为 HTTP 状态码。
 
 Attention
 ^^^^^^^^^
 
-响应体上限 **16384** 字节；``main.js`` 最大 **256 KiB**。出站 URL 须符合 Host 网络安全策略。
+响应体上限 **65536** 字节；``main.js`` 最大 **1 MiB**。出站 URL 须符合 Host 网络安全策略。
+可选 ``headers`` 对象设置请求头（如 ``Cookie``、``Content-Type``）。自动重定向**关闭**，便于读取
+``Location`` / ``Set-Cookie``（护照登录）。除 GET/POST/PUT 外支持 ``DELETE``。
+
+方法 — host.net
+---------------
+
+IPv4 UDP（如 miIO）。二进制载荷使用 **base64**。实现：``components/minihub_js/minihub_js_ext.c``。
+
+host.net.udp.open(opts?)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+``opts.broadcast``（可选 bool）开启广播。返回小整数 socket 句柄。
+
+host.net.udp.sendto(fd, { ip, port, data_b64 })
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+host.net.udp.recvfrom(fd, { timeout_ms, max_len? })
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+返回 ``{ ip, port, data_b64 }``，超时为 ``null``。
+
+host.net.udp.close(fd)
+~~~~~~~~~~~~~~~~~~~~~~
+
+方法 — host.crypto
+------------------
+
+摘要 / HMAC / AES。摘要返回**小写 hex**；HMAC 与 AES 返回 **base64**。
+输入可为字符串或 ``{ data }`` / ``{ data_b64 }``。
+
+* ``host.crypto.md5(input)``
+* ``host.crypto.sha1(input)``
+* ``host.crypto.sha256(input)``
+* ``host.crypto.hmacSha256({ key_b64, data_b64 })`` → base64
+* ``host.crypto.aes128CbcEncrypt({ key_b64, iv_b64, data_b64 })`` → base64（PKCS7）
+* ``host.crypto.aes128CbcDecrypt({ key_b64, iv_b64, data_b64 })`` → base64
+
+示例：``examples/plugins/miot_js/``（纯 L2 云 + miIO LAN）。
 
 方法 — host.config
 ------------------
@@ -315,10 +353,69 @@ Returns
 
 JavaScript 对象，或 ``null``。
 
-Attention
-^^^^^^^^^
+host.config.save(adaptersRoot)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-JS 侧不能写回配置；持久化请用 REST PUT /api/config/adapters 或 L3 虚表
-config_save_adapters（:doc:`module_abi`）。
+写回完整 ``adapters.json``（``minihub_config_save_adapters``）。
+
+Parameters
+^^^^^^^^^^
+
+``adaptersRoot`` （object，必填）
+    要写入的整份 adapters 文档。
+
+Returns
+^^^^^^^
+
+``undefined``；失败时 **抛异常**。
+
+方法 — host.module
+------------------
+
+host.module.rpc(moduleId, method, params?)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+调用其它已加载模块的 RPC（``minihub_module_invoke_rpc``），例如一个 Store
+模块调用另一个模块的共享能力。
+
+Parameters
+^^^^^^^^^^
+
+``moduleId`` （string，必填）
+    目标模块 id。
+
+``method`` （string，必填）
+    RPC 方法名。
+
+``params`` （object，可选）
+    JSON 参数。
+
+Returns
+^^^^^^^
+
+解析后的 JSON 对象（或 ``null``）。失败时 **抛异常**。
+
+host.module.registerRpc(method, handler)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+为本模块 id 注册 RPC（仅可在 ``setup`` 内调用）。Web UI 与
+``POST /api/modules/<id>/rpc`` 会调用 ``handler(method, params)``。
+
+在 **hybrid** 模块上，JS 处理器为 RPC 主路径；未在 JS 注册的方法会回落到
+原生 ``minihub_module_rpc``（例如 ``miot_js`` 的 ``lan_*``）。
+
+Parameters
+^^^^^^^^^^
+
+``method`` （string，必填）
+    方法名（如 ``login``、``sync``）。
+
+``handler`` （function，必填）
+    返回可 JSON 序列化的对象。返回 ``false`` 或抛异常表示失败。
+
+Returns
+^^^^^^^
+
+``undefined``。
 
 见 :doc:`../plugins/develop_l2`。

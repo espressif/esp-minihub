@@ -62,8 +62,12 @@
 
 static const char *TAG = "minihub_web";
 
-/** Product version shown in sidebar / system page (stable; not git describe). */
-#define MINIHUB_PRODUCT_VERSION "0.2.0"
+/* Product version shown in the sidebar / system page (not git describe).
+ * Kconfig string; quoted by sdkconfig.h. Fallback keeps host builds that
+ * have not regenerated sdkconfig.h on the same default. */
+#ifndef CONFIG_MINIHUB_PRODUCT_VERSION
+#define CONFIG_MINIHUB_PRODUCT_VERSION "0.1.0"
+#endif
 
 __attribute__((weak)) void minihub_map_download_begin(void)
 {
@@ -220,6 +224,7 @@ static esp_err_t send_preinstall_index_or_fallback(httpd_req_t *req)
 
 static esp_err_t send_login_redirect(httpd_req_t *req)
 {
+    minihub_auth_clear_session_cookie(req);
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/login");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
@@ -353,6 +358,8 @@ static esp_err_t handle_api_auth_logout(httpd_req_t *req)
 static esp_err_t api_auth(httpd_req_t *req)
 {
     if (minihub_auth_check(req) != ESP_OK) {
+        /* Drop stale cookie so the SPA cannot keep acting on a cached UI. */
+        minihub_auth_clear_session_cookie(req);
         return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "unauthorized");
     }
     return ESP_OK;
@@ -765,7 +772,7 @@ static esp_err_t handle_api_info(httpd_req_t *req)
     const int64_t uptime_ms = esp_timer_get_time() / 1000;
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "name", "MiniHub");
-    cJSON_AddStringToObject(root, "version", MINIHUB_PRODUCT_VERSION);
+    cJSON_AddStringToObject(root, "version", CONFIG_MINIHUB_PRODUCT_VERSION);
     cJSON_AddNumberToObject(root, "api_version", MINIHUB_CORE_API_VERSION);
     cJSON_AddBoolToObject(root, "auth_required", minihub_auth_enabled());
     cJSON_AddBoolToObject(root, "password_set", minihub_auth_password_set());
@@ -839,7 +846,7 @@ static esp_err_t handle_api_system(httpd_req_t *req)
     const esp_app_desc_t *app = esp_app_get_description();
     cJSON_AddStringToObject(root, "name", "MiniHub");
     /* Product version shown in sidebar (hub-ver); keep stable across git builds. */
-    cJSON_AddStringToObject(root, "version", MINIHUB_PRODUCT_VERSION);
+    cJSON_AddStringToObject(root, "version", CONFIG_MINIHUB_PRODUCT_VERSION);
     cJSON_AddStringToObject(root, "idf_version", esp_get_idf_version());
     if (app && app->version[0]) {
         cJSON_AddStringToObject(root, "commit", app->version);
@@ -1952,12 +1959,16 @@ static esp_err_t handle_api_devices_control(httpd_req_t *req)
     const cJSON *value = cJSON_GetObjectItem(root, "value");
     const cJSON *seqj = cJSON_GetObjectItem(root, "seq");
     const cJSON *point_id_j = cJSON_GetObjectItem(root, "point_id");
-    if (!cJSON_IsString(device) || !cJSON_IsString(parameter) || !value) {
+    if (!cJSON_IsString(device) || !cJSON_IsString(parameter) || !value ||
+        !parameter->valuestring) {
         cJSON_Delete(root);
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
                                     "missing device/parameter/value");
     }
-    if (!minihub_device_widget_find(device->valuestring, parameter->valuestring)) {
+    /* Copy before cJSON_Delete(root): the response still names this parameter. */
+    char param_name[64];
+    snprintf(param_name, sizeof(param_name), "%s", parameter->valuestring);
+    if (!minihub_device_widget_find(device->valuestring, param_name)) {
         cJSON_Delete(root);
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown device/parameter");
     }
@@ -2005,7 +2016,7 @@ static esp_err_t handle_api_devices_control(httpd_req_t *req)
     free(vs);
     char payload[384];
     if (!minihub_device_widget_report_payload(seq, device->valuestring,
-                                               parameter->valuestring, value_json,
+                                               param_name, value_json,
                                                payload, sizeof(payload))) {
         cJSON_Delete(root);
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "payload too long");
@@ -2020,7 +2031,7 @@ static esp_err_t handle_api_devices_control(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
     }
     cJSON_AddNumberToObject(params, "seq", (double)seq);
-    cJSON_AddStringToObject(params, "parameter", parameter->valuestring);
+    cJSON_AddStringToObject(params, "parameter", param_name);
     cJSON_AddItemToObject(params, "value", cJSON_Duplicate(value, true));
     cmd.params = params;
     err = minihub_command_invoke(&cmd);
@@ -2040,7 +2051,7 @@ static esp_err_t handle_api_devices_control(httpd_req_t *req)
     }
     cJSON_AddStringToObject(resp, "result", "ok");
     cJSON_AddStringToObject(resp, "path", path);
-    cJSON_AddStringToObject(resp, "parameter", parameter->valuestring);
+    cJSON_AddStringToObject(resp, "parameter", param_name);
     cJSON_AddStringToObject(resp, "payload", payload);
     err = send_json(req, resp);
     cJSON_Delete(resp);

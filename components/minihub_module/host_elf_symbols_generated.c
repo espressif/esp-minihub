@@ -33,16 +33,18 @@
 #include "minihub_net.h"
 
 extern long long __divdi3(long long, long long);
-extern void __eqdf2(void);
+extern int __eqdf2(double, double);
 extern double __extendsfdf2(float);
 extern long long __fixdfdi(double);
 extern int __fixdfsi(double);
 extern double __floatdidf(long long);
 extern double __floatsidf(int);
 extern double __floatunsidf(unsigned int);
-extern void __gtdf2(void);
-extern void __ltdf2(void);
-extern void __nedf2(void);
+extern int __gedf2(double, double);
+extern int __gtdf2(double, double);
+extern int __ledf2(double, double);
+extern int __ltdf2(double, double);
+extern int __nedf2(double, double);
 
 const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(__divdi3),
@@ -53,7 +55,9 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(__floatdidf),
     ESP_ELFSYM_EXPORT(__floatsidf),
     ESP_ELFSYM_EXPORT(__floatunsidf),
+    ESP_ELFSYM_EXPORT(__gedf2),
     ESP_ELFSYM_EXPORT(__gtdf2),
+    ESP_ELFSYM_EXPORT(__ledf2),
     ESP_ELFSYM_EXPORT(__ltdf2),
     ESP_ELFSYM_EXPORT(__nedf2),
     ESP_ELFSYM_EXPORT(atof),
@@ -140,6 +144,7 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(mbedtls_md_starts),
     ESP_ELFSYM_EXPORT(mbedtls_md_update),
     ESP_ELFSYM_EXPORT(memcpy),
+    ESP_ELFSYM_EXPORT(memcmp),
     ESP_ELFSYM_EXPORT(memmove),
     ESP_ELFSYM_EXPORT(memset),
     ESP_ELFSYM_EXPORT(minihub_http_is_worker_task),
@@ -196,8 +201,11 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(sscanf),
     ESP_ELFSYM_EXPORT(stat),
     ESP_ELFSYM_EXPORT(strcasecmp),
+    ESP_ELFSYM_EXPORT(strcat),
     ESP_ELFSYM_EXPORT(strchr),
     ESP_ELFSYM_EXPORT(strcmp),
+    ESP_ELFSYM_EXPORT(strcpy),
+    ESP_ELFSYM_EXPORT(strdup),
     ESP_ELFSYM_EXPORT(strlen),
     ESP_ELFSYM_EXPORT(strncat),
     ESP_ELFSYM_EXPORT(strncmp),

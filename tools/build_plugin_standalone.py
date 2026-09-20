@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an examples/plugins L3 demo without ESP-IDF (CMake + Plugin SDK)."""
+"""Build an examples/plugins native/hybrid demo without ESP-IDF (CMake + Plugin SDK)."""
 from __future__ import annotations
 
 import argparse
@@ -18,11 +18,14 @@ def resolve_plugin_dir(module_id: str, *, root: Path = ROOT) -> Path:
     if not d.is_dir() or not (d / "module.json").is_file():
         raise FileNotFoundError(f"missing examples/plugins/{module_id}/module.json")
     manifest = json.loads((d / "module.json").read_text(encoding="utf-8"))
-    if manifest.get("runtime") != "native":
+    runtime = manifest.get("runtime") or "native"
+    if runtime not in ("native", "hybrid"):
         raise ValueError(
-            f"{module_id}: runtime={manifest.get('runtime')!r} — "
-            "standalone CMake is L3 native only"
+            f"{module_id}: runtime={runtime!r} — "
+            "standalone CMake builds native/hybrid .so only"
         )
+    if runtime == "hybrid" and not (d / "main.js").is_file():
+        raise FileNotFoundError(f"hybrid module missing {d / 'main.js'}")
     if not (d / "CMakeLists.txt").is_file():
         raise FileNotFoundError(f"missing {d / 'CMakeLists.txt'}")
     return d
@@ -81,7 +84,7 @@ def run_standalone(
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("module_id", help="examples/plugins/<id> (L3 native)")
+    p.add_argument("module_id", help="examples/plugins/<id> (native or hybrid)")
     p.add_argument("--cc", default=None, help="C compiler (default riscv32-esp-elf-gcc)")
     p.add_argument("--clean", action="store_true")
     p.add_argument("--pack", action="store_true", help="also build CMake target 'pack'")

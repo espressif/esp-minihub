@@ -26,7 +26,8 @@
  * - ``minihub_plugin_sdk/freertos.h`` — tasks / mutexes / libgcc helpers
  * - ``minihub_plugin_sdk/minihub.h`` — points, ABI, HTTP worker, net, BLE GATT
  *
- * libc (``malloc``, ``memcpy``, ``fopen``, ``mkdir``, ``stat``, ``unlink``,
+ * libc (``malloc``, ``memcpy``/``memset``/``memcmp``, ``strcpy``/``strncpy``/
+ * ``strcat``/``strcmp``/``strlen``/…, ``fopen``, ``mkdir``, ``stat``, ``unlink``,
  * ``time``, ``close``, …) comes from the toolchain. Runtime binding:
  * ``host_export_allowlist.json``.
  * Host build runs ``tools/check_plugin_sdk.py`` when dynamic modules are on.

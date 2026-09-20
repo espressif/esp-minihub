@@ -18,6 +18,9 @@
 #include "esp_http_client.h"
 #include "cJSON.h"
 #include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -35,10 +38,29 @@ static const struct esp_elfsym s_minihub_host_elfsyms[] = {
     ESP_ELFSYM_EXPORT(minihub_net_has_ip),
     /* cJSON helpers that a Store .mhub may leave undefined (e.g. color_bulb) */
     ESP_ELFSYM_EXPORT(cJSON_GetObjectItemCaseSensitive),
-    /* libc helpers frequently pulled by HTTP/cloud plugins */
+    /* libc string / memory — keep a stable set so plugins need not chase toolchain */
+    ESP_ELFSYM_EXPORT(memcmp),
+    ESP_ELFSYM_EXPORT(memcpy),
+    ESP_ELFSYM_EXPORT(memmove),
+    ESP_ELFSYM_EXPORT(memset),
+    ESP_ELFSYM_EXPORT(strcasecmp),
+    ESP_ELFSYM_EXPORT(strcat),
+    ESP_ELFSYM_EXPORT(strchr),
+    ESP_ELFSYM_EXPORT(strcmp),
+    ESP_ELFSYM_EXPORT(strcpy),
     ESP_ELFSYM_EXPORT(strdup),
+    ESP_ELFSYM_EXPORT(strlen),
+    ESP_ELFSYM_EXPORT(strncat),
+    ESP_ELFSYM_EXPORT(strncmp),
+    ESP_ELFSYM_EXPORT(strncpy),
+    ESP_ELFSYM_EXPORT(strrchr),
+    ESP_ELFSYM_EXPORT(strstr),
+    ESP_ELFSYM_EXPORT(strtol),
+    /* libc alloc */
     ESP_ELFSYM_EXPORT(malloc),
     ESP_ELFSYM_EXPORT(free),
+    ESP_ELFSYM_EXPORT(calloc),
+    ESP_ELFSYM_EXPORT(realloc),
     /* Spec extras harvest / low-heap skip (dynamic cloud modules) */
     ESP_ELFSYM_EXPORT(heap_caps_get_free_size),
     /* Generic BLE GATT client for FE95-class / vendor BLE modules */

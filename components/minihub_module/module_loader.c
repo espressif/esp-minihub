@@ -38,6 +38,8 @@ typedef struct {
     long binary_size_expected;
     const minihub_adapter_t *adapter;
     minihub_module_rpc_fn rpc;
+    /** Secondary RPC for hybrid: JS primary + native fallback (or vice versa). */
+    minihub_module_rpc_fn rpc_fallback;
     cJSON *ui_json;
     char ui_file_path[192]; /**< optional on-disk ui.json; reloaded for /api/modules */
     bool is_js; /**< L2 QuickJS — listed/managed here, executed by minihub_js */
@@ -889,7 +891,12 @@ static esp_err_t try_load_binary(module_slot_t *slot, const cJSON *adapter_cfg)
     }
 
     if (rpc) {
-        slot->rpc = rpc;
+        /* Hybrid entry=js: JS may already own primary RPC — keep it, stash native. */
+        if (slot->rpc && slot->rpc != rpc) {
+            slot->rpc_fallback = rpc;
+        } else {
+            slot->rpc = rpc;
+        }
     }
 
     err = minihub_module_attach_adapter(&slot->info, adapter);
@@ -1419,6 +1426,10 @@ esp_err_t minihub_module_register_rpc(const char *module_id, minihub_module_rpc_
         slot->info.core_api_max = MINIHUB_CORE_API_VERSION;
         ESP_LOGI(TAG, "host RPC module slot created: %s", module_id);
     }
+    /* Hybrid: JS registerRpc becomes primary; demote prior native RPC to fallback. */
+    if (slot->rpc && slot->rpc != rpc) {
+        slot->rpc_fallback = slot->rpc;
+    }
     slot->rpc = rpc;
     slot->info.loaded = true;
     return ESP_OK;
@@ -1445,9 +1456,16 @@ esp_err_t minihub_module_forget_host_rpc(const char *module_id)
     }
 
     module_slot_t *slot = find_module(module_id);
-    if (slot && slot->manifest_path[0] == '\0') {
-        remove_ephemeral_module_slot(module_id);
-        found = true;
+    if (slot) {
+        if (slot->rpc_fallback) {
+            slot->rpc = slot->rpc_fallback;
+            slot->rpc_fallback = NULL;
+            found = true;
+        }
+        if (slot->manifest_path[0] == '\0') {
+            remove_ephemeral_module_slot(module_id);
+            found = true;
+        }
     }
 
     if (found) {
@@ -1544,7 +1562,11 @@ esp_err_t minihub_module_invoke_rpc(const char *module_id, const char *method,
     if (!slot || !slot->info.loaded || !slot->rpc) {
         return ESP_ERR_INVALID_STATE;
     }
-    return slot->rpc(method, params, out);
+    esp_err_t err = slot->rpc(method, params, out);
+    if (err == ESP_ERR_NOT_FOUND && slot->rpc_fallback) {
+        err = slot->rpc_fallback(method, params, out);
+    }
+    return err;
 }
 
 static esp_err_t write_manifest_enabled(const char *path, bool enabled)

@@ -49,8 +49,10 @@ Kconfig 与登录
 * ``CONFIG_MINIHUB_WEB_UI`` （默认开）— 提供控制台。关掉后 ``GET /`` 为 404，
   REST ``/api/`` 仍可用。
 * ``CONFIG_MINIHUB_WEB_LOGIN_AUTH`` （默认开，依赖 Web UI）— 首次打开
-  ``/login`` 为 ``admin`` 设密码（NVS ``minihub/web_pw``）。Cookie ``mh_sess``
-  **空闲 5 分钟** 过期（有鉴权请求会续期）。关掉后无 Cookie、也无 Bearer。
+  ``/login`` 为 ``admin`` 设密码（NVS ``minihub/web_pw``）。Cookie ``mh_sess``：
+  **空闲 5 分钟** 无任何鉴权请求则过期（GET 轮询也算在用，会续空闲期）；另有
+  **登录后最长 8 小时** 绝对上限。过期后 API 返回 401，控制台跳转 ``/login``，
+  避免缓存页继续删插件 / 控设备。关掉后无 Cookie、也无 Bearer。
 * ``CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN`` — 可选 ``Authorization: Bearer`` 给脚本。
   空字符串表示只用 Cookie。NVS 回退键仍是 ``api_token`` 。
 

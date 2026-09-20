@@ -52,8 +52,11 @@ Kconfig and login
   404; REST ``/api/`` still works.
 * ``CONFIG_MINIHUB_WEB_LOGIN_AUTH`` (default on, depends on Web UI) — first
   visit to ``/login`` sets the ``admin`` password (NVS ``minihub/web_pw``).
-  Cookie ``mh_sess`` lasts **5 minutes idle** (each authenticated request extends
-  it). Off: no cookie and no Bearer.
+  Cookie ``mh_sess``: **5 minutes idle** with no authenticated request
+  (GET polls count as activity and refresh idle). Hard cap **8 hours** from
+  login. On expiry APIs return 401 and the console navigates to ``/login`` so a
+  cached SPA cannot keep uninstalling modules or controlling devices. Off: no
+  cookie and no Bearer.
 * ``CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN`` — optional ``Authorization: Bearer``
   for scripts. Empty string: cookie only. NVS fallback key remains
   ``api_token``.
