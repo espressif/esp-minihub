@@ -16,7 +16,7 @@ Prerequisites
   or CMake will not emit ``libadapter_*.so``
 * The Hub **running** L2 / L3 must also have been flashed with that option
 * ``pip install pyyaml`` at the repo root if scripts fail on PyYAML
-* Optional: ``export MINIHUB_STORE_DEPLOY=~/workspace/minihub_store``
+* Optional: ``export MINIHUB_PLUGINS_DEPLOY_DIR=~/workspace/minihub_store``
 
 Pack commands
 -------------
@@ -63,7 +63,7 @@ reads ``module.json`` (and ``ui.json`` when the zip has one), and writes
 ``catalog.json``. Plugin sources are not required. The same script is inside
 ``module_sdk.zip``. The local Store server serves that file; copying a zip
 alone does not update the catalog. Default deploy root is
-``MINIHUB_STORE_DEPLOY`` or ``~/workspace/minihub_store``.
+``MINIHUB_PLUGINS_DEPLOY_DIR`` or ``~/workspace/minihub_store``.
 
 Deploy layout
 -------------

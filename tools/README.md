@@ -9,7 +9,7 @@ Env used by several scripts:
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product folder under `application/` |
-| `MINIHUB_STORE_DEPLOY` | `~/workspace/minihub_store` | Store catalog + `<id>/<id>.mhub` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Store catalog + `<id>/<id>.mhub` |
 
 ---
 
@@ -236,17 +236,14 @@ python3 tools/preview_docs.py
 
 | Path | Role |
 |------|------|
-| `ci/list_apps.py` | Print `application/*` names that have `CMakeLists.txt` |
-| `ci/build_apps.sh` | Build (+ merge) each app; does **not** pack `.mhub` |
-| `ci/pack_store_modules.sh` | Pack Store after a minihub firmware build |
-| `ci/build_plugin_standalone.sh` | Standalone (no IDF project) build of `examples/plugins` L3 demos |
-| `ci/stage_artifacts.sh <app>` | Copy firmware / flash images / sdkconfig into `ci_artifacts/` |
 | `ci/install_git_hooks.sh` | Install pre-commit + pre-push (+ strip Cursor commit trailers) |
 | `git-hooks/commit-msg-strip-cursor` | Local commit-msg helper |
 
+Firmware / pack / docs CI jobs call `./tools/build_firmware.py` and `./tools/build_docs.sh` from `.gitlab-ci.yml` (no extra wrappers).
+
 ```bash
 bash tools/ci/install_git_hooks.sh
-MINIHUB_APP=minihub bash tools/ci/build_apps.sh
+./tools/build_firmware.py --app minihub build merge
 ```
 
 ---

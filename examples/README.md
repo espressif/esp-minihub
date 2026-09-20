@@ -14,6 +14,8 @@
 | [ble_mesh_ota](plugins/ble_mesh_ota/) | **L3** | Same claim/catalog pattern on Host BLE Mesh points. Mesh Firmware Update air path is a Host stub. |
 | [matter_ota](plugins/matter_ota/) | **L3** | Same pattern on Host Matter endpoints (`light/matter_n*_ep*`). Hub runs CSA Provider + BDX when OTA is started. |
 
+Xiaomi MIoT (`miot` L3, `miot_js` L2) is not in this tree. It lives in the sibling repo [esp-minihub-plugins](https://gitlab.espressif.cn:6688/ae_group/minihub/esp-minihub-plugins). Point `MINIHUB_PLUGIN_DIRS` at that clone.
+
 Radio OTA plugins **must not** `point_register` a second id. Enrich the Host
 point with `merge_props` (`owner` / `ota`).
 
@@ -37,7 +39,8 @@ L3 also needs a matching `.so`. In-tree: export `MINIHUB_PLUGIN_DIRS` **before**
 python3 tools/build_plugin_standalone.py color_bulb
 ```
 
-Then pack as above. L1/L2 zip only — no firmware compile.
+Then pack as above. L1/L2 zip only — no firmware compile. L3 needs a
+`.so` (`build_plugin_standalone.py` or Host build with `MINIHUB_PLUGIN_DIRS`).
 
 Scaffold for a new module: `python3 tools/new_store_module.py --tier l1|l2|l3 --id …`
 (default destination is `components/minihub_plugins/`; copy into `plugins/`

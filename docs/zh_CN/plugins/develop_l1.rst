@@ -71,7 +71,7 @@ L1 **只改已有 Host 适配器的配置块**，不登记点、不跑逻辑、�
 .. code-block:: bash
 
    python3 tools/pack_store_module.py pack ble_mesh_pack
-   # → $MINIHUB_STORE_DEPLOY/ble_mesh_pack/ble_mesh_pack.mhub
+   # → $MINIHUB_PLUGINS_DEPLOY_DIR/ble_mesh_pack/ble_mesh_pack.mhub
    python3 tools/sync_store_catalog.py --from-store
 
 设备上 (先 ``store_server.py`` 并刷新目录)：

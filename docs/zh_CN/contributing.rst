@@ -70,9 +70,9 @@ Git 工作流
 * 构建参考 Host：``./tools/build_firmware.py -app minihub build``
 * 修改 ``manifest.yml`` 后直接编译（``build_firmware.py`` 会自动合并）
 * L3 模块：``./tools/build_firmware.py -app minihub modules`` （编译全部原生 ``.so``；打包用 ``pack``）
-* L3 演示单独编译（不编 IDF 工程）：``bash tools/ci/build_plugin_standalone.sh``
+* L3 演示单独编译（不编 IDF 工程）：``python3 tools/test_build_plugin_standalone.py -v``
   （GitLab 任务 ``build:plugin_standalone`` ；需要 ``riscv32-esp-elf-gcc`` 与 ``cmake``）
-* CI：``tools/ci/`` 与根目录 gitlab-ci.yml
+* CI：根目录 ``.gitlab-ci.yml``
 
 若变更 L3 模块可见的 Host 符号，需更新
 ``docs/module_sdk/host_export_allowlist.json`` 并运行

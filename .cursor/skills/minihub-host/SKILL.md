@@ -34,7 +34,7 @@ description: Develop MiniHub Host firmware products (application folder, Kconfig
 | Goal | What to do |
 |------|------------|
 | Pull extra sources into configure | `export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"` **before** `./tools/build_firmware.py … build` (`:`/`;` separated). Read at configure time only. |
-| Ship `.mhub` to LAN Store | After L3 Host build (or L1/L2 pack): `$MINIHUB_STORE_DEPLOY` (default `~/workspace/minihub_store`) has `catalog.json` + `<id>/<id>.mhub`. Serve with `python3 tools/store_server.py`. |
+| Ship `.mhub` to LAN Store | After L3 Host build (or L1/L2 pack): `$MINIHUB_PLUGINS_DEPLOY_DIR` (default `~/workspace/minihub_store`) has `catalog.json` + `<id>/<id>.mhub`. Serve with `python3 tools/store_server.py`. |
 | Rebuild all L3 `.so` | `./tools/build_firmware.py modules` |
 | Rebuild one L3 `.so` | `./tools/build_firmware.py module <id>` |
 | Re-wrap existing L3 ELF | `./tools/build_firmware.py pack [all\|<id>]` |

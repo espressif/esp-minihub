@@ -363,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         "--deploy",
         type=Path,
         default=None,
-        help="deploy root (default: MINIHUB_STORE_DEPLOY or ~/workspace/minihub_store)",
+        help="deploy root (default: MINIHUB_PLUGINS_DEPLOY_DIR or ~/workspace/minihub_store)",
     )
     args = parser.parse_args(argv)
     requested = args.module_id if args.module_id else ["all"]

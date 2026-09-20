@@ -52,8 +52,8 @@ function(minihub_add_module_so module_id component_name)
     if(NOT MINIHUB_REPO_ROOT)
         get_filename_component(MINIHUB_REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
     endif()
-    if(DEFINED ENV{MINIHUB_STORE_DEPLOY} AND NOT "$ENV{MINIHUB_STORE_DEPLOY}" STREQUAL "")
-        set(_mh_deploy "$ENV{MINIHUB_STORE_DEPLOY}")
+    if(DEFINED ENV{MINIHUB_PLUGINS_DEPLOY_DIR} AND NOT "$ENV{MINIHUB_PLUGINS_DEPLOY_DIR}" STREQUAL "")
+        set(_mh_deploy "$ENV{MINIHUB_PLUGINS_DEPLOY_DIR}")
     else()
         set(_mh_deploy "$ENV{HOME}/workspace/minihub_store")
     endif()
@@ -80,12 +80,12 @@ function(minihub_add_module_so module_id component_name)
         COMMAND ${CMAKE_STRIP_SO} ${so_strip_flags} ${so_output}
         COMMAND ${_mh_python} ${_mh_pack_py} mhmd ${so_output} ${mhmd_output}
         COMMAND ${CMAKE_COMMAND} -E env
-                MINIHUB_STORE_DEPLOY=${_mh_deploy}
+                MINIHUB_PLUGINS_DEPLOY_DIR=${_mh_deploy}
                 MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
                 MINIHUB_APP=$ENV{MINIHUB_APP}
                 ${_mh_python} ${_mh_pack_py} ${module_id} --deploy ${_mh_deploy}
         COMMAND ${CMAKE_COMMAND} -E env
-                MINIHUB_STORE_DEPLOY=${_mh_deploy}
+                MINIHUB_PLUGINS_DEPLOY_DIR=${_mh_deploy}
                 MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
                 MINIHUB_APP=$ENV{MINIHUB_APP}
                 ${_mh_python} ${_mh_catalog_py} --catalog-only --deploy ${_mh_deploy}

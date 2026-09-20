@@ -288,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
         "--deploy",
         type=Path,
         default=None,
-        help="deploy root (default: MINIHUB_STORE_DEPLOY or ~/workspace/minihub_store)",
+        help="deploy root (default: MINIHUB_PLUGINS_DEPLOY_DIR or ~/workspace/minihub_store)",
     )
     parser.add_argument(
         "--catalog-only",

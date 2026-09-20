@@ -5,7 +5,7 @@
 
 Serves catalog.json and /files/<id>.mhub from the deploy directory:
 
-  MINIHUB_STORE_DEPLOY  (default ~/workspace/minihub_store)
+  MINIHUB_PLUGINS_DEPLOY_DIR  (default ~/workspace/minihub_store)
 
 Layout: catalog.json and <id>/<id>.mhub (zip only; MHMD .so stays in repo build/).
 Sources remain under the MiniHub repo components/minihub_plugins/.
@@ -861,7 +861,7 @@ def main() -> int:
         "--deploy",
         type=Path,
         default=None,
-        help="deploy root (default: MINIHUB_STORE_DEPLOY or ~/workspace/minihub_store)",
+        help="deploy root (default: MINIHUB_PLUGINS_DEPLOY_DIR or ~/workspace/minihub_store)",
     )
     parser.add_argument(
         "--rebuild-slim",

@@ -107,7 +107,7 @@ Deploy / catalog (development PC):
 
 .. code-block:: text
 
-   $MINIHUB_STORE_DEPLOY/          # default ~/workspace/minihub_store
+   $MINIHUB_PLUGINS_DEPLOY_DIR/          # default ~/workspace/minihub_store
      catalog.json
      ID/ID.mhub
 

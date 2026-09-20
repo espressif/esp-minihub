@@ -27,7 +27,9 @@ python3 tools/new_store_module.py --tier l3 --id my_native
 | L2 JS | `module.json` + `main.js`（+ UI） | `<id>.mhub` |
 | L3 native | `module.json` + CMake / `.so` | MHMD `.so` + `<id>.mhub` |
 
-部署目录（`MINIHUB_STORE_DEPLOY`，默认 `~/workspace/minihub_store`）：
+厂商插件（小米 MIoT）在旁路仓库 `esp-minihub-plugins`，不在 `examples/plugins`。把 `MINIHUB_PLUGIN_DIRS` 指到那份克隆。
+
+部署目录（`MINIHUB_PLUGINS_DEPLOY_DIR`，默认 `~/workspace/minihub_store`）：
 
 ```text
 <deploy>/catalog.json
@@ -35,7 +37,8 @@ python3 tools/new_store_module.py --tier l3 --id my_native
 ```
 
 ```bash
-./tools/build_firmware.py -app minihub build modules
+./tools/build_firmware.py -app minihub modules   # 编译全部原生 .so
+./tools/build_firmware.py -app minihub pack      # 只打包已有 .so
 python3 tools/pack_store_module.py pack all
 python3 tools/sync_store_catalog.py all
 ```

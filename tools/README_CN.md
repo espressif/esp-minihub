@@ -9,7 +9,7 @@
 | 变量 | 默认 | 含义 |
 |------|------|------|
 | `MINIHUB_APP` | `minihub` | `application/` 下的产品目录 |
-| `MINIHUB_STORE_DEPLOY` | `~/workspace/minihub_store` | Store 目录 + `<id>/<id>.mhub` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Store 目录 + `<id>/<id>.mhub` |
 
 ---
 
@@ -221,17 +221,14 @@ python3 tools/gen_host_export_symbols.py \
 
 | 路径 | 作用 |
 |------|------|
-| `ci/list_apps.py` | 打印带 `CMakeLists.txt` 的 `application/*` 名称 |
-| `ci/build_apps.sh` | 构建（+ merge）每个 app；**不**打包 `.mhub` |
-| `ci/pack_store_modules.sh` | minihub 固件构建后打包 Store |
-| `ci/build_plugin_standalone.sh` | 无 IDF 工程，单独编译 `examples/plugins` 里的 L3 演示 |
-| `ci/stage_artifacts.sh <app>` | 把固件 / 烧录镜像 / sdkconfig 拷到 `ci_artifacts/` |
 | `ci/install_git_hooks.sh` | 安装 pre-commit + pre-push（+ 去掉 Cursor commit trailer） |
 | `git-hooks/commit-msg-strip-cursor` | 本地 commit-msg 助手 |
 
+固件 / 打包 / 文档的 CI 任务在 `.gitlab-ci.yml` 里直接调用 `./tools/build_firmware.py` 和 `./tools/build_docs.sh`。
+
 ```bash
 bash tools/ci/install_git_hooks.sh
-MINIHUB_APP=minihub bash tools/ci/build_apps.sh
+./tools/build_firmware.py --app minihub build merge
 ```
 
 ---

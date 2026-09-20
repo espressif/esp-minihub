@@ -27,7 +27,10 @@ factory bundling.)
 | L2 JS | `module.json` + `main.js` (+ UI) | `<id>.mhub` |
 | L3 native | `module.json` + CMake / `.so` | MHMD `.so` + `<id>.mhub` |
 
-Deploy (`MINIHUB_STORE_DEPLOY`, default `~/workspace/minihub_store`):
+Vendor plugins (Xiaomi MIoT) live in the sibling repo `esp-minihub-plugins`,
+not under `examples/plugins`. Point `MINIHUB_PLUGIN_DIRS` at that clone.
+
+Deploy (`MINIHUB_PLUGINS_DEPLOY_DIR`, default `~/workspace/minihub_store`):
 
 ```text
 <deploy>/catalog.json
@@ -36,7 +39,8 @@ Deploy (`MINIHUB_STORE_DEPLOY`, default `~/workspace/minihub_store`):
 
 ```bash
 ./tools/build_firmware.py -app minihub build     # firmware; packs .mhub on success
-./tools/build_firmware.py -app minihub modules   # pack only (existing .so)
+./tools/build_firmware.py -app minihub modules   # compile every native .so
+./tools/build_firmware.py -app minihub pack      # pack only (existing .so)
 python3 tools/pack_store_module.py pack all
 python3 tools/sync_store_catalog.py all
 ```

@@ -77,9 +77,9 @@ Code and firmware
 * Build reference Host: ``./tools/build_firmware.py -app minihub build``
 * After ``manifest.yml`` edits, just build (``build_firmware.py`` merges)
 * L3 modules: ``./tools/build_firmware.py -app minihub modules`` (compile every native ``.so``; pack with ``pack``)
-* Standalone L3 demos (no IDF project): ``bash tools/ci/build_plugin_standalone.sh``
+* Standalone L3 demos (no IDF project): ``python3 tools/test_build_plugin_standalone.py -v``
   (GitLab job ``build:plugin_standalone``; needs ``riscv32-esp-elf-gcc`` and ``cmake``)
-* CI scripts: ``tools/ci/``, ``.gitlab-ci.yml``
+* CI: ``.gitlab-ci.yml``
 
 When changing Host symbols visible to L3 modules, update
 ``docs/module_sdk/host_export_allowlist.json`` and run

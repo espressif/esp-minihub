@@ -15,7 +15,7 @@
   ``libadapter_*.so``
 * Hub **加载** L2 / L3 时，烧进去的固件也必须打开上述选项
 * 脚本缺 PyYAML 时在仓库根目录 ``pip install pyyaml``
-* 可选：``export MINIHUB_STORE_DEPLOY=~/workspace/minihub_store``
+* 可选：``export MINIHUB_PLUGINS_DEPLOY_DIR=~/workspace/minihub_store``
 
 打包命令
 --------
@@ -59,7 +59,7 @@
 读取 zip 内的 ``module.json`` （有则一并读 ``ui.json`` ），写出
 ``catalog.json`` 。不需要插件源码。同一脚本也在 ``module_sdk.zip`` 里。
 本地 Store 服务读的是这份目录文件；只拷贝 zip 不会更新目录。默认部署根是
-``MINIHUB_STORE_DEPLOY`` 或 ``~/workspace/minihub_store`` 。
+``MINIHUB_PLUGINS_DEPLOY_DIR`` 或 ``~/workspace/minihub_store`` 。
 
 部署目录布局
 ------------

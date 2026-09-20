@@ -9,7 +9,7 @@ single plugin dir or a parent dir holding several plugins).
 Built artifacts go to:
 
   build/<id>.so                 — L3 MHMD+ELF intermediate (local only)
-  MINIHUB_STORE_DEPLOY          — default ~/workspace/minihub_store
+  MINIHUB_PLUGINS_DEPLOY_DIR          — default ~/workspace/minihub_store
 
 Layout under deploy (Store-facing only):
   catalog.json
@@ -26,7 +26,7 @@ STORE_MODULES = ROOT / "components" / "minihub_plugins"
 
 
 def default_deploy_dir() -> Path:
-    env = os.environ.get("MINIHUB_STORE_DEPLOY", "").strip()
+    env = os.environ.get("MINIHUB_PLUGINS_DEPLOY_DIR", "").strip()
     if env:
         return Path(env).expanduser().resolve()
     return (Path.home() / "workspace" / "minihub_store").resolve()

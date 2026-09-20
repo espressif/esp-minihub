@@ -135,10 +135,10 @@ file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/packs)
 file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/files)
 
 # Built .mhub (zip) / .so / catalog live under deploy dir (not in the source tree).
-if(DEFINED ENV{MINIHUB_STORE_DEPLOY} AND NOT "$ENV{MINIHUB_STORE_DEPLOY}" STREQUAL "")
-    set(_MINIHUB_STORE_DEPLOY "$ENV{MINIHUB_STORE_DEPLOY}")
+if(DEFINED ENV{MINIHUB_PLUGINS_DEPLOY_DIR} AND NOT "$ENV{MINIHUB_PLUGINS_DEPLOY_DIR}" STREQUAL "")
+    set(_MINIHUB_PLUGINS_DEPLOY_DIR "$ENV{MINIHUB_PLUGINS_DEPLOY_DIR}")
 else()
-    set(_MINIHUB_STORE_DEPLOY "$ENV{HOME}/workspace/minihub_store")
+    set(_MINIHUB_PLUGINS_DEPLOY_DIR "$ENV{HOME}/workspace/minihub_store")
 endif()
 # Catalog is copied AFTER packing below so size/binary_size match staged .mhub.
 # Stage /store/files from deploy/<id>/<id>.mhub (zip package)
@@ -156,7 +156,7 @@ endforeach()
 foreach(_MOD_JSON ${_STORE_MOD_JSONS})
     get_filename_component(_MOD_DIR ${_MOD_JSON} DIRECTORY)
     get_filename_component(_MOD ${_MOD_DIR} NAME)
-    set(_DEPLOY_MOD ${_MINIHUB_STORE_DEPLOY}/${_MOD})
+    set(_DEPLOY_MOD ${_MINIHUB_PLUGINS_DEPLOY_DIR}/${_MOD})
     set(_SO ${_DEPLOY_MOD}/${_MOD}.so)
     set(_SO_BUILD ${CMAKE_SOURCE_DIR}/build/${_MOD}.so)
     set(_LIBAD ${CMAKE_BINARY_DIR}/modules/libadapter_${_MOD}.so)
@@ -197,9 +197,9 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
     if(EXISTS ${_SO_BUILD})
         execute_process(
             COMMAND ${CMAKE_COMMAND} -E env
-                    MINIHUB_STORE_DEPLOY=${_MINIHUB_STORE_DEPLOY}
+                    MINIHUB_PLUGINS_DEPLOY_DIR=${_MINIHUB_PLUGINS_DEPLOY_DIR}
                     ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py
-                    ${_MOD} --deploy ${_MINIHUB_STORE_DEPLOY}
+                    ${_MOD} --deploy ${_MINIHUB_PLUGINS_DEPLOY_DIR}
             WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
             RESULT_VARIABLE _PACK_HUB_RC
         )
@@ -210,9 +210,9 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
     elseif(NOT EXISTS ${_PKG})
         execute_process(
             COMMAND ${CMAKE_COMMAND} -E env
-                    MINIHUB_STORE_DEPLOY=${_MINIHUB_STORE_DEPLOY}
+                    MINIHUB_PLUGINS_DEPLOY_DIR=${_MINIHUB_PLUGINS_DEPLOY_DIR}
                     ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py
-                    ${_MOD} --deploy ${_MINIHUB_STORE_DEPLOY}
+                    ${_MOD} --deploy ${_MINIHUB_PLUGINS_DEPLOY_DIR}
             WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
             RESULT_VARIABLE _PACK_HUB_RC
         )
@@ -287,22 +287,22 @@ endforeach()
 # Atomic with staged files/*.mhub: rewrite catalog sizes from deploy packages, then copy.
 execute_process(
     COMMAND ${CMAKE_COMMAND} -E env
-            MINIHUB_STORE_DEPLOY=${_MINIHUB_STORE_DEPLOY}
+            MINIHUB_PLUGINS_DEPLOY_DIR=${_MINIHUB_PLUGINS_DEPLOY_DIR}
             MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
             MINIHUB_APP=$ENV{MINIHUB_APP}
             ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/sync_store_catalog.py
-            --catalog-only --deploy ${_MINIHUB_STORE_DEPLOY}
+            --catalog-only --deploy ${_MINIHUB_PLUGINS_DEPLOY_DIR}
     WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
     RESULT_VARIABLE _CATALOG_RC
 )
 if(NOT _CATALOG_RC EQUAL 0)
     message(WARNING "sync_store_catalog --catalog-only failed (rc=${_CATALOG_RC})")
 endif()
-if(EXISTS ${_MINIHUB_STORE_DEPLOY}/catalog.json)
-    file(COPY ${_MINIHUB_STORE_DEPLOY}/catalog.json DESTINATION ${MINIHUB_MODSTORE_DIR})
-    message(STATUS "modstore: staged catalog.json from ${_MINIHUB_STORE_DEPLOY}")
+if(EXISTS ${_MINIHUB_PLUGINS_DEPLOY_DIR}/catalog.json)
+    file(COPY ${_MINIHUB_PLUGINS_DEPLOY_DIR}/catalog.json DESTINATION ${MINIHUB_MODSTORE_DIR})
+    message(STATUS "modstore: staged catalog.json from ${_MINIHUB_PLUGINS_DEPLOY_DIR}")
 else()
-    message(WARNING "modstore: catalog.json missing under ${_MINIHUB_STORE_DEPLOY}")
+    message(WARNING "modstore: catalog.json missing under ${_MINIHUB_PLUGINS_DEPLOY_DIR}")
 endif()
 
 # Host Web console → /store/preinstall/web/ (source dir from CONFIG_MINIHUB_WEB_STATIC_SRC)

@@ -61,7 +61,7 @@ Devices-page light demo: `examples/plugins/color_bulb_js/`.
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product under `application/` |
-| `MINIHUB_STORE_DEPLOY` | `~/workspace/minihub_store` | Catalog + `.mhub` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Catalog + `.mhub` |
 | `MINIHUB_PLUGIN_DIRS` | (empty) | Extra source trees (`:`/`;`). Set if the module is under `examples/plugins/` |
 
 No native compile. Packer zips `module.json` + `main.js` (+ `ui.json` / `web/` if present). Host must already have `CONFIG_MINIHUB_DYNAMIC_MODULES` and `CONFIG_MINIHUB_JS_PLUGINS`.
@@ -82,8 +82,8 @@ IDE MCP `pack_plugin` can zip L2 the same way (no `.so`).
 ## Artifacts
 
 ```text
-$MINIHUB_STORE_DEPLOY/catalog.json
-$MINIHUB_STORE_DEPLOY/my_js/my_js.mhub   # zip: module.json + main.js [+ ui/web]
+$MINIHUB_PLUGINS_DEPLOY_DIR/catalog.json
+$MINIHUB_PLUGINS_DEPLOY_DIR/my_js/my_js.mhub   # zip: module.json + main.js [+ ui/web]
 ```
 
 ## Install

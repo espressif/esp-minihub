@@ -45,7 +45,7 @@ Or IDE MCP: `scaffold_plugin` with `tier=l1` (`python3 tools/minihub_plugin_mcp.
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product under `application/` |
-| `MINIHUB_STORE_DEPLOY` | `~/workspace/minihub_store` | Catalog + `.mhub` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Catalog + `.mhub` |
 | `MINIHUB_PLUGIN_DIRS` | (empty) | Extra source trees (`:`/`;`). Needed only if the pack is **not** under `components/minihub_plugins/` |
 
 No firmware compile. Packer zips `module.json` only (no `main.js`, no `.so`).
@@ -65,8 +65,8 @@ python3 tools/store_server.py --port 8080
 ## Artifacts
 
 ```text
-$MINIHUB_STORE_DEPLOY/catalog.json
-$MINIHUB_STORE_DEPLOY/my_pack/my_pack.mhub   # zip: module.json
+$MINIHUB_PLUGINS_DEPLOY_DIR/catalog.json
+$MINIHUB_PLUGINS_DEPLOY_DIR/my_pack/my_pack.mhub   # zip: module.json
 ```
 
 ## Install

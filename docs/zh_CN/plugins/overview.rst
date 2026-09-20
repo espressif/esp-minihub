@@ -96,7 +96,7 @@ Host 与插件
      ui.json          # 可选 Web 表单（L2 / L3 / Hybrid）
      .load_guard      # Host 加载期间写入
 
-开发机部署目录（``MINIHUB_STORE_DEPLOY``，默认 ``~/workspace/minihub_store`` ）：
+开发机部署目录（``MINIHUB_PLUGINS_DEPLOY_DIR``，默认 ``~/workspace/minihub_store`` ）：
 
 .. code-block:: text
 
