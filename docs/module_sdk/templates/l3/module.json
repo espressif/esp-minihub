@@ -2,13 +2,11 @@
   "id": "PLACEHOLDER_ID",
   "name": "PLACEHOLDER_NAME",
   "version": "0.1.0",
-  "enabled": true,
   "kind": "module",
   "runtime": "native",
   "adapter": "PLACEHOLDER_ID",
   "description": "L3 native hello adapter (no vendor cloud)",
   "binary": "PLACEHOLDER_ID.so",
   "abi_version": 1,
-  "core_api_min": 1,
-  "core_api_max": 1
+  "core_api_min": 1
 }

@@ -5,6 +5,7 @@
  */
 
 #include "minihub_zigbee.h"
+#include "zigbee_cluster_map.h"
 #include "zigbee_nvs.h"
 #include "zigbee_stack.h"
 
@@ -101,6 +102,7 @@ esp_err_t minihub_zigbee_init(void)
     if (s_inited) {
         return ESP_OK;
     }
+    (void)minihub_zb_cluster_map_init();
     s_device_count = 0;
     memset(s_devices, 0, sizeof(s_devices));
     esp_err_t err = minihub_zb_nvs_load(s_devices, MINIHUB_ZB_MAX_DEVICES, &s_device_count);
@@ -355,4 +357,34 @@ const minihub_zigbee_device_t *minihub_zigbee_find_by_addr(uint16_t short_addr, 
         }
     }
     return NULL;
+}
+
+esp_err_t minihub_zigbee_ota_offer(const char *point_id_or_ieee, const char *file_path)
+{
+    if (!point_id_or_ieee || !point_id_or_ieee[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    const minihub_zigbee_device_t *dev = minihub_zigbee_find_by_point(point_id_or_ieee);
+    if (!dev) {
+        uint64_t ieee = 0;
+        if (minihub_zb_parse_ieee(point_id_or_ieee, &ieee) == 0) {
+            for (size_t i = 0; i < s_device_count; i++) {
+                if (s_devices[i].ieee == ieee) {
+                    dev = &s_devices[i];
+                    break;
+                }
+            }
+        }
+    }
+    if (!dev) {
+        ESP_LOGW(TAG, "ota_offer: device not found (%s)", point_id_or_ieee);
+        return ESP_ERR_NOT_FOUND;
+    }
+    /* Full ZCL OTA Upgrade (0x0019) server + image block path is not wired yet.
+     * Plugins may still publish props.ota on this point_id; transport lands later. */
+    ESP_LOGW(TAG,
+             "ota_offer: Zigbee end-device OTA transport not implemented yet "
+             "(point=%s short=0x%04x path=%s) — returning NOT_SUPPORTED",
+             dev->point_id, dev->short_addr, file_path ? file_path : "(none)");
+    return ESP_ERR_NOT_SUPPORTED;
 }

@@ -6,27 +6,32 @@ Unified MiniHub radio-stack firmware build.
 
 Usage:
   ./tools/build_firmware.py [-app NAME] [stacks...] [--] [idf.py args...]
-  ./tools/build_firmware.py modules [all|module_id ...]
+  ./tools/build_firmware.py module [all|<id> ...]
+  ./tools/build_firmware.py modules
+  ./tools/build_firmware.py pack [all|<id> ...]
   ./tools/build_firmware.py merge
 
 Apps (-app / --app; folder under application/):
-  minihub         Public Host (default)
+  minihub         Generic Host (default)
 
   Product = application/<app>/ (MINIHUB_APP), e.g. minihub.
   Sdkconfig recipe: application/<app>/config/sdkconfig/app.yml
 
-Stacks (lowercase):
+Stacks (lowercase, optional):
   ble_mesh | zigbee | matter | thread
   thread and zigbee are mutually exclusive (IEEE 802.15.4).
-
-Defaults (no stack args):  zigbee ble_mesh
+  Omit stacks to use defaults (zigbee ble_mesh), then reconcile with the
+  product sdkconfig: drop stacks that are disabled there; pull in matter /
+  thread when those Kconfig options are already =y. Pass a stack name to
+  force-enable it when it is not explicitly disabled in sdkconfig.
 
 Examples:
-  ./tools/build_firmware.py -app minihub zigbee build
-  ./tools/build_firmware.py ble_mesh matter build
-  ./tools/build_firmware.py thread matter build
+  ./tools/build_firmware.py -app minihub build
+  ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
+  ./tools/build_firmware.py module color_bulb
   ./tools/build_firmware.py modules
+  ./tools/build_firmware.py pack color_bulb
 """
 
 from __future__ import annotations
@@ -41,7 +46,7 @@ from pathlib import Path
 
 # Allow `from build_store_modules import …` when run as ./tools/build_firmware.py
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_store_modules import pack_modules  # noqa: E402
+from build_store_modules import pack_modules, resolve_module_ids  # noqa: E402
 from compose_sdkconfig import (  # noqa: E402
     append_local_overrides,
     app_feature_list,
@@ -134,19 +139,25 @@ def usage(code: int = 0) -> None:
     print(
         """Usage:
   ./tools/build_firmware.py [-app NAME] [stacks...] [--] [idf.py args...]
-  ./tools/build_firmware.py modules [all|module_id ...]
+  ./tools/build_firmware.py module [all|<id> ...]
+  ./tools/build_firmware.py modules
+  ./tools/build_firmware.py pack [all|<id> ...]
   ./tools/build_firmware.py merge
 
 Apps: minihub (default)
 Product: -app / MINIHUB_APP (application/<name>/)
-Stacks: ble_mesh | zigbee | matter | thread (default: zigbee ble_mesh)
+Stacks (optional): ble_mesh | zigbee | matter | thread
+  default if omitted: zigbee ble_mesh; then reconcile with product sdkconfig
+  (drop disabled; add matter/thread when already =y).
 thread and zigbee are mutually exclusive (IEEE 802.15.4).
 
 Examples:
-  ./tools/build_firmware.py -app minihub zigbee build
+  ./tools/build_firmware.py -app minihub build
   ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
+  ./tools/build_firmware.py module color_bulb
   ./tools/build_firmware.py modules
+  ./tools/build_firmware.py pack color_bulb
 """,
         file=sys.stderr if code else sys.stdout,
     )
@@ -196,9 +207,21 @@ def parse_argv(argv: list[str]) -> tuple[str, str, list[str], list[str]]:
             seen_sep = True
             i += 1
             continue
-        if not seen_sep and a == "modules":
+        if not seen_sep and a in {"module", "modules", "pack"}:
             app = resolve_app(cli_app)
-            return app, [], ["__modules__", *argv[i + 1 :]]
+            rest = argv[i + 1 :]
+            # `modules` compiles every native plugin .so (no ids). `pack` only wraps.
+            if a == "modules":
+                if rest:
+                    print(
+                        "ERROR: modules takes no ids; it compiles every native plugin. "
+                        "Use: ./tools/build_firmware.py module <id>",
+                        file=sys.stderr,
+                    )
+                    usage(2)
+                return app, [], ["__module__"]
+            verb = "__pack__" if a == "pack" else "__module__"
+            return app, [], [verb, *rest]
         if not seen_sep and a in STACKS:
             if a not in stacks:
                 stacks.append(a)
@@ -771,7 +794,7 @@ def shell_bmgr_codegen() -> list[str]:
     ]
 
 
-def run_build(stacks: list[str], idf_args: list[str]) -> int:
+def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True) -> int:
     local_verbs, idf_args = split_local_verbs(idf_args)
 
     # merge-only: no idf.py invocation
@@ -878,36 +901,75 @@ def run_build(stacks: list[str], idf_args: list[str]) -> int:
 
     script = "\n".join(shell_parts) + "\n"
     rc = subprocess.run(["bash", "-c", script], cwd=str(APP_DIR)).returncode
-    rc = maybe_pack_modules_after_build(idf_args, rc)
+    if pack_after:
+        rc = maybe_pack_modules_after_build(idf_args, rc)
     if rc == 0 and "merge" in local_verbs:
         print()
         rc = run_merge_bin()
     return rc
 
 
+def _store_verb_args(raw: list[str]) -> tuple[Path | None, list[str]]:
+    deploy = None
+    ids: list[str] = []
+    i = 0
+    while i < len(raw):
+        if raw[i] in ("--deploy", "-d") and i + 1 < len(raw):
+            deploy = Path(raw[i + 1])
+            i += 2
+            continue
+        ids.append(raw[i])
+        i += 1
+    return deploy, ids
+
+
+def run_pack(raw: list[str]) -> int:
+    deploy, ids = _store_verb_args(raw)
+    try:
+        return pack_modules(ids if ids else ["all"], deploy=deploy)
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as exc:
+        return exc.returncode or 1
+
+
+def run_module_compile(raw: list[str]) -> int:
+    """Rebuild native module shared objects (idf target module_so_<id>)."""
+    deploy, ids = _store_verb_args(raw)
+    if deploy is not None:
+        print("ERROR: --deploy applies to pack, not module", file=sys.stderr)
+        return 2
+    if not ids or ids == ["all"]:
+        items = [(mid, kind) for mid, kind in resolve_module_ids(["all"]) if kind == "binary"]
+        if not items:
+            print("ERROR: no native modules to compile", file=sys.stderr)
+            return 2
+    else:
+        items = resolve_module_ids(ids)
+    targets: list[str] = []
+    for mid, kind in items:
+        if kind != "binary":
+            print(
+                f"ERROR: {mid} has no native .so. Pack it with: "
+                f"./tools/build_firmware.py pack {mid}",
+                file=sys.stderr,
+            )
+            return 2
+        targets.append(f"module_so_{mid}")
+    # `idf.py build` is the ninja `all` target (app + bootloader). These names are
+    # ninja targets on their own; passing them without `build` compiles only the .so.
+    return run_build(list(DEFAULT_STACKS), targets, pack_after=False)
+
+
 def main() -> None:
     app, stacks, idf_args = parse_argv(sys.argv[1:])
     set_app(app)
     os.environ["MINIHUB_APP"] = APP_NAME
-    if idf_args and idf_args[0] == "__modules__":
-        raw = idf_args[1:] if len(idf_args) > 1 else []
-        deploy = None
-        ids: list[str] = []
-        i = 0
-        while i < len(raw):
-            if raw[i] in ("--deploy", "-d") and i + 1 < len(raw):
-                deploy = Path(raw[i + 1])
-                i += 2
-                continue
-            ids.append(raw[i])
-            i += 1
-        try:
-            raise SystemExit(pack_modules(ids if ids else ["all"], deploy=deploy))
-        except FileNotFoundError as exc:
-            print(str(exc), file=sys.stderr)
-            raise SystemExit(1)
-        except subprocess.CalledProcessError as exc:
-            raise SystemExit(exc.returncode or 1)
+    if idf_args and idf_args[0] == "__pack__":
+        raise SystemExit(run_pack(idf_args[1:]))
+    if idf_args and idf_args[0] == "__module__":
+        raise SystemExit(run_module_compile(idf_args[1:]))
     raise SystemExit(run_build(stacks, idf_args))
 
 

@@ -6,6 +6,7 @@
 
 #include "minihub_config.h"
 #include "minihub_paths.h"
+#include "minihub_device_widget.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,9 +45,12 @@ static bool dir_exists(const char *path)
 static void resolve_config_paths(void)
 {
     const char *root = MINIHUB_VFS_MOUNT;
-    /* claw_minihub mounts FAT `storage` at /fatfs; Host MiniHub uses LittleFS /data. */
+    /* Host MiniHub uses LittleFS /data; claw FAT is /fatfs; Mosaic NAND DATA is /nand. */
     if (!dir_exists(MINIHUB_VFS_MOUNT) && dir_exists("/fatfs")) {
         root = "/fatfs";
+        ESP_LOGI(TAG, "config root %s (no %s mount)", root, MINIHUB_VFS_MOUNT);
+    } else if (!dir_exists(MINIHUB_VFS_MOUNT) && dir_exists("/nand")) {
+        root = "/nand";
         ESP_LOGI(TAG, "config root %s (no %s mount)", root, MINIHUB_VFS_MOUNT);
     }
     strlcpy(s_data_root, root, sizeof(s_data_root));
@@ -287,6 +291,9 @@ esp_err_t minihub_config_init(void)
 {
     mount_littlefs();
 
+    /* Load the device control registry (CSV on /data, embedded fallback). */
+    minihub_device_widget_init();
+
     if (s_adapters_cfg) {
         cJSON_Delete(s_adapters_cfg);
     }
@@ -387,6 +394,56 @@ esp_err_t minihub_config_save_adapters(cJSON *adapters_root)
     }
     ESP_LOGI(TAG, "saved %s", s_adapters_path);
     return ESP_OK;
+}
+
+esp_err_t minihub_config_ensure_adapter_slot(const char *adapter_name, bool force_enable)
+{
+    if (!adapter_name || !adapter_name[0]) {
+        return ESP_OK;
+    }
+    if (!s_adapters_cfg) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    cJSON *adapters = cJSON_GetObjectItem(s_adapters_cfg, "adapters");
+    if (!cJSON_IsObject(adapters)) {
+        adapters = cJSON_CreateObject();
+        if (!adapters) {
+            return ESP_ERR_NO_MEM;
+        }
+        cJSON_AddItemToObject(s_adapters_cfg, "adapters", adapters);
+    }
+
+    cJSON *slot = cJSON_GetObjectItem(adapters, adapter_name);
+    bool created = false;
+    if (!slot) {
+        slot = cJSON_CreateObject();
+        if (!slot) {
+            return ESP_ERR_NO_MEM;
+        }
+        cJSON_AddItemToObject(adapters, adapter_name, slot);
+        created = true;
+        cJSON_AddTrueToObject(slot, "enabled");
+        cJSON_AddItemToObject(slot, "devices", cJSON_CreateArray());
+    } else if (force_enable) {
+        cJSON_DeleteItemFromObject(slot, "enabled");
+        cJSON_AddTrueToObject(slot, "enabled");
+        if (!cJSON_GetObjectItem(slot, "devices")) {
+            cJSON_AddItemToObject(slot, "devices", cJSON_CreateArray());
+        }
+    } else {
+        return ESP_OK;
+    }
+
+    esp_err_t err = minihub_config_save_adapters(s_adapters_cfg);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "%s adapters.json slot '%s' (enabled)",
+                 created ? "created" : "updated", adapter_name);
+    } else {
+        ESP_LOGW(TAG, "adapters.json slot '%s' save failed: %s",
+                 adapter_name, esp_err_to_name(err));
+    }
+    return err;
 }
 
 esp_err_t minihub_config_remove_adapter(const char *adapter_name)

@@ -302,3 +302,22 @@ const minihub_ble_mesh_device_t *minihub_ble_mesh_find_by_unicast(uint16_t unica
     }
     return NULL;
 }
+
+esp_err_t minihub_ble_mesh_ota_offer(const char *point_id, const char *file_path)
+{
+    if (!point_id || !point_id[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    const minihub_ble_mesh_device_t *dev = minihub_ble_mesh_find_by_point(point_id);
+    if (!dev) {
+        ESP_LOGW(TAG, "ota_offer: device not found (%s)", point_id);
+        return ESP_ERR_NOT_FOUND;
+    }
+    /* Mesh Firmware Update / BLOB models are not wired. Plugins may still
+     * publish props.ota on this point_id; air transport lands later. */
+    ESP_LOGW(TAG,
+             "ota_offer: BLE Mesh firmware update not implemented yet "
+             "(point=%s unicast=0x%04x path=%s) — returning NOT_SUPPORTED",
+             dev->point_id, dev->unicast, file_path ? file_path : "(none)");
+    return ESP_ERR_NOT_SUPPORTED;
+}

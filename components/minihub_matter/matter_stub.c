@@ -29,9 +29,22 @@ esp_err_t minihub_matter_init(void)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
-bool minihub_matter_ready(void)
+esp_err_t minihub_matter_attach_thread(void)
 {
-    return false;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_matter_set_identity_cb(minihub_matter_identity_cb_t cb, void *ctx)
+{
+    (void)cb;
+    (void)ctx;
+    return ESP_OK;
+}
+
+esp_err_t minihub_matter_interview_identity(uint64_t node_id)
+{
+    (void)node_id;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t minihub_matter_commission_code(uint64_t node_id, const char *pairing_code)
@@ -103,4 +116,11 @@ cJSON *minihub_matter_status_json(void)
 const char *minihub_matter_last_error(void)
 {
     return s_last_error[0] ? s_last_error : NULL;
+}
+
+esp_err_t minihub_matter_ota_offer(const char *point_id, const char *file_path)
+{
+    (void)point_id;
+    (void)file_path;
+    return ESP_ERR_NOT_SUPPORTED;
 }

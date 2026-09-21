@@ -46,10 +46,12 @@ function rulesAiToggleCfg() {
 function rulesAiSystemPrompt(pointIds) {
     return 'You generate MiniHub rules.json. Output ONLY valid JSON object with key "rules" (array). No markdown.\n' +
         'Schema per rule: id(string), name(string), enabled(bool), when, if(array), then.\n' +
-        'when: {"type":"point","point_id":"...","equals":"..."} OR {"type":"time","at":"HH:MM"}.\n' +
-        'if item: {"point_id":"...","equals":"..."}. Empty if ok.\n' +
+        'when point: {"type":"point","point_id":"<device point>","parameter":"<param>","op":"eq|lt|le|gt|ge","value":"..."}\n' +
+        '  Legacy also ok: {"type":"point","point_id":"...","equals":"..."}.\n' +
+        'when time: {"type":"time","at":"HH:MM"}.\n' +
+        'if item: same shape as when point (point_id + parameter + op + value). Empty if ok.\n' +
         'then: {"type":"command","point_id":"...","cmd":"..."} OR {"type":"delay","seconds":N}. One then only.\n' +
-        'Prefer these point_id values when relevant: ' + JSON.stringify(pointIds.slice(0, 80)) + '\n' +
+        'Prefer these device point_id values when relevant: ' + JSON.stringify(pointIds.slice(0, 80)) + '\n' +
         'Common cmds: turn_on, turn_off, toggle. Chinese user input is ok.';
 }
 
@@ -70,7 +72,8 @@ function rulesAiValidate(file) {
         };
         const w = r.when;
         if (w.type === 'point') {
-            if (!w.point_id || w.equals == null || w.equals === '') return {
+            const hasVal = (w.value != null && w.value !== '') || (w.equals != null && w.equals !== '');
+            if (!w.point_id || !hasVal) return {
                 ok: false,
                 error: '规则 ' + (i + 1) + ' when.point 不完整'
             };
@@ -301,10 +304,53 @@ async function rulesAiApply() {
     }
 }
 
+function rulesOpLabel(op) {
+    const m = {
+        lt: '<',
+        le: '≦',
+        eq: '=',
+        gt: '>',
+        ge: '≧',
+        ne: '≠'
+    };
+    return m[op] || op || '=';
+}
+
+function rulesCondValue(c) {
+    if (!c || typeof c !== 'object') return '';
+    if (c.value != null && c.value !== '') return String(c.value);
+    if (c.equals != null && c.equals !== '') return String(c.equals);
+    return '';
+}
+
+function rulesCondOp(c) {
+    const raw = (c && c.op) ? String(c.op) : 'eq';
+    if (raw === '<' || raw === 'lt') return 'lt';
+    if (raw === '<=' || raw === '≦' || raw === 'le') return 'le';
+    if (raw === '>' || raw === 'gt') return 'gt';
+    if (raw === '>=' || raw === '≧' || raw === 'ge') return 'ge';
+    if (raw === '!=' || raw === 'ne' || raw === '<>') return 'ne';
+    return 'eq';
+}
+
+function rulesDeviceLabel(pointId) {
+    if (!pointId) return '?';
+    const segs = String(pointId).split('.');
+    if (segs.length >= 2) return segs[segs.length - 1];
+    return pointId;
+}
+
 function whenSummary(w) {
     if (!w || typeof w !== 'object') return '-';
     if (w.type === 'time') return '定时 ' + (w.at || '');
-    if (w.type === 'point') return (w.point_id || '') + ' = ' + (w.equals != null ? w.equals : '');
+    if (w.type === 'point') {
+        const dev = rulesDeviceLabel(w.point_id);
+        const param = w.parameter ? String(w.parameter) : '';
+        const op = rulesOpLabel(rulesCondOp(w));
+        const val = rulesCondValue(w);
+        if (param) return dev + '.' + param + ' ' + op + ' ' + val;
+        return dev + ' ' + op + ' ' + val;
+    }
     return w.type || '-';
 }
 
@@ -314,7 +360,7 @@ function thenSummary(t) {
         const n = t.ms != null ? t.ms : (t.seconds != null ? t.seconds * 1000 : '');
         return '延时 ' + n + ' ms';
     }
-    if (t.type === 'command') return (t.cmd || '') + ' → ' + (t.point_id || '');
+    if (t.type === 'command') return (t.cmd || '') + ' → ' + rulesDeviceLabel(t.point_id || '');
     return t.type || '-';
 }
 
@@ -327,10 +373,17 @@ function whenPlain(w) {
         title: '定时到达',
         body: '每天 <b>' + esc(w.at || '??:??') + '</b> 触发'
     };
-    if (w.type === 'point') return {
-        title: '设备状态变化',
-        body: '当 <b>' + esc(w.point_id || '?') + '</b> 变为 <b>' + esc(w.equals != null ? String(w.equals) : '?') + '</b> 时'
-    };
+    if (w.type === 'point') {
+        const dev = rulesDeviceLabel(w.point_id);
+        const param = w.parameter ? String(w.parameter) : '';
+        const op = rulesOpLabel(rulesCondOp(w));
+        const val = rulesCondValue(w);
+        const target = param ? (esc(dev) + ' · <b>' + esc(param) + '</b>') : ('<b>' + esc(dev) + '</b>');
+        return {
+            title: '设备状态变化',
+            body: '当 ' + target + ' ' + esc(op) + ' <b>' + esc(val || '?') + '</b> 时'
+        };
+    }
     return {
         title: esc(w.type || '触发'),
         body: esc(JSON.stringify(w))
@@ -345,7 +398,12 @@ function ifPlain(iff) {
     };
     const lines = arr.map(function(c, i) {
         if (!c || typeof c !== 'object') return (i + 1) + '. （无效条件）';
-        return (i + 1) + '. <b>' + esc(c.point_id || '?') + '</b> 等于 <b>' + esc(c.equals != null ? String(c.equals) : '?') + '</b>';
+        const dev = rulesDeviceLabel(c.point_id);
+        const param = c.parameter ? String(c.parameter) : '';
+        const op = rulesOpLabel(rulesCondOp(c));
+        const val = rulesCondValue(c);
+        const target = param ? (esc(dev) + ' · <b>' + esc(param) + '</b>') : ('<b>' + esc(dev) + '</b>');
+        return (i + 1) + '. ' + target + ' ' + esc(op) + ' <b>' + esc(val || '?') + '</b>';
     }).join('<br>');
     return {
         title: '还需同时满足',
@@ -367,7 +425,7 @@ function thenPlain(th) {
     }
     if (th.type === 'command') return {
         title: '下发指令',
-        body: '对 <b>' + esc(th.point_id || '?') + '</b> 执行 <b>' + esc(th.cmd || '?') + '</b>'
+        body: '对 <b>' + esc(rulesDeviceLabel(th.point_id || '?')) + '</b> 执行 <b>' + esc(th.cmd || '?') + '</b>'
     };
     return {
         title: esc(th.type || '动作'),
@@ -380,6 +438,7 @@ function ruleStepHtml(stepLabel, plain) {
 }
 
 async function loadRules() {
+    dwRuleLoadCatalog();
     try {
         const r = await fetch('/api/rules');
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -397,37 +456,306 @@ async function loadRules() {
 
 
 const RULE_CMDS = ['turn_on', 'turn_off', 'toggle', 'set', 'set_brightness'];
-const RULE_EQ_HINTS = ['on', 'off', 'pressed', 'released', 'true', 'false', '1', '0'];
+const RULE_OPS = [
+    { op: 'lt', label: '<' },
+    { op: 'le', label: '≦' },
+    { op: 'eq', label: '=' },
+    { op: 'gt', label: '>' },
+    { op: 'ge', label: '≧' }
+];
 
-function rulesPointOptions(selected) {
-    const ids = [];
-    (pts || []).forEach(function(p) {
-        if (p && p.point_id) ids.push(p.point_id);
+/* Type catalog from GET /api/device_widgets — labels / widget / bounds / options. */
+let dwRuleCatalog = null;
+
+async function dwRuleLoadCatalog() {
+    try {
+        const r = await fetch('/api/device_widgets');
+        if (r.ok) dwRuleCatalog = await r.json();
+    } catch (e) { /* non-fatal */ }
+}
+
+function rulesParseStyle(raw) {
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw;
+    try {
+        return JSON.parse(raw) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function rulesCatalogForType(type) {
+    if (!dwRuleCatalog || !Array.isArray(dwRuleCatalog.devices) || !type) return null;
+    for (let i = 0; i < dwRuleCatalog.devices.length; i++) {
+        const d = dwRuleCatalog.devices[i];
+        if (d && d.device === type) return d;
+    }
+    return null;
+}
+
+function rulesCatalogParam(type, parameter) {
+    const d = rulesCatalogForType(type);
+    if (!d || !Array.isArray(d.params)) return null;
+    for (let i = 0; i < d.params.length; i++) {
+        const p = d.params[i];
+        if (p && p.parameter === parameter) return p;
+    }
+    return null;
+}
+
+/** One card = one device point (props.params or 2-seg id). Prefer dwBuildInstances. */
+function rulesDeviceInstances() {
+    if (typeof dwBuildInstances === 'function') {
+        return dwBuildInstances(pts || []);
+    }
+    const out = [];
+    (pts || []).forEach(function(pt) {
+        if (!pt || !pt.point_id) return;
+        const segs = String(pt.point_id).split('.');
+        const pr = (pt.props && typeof pt.props === 'object') ? pt.props : null;
+        const params = pr && pr.params;
+        const hasParams = !!(params && typeof params === 'object' &&
+            (Array.isArray(params) ? params.length : Object.keys(params).length));
+        if (hasParams || segs.length === 2) {
+            out.push({
+                point_id: pt.point_id,
+                type: pt.type || '',
+                endpoint: segs.length >= 2 ? segs[segs.length - 1] : pt.point_id,
+                params: Object.create(null)
+            });
+        }
     });
+    return out;
+}
+
+function rulesFindPoint(pointId) {
+    return (pts || []).find(function(p) {
+        return p && p.point_id === pointId;
+    }) || null;
+}
+
+function rulesLiveParams(pointId) {
+    if (typeof dwBuildInstances === 'function') {
+        const insts = dwBuildInstances(pts || []);
+        const inst = insts.find(function(x) {
+            return x.point_id === pointId || x.key === pointId;
+        });
+        if (inst && inst.params) return inst.params;
+    }
+    const pt = rulesFindPoint(pointId);
+    const blob = pt && pt.props && pt.props.params;
+    const out = Object.create(null);
+    if (!blob || typeof blob !== 'object') {
+        if (pt && pt.value != null && String(pt.value) !== '') {
+            out.power = {
+                name: 'power',
+                value: String(pt.value),
+                visible: true
+            };
+        }
+        return out;
+    }
+    if (Array.isArray(blob)) {
+        blob.forEach(function(ent) {
+            if (!ent || !ent.name) return;
+            out[ent.name] = {
+                name: ent.name,
+                value: ent.value != null ? String(ent.value) : '',
+                visible: !(ent.visible === false),
+                min: ent.min,
+                max: ent.max,
+                step: ent.step,
+                unit: ent.unit
+            };
+        });
+    } else {
+        Object.keys(blob).forEach(function(name) {
+            const ent = blob[name] || {};
+            out[name] = {
+                name: name,
+                value: ent.value != null ? String(ent.value) : '',
+                visible: !(ent.visible === false),
+                min: ent.min,
+                max: ent.max,
+                step: ent.step,
+                unit: ent.unit
+            };
+        });
+    }
+    return out;
+}
+
+/** Visible params = live props.params ∩ catalog (catalog optional). */
+function rulesVisibleParams(pointId) {
+    const pt = rulesFindPoint(pointId);
+    const type = (pt && pt.type) || '';
+    const live = rulesLiveParams(pointId);
+    const cat = rulesCatalogForType(type);
+    const names = [];
+    const seen = Object.create(null);
+    const order = cat && Array.isArray(cat.params) ?
+        cat.params.map(function(p) {
+            return p.parameter;
+        }) : Object.keys(live);
+    order.forEach(function(name) {
+        if (!name || seen[name]) return;
+        const lv = live[name];
+        if (!lv || lv.visible === false) return;
+        seen[name] = true;
+        names.push(name);
+    });
+    Object.keys(live).forEach(function(name) {
+        if (seen[name]) return;
+        if (live[name].visible === false) return;
+        names.push(name);
+    });
+    return names;
+}
+
+function rulesParamMeta(pointId, parameter) {
+    const pt = rulesFindPoint(pointId);
+    const type = (pt && pt.type) || '';
+    const cat = rulesCatalogParam(type, parameter) || {
+        parameter: parameter,
+        label: parameter,
+        widget: '',
+        style: '{}'
+    };
+    const style = rulesParseStyle(cat.style);
+    const live = rulesLiveParams(pointId)[parameter] || {};
+    const widget = (cat.widget || style.widget || style.ui_element || '').replace(/^ui\./, '').replace(/-/g, '_');
+    return {
+        parameter: parameter,
+        label: cat.label || style.label || parameter,
+        widget: widget,
+        min: live.min != null ? live.min : (style.min != null ? style.min : null),
+        max: live.max != null ? live.max : (style.max != null ? style.max : null),
+        step: live.step != null ? live.step : (style.step != null ? style.step : null),
+        unit: live.unit != null ? live.unit : (style.unit || ''),
+        options: Array.isArray(style.options) ? style.options : []
+    };
+}
+
+function rulesDeviceOptionsHtml(selected) {
+    const insts = rulesDeviceInstances();
+    let ids = insts.map(function(x) {
+        return x.point_id;
+    }).filter(Boolean);
+    if (!ids.length) {
+        (pts || []).forEach(function(p) {
+            if (p && p.point_id) ids.push(p.point_id);
+        });
+    }
     if (selected && ids.indexOf(selected) < 0) ids.unshift(selected);
-    if (!ids.length) ids.push('');
+    if (!ids.length) ids = [''];
     return ids.map(function(id) {
-        return '<option value="' + escAttr(id) + '"' + (id === selected ? ' selected' : '') + '>' + esc(id || '(无能力点)') + '</option>';
+        const pt = rulesFindPoint(id);
+        const label = rulesDeviceLabel(id) + (pt && pt.type ? '（' + pt.type + '）' : '');
+        return '<option value="' + escAttr(id) + '"' + (id === selected ? ' selected' : '') + '>' +
+            esc(label || '(无设备)') + '</option>';
     }).join('');
 }
 
-function rulesSelectHtml(id, optsHtml) {
-    return '<select id="' + id + '">' + optsHtml + '</select>';
-}
-
-function rulesEqInput(id, val) {
-    const v = val != null ? String(val) : '';
-    return '<input type="text" id="' + id + '" list="rules-eq-hints" value="' + escAttr(v) + '" placeholder="如 on / pressed" />';
-}
-
-function rulesEnsureEqDatalist() {
-    if (document.getElementById('rules-eq-hints')) return;
-    const d = document.createElement('datalist');
-    d.id = 'rules-eq-hints';
-    d.innerHTML = RULE_EQ_HINTS.map(function(x) {
-        return '<option value="' + x + '"></option>';
+function rulesParamOptionsHtml(pointId, selected) {
+    const names = rulesVisibleParams(pointId);
+    if (selected && names.indexOf(selected) < 0) names.unshift(selected);
+    if (!names.length) {
+        return '<option value="">（无可用参数）</option>';
+    }
+    return names.map(function(name) {
+        const meta = rulesParamMeta(pointId, name);
+        return '<option value="' + escAttr(name) + '"' + (name === selected ? ' selected' : '') + '>' +
+            esc(meta.label || name) + '</option>';
     }).join('');
-    document.body.appendChild(d);
+}
+
+function rulesOpOptionsHtml(selected) {
+    const sel = selected || 'eq';
+    return RULE_OPS.map(function(o) {
+        return '<option value="' + o.op + '"' + (o.op === sel ? ' selected' : '') + '>' +
+            esc(o.label) + '</option>';
+    }).join('');
+}
+
+function rulesValueInputHtml(id, pointId, parameter, value) {
+    const v = value != null ? String(value) : '';
+    if (!parameter) {
+        return '<input type="text" id="' + id + '" value="' + escAttr(v) + '" placeholder="值" />';
+    }
+    const meta = rulesParamMeta(pointId, parameter);
+    const w = meta.widget || '';
+    if (w === 'toggle' || w === 'bool' || parameter === 'power') {
+        const on = (v === 'on' || v === 'true' || v === '1' || v === 'ON');
+        const off = (v === 'off' || v === 'false' || v === '0' || v === 'OFF');
+        return '<select id="' + id + '">' +
+            '<option value="on"' + (on || (!on && !off && !v) ? ' selected' : '') + '>开 (on)</option>' +
+            '<option value="off"' + (off ? ' selected' : '') + '>关 (off)</option></select>';
+    }
+    if ((w === 'dropdown' || w === 'segmented') && meta.options && meta.options.length) {
+        let body = '';
+        meta.options.forEach(function(o) {
+            const val = (o && typeof o === 'object') ? o.value : o;
+            const lbl = (o && typeof o === 'object') ? o.label : o;
+            const sel = (v !== '' && String(val) === v) ? ' selected' : '';
+            body += '<option value="' + escAttr(String(val)) + '"' + sel + '>' + esc(String(lbl)) + '</option>';
+        });
+        return '<select id="' + id + '">' + body + '</select>';
+    }
+    if (meta.min != null && meta.max != null) {
+        const min = meta.min;
+        const max = meta.max;
+        const step = meta.step != null ? meta.step : 1;
+        const num = (v !== '' && !isNaN(Number(v))) ? Number(v) : min;
+        const unit = meta.unit ? (' <span class="rule-ed-unit">' + esc(meta.unit) + '</span>') : '';
+        return '<input type="number" id="' + id + '" min="' + escAttr(String(min)) +
+            '" max="' + escAttr(String(max)) + '" step="' + escAttr(String(step)) +
+            '" value="' + escAttr(String(num)) + '" />' + unit;
+    }
+    return '<input type="text" id="' + id + '" value="' + escAttr(v) + '" placeholder="值" />';
+}
+
+function rulesSelectHtml(id, optsHtml, onchange) {
+    return '<select id="' + id + '"' + (onchange ? ' onchange="' + onchange + '"' : '') + '>' + optsHtml + '</select>';
+}
+
+function rulesPointCondFields(prefix, cond, onDevChange, onParamChange) {
+    const c = cond && typeof cond === 'object' ? cond : {};
+    const pointId = c.point_id || '';
+    const parameter = c.parameter || '';
+    const op = rulesCondOp(c);
+    const value = rulesCondValue(c);
+    return '<div class="row2">' +
+        '<div><label>设备</label>' + rulesSelectHtml(prefix + '-dev', rulesDeviceOptionsHtml(pointId), onDevChange) + '</div>' +
+        '<div><label>参数</label>' + rulesSelectHtml(prefix + '-param', rulesParamOptionsHtml(pointId, parameter), onParamChange) + '</div>' +
+        '</div>' +
+        '<div class="row2 rule-ed-opval">' +
+        '<div><label>条件</label>' + rulesSelectHtml(prefix + '-op', rulesOpOptionsHtml(op)) + '</div>' +
+        '<div><label>值</label><div class="rule-ed-val">' + rulesValueInputHtml(prefix + '-val', pointId, parameter, value) + '</div></div>' +
+        '</div>';
+}
+
+function rulesCollectPointCond(prefix) {
+    const dev = document.getElementById(prefix + '-dev');
+    const param = document.getElementById(prefix + '-param');
+    const opEl = document.getElementById(prefix + '-op');
+    const valEl = document.getElementById(prefix + '-val');
+    const point_id = ((dev && dev.value) || '').trim();
+    const parameter = ((param && param.value) || '').trim();
+    const op = ((opEl && opEl.value) || 'eq').trim() || 'eq';
+    let value = '';
+    if (valEl) {
+        if (valEl.type === 'checkbox') value = valEl.checked ? 'on' : 'off';
+        else value = String(valEl.value != null ? valEl.value : '').trim();
+    }
+    const out = {
+        point_id: point_id,
+        parameter: parameter,
+        op: op,
+        value: value
+    };
+    /* Keep legacy equals mirror for older tooling / display. */
+    if (op === 'eq') out.equals = value;
+    return out;
 }
 
 function rulesBack() {
@@ -441,6 +769,9 @@ async function rulesEditNew() {
             await loadPoints();
         } catch (e) {}
     }
+    try {
+        await dwRuleLoadCatalog();
+    } catch (e) {}
     rulesSel = null;
     rulesEditMode = 'new';
     rulesEditRender(null);
@@ -451,6 +782,9 @@ async function rulesEditOpen(id) {
             await loadPoints();
         } catch (e) {}
     }
+    try {
+        await dwRuleLoadCatalog();
+    } catch (e) {}
     const rule = (rulesCfg.rules || []).find(function(x) {
         return x.id === id;
     });
@@ -473,11 +807,23 @@ function rulesEditWhenFields(when) {
     };
     const typ = w.type === 'time' ? 'time' : 'point';
     let html = '<label>触发类型</label><select id="re-when-type" onchange="rulesEditSyncWhenType()">' +
-        '<option value="point"' + (typ === 'point' ? ' selected' : '') + '>能力点变化</option>' +
+        '<option value="point"' + (typ === 'point' ? ' selected' : '') + '>设备状态变化</option>' +
         '<option value="time"' + (typ === 'time' ? ' selected' : '') + '>定时（HH:MM）</option></select>';
     if (typ === 'point') {
-        html += '<div class="row2"><div><label>能力点 point_id</label>' + rulesSelectHtml('re-when-pid', rulesPointOptions(w.point_id || '')) + '</div>' +
-            '<div><label>变为 equals</label>' + rulesEqInput('re-when-eq', w.equals != null ? w.equals : 'pressed') + '</div></div>';
+        const first = rulesDeviceInstances()[0];
+        const cond = {
+            point_id: w.point_id || (first && first.point_id) || '',
+            parameter: w.parameter || '',
+            op: rulesCondOp(w),
+            value: rulesCondValue(w) || (w.equals != null ? String(w.equals) : '')
+        };
+        if (!cond.parameter && cond.point_id) {
+            const names = rulesVisibleParams(cond.point_id);
+            cond.parameter = names[0] || '';
+        }
+        if (!cond.value && cond.parameter === 'power') cond.value = 'on';
+        html += '<div id="re-when-point">' + rulesPointCondFields('re-when', cond,
+            'rulesEditSyncWhenDevice()', 'rulesEditSyncWhenParam()') + '</div>';
     } else {
         html += '<label>时间 at</label><input type="time" id="re-when-at" value="' + escAttr(w.at || '23:00') + '" />';
     }
@@ -498,8 +844,9 @@ function rulesEditThenFields(th) {
             return '<option value="' + c + '"' + (c === cmd ? ' selected' : '') + '>' + c + '</option>';
         }).join('');
         const extra = (RULE_CMDS.indexOf(cmd) < 0) ? '<option value="' + escAttr(cmd) + '" selected>' + esc(cmd) + '</option>' : '';
-        html += '<div class="row2"><div><label>目标 point_id</label>' + rulesSelectHtml('re-then-pid', rulesPointOptions(t.point_id || '')) + '</div>' +
-            '<div><label>指令 cmd</label><select id="re-then-cmd">' + extra + cmdOpts + '</select></div></div>';
+        html += '<div class="row2"><div><label>目标设备</label>' +
+            rulesSelectHtml('re-then-pid', rulesDeviceOptionsHtml(t.point_id || '')) + '</div>' +
+            '<div><label>指令</label><select id="re-then-cmd">' + extra + cmdOpts + '</select></div></div>';
     } else {
         html += '<label>秒数 seconds</label><input type="number" id="re-then-sec" min="1" value="' + (t.seconds > 0 ? t.seconds : 5) + '" />';
     }
@@ -511,16 +858,25 @@ function rulesEditIfRows(iff) {
     if (!arr.length) return '<div class="rules-ai-hint" id="re-if-empty">无附加条件（触发后直接执行）</div><div id="re-if-list"></div>';
     let rows = '';
     arr.forEach(function(c, i) {
-        rows += '<div class="row3 rule-if-row" data-if-i="' + i + '">' +
-            '<div><label>point_id</label>' + rulesSelectHtml('re-if-pid-' + i, rulesPointOptions(c && c.point_id || '')) + '</div>' +
-            '<div><label>equals</label>' + rulesEqInput('re-if-eq-' + i, c && c.equals != null ? c.equals : 'on') + '</div>' +
+        const cond = {
+            point_id: (c && c.point_id) || '',
+            parameter: (c && c.parameter) || '',
+            op: rulesCondOp(c),
+            value: rulesCondValue(c)
+        };
+        if (!cond.parameter && cond.point_id) {
+            const names = rulesVisibleParams(cond.point_id);
+            cond.parameter = names[0] || '';
+        }
+        rows += '<div class="rule-if-row" data-if-i="' + i + '">' +
+            rulesPointCondFields('re-if-' + i, cond,
+                'rulesEditSyncIfDevice(' + i + ')', 'rulesEditSyncIfParam(' + i + ')') +
             '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveIf(' + i + ')">删除</button></div>';
     });
     return '<div id="re-if-list">' + rows + '</div>';
 }
 
 function rulesEditRender(rule) {
-    rulesEnsureEqDatalist();
     const edit = document.getElementById('rules-edit');
     const list = document.getElementById('rules-list');
     const detail = document.getElementById('rules-detail');
@@ -529,27 +885,33 @@ function rulesEditRender(rule) {
     if (detail) detail.hidden = true;
     edit.hidden = false;
     const isNew = rulesEditMode === 'new';
+    const first = rulesDeviceInstances()[0];
+    const defaultPid = (first && first.point_id) || ((pts[0] && pts[0].point_id) || '');
+    const defaultParams = rulesVisibleParams(defaultPid);
     const r = rule || {
         id: '',
         name: '',
         enabled: true,
         when: {
             type: 'point',
-            point_id: (pts[0] && pts[0].point_id) || '',
-            equals: 'pressed'
+            point_id: defaultPid,
+            parameter: defaultParams[0] || 'power',
+            op: 'eq',
+            value: 'on'
         },
         if: [],
         then: {
             type: 'command',
-            point_id: (pts[0] && pts[0].point_id) || '',
+            point_id: defaultPid,
             cmd: 'turn_on'
         }
     };
+    /* Hidden id keeps snapshot/save working without showing the field. */
     edit.innerHTML = '<div class="rule-ed">' +
         '<button class="btn-sm" type="button" onclick="rulesEditCancel()">← 取消</button>' +
         '<h3 style="margin-top:12px">' + (isNew ? '添加规则' : '编辑规则') + '</h3>' +
-        '<div class="row2"><div><label>名称 name</label><input type="text" id="re-name" value="' + escAttr(r.name || '') + '" placeholder="如 按钮开灯" /></div>' +
-        '<div><label>ID</label><input type="text" id="re-id" value="' + escAttr(r.id || '') + '" placeholder="自动生成" ' + (isNew ? '' : 'readonly') + ' /></div></div>' +
+        '<input type="hidden" id="re-id" value="' + escAttr(r.id || '') + '" />' +
+        '<label>名称</label><input type="text" id="re-name" value="' + escAttr(r.name || '') + '" placeholder="如 亮度过高提醒" />' +
         '<label class="rule-ed-check"><input type="checkbox" id="re-enabled"' + (r.enabled !== false ? ' checked' : '') + ' /> 启用</label>' +
         '<div class="rule-ed-sec"><h4>当 · When（触发）</h4><div id="re-when-box">' + rulesEditWhenFields(r.when) + '</div></div>' +
         '<div class="rule-ed-sec"><h4>且 · And If（条件，可选）</h4>' + rulesEditIfRows(r.if) +
@@ -559,7 +921,7 @@ function rulesEditRender(rule) {
         '<button class="btn-sm on" type="button" onclick="rulesEditSave()">保存并生效</button>' +
         '<button class="btn-sm" type="button" onclick="rulesEditCancel()">取消</button>' +
         (isNew ? '' : '<button class="btn-sm bad" type="button" onclick="rulesEditDelete()">删除规则</button>') +
-        '</div><p class="rules-ai-hint">保存将整表写入 Hub（与导入相同热重载）。能力点列表来自当前 /api/points。</p></div>';
+        '</div><p class="rules-ai-hint">保存将整表写入 Hub（与导入相同热重载）。选择设备与参数；原始 point_id 仅内部存储。</p></div>';
 }
 
 function rulesEditCollectIf() {
@@ -569,14 +931,8 @@ function rulesEditCollectIf() {
     const out = [];
     rows.forEach(function(row) {
         const i = row.getAttribute('data-if-i');
-        const pid = document.getElementById('re-if-pid-' + i);
-        const eq = document.getElementById('re-if-eq-' + i);
-        const point_id = (pid && pid.value || '').trim();
-        const equals = (eq && eq.value || '').trim();
-        if (point_id && equals) out.push({
-            point_id: point_id,
-            equals: equals
-        });
+        const c = rulesCollectPointCond('re-if-' + i);
+        if (c.point_id && c.value !== '') out.push(c);
     });
     return out;
 }
@@ -600,13 +956,9 @@ function rulesEditSnapshot() {
             at: at
         };
     } else {
-        const pidEl = document.getElementById('re-when-pid');
-        const eqEl = document.getElementById('re-when-eq');
-        when = {
-            type: 'point',
-            point_id: ((pidEl && pidEl.value) || '').trim(),
-            equals: ((eqEl && eqEl.value) || '').trim()
-        };
+        when = Object.assign({
+            type: 'point'
+        }, rulesCollectPointCond('re-when'));
     }
     const ttypeEl = document.getElementById('re-then-type');
     const ttype = (ttypeEl && ttypeEl.value) || 'command';
@@ -639,12 +991,14 @@ function rulesEditSnapshot() {
 function rulesEditValidate(r) {
     if (!r.name) return '请填写名称';
     if (r.when.type === 'point') {
-        if (!r.when.point_id || !r.when.equals) return '请完整填写触发能力点与 equals';
+        if (!r.when.point_id) return '请选择触发设备';
+        if (!r.when.parameter) return '请选择触发参数';
+        if (r.when.value == null || r.when.value === '') return '请填写触发值';
     } else if (r.when.type === 'time') {
         if (!/^\d{2}:\d{2}$/.test(r.when.at || '')) return '定时须为 HH:MM';
     } else return '触发类型无效';
     if (r.then.type === 'command') {
-        if (!r.then.point_id || !r.then.cmd) return '请完整填写动作 point_id 与 cmd';
+        if (!r.then.point_id || !r.then.cmd) return '请完整填写动作设备与指令';
     } else if (r.then.type === 'delay') {
         if (!(r.then.seconds > 0)) return '延时秒数无效';
     } else return '动作类型无效';
@@ -652,29 +1006,64 @@ function rulesEditValidate(r) {
 }
 
 function rulesEditSyncWhenType() {
-    const snap = rulesEditSnapshot();
-    snap.when = snap.when.type === 'time' ? {
-        type: 'time',
-        at: snap.when.at || '23:00'
-    } : {
-        type: 'point',
-        point_id: snap.when.point_id || '',
-        equals: snap.when.equals || 'pressed'
-    };
-    /* type already from select — rebuild when box only */
-    const typ = document.getElementById('re-when-type').value;
     const box = document.getElementById('re-when-box');
     if (!box) return;
-    const cur = rulesEditSnapshot();
-    if (typ === 'time') box.innerHTML = rulesEditWhenFields({
-        type: 'time',
-        at: (cur.when && cur.when.at) || '23:00'
-    });
-    else box.innerHTML = rulesEditWhenFields({
-        type: 'point',
-        point_id: (pts[0] && pts[0].point_id) || '',
-        equals: 'pressed'
-    });
+    const typ = document.getElementById('re-when-type').value;
+    if (typ === 'time') {
+        box.innerHTML = rulesEditWhenFields({
+            type: 'time',
+            at: '23:00'
+        });
+    } else {
+        const first = rulesDeviceInstances()[0];
+        const pid = (first && first.point_id) || '';
+        const names = rulesVisibleParams(pid);
+        box.innerHTML = rulesEditWhenFields({
+            type: 'point',
+            point_id: pid,
+            parameter: names[0] || 'power',
+            op: 'eq',
+            value: 'on'
+        });
+    }
+}
+
+function rulesEditRebuildPointBox(prefix, onDev, onParam) {
+    const cur = rulesCollectPointCond(prefix);
+    const names = rulesVisibleParams(cur.point_id);
+    if (!cur.parameter || names.indexOf(cur.parameter) < 0) {
+        cur.parameter = names[0] || '';
+    }
+    const meta = cur.parameter ? rulesParamMeta(cur.point_id, cur.parameter) : null;
+    if (meta && (meta.widget === 'toggle' || cur.parameter === 'power') &&
+        !(cur.value === 'on' || cur.value === 'off')) {
+        cur.value = 'on';
+    } else if (meta && meta.min != null && (cur.value === '' || cur.value === 'on' || cur.value === 'off')) {
+        cur.value = String(meta.min);
+    }
+    return rulesPointCondFields(prefix, cur, onDev, onParam);
+}
+
+function rulesEditSyncWhenDevice() {
+    const box = document.getElementById('re-when-point');
+    if (!box) return;
+    box.innerHTML = rulesEditRebuildPointBox('re-when', 'rulesEditSyncWhenDevice()', 'rulesEditSyncWhenParam()');
+}
+
+function rulesEditSyncWhenParam() {
+    rulesEditSyncWhenDevice();
+}
+
+function rulesEditSyncIfDevice(i) {
+    const row = document.querySelector('.rule-if-row[data-if-i="' + i + '"]');
+    if (!row) return;
+    const btn = '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveIf(' + i + ')">删除</button>';
+    row.innerHTML = rulesEditRebuildPointBox('re-if-' + i,
+        'rulesEditSyncIfDevice(' + i + ')', 'rulesEditSyncIfParam(' + i + ')') + btn;
+}
+
+function rulesEditSyncIfParam(i) {
+    rulesEditSyncIfDevice(i);
 }
 
 function rulesEditSyncThenType() {
@@ -685,11 +1074,14 @@ function rulesEditSyncThenType() {
         type: 'delay',
         seconds: 5
     });
-    else box.innerHTML = rulesEditThenFields({
-        type: 'command',
-        point_id: (pts[0] && pts[0].point_id) || '',
-        cmd: 'turn_on'
-    });
+    else {
+        const first = rulesDeviceInstances()[0];
+        box.innerHTML = rulesEditThenFields({
+            type: 'command',
+            point_id: (first && first.point_id) || '',
+            cmd: 'turn_on'
+        });
+    }
 }
 
 function rulesEditAddIf() {
@@ -698,19 +1090,24 @@ function rulesEditAddIf() {
     if (empty) empty.hidden = true;
     if (!list) return;
     const i = list.querySelectorAll('[data-if-i]').length;
+    const first = rulesDeviceInstances()[0];
+    const pid = (first && first.point_id) || '';
+    const names = rulesVisibleParams(pid);
     const wrap = document.createElement('div');
-    wrap.className = 'row3 rule-if-row';
+    wrap.className = 'rule-if-row';
     wrap.setAttribute('data-if-i', String(i));
-    wrap.innerHTML = '<div><label>point_id</label>' + rulesSelectHtml('re-if-pid-' + i, rulesPointOptions((pts[0] && pts[0].point_id) || '')) + '</div>' +
-        '<div><label>equals</label>' + rulesEqInput('re-if-eq-' + i, 'on') + '</div>' +
+    wrap.innerHTML = rulesPointCondFields('re-if-' + i, {
+            point_id: pid,
+            parameter: names[0] || 'power',
+            op: 'eq',
+            value: 'on'
+        }, 'rulesEditSyncIfDevice(' + i + ')', 'rulesEditSyncIfParam(' + i + ')') +
         '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveIf(' + i + ')">删除</button>';
     list.appendChild(wrap);
 }
 
 function rulesEditRemoveIf(i) {
     const cur = rulesEditSnapshot();
-    const next = (cur.if || []).slice();
-    /* rebuild from DOM excluding i */
     const list = document.getElementById('re-if-list');
     if (!list) return;
     const rows = [].slice.call(list.querySelectorAll('[data-if-i]'));
@@ -718,12 +1115,7 @@ function rulesEditRemoveIf(i) {
     rows.forEach(function(row) {
         const idx = row.getAttribute('data-if-i');
         if (String(idx) === String(i)) return;
-        const pid = document.getElementById('re-if-pid-' + idx);
-        const eq = document.getElementById('re-if-eq-' + idx);
-        kept.push({
-            point_id: (pid && pid.value) || '',
-            equals: (eq && eq.value) || ''
-        });
+        kept.push(rulesCollectPointCond('re-if-' + idx));
     });
     const nameEl = document.getElementById('re-name');
     const idEl = document.getElementById('re-id');
@@ -737,8 +1129,6 @@ function rulesEditRemoveIf(i) {
         then: cur.then
     };
     rulesEditRender(base);
-    if (rulesEditMode === 'new' && !(base.id)) {
-        /* keep new */ } else if (rulesEditMode === 'new') rulesEditMode = 'new';
 }
 async function rulesSaveAll(nextRules) {
     const r = await fetch('/api/rules/import', {

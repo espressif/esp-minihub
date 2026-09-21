@@ -60,5 +60,18 @@ const minihub_zigbee_device_t *minihub_zigbee_find_by_point(const char *point_id
 /** Find device by short_addr + endpoint. */
 const minihub_zigbee_device_t *minihub_zigbee_find_by_addr(uint16_t short_addr, uint8_t endpoint);
 
+/**
+ * Offer an end-device OTA image for a Zigbee point (or IEEE hex string).
+ *
+ * Plugins publish availability on the same Host point under ``props.ota``
+ * (version / url / available / …). This API starts transport when the SDK
+ * OTA Upgrade server path is wired; until then it returns
+ * ``ESP_ERR_NOT_SUPPORTED`` with a clear log (no Hub firmware OTA).
+ *
+ * @param point_id_or_ieee Host ``point_id`` or ``0x`` IEEE hex
+ * @param file_path        Optional local image path or URL (may be NULL)
+ */
+esp_err_t minihub_zigbee_ota_offer(const char *point_id_or_ieee, const char *file_path);
+
 /** Parse IEEE hex string (optional 0x prefix). Returns 0 on success, -1 on error. */
 int minihub_zb_parse_ieee(const char *s, uint64_t *out);

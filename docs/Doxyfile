@@ -1,0 +1,51 @@
+# MiniHub API headers — Doxygen input for esp-docs (Breathe).
+# INPUT paths must use $(PROJECT_PATH)/... (repo root).
+
+PROJECT_NAME = "MiniHub Programming Guide"
+
+INPUT = \
+ $(PROJECT_PATH)/components/minihub_core/include/minihub_core.h \
+ $(PROJECT_PATH)/components/minihub_core/include/minihub_http_worker.h \
+ $(PROJECT_PATH)/components/minihub_adapter/include/minihub_adapter.h \
+ $(PROJECT_PATH)/components/minihub_module/include/minihub_module_abi.h \
+ $(PROJECT_PATH)/components/minihub_net/include/minihub_net.h \
+ $(PROJECT_PATH)/components/minihub_net/include/minihub_net_cfg.h \
+ $(PROJECT_PATH)/components/minihub_ble_gatt/include/minihub_ble_gatt.h \
+ $(PROJECT_PATH)/docs/module_sdk/include/minihub_plugin_sdk/esp_idf.h \
+ $(PROJECT_PATH)/docs/module_sdk/include/minihub_plugin_sdk/lwip.h \
+ $(PROJECT_PATH)/docs/module_sdk/include/minihub_plugin_sdk/cjson.h \
+ $(PROJECT_PATH)/docs/module_sdk/include/minihub_plugin_sdk/mbedtls.h \
+ $(PROJECT_PATH)/docs/module_sdk/include/minihub_plugin_sdk/psa.h \
+ $(PROJECT_PATH)/docs/module_sdk/include/minihub_plugin_sdk/freertos.h
+
+INCLUDE_PATH = \
+ $(PROJECT_PATH)/components \
+ $(PROJECT_PATH)/docs/module_sdk/include
+
+GENERATE_XML = YES
+XML_OUTPUT = xml
+GENERATE_HTML = NO
+GENERATE_LATEX = NO
+GENERATE_MAN = NO
+
+# Homebrew doxygen 1.18 on macOS SIGBUS'es in the parallel XML writer and
+# when it recursively searches INCLUDE_PATH (entire components/).
+NUM_PROC_THREADS = 1
+SEARCH_INCLUDES = NO
+RECURSIVE = NO
+
+ENABLE_PREPROCESSING = YES
+MACRO_EXPANSION = YES
+EXPAND_ONLY_PREDEF = YES
+PREDEFINED = \
+ $(ENV_DOXYGEN_DEFINES) \
+ __attribute__(x)= \
+ DOXYGEN=1 \
+ AF_UNSPEC=0 \
+ AF_INET=2 \
+ AF_INET6=10
+
+WARN_NO_PARAMDOC = YES
+WARN_IF_UNDOCUMENTED = NO
+QUIET = YES
+HAVE_DOT = NO

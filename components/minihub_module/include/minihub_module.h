@@ -109,6 +109,16 @@ esp_err_t minihub_module_delete(const char *id);
 esp_err_t minihub_module_host_api_fill(minihub_module_host_api_t *api);
 
 /**
+ * Read a relative file from the Store install dir of the module owning
+ * ``adapter_name`` (manifest parent of ``/store/modules/<id>/``).
+ *
+ * ``rel_name`` must be relative: no leading ``/``, no ``..``. On success
+ * ``*out`` is a malloc'd NUL-terminated buffer; the caller frees it.
+ */
+esp_err_t minihub_module_read_file(const char *adapter_name, const char *rel_name,
+                                   char **out, size_t *out_len);
+
+/**
  * Manually attach a module-exported adapter (tests / loader internals).
  * Checks abi_version and core_api range.
  */

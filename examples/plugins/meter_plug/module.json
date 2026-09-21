@@ -1,0 +1,12 @@
+{
+  "id": "meter_plug",
+  "name": "Metering Outlet (simulated)",
+  "version": "0.1.0",
+  "kind": "module",
+  "runtime": "native",
+  "adapter": "meter_plug",
+  "description": "计量插座（模拟）：开关 + 电压/电流/功率只读读数，无真实硬件。",
+  "binary": "meter_plug.so",
+  "abi_version": 1,
+  "core_api_min": 1
+}

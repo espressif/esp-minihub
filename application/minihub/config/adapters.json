@@ -7,12 +7,12 @@
       "devices": []
     },
     "thread": {
-      "enabled": false,
+      "enabled": true,
       "dataset": null,
       "channel": null
     },
     "matter": {
-      "enabled": false,
+      "enabled": true,
       "devices": []
     },
     "zigbee": {

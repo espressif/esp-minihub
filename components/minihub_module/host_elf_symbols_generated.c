@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 #include "esp_elf.h"
@@ -32,16 +33,18 @@
 #include "minihub_net.h"
 
 extern long long __divdi3(long long, long long);
-extern void __eqdf2(void);
+extern int __eqdf2(double, double);
 extern double __extendsfdf2(float);
 extern long long __fixdfdi(double);
 extern int __fixdfsi(double);
 extern double __floatdidf(long long);
 extern double __floatsidf(int);
 extern double __floatunsidf(unsigned int);
-extern void __gtdf2(void);
-extern void __ltdf2(void);
-extern void __nedf2(void);
+extern int __gedf2(double, double);
+extern int __gtdf2(double, double);
+extern int __ledf2(double, double);
+extern int __ltdf2(double, double);
+extern int __nedf2(double, double);
 
 const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(__divdi3),
@@ -52,7 +55,9 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(__floatdidf),
     ESP_ELFSYM_EXPORT(__floatsidf),
     ESP_ELFSYM_EXPORT(__floatunsidf),
+    ESP_ELFSYM_EXPORT(__gedf2),
     ESP_ELFSYM_EXPORT(__gtdf2),
+    ESP_ELFSYM_EXPORT(__ledf2),
     ESP_ELFSYM_EXPORT(__ltdf2),
     ESP_ELFSYM_EXPORT(__nedf2),
     ESP_ELFSYM_EXPORT(atof),
@@ -77,6 +82,7 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(cJSON_GetArrayItem),
     ESP_ELFSYM_EXPORT(cJSON_GetArraySize),
     ESP_ELFSYM_EXPORT(cJSON_GetObjectItem),
+    ESP_ELFSYM_EXPORT(cJSON_GetObjectItemCaseSensitive),
     ESP_ELFSYM_EXPORT(cJSON_IsArray),
     ESP_ELFSYM_EXPORT(cJSON_IsBool),
     ESP_ELFSYM_EXPORT(cJSON_IsFalse),
@@ -94,11 +100,16 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(esp_err_to_name),
     ESP_ELFSYM_EXPORT(esp_fill_random),
     ESP_ELFSYM_EXPORT(esp_http_client_cleanup),
+    ESP_ELFSYM_EXPORT(esp_http_client_close),
+    ESP_ELFSYM_EXPORT(esp_http_client_fetch_headers),
+    ESP_ELFSYM_EXPORT(esp_http_client_get_content_length),
     ESP_ELFSYM_EXPORT(esp_http_client_get_errno),
     ESP_ELFSYM_EXPORT(esp_http_client_get_header),
     ESP_ELFSYM_EXPORT(esp_http_client_get_status_code),
     ESP_ELFSYM_EXPORT(esp_http_client_init),
+    ESP_ELFSYM_EXPORT(esp_http_client_open),
     ESP_ELFSYM_EXPORT(esp_http_client_perform),
+    ESP_ELFSYM_EXPORT(esp_http_client_read),
     ESP_ELFSYM_EXPORT(esp_http_client_set_header),
     ESP_ELFSYM_EXPORT(esp_http_client_set_method),
     ESP_ELFSYM_EXPORT(esp_http_client_set_post_field),
@@ -133,17 +144,25 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(mbedtls_md_starts),
     ESP_ELFSYM_EXPORT(mbedtls_md_update),
     ESP_ELFSYM_EXPORT(memcpy),
+    ESP_ELFSYM_EXPORT(memcmp),
     ESP_ELFSYM_EXPORT(memmove),
     ESP_ELFSYM_EXPORT(memset),
     ESP_ELFSYM_EXPORT(minihub_http_is_worker_task),
     ESP_ELFSYM_EXPORT(minihub_http_run_worker),
     ESP_ELFSYM_EXPORT(minihub_http_run_worker_async),
+    ESP_ELFSYM_EXPORT(minihub_command_invoke),
+    ESP_ELFSYM_EXPORT(minihub_event_bus_subscribe),
     ESP_ELFSYM_EXPORT(minihub_point_get),
     ESP_ELFSYM_EXPORT(minihub_point_get_snapshot),
+    ESP_ELFSYM_EXPORT(minihub_point_list_by_adapter),
+    ESP_ELFSYM_EXPORT(minihub_point_list_free),
+    ESP_ELFSYM_EXPORT(minihub_point_merge_params),
+    ESP_ELFSYM_EXPORT(minihub_point_merge_props),
     ESP_ELFSYM_EXPORT(minihub_point_register),
     ESP_ELFSYM_EXPORT(minihub_point_set),
     ESP_ELFSYM_EXPORT(minihub_point_set_online),
     ESP_ELFSYM_EXPORT(minihub_point_unregister_by_adapter),
+    ESP_ELFSYM_EXPORT(mkdir),
     ESP_ELFSYM_EXPORT(nvs_close),
     ESP_ELFSYM_EXPORT(nvs_commit),
     ESP_ELFSYM_EXPORT(nvs_erase_all),
@@ -177,11 +196,16 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(psa_reset_key_attributes),
     ESP_ELFSYM_EXPORT(realloc),
     ESP_ELFSYM_EXPORT(rewind),
+    ESP_ELFSYM_EXPORT(rmdir),
     ESP_ELFSYM_EXPORT(snprintf),
     ESP_ELFSYM_EXPORT(sscanf),
+    ESP_ELFSYM_EXPORT(stat),
     ESP_ELFSYM_EXPORT(strcasecmp),
+    ESP_ELFSYM_EXPORT(strcat),
     ESP_ELFSYM_EXPORT(strchr),
     ESP_ELFSYM_EXPORT(strcmp),
+    ESP_ELFSYM_EXPORT(strcpy),
+    ESP_ELFSYM_EXPORT(strdup),
     ESP_ELFSYM_EXPORT(strlen),
     ESP_ELFSYM_EXPORT(strncat),
     ESP_ELFSYM_EXPORT(strncmp),
@@ -190,6 +214,7 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(strstr),
     ESP_ELFSYM_EXPORT(strtol),
     ESP_ELFSYM_EXPORT(time),
+    ESP_ELFSYM_EXPORT(unlink),
     ESP_ELFSYM_EXPORT(vTaskDelay),
     ESP_ELFSYM_EXPORT(vTaskDelete),
     ESP_ELFSYM_EXPORT(vsnprintf),
@@ -211,6 +236,7 @@ const struct esp_elfsym s_minihub_module_dep_elfsyms[] = {
     ESP_ELFSYM_EXPORT(minihub_ble_gatt_wait_notify),
     ESP_ELFSYM_EXPORT(minihub_ble_gatt_write),
     ESP_ELFSYM_EXPORT(minihub_module_host_api_fill),
+    ESP_ELFSYM_EXPORT(minihub_module_read_file),
     ESP_ELFSYM_EXPORT(minihub_module_register_rpc),
     ESP_ELFSYM_EXPORT(minihub_module_set_ui_file),
     ESP_ELFSYM_END

@@ -10,8 +10,7 @@
     "adapter": "mqtt",
     "devices": [
       {
-        "id": "PLACEHOLDER_ID_demo",
-        "name": "PLACEHOLDER_NAME demo",
+        "point_id": "mqtt.PLACEHOLDER_ID_demo",
         "type": "switch",
         "state_topic": "minihub/PLACEHOLDER_ID/state",
         "command_topic": "minihub/PLACEHOLDER_ID/set"

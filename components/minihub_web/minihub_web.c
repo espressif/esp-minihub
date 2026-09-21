@@ -29,6 +29,7 @@
 #include "minihub_core.h"
 #include "minihub_http_worker.h"
 #include "minihub_config.h"
+#include "minihub_device_widget.h"
 #include "minihub_pack.h"
 #include "minihub_module.h"
 #include "minihub_store.h"
@@ -61,8 +62,12 @@
 
 static const char *TAG = "minihub_web";
 
-/** Product version shown in sidebar / system page (stable; not git describe). */
-#define MINIHUB_PRODUCT_VERSION "0.2.0"
+/* Product version shown in the sidebar / system page (not git describe).
+ * Kconfig string; quoted by sdkconfig.h. Fallback keeps host builds that
+ * have not regenerated sdkconfig.h on the same default. */
+#ifndef CONFIG_MINIHUB_PRODUCT_VERSION
+#define CONFIG_MINIHUB_PRODUCT_VERSION "0.1.0"
+#endif
 
 __attribute__((weak)) void minihub_map_download_begin(void)
 {
@@ -219,6 +224,7 @@ static esp_err_t send_preinstall_index_or_fallback(httpd_req_t *req)
 
 static esp_err_t send_login_redirect(httpd_req_t *req)
 {
+    minihub_auth_clear_session_cookie(req);
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/login");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
@@ -352,6 +358,8 @@ static esp_err_t handle_api_auth_logout(httpd_req_t *req)
 static esp_err_t api_auth(httpd_req_t *req)
 {
     if (minihub_auth_check(req) != ESP_OK) {
+        /* Drop stale cookie so the SPA cannot keep acting on a cached UI. */
+        minihub_auth_clear_session_cookie(req);
         return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "unauthorized");
     }
     return ESP_OK;
@@ -621,6 +629,47 @@ static esp_err_t handle_web_asset(httpd_req_t *req)
     }
     return err;
 }
+
+/* GET /img/<subdir>/<file> → <storage>/images/<subdir>/<file>
+ *
+ * Device / control icons live in storage (/data/images, see minihub_paths.h and
+ * the images/ staging in application/minihub/main/CMakeLists.txt) so they can be
+ * added or replaced at runtime next to devices.csv, without a firmware rebuild.
+ * The directory is split by what the icon depicts: devices/ holds the
+ * device-class avatars, parameters/ the control mockups. The relative path is
+ * picked from the device attributes by minihub_device_widget_image_name() when
+ * /api/device_widgets is served, so this handler only maps a URI to a file
+ * inside the icon directory: the path is confined there (no leading "/", no
+ * "..") and the extension is limited to the image types we ship. */
+static esp_err_t handle_device_image(httpd_req_t *req)
+{
+    if (minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
+        return send_login_redirect(req);
+    }
+    const char *prefix = MINIHUB_IMAGES_URI_PREFIX;
+    if (strncmp(req->uri, prefix, strlen(prefix)) != 0) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+    }
+    const char *rel = req->uri + strlen(prefix);
+    const char *dot = strrchr(rel, '.');
+    if (!web_path_safe(rel) || rel[0] == '.' || !dot ||
+        (strcasecmp(dot, ".svg") != 0 && strcasecmp(dot, ".png") != 0)) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+    }
+    char path[MINIHUB_PATH_MAX];
+    if (snprintf(path, sizeof(path), "%s/%s", MINIHUB_IMAGES_DIR, rel) >= (int)sizeof(path)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "path too long");
+    }
+    struct stat st;
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+    }
+    esp_err_t err = send_file_chunked(req, path);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+    }
+    return err;
+}
 #endif
 
 #if CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB
@@ -723,7 +772,7 @@ static esp_err_t handle_api_info(httpd_req_t *req)
     const int64_t uptime_ms = esp_timer_get_time() / 1000;
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "name", "MiniHub");
-    cJSON_AddStringToObject(root, "version", MINIHUB_PRODUCT_VERSION);
+    cJSON_AddStringToObject(root, "version", CONFIG_MINIHUB_PRODUCT_VERSION);
     cJSON_AddNumberToObject(root, "api_version", MINIHUB_CORE_API_VERSION);
     cJSON_AddBoolToObject(root, "auth_required", minihub_auth_enabled());
     cJSON_AddBoolToObject(root, "password_set", minihub_auth_password_set());
@@ -797,7 +846,7 @@ static esp_err_t handle_api_system(httpd_req_t *req)
     const esp_app_desc_t *app = esp_app_get_description();
     cJSON_AddStringToObject(root, "name", "MiniHub");
     /* Product version shown in sidebar (hub-ver); keep stable across git builds. */
-    cJSON_AddStringToObject(root, "version", MINIHUB_PRODUCT_VERSION);
+    cJSON_AddStringToObject(root, "version", CONFIG_MINIHUB_PRODUCT_VERSION);
     cJSON_AddStringToObject(root, "idf_version", esp_get_idf_version());
     if (app && app->version[0]) {
         cJSON_AddStringToObject(root, "commit", app->version);
@@ -1657,6 +1706,9 @@ static esp_err_t handle_api_location(httpd_req_t *req)
 static cJSON *point_to_json(const minihub_point_t *p)
 {
     cJSON *obj = cJSON_CreateObject();
+    if (!obj) {
+        return NULL;
+    }
     cJSON_AddStringToObject(obj, "point_id", p->point_id);
     cJSON_AddStringToObject(obj, "type", p->type);
     cJSON_AddStringToObject(obj, "value", p->value);
@@ -1723,6 +1775,9 @@ static esp_err_t handle_api_points(httpd_req_t *req)
             if (snap.props) {
                 cJSON_Delete(snap.props);
             }
+            if (!obj) {
+                return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+            }
             err = send_json(req, obj);
             cJSON_Delete(obj);
             return err;
@@ -1737,13 +1792,269 @@ static esp_err_t handle_api_points(httpd_req_t *req)
     }
 
     cJSON *arr = cJSON_CreateArray();
-    for (size_t i = 0; i < count; i++) {
-        cJSON_AddItemToArray(arr, point_to_json(&points[i]));
+    if (!arr) {
+        minihub_point_list_free(points, count);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
     }
-    free(points);
+    for (size_t i = 0; i < count; i++) {
+        cJSON *item = point_to_json(&points[i]);
+        if (item) {
+            cJSON_AddItemToArray(arr, item);
+        }
+    }
+    minihub_point_list_free(points, count);
 
     err = send_json(req, arr);
     cJSON_Delete(arr);
+    return err;
+}
+
+/* ---- device-widget registry bridge (data-driven device catalog) ---- */
+
+/* Extract the widget type from a style_json string (best effort). */
+static const char *dw_widget_of(const char *style_json, char *buf, size_t sz)
+{
+    buf[0] = '\0';
+    if (!style_json) {
+        return buf;
+    }
+    cJSON *root = cJSON_Parse(style_json);
+    if (root) {
+        cJSON *w = cJSON_GetObjectItemCaseSensitive(root, "widget");
+        if (cJSON_IsString(w) && w->valuestring) {
+            snprintf(buf, sz, "%s", w->valuestring);
+        }
+        cJSON_Delete(root);
+    }
+    return buf;
+}
+
+/* GET /api/device_widgets
+ * Serves the loaded registry as JSON for the UI and the rules editor: every
+ * parameter of the type is offered; hiding one is a property of the registered
+ * POINT (props.params.<name>.visible), which the UI intersects with this catalog.
+ * Each device carries its device-class `image` (avatar, /img/devices/...).
+ * Parameters carry `label`, `widget`, and `style` (min/max/unit/options);
+ * interactive controls are CSS widgets — param `image` is always empty
+ * (legacy field kept for clients). See minihub_device_widget.h. */
+static esp_err_t handle_api_device_widgets(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *devs = cJSON_CreateArray();
+    if (!root || !devs) {
+        cJSON_Delete(root);
+        cJSON_Delete(devs);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddItemToObject(root, "devices", devs);
+    char wbuf[32];
+    char ibuf[MINIHUB_DW_IMAGE_PATH_MAX];   /* resolved icon path (subdir/name) */
+    size_t ndev = minihub_device_widget_device_count();
+    for (size_t i = 0; i < ndev; i++) {
+        const minihub_device_widget_device_t *d = minihub_device_widget_device_at(i);
+        if (!d) {
+            continue;
+        }
+        cJSON *dj = cJSON_CreateObject();
+        cJSON_AddStringToObject(dj, "device", d->device);
+        /* Device-class icon: resolved from the type against storage at render
+         * time (never baked into the firmware), served by GET /img/ . Empty
+         * when this device type has no icon (NULL parameter = device icon). */
+        char dicon[MINIHUB_DW_IMAGE_PATH_MAX + 16] = "";
+        if (minihub_device_widget_image_name(d->device, NULL, ibuf, sizeof(ibuf))) {
+            snprintf(dicon, sizeof(dicon), "%s%s", MINIHUB_IMAGES_URI_PREFIX, ibuf);
+        }
+        cJSON_AddStringToObject(dj, "image", dicon);
+        cJSON *params = cJSON_CreateArray();
+        for (size_t j = 0; j < d->count; j++) {
+            const minihub_device_widget_entry_t *e = &d->entries[j];
+            cJSON *pj = cJSON_CreateObject();
+            cJSON_AddStringToObject(pj, "parameter", e->parameter);
+            cJSON_AddStringToObject(pj, "label", e->label);
+            cJSON_AddStringToObject(pj, "widget", dw_widget_of(e->style_json, wbuf, sizeof(wbuf)));
+            /* Controls are CSS widgets; do not resolve /img/parameters mockups. */
+            cJSON_AddStringToObject(pj, "image", "");
+            cJSON_AddStringToObject(pj, "style", e->style_json ? e->style_json : "{}");
+            /* The concrete transport point for this (type, parameter) is decided
+             * by the device REGISTRATION, not the protocol-agnostic catalog. Resolve
+             * it so the rules editor can target the real device point_id
+             * (e.g. ("light","power") -> "sim.color_bulb"), which is
+             * what the rules engine matches against. Absent when no device of this
+             * type is registered yet. Parameter key stays on this catalog row. */
+            char pid[MINIHUB_POINT_ID_MAX];
+            if (minihub_point_resolve_by_type_param(d->device, e->parameter, pid, sizeof(pid)) == ESP_OK) {
+                cJSON_AddStringToObject(pj, "point_id", pid);
+            }
+            cJSON_AddItemToArray(params, pj);
+        }
+        cJSON_AddItemToObject(dj, "params", params);
+        cJSON_AddItemToArray(devs, dj);
+    }
+    err = send_json(req, root);
+    cJSON_Delete(root);
+    return err;
+}
+
+/* POST /api/devices/control
+ * Body: { "device": <type>, "parameter": <id>, "value": <json>,
+ *         "point_id": <opt>, "seq": <u32 opt> }
+ * `device` is the data-model TYPE (e.g. "light"). Optional `point_id` selects
+ * a concrete instance when several points share that type (Devices UI sends
+ * live.point_id). If present and the point exists with matching type, use it;
+ * else fall back to minihub_point_resolve_by_type_param (first match). The
+ * type catalog stays protocol-agnostic; transport prefix comes from registration.
+ * Parameter name is passed in cmd.params so adapters update
+ * props.params.<parameter> on that device point.
+ *
+ * Control bodies are tiny ({device, parameter, value, point_id?, seq}); the
+ * read is capped so a bogus Content-Length cannot exhaust the HTTP task stack. */
+#define MINIHUB_WEB_CONTROL_BODY_MAX 1024
+static esp_err_t handle_api_devices_control(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    /* Drain the body instead of taking a single httpd_req_recv(): one call only
+     * returns the bytes that already arrived, so a chunked/slow client used to
+     * yield a truncated body and a confusing "invalid json" 400. */
+    char buf[MINIHUB_WEB_CONTROL_BODY_MAX];
+    size_t want = (req->content_len > 0) ? (size_t)req->content_len : 0;
+    size_t total = 0;
+    if (want > sizeof(buf) - 1) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body too large");
+    }
+    for (;;) {
+        size_t room = want ? (want - total) : (sizeof(buf) - 1 - total);
+        if (room == 0) {
+            break;
+        }
+        int received = httpd_req_recv(req, buf + total, room);
+        if (received < 0) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad body");
+        }
+        if (received == 0) {
+            break;   /* end of body (unknown length / chunked) */
+        }
+        total += (size_t)received;
+    }
+    if (total == 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    buf[total] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+
+    const cJSON *device = cJSON_GetObjectItem(root, "device");
+    const cJSON *parameter = cJSON_GetObjectItem(root, "parameter");
+    const cJSON *value = cJSON_GetObjectItem(root, "value");
+    const cJSON *seqj = cJSON_GetObjectItem(root, "seq");
+    const cJSON *point_id_j = cJSON_GetObjectItem(root, "point_id");
+    if (!cJSON_IsString(device) || !cJSON_IsString(parameter) || !value ||
+        !parameter->valuestring) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                    "missing device/parameter/value");
+    }
+    /* Copy before cJSON_Delete(root): the response still names this parameter. */
+    char param_name[64];
+    snprintf(param_name, sizeof(param_name), "%s", parameter->valuestring);
+    if (!minihub_device_widget_find(device->valuestring, param_name)) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown device/parameter");
+    }
+    /* Prefer explicit point_id (multi-instance same type); else first-match
+     * resolve. Transport prefix comes from registration, not the type catalog. */
+    char path[MINIHUB_POINT_ID_MAX];
+    path[0] = '\0';
+    if (cJSON_IsString(point_id_j) && point_id_j->valuestring &&
+        point_id_j->valuestring[0]) {
+        const minihub_point_t *pt = minihub_point_get(point_id_j->valuestring);
+        if (pt && pt->type[0] && strcmp(pt->type, device->valuestring) == 0) {
+            strncpy(path, point_id_j->valuestring, sizeof(path) - 1);
+            path[sizeof(path) - 1] = '\0';
+        }
+    }
+    if (path[0] == '\0') {
+        esp_err_t rerr = minihub_point_resolve_by_type_param(device->valuestring,
+                                                             parameter->valuestring,
+                                                             path, sizeof(path));
+        if (rerr != ESP_OK) {
+            cJSON_Delete(root);
+            return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "device not registered");
+        }
+    }
+    uint32_t seq = cJSON_IsNumber(seqj) ? (uint32_t)seqj->valueint : 0;
+
+    /* Serialise the value THROUGH cJSON instead of pasting the raw string: a
+     * bare string used to be emitted without quotes at all, and any '"' or '\'
+     * inside it silently produced an invalid report payload. */
+    char value_json[256];
+    cJSON *vitem = cJSON_IsString(value) ? cJSON_CreateString(value->valuestring)
+                                         : cJSON_Duplicate(value, true);
+    if (!vitem) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    char *vs = cJSON_PrintUnformatted(vitem);
+    cJSON_Delete(vitem);
+    if (!vs || strlen(vs) >= sizeof(value_json)) {
+        free(vs);
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "value too long");
+    }
+    snprintf(value_json, sizeof(value_json), "%s", vs);
+    free(vs);
+    char payload[384];
+    if (!minihub_device_widget_report_payload(seq, device->valuestring,
+                                               param_name, value_json,
+                                               payload, sizeof(payload))) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "payload too long");
+    }
+
+    minihub_command_t cmd = {0};
+    strncpy(cmd.point_id, path, sizeof(cmd.point_id) - 1);
+    strncpy(cmd.cmd, cJSON_IsBool(value) ? "toggle" : "set", sizeof(cmd.cmd) - 1);
+    cJSON *params = cJSON_CreateObject();
+    if (!params) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddNumberToObject(params, "seq", (double)seq);
+    cJSON_AddStringToObject(params, "parameter", param_name);
+    cJSON_AddItemToObject(params, "value", cJSON_Duplicate(value, true));
+    cmd.params = params;
+    err = minihub_command_invoke(&cmd);
+    if (params) {
+        cJSON_Delete(params);
+    }
+    cJSON_Delete(root);
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req,
+                                   err == ESP_ERR_NOT_FOUND ? HTTPD_404_NOT_FOUND
+                                                            : HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   esp_err_to_name(err));
+    }
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddStringToObject(resp, "path", path);
+    cJSON_AddStringToObject(resp, "parameter", param_name);
+    cJSON_AddStringToObject(resp, "payload", payload);
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
     return err;
 }
 
@@ -1788,10 +2099,113 @@ static esp_err_t handle_api_command(httpd_req_t *req)
     cJSON_Delete(root);
 
     if (err != ESP_OK) {
-        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, esp_err_to_name(err));
+        return httpd_resp_send_err(req,
+                                   err == ESP_ERR_NOT_FOUND ? HTTPD_404_NOT_FOUND
+                                                            : HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   esp_err_to_name(err));
     }
 
     cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddStringToObject(resp, "result", "ok");
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+/* POST /api/devices/ota — end-device OTA (not Hub firmware /api/ota).
+ * Body: { "point_id": "...", "path"|"url"|"file_path"?: "..." }
+ * Routes to the point's adapter via minihub_command_invoke(cmd="ota").
+ * Plugins publish availability on props.ota.available. */
+static esp_err_t handle_api_devices_ota(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char buf[512];
+    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (received <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    buf[received] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+
+    const cJSON *point_id = cJSON_GetObjectItem(root, "point_id");
+    if (!cJSON_IsString(point_id) || !point_id->valuestring || !point_id->valuestring[0]) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing point_id");
+    }
+
+    const minihub_point_t *pt = minihub_point_get(point_id->valuestring);
+    if (!pt) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "point not found");
+    }
+
+    minihub_command_t command = {0};
+    strncpy(command.point_id, point_id->valuestring, sizeof(command.point_id) - 1);
+    strncpy(command.cmd, "ota", sizeof(command.cmd) - 1);
+
+    cJSON *params = cJSON_CreateObject();
+    if (!params) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    const char *path_keys[] = { "path", "file_path", "url", NULL };
+    for (int i = 0; path_keys[i]; i++) {
+        const cJSON *pj = cJSON_GetObjectItem(root, path_keys[i]);
+        if (cJSON_IsString(pj) && pj->valuestring && pj->valuestring[0]) {
+            cJSON_AddStringToObject(params, path_keys[i], pj->valuestring);
+            break;
+        }
+    }
+    /* Prefer plugin-published local file, then image URL, from props.ota. */
+    if (!params->child && pt->props) {
+        const cJSON *ota = cJSON_GetObjectItem(pt->props, "ota");
+        if (cJSON_IsObject(ota)) {
+            const cJSON *file = cJSON_GetObjectItem(ota, "file");
+            if (cJSON_IsString(file) && file->valuestring && file->valuestring[0]) {
+                cJSON_AddStringToObject(params, "path", file->valuestring);
+            } else {
+                const cJSON *url = cJSON_GetObjectItem(ota, "url");
+                if (cJSON_IsString(url) && url->valuestring && url->valuestring[0]) {
+                    cJSON_AddStringToObject(params, "url", url->valuestring);
+                }
+            }
+            const cJSON *ver = cJSON_GetObjectItem(ota, "version");
+            if (cJSON_IsString(ver) && ver->valuestring) {
+                cJSON_AddStringToObject(params, "version", ver->valuestring);
+            }
+        }
+    }
+    command.params = params;
+
+    err = minihub_command_invoke(&command);
+    cJSON_Delete(params);
+    cJSON_Delete(root);
+
+    if (err != ESP_OK) {
+        httpd_err_code_t code = HTTPD_500_INTERNAL_SERVER_ERROR;
+        if (err == ESP_ERR_NOT_FOUND) {
+            code = HTTPD_404_NOT_FOUND;
+        } else if (err == ESP_ERR_NOT_SUPPORTED) {
+            code = HTTPD_400_BAD_REQUEST;
+        }
+        return httpd_resp_send_err(req, code, esp_err_to_name(err));
+    }
+
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
     cJSON_AddStringToObject(resp, "result", "ok");
     err = send_json(req, resp);
     cJSON_Delete(resp);
@@ -2278,10 +2692,16 @@ static esp_err_t handle_api_scene_invoke(httpd_req_t *req)
     err = minihub_scenes_invoke(id->valuestring);
     cJSON_Delete(root);
     if (err != ESP_OK) {
-        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, esp_err_to_name(err));
+        return httpd_resp_send_err(req,
+                                   err == ESP_ERR_NOT_FOUND ? HTTPD_404_NOT_FOUND
+                                                            : HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   esp_err_to_name(err));
     }
 
     cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
     cJSON_AddStringToObject(resp, "result", "ok");
     err = send_json(req, resp);
     cJSON_Delete(resp);
@@ -2401,6 +2821,7 @@ static esp_err_t handle_api_ota_upload(httpd_req_t *req)
         }
         err = minihub_ota_upload_write(buf, (size_t)n);
         if (err != ESP_OK) {
+            minihub_ota_upload_abort(minihub_ota_get_error());
             return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, minihub_ota_get_error());
         }
         remaining -= (size_t)n;
@@ -2408,6 +2829,7 @@ static esp_err_t handle_api_ota_upload(httpd_req_t *req)
 
     err = minihub_ota_upload_finish();
     if (err != ESP_OK) {
+        minihub_ota_upload_abort(minihub_ota_get_error());
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, minihub_ota_get_error());
     }
 
@@ -2442,8 +2864,6 @@ static esp_err_t handle_api_zigbee_permit(httpd_req_t *req)
         }
     }
 
-    cJSON *params = NULL;
-    (void)params;
     esp_err_t zb_err = minihub_zigbee_permit_join(seconds);
     cJSON *resp = cJSON_CreateObject();
     if (!resp) {
@@ -2536,8 +2956,6 @@ static esp_err_t handle_api_ble_mesh_permit(httpd_req_t *req)
         }
     }
 
-    cJSON *params = NULL;
-    (void)params;
     esp_err_t bm_err = minihub_ble_mesh_permit_provision(seconds);
     cJSON *resp = cJSON_CreateObject();
     if (!resp) {
@@ -3321,9 +3739,6 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
         if (!cJSON_GetObjectItem(root, "adapter")) {
             cJSON_AddStringToObject(root, "adapter", "matter");
         }
-        if (cJSON_IsBool(reload)) {
-            cJSON_AddItemToObject(root, "reload", cJSON_Duplicate(reload, true));
-        }
         return handle_points_remove_json(req, root);
     }
 
@@ -3701,6 +4116,11 @@ static esp_err_t handle_api_config_adapters_put(httpd_req_t *req)
 
 static esp_err_t handle_api_dev_fs_put(httpd_req_t *req)
 {
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
     static const char prefix[] = "/api/dev/fs/";
     const char *uri = req->uri;
     if (strncmp(uri, prefix, sizeof(prefix) - 1) != 0) {
@@ -3713,7 +4133,7 @@ static esp_err_t handle_api_dev_fs_put(httpd_req_t *req)
 
     char *body = NULL;
     size_t body_len = 0;
-    esp_err_t     err = read_http_body(req, &body, &body_len, DEV_FS_UPLOAD_MAX_BYTES);
+    err = read_http_body(req, &body, &body_len, DEV_FS_UPLOAD_MAX_BYTES);
     if (err != ESP_OK) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid body");
     }
@@ -3833,6 +4253,103 @@ static esp_err_t handle_api_dev_web_put(httpd_req_t *req)
     cJSON_Delete(resp);
     return err;
 }
+
+/* GET/PUT /api/dev/catalog/{devices.csv|parameters.csv}
+ * Model-shaped CSVs → /data/config/model/, flatten to /data/config/devices.csv,
+ * minihub_device_widget_reload(). Same api_auth gate as other REST. */
+#define DEV_CATALOG_UPLOAD_MAX_BYTES (128 * 1024)
+
+static bool catalog_name_from_uri(const char *uri, char *name_out, size_t name_len)
+{
+    static const char prefix[] = "/api/dev/catalog/";
+    if (!uri || strncmp(uri, prefix, sizeof(prefix) - 1) != 0) {
+        return false;
+    }
+    const char *rel = uri + sizeof(prefix) - 1;
+    if (strcmp(rel, "devices.csv") != 0 && strcmp(rel, "parameters.csv") != 0) {
+        return false;
+    }
+    if (strlen(rel) + 1 > name_len) {
+        return false;
+    }
+    memcpy(name_out, rel, strlen(rel) + 1);
+    return true;
+}
+
+static esp_err_t handle_api_dev_catalog_get(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char name[32];
+    if (!catalog_name_from_uri(req->uri, name, sizeof(name))) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "use devices.csv or parameters.csv");
+    }
+    char *body = NULL;
+    size_t body_len = 0;
+    err = minihub_device_widget_get_model(name, &body, &body_len);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not uploaded yet");
+    }
+    if (err != ESP_OK || !body) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "read failed");
+    }
+    httpd_resp_set_type(req, "text/csv; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    err = httpd_resp_send(req, body, body_len);
+    free(body);
+    return err;
+}
+
+static esp_err_t handle_api_dev_catalog_put(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char name[32];
+    if (!catalog_name_from_uri(req->uri, name, sizeof(name))) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "use devices.csv or parameters.csv");
+    }
+
+    char *body = NULL;
+    size_t body_len = 0;
+    err = read_http_body(req, &body, &body_len, DEV_CATALOG_UPLOAD_MAX_BYTES);
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid body");
+    }
+
+    bool rebuilt = false;
+    char errbuf[192];
+    errbuf[0] = '\0';
+    err = minihub_device_widget_put_model(name, body, body_len, &rebuilt, errbuf, sizeof(errbuf));
+    free(body);
+    if (err == ESP_ERR_INVALID_ARG || err == ESP_ERR_INVALID_SIZE) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                   errbuf[0] ? errbuf : "invalid catalog csv");
+    }
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   errbuf[0] ? errbuf : "catalog update failed");
+    }
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddStringToObject(resp, "file", name);
+    cJSON_AddBoolToObject(resp, "rebuilt", rebuilt);
+    cJSON_AddNumberToObject(resp, "bytes", (double)body_len);
+    if (!rebuilt && errbuf[0]) {
+        cJSON_AddStringToObject(resp, "hint", errbuf);
+    } else if (rebuilt) {
+        cJSON_AddStringToObject(resp, "runtime", MINIHUB_DW_CSV_PATH);
+        cJSON_AddNumberToObject(resp, "devices",
+                                (double)minihub_device_widget_device_count());
+    }
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
 #endif /* CONFIG_MINIHUB_WEB_UI */
 
 static esp_err_t minihub_web_add_uri(httpd_handle_t server, const httpd_uri_t *uri)
@@ -3871,6 +4388,8 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
 #if CONFIG_MINIHUB_WEB_UI
     httpd_uri_t login_page = { .uri = "/login", .method = HTTP_GET, .handler = handle_login_page };
     httpd_uri_t web_assets = { .uri = "/web/*", .method = HTTP_GET, .handler = handle_web_asset };
+    httpd_uri_t device_images = { .uri = MINIHUB_IMAGES_URI_PREFIX "*", .method = HTTP_GET,
+                                  .handler = handle_device_image };
 #endif
 #if CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB
     httpd_uri_t module_web = { .uri = "/modules/*", .method = HTTP_GET,
@@ -3900,6 +4419,9 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     httpd_uri_t points_remove = { .uri = "/api/points/remove", .method = HTTP_POST,
                                   .handler = handle_api_points_remove };
     httpd_uri_t command = { .uri = "/api/command", .method = HTTP_POST, .handler = handle_api_command };
+    httpd_uri_t device_widgets = { .uri = "/api/device_widgets", .method = HTTP_GET, .handler = handle_api_device_widgets };
+    httpd_uri_t devices_control = { .uri = "/api/devices/control", .method = HTTP_POST, .handler = handle_api_devices_control };
+    httpd_uri_t devices_ota = { .uri = "/api/devices/ota", .method = HTTP_POST, .handler = handle_api_devices_ota };
     httpd_uri_t rules = { .uri = "/api/rules", .method = HTTP_GET, .handler = handle_api_rules };
     httpd_uri_t rules_import = { .uri = "/api/rules/import", .method = HTTP_POST,
                                  .handler = handle_api_rules_import };
@@ -3960,6 +4482,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
 #if CONFIG_MINIHUB_WEB_UI
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &login_page), TAG, "/login");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &web_assets), TAG, "/web/*");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &device_images), TAG, MINIHUB_IMAGES_URI_PREFIX "*");
 #endif
 #if CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &module_web), TAG, "/modules/*");
@@ -3982,6 +4505,9 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &points_history), TAG, "/api/points/history");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &points_remove), TAG, "/api/points/remove");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &command), TAG, "/api/command");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &device_widgets), TAG, "/api/device_widgets");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &devices_control), TAG, "/api/devices/control");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &devices_ota), TAG, "/api/devices/ota");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &rules), TAG, "/api/rules");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &rules_import), TAG, "/api/rules/import");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &rules_ai_chat), TAG, "/api/rules/ai/chat");
@@ -4062,6 +4588,18 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
         .handler = handle_api_dev_web_put,
     };
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_web_put), TAG, "/api/dev/web/*");
+    httpd_uri_t dev_catalog_get = {
+        .uri = "/api/dev/catalog/*",
+        .method = HTTP_GET,
+        .handler = handle_api_dev_catalog_get,
+    };
+    httpd_uri_t dev_catalog_put = {
+        .uri = "/api/dev/catalog/*",
+        .method = HTTP_PUT,
+        .handler = handle_api_dev_catalog_put,
+    };
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_catalog_get), TAG, "/api/dev/catalog GET");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_catalog_put), TAG, "/api/dev/catalog PUT");
 #endif
 
     if (local.start_websocket) {

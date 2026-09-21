@@ -39,7 +39,8 @@ repos:
         exclude: |
           (?x)^(
             .+\.(md|rst|patch|map|bin)|
-            .+\.pb-c\.(c|h)$
+            .+\.pb-c\.(c|h)$|
+            docs/sphinx-known-warnings.txt
           )$
       - id: check-yaml
         args: [--allow-multiple-documents]

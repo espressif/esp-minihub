@@ -6,6 +6,7 @@
 
 #include "zigbee_stack.h"
 #include "zigbee_map.h"
+#include "zigbee_cluster_map.h"
 #include "minihub_product_params.h"
 
 #include <stdint.h>
@@ -16,6 +17,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "minihub_core.h"
+#include "minihub_zigbee.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
@@ -185,6 +187,7 @@ typedef struct {
 
 typedef struct {
     bool in_use;
+    uint64_t ieee; /* stable across short-addr rejoin */
     uint16_t short_addr;
     uint8_t endpoint;
     uint8_t caps;
@@ -194,6 +197,8 @@ static meter_scale_t s_meter_scale[MINIHUB_ZB_MAX_DEVICES];
 static size_t s_meter_scale_count;
 static meter_sub_t s_meter_subs[MINIHUB_ZB_MAX_DEVICES];
 static esp_timer_handle_t s_meter_poll_timer;
+static esp_timer_handle_t s_meter_kick_timer;
+#define METER_KICK_DELAY_MS 2500
 #define HUM_CHANGE_CENTI 100   /* 1 %RH */
 
 /* Prefer ch 20–26 for form (less overlap with common Wi-Fi 1/6/11).
@@ -201,7 +206,7 @@ static esp_timer_handle_t s_meter_poll_timer;
 #define ZB_PRIMARY_CHANNEL_MASK 0x07E00000U   /* channels 20–26 */
 #define ZB_SECONDARY_CHANNEL_MASK 0x001FF800U /* channels 11–19 */
 
-#define ZB_MANUFACTURER_NAME "\x07" "MiniHub"
+#define ZB_MANUFACTURER_NAME "\x03" "ESP"
 #define ZB_MODEL_IDENTIFIER "\x07" CONFIG_IDF_TARGET
 
 #define ZB_ZC_DEVICE_CONFIG()                               \
@@ -331,7 +336,26 @@ static void log_coordinator_identity(const char *why)
              (unsigned long long)ieee.u64, ezb_nwk_get_panid(), ezb_nwk_get_current_channel());
 }
 
-static void mark_stack_ready(void);
+static esp_timer_handle_t s_ident_timer;
+static int s_ident_pass;
+
+static void read_basic_identity_locked(uint16_t short_addr, uint8_t endpoint);
+static void refresh_known_identities(void);
+
+static void ident_timer_cb(void *arg)
+{
+    (void)arg;
+    if (!s_stack_ready) {
+        return;
+    }
+    refresh_known_identities();
+    /* Sleepy HA_on_off_light (keep_alive 3s) often misses the first Read. */
+    if (s_ident_pass < 4 && s_ident_timer) {
+        s_ident_pass++;
+        esp_timer_stop(s_ident_timer);
+        esp_timer_start_once(s_ident_timer, 8000000ULL);
+    }
+}
 static void log_network_key_for_sniffer(void);
 
 static void mark_stack_ready(void)
@@ -344,6 +368,12 @@ static void mark_stack_ready(void)
     log_network_key_for_sniffer();
     if (s_on_ready) {
         s_on_ready(s_cb_ctx);
+    }
+    /* NVS-restored devices skip interview; sleepy EDs need a later Read. */
+    s_ident_pass = 0;
+    if (s_ident_timer) {
+        esp_timer_stop(s_ident_timer);
+        esp_timer_start_once(s_ident_timer, 2000000ULL);
     }
 }
 
@@ -419,29 +449,12 @@ static const char *auth_status_str(ezb_zdo_auth_status_t s)
 
 static uint8_t caps_from_simple_desc(const ezb_af_simple_desc_t *simple_desc)
 {
-    uint8_t caps = 0;
     if (!simple_desc || !simple_desc->app_cluster_list) {
         return 0;
     }
     uint16_t cluster_count =
         (uint16_t)simple_desc->app_input_cluster_count + simple_desc->app_output_cluster_count;
-    for (uint16_t i = 0; i < cluster_count; i++) {
-        uint16_t cid = simple_desc->app_cluster_list[i];
-        if (cid == EZB_ZCL_CLUSTER_ID_ON_OFF) {
-            caps |= MINIHUB_ZB_CAP_ONOFF;
-        } else if (cid == EZB_ZCL_CLUSTER_ID_TEMPERATURE_MEASUREMENT) {
-            caps |= MINIHUB_ZB_CAP_TEMP;
-        } else if (cid == EZB_ZCL_CLUSTER_ID_REL_HUMIDITY_MEASUREMENT) {
-            caps |= MINIHUB_ZB_CAP_HUMIDITY;
-        } else if (cid == EZB_ZCL_CLUSTER_ID_IAS_ZONE) {
-            caps |= MINIHUB_ZB_CAP_IAS_ZONE;
-        } else if (cid == EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT) {
-            caps |= MINIHUB_ZB_CAP_ELECTRICAL;
-        } else if (cid == EZB_ZCL_CLUSTER_ID_METERING) {
-            caps |= MINIHUB_ZB_CAP_ENERGY;
-        }
-    }
-    return caps;
+    return minihub_zb_map_caps_from_clusters(simple_desc->app_cluster_list, cluster_count);
 }
 
 static void log_simple_desc_clusters(uint16_t short_addr, uint8_t ep, const ezb_af_simple_desc_t *desc)
@@ -481,12 +494,14 @@ static bool caps_better(uint8_t candidate, uint8_t current)
     return candidate != 0 && current == 0;
 }
 
+static esp_err_t read_attr(uint16_t short_addr, uint8_t endpoint, uint16_t cluster_id, uint16_t attr_id);
+
 static void emit_classified(uint16_t short_addr, uint64_t ieee, uint8_t endpoint, uint8_t caps,
                             uint16_t app_device_id)
 {
     minihub_zigbee_device_t dev = {0};
     const char *type = minihub_zb_classify_type(caps, app_device_id);
-    minihub_zb_format_point_id(dev.point_id, sizeof(dev.point_id), type, short_addr);
+    minihub_zb_format_point_id(dev.point_id, sizeof(dev.point_id), short_addr);
     strncpy(dev.type, type, sizeof(dev.type) - 1);
     dev.ieee = ieee;
     dev.short_addr = short_addr;
@@ -504,6 +519,12 @@ static void emit_classified(uint16_t short_addr, uint64_t ieee, uint8_t endpoint
         (void)zigbee_stack_subscribe(dev.short_addr, dev.endpoint, dev.ieee, dev.caps);
     }
     zigbee_stack_subscribe_product_params(dev.short_addr, dev.endpoint, dev.ieee);
+    /* Best-effort Basic identity — join already succeeded; ignore read failures. */
+    if (s_stack_ready) {
+        esp_zigbee_lock_acquire(portMAX_DELAY);
+        read_basic_identity_locked(dev.short_addr, dev.endpoint);
+        esp_zigbee_lock_release();
+    }
 }
 
 static void arm_disc_timer(void)
@@ -1216,32 +1237,100 @@ static esp_err_t read_attr(uint16_t short_addr, uint8_t endpoint, uint16_t clust
     fill_zcl_cmd_ctrl(&cmd.cmd_ctrl, short_addr, endpoint, cluster_id);
     cmd.payload.attr_number = 1;
     cmd.payload.attr_field = attrs;
-    return esp_zigbee_err_to_esp(ezb_zcl_read_attr_cmd_req(&cmd));
-}
-
-static esp_err_t read_attrs(uint16_t short_addr, uint8_t endpoint, uint16_t cluster_id,
-                            uint16_t *attrs, uint16_t attr_count)
-{
-    if (!attrs || attr_count == 0) {
-        return ESP_ERR_INVALID_ARG;
+    ezb_err_t zerr = ezb_zcl_read_attr_cmd_req(&cmd);
+    if (zerr != EZB_ERR_NONE) {
+        ESP_LOGW(TAG, "read_attr 0x%04x ep=%u cluster=0x%04x attr=0x%04x failed: %d", short_addr,
+                 endpoint, cluster_id, attr_id, (int)zerr);
     }
-    ESP_LOGD(TAG, "read_attrs 0x%04x ep=%u cluster=0x%04x n=%u", short_addr, endpoint, cluster_id,
-             (unsigned)attr_count);
-    ezb_zcl_read_attr_cmd_t cmd = {0};
-    fill_zcl_cmd_ctrl(&cmd.cmd_ctrl, short_addr, endpoint, cluster_id);
-    cmd.payload.attr_number = attr_count;
-    cmd.payload.attr_field = attrs;
-    return esp_zigbee_err_to_esp(ezb_zcl_read_attr_cmd_req(&cmd));
+    return esp_zigbee_err_to_esp(zerr);
 }
 
-static void meter_sub_add(uint16_t short_addr, uint8_t endpoint, uint8_t caps)
+static void read_basic_identity_locked(uint16_t short_addr, uint8_t endpoint)
+{
+    if (!short_addr || short_addr == 0xfffe || !endpoint) {
+        return;
+    }
+    ESP_LOGI(TAG, "read Basic identity 0x%04x ep=%u", short_addr, endpoint);
+    (void)read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_BASIC,
+                    EZB_ZCL_ATTR_BASIC_MANUFACTURER_NAME_ID);
+    (void)read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_BASIC,
+                    EZB_ZCL_ATTR_BASIC_MODEL_IDENTIFIER_ID);
+    (void)read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_BASIC,
+                    EZB_ZCL_ATTR_BASIC_APPLICATION_VERSION_ID);
+    (void)read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_BASIC,
+                    EZB_ZCL_ATTR_BASIC_HW_VERSION_ID);
+}
+
+static void refresh_known_identities(void)
+{
+    minihub_zigbee_device_t list[MINIHUB_ZB_MAX_DEVICES];
+    size_t n = 0;
+    if (minihub_zigbee_list_devices(list, MINIHUB_ZB_MAX_DEVICES, &n) != ESP_OK || n == 0) {
+        return;
+    }
+    esp_zigbee_lock_acquire(portMAX_DELAY);
+    for (size_t i = 0; i < n; i++) {
+        read_basic_identity_locked(list[i].short_addr, list[i].endpoint);
+    }
+    esp_zigbee_lock_release();
+}
+
+static void meter_read_live_locked(uint16_t short_addr, uint8_t endpoint, uint8_t caps)
+{
+    /* One attr per request — Tuya plugs often drop multi-attr Read or late
+     * commands after a ConfigureReporting + scale-attr flood. */
+    if (caps & MINIHUB_ZB_CAP_ELECTRICAL) {
+        (void)read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
+                        EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_ACTIVE_POWER_ID);
+        (void)read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
+                        EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_RMS_VOLTAGE_ID);
+        (void)read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
+                        EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_RMS_CURRENT_ID);
+    }
+    if (caps & MINIHUB_ZB_CAP_ENERGY) {
+        (void)read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_METERING,
+                        EZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID);
+    }
+}
+
+static void meter_sub_remove_short(uint16_t short_addr)
+{
+    if (!short_addr || short_addr == 0xfffe) {
+        return;
+    }
+    for (size_t i = 0; i < MINIHUB_ZB_MAX_DEVICES; i++) {
+        if (s_meter_subs[i].in_use && s_meter_subs[i].short_addr == short_addr) {
+            ESP_LOGI(TAG, "meter poll drop short=0x%04x (ieee=0x%016llx)", short_addr,
+                     (unsigned long long)s_meter_subs[i].ieee);
+            s_meter_subs[i].in_use = false;
+        }
+    }
+}
+
+static void meter_sub_add(uint16_t short_addr, uint8_t endpoint, uint64_t ieee, uint8_t caps)
 {
     if (!(caps & MINIHUB_ZB_CAP_METERING_MASK)) {
         return;
     }
+    /* Same IEEE rejoin (new short) — update in place; never keep the dead short. */
+    if (ieee) {
+        for (size_t i = 0; i < MINIHUB_ZB_MAX_DEVICES; i++) {
+            if (s_meter_subs[i].in_use && s_meter_subs[i].ieee == ieee) {
+                if (s_meter_subs[i].short_addr != short_addr) {
+                    ESP_LOGI(TAG, "meter poll remap ieee=0x%016llx 0x%04x → 0x%04x",
+                             (unsigned long long)ieee, s_meter_subs[i].short_addr, short_addr);
+                }
+                s_meter_subs[i].short_addr = short_addr;
+                s_meter_subs[i].endpoint = endpoint ? endpoint : 1;
+                s_meter_subs[i].caps = caps;
+                return;
+            }
+        }
+    }
     for (size_t i = 0; i < MINIHUB_ZB_MAX_DEVICES; i++) {
         if (s_meter_subs[i].in_use && s_meter_subs[i].short_addr == short_addr &&
             s_meter_subs[i].endpoint == endpoint) {
+            s_meter_subs[i].ieee = ieee;
             s_meter_subs[i].caps = caps;
             return;
         }
@@ -1249,12 +1338,27 @@ static void meter_sub_add(uint16_t short_addr, uint8_t endpoint, uint8_t caps)
     for (size_t i = 0; i < MINIHUB_ZB_MAX_DEVICES; i++) {
         if (!s_meter_subs[i].in_use) {
             s_meter_subs[i].in_use = true;
+            s_meter_subs[i].ieee = ieee;
             s_meter_subs[i].short_addr = short_addr;
             s_meter_subs[i].endpoint = endpoint;
             s_meter_subs[i].caps = caps;
-            ESP_LOGI(TAG, "meter poll track 0x%04x ep=%u caps=0x%02x", short_addr, endpoint, caps);
+            ESP_LOGI(TAG, "meter poll track 0x%04x ep=%u caps=0x%02x ieee=0x%016llx", short_addr, endpoint,
+                     caps, (unsigned long long)ieee);
             return;
         }
+    }
+}
+
+static void meter_poll_all_locked(void)
+{
+    for (size_t i = 0; i < MINIHUB_ZB_MAX_DEVICES; i++) {
+        if (!s_meter_subs[i].in_use) {
+            continue;
+        }
+        ESP_LOGD(TAG, "meter poll 0x%04x ep=%u caps=0x%02x", s_meter_subs[i].short_addr,
+                 s_meter_subs[i].endpoint, s_meter_subs[i].caps);
+        meter_read_live_locked(s_meter_subs[i].short_addr, s_meter_subs[i].endpoint,
+                               s_meter_subs[i].caps);
     }
 }
 
@@ -1265,28 +1369,32 @@ static void meter_poll_timer_cb(void *arg)
         return;
     }
     esp_zigbee_lock_acquire(portMAX_DELAY);
-    for (size_t i = 0; i < MINIHUB_ZB_MAX_DEVICES; i++) {
-        if (!s_meter_subs[i].in_use) {
-            continue;
-        }
-        uint16_t short_addr = s_meter_subs[i].short_addr;
-        uint8_t endpoint = s_meter_subs[i].endpoint;
-        uint8_t caps = s_meter_subs[i].caps;
-        if (caps & MINIHUB_ZB_CAP_ELECTRICAL) {
-            static uint16_t em_attrs[] = {
-                EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_ACTIVE_POWER_ID,
-                EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_RMS_VOLTAGE_ID,
-                EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_RMS_CURRENT_ID,
-            };
-            (void)read_attrs(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT, em_attrs,
-                             sizeof(em_attrs) / sizeof(em_attrs[0]));
-        }
-        if (caps & MINIHUB_ZB_CAP_ENERGY) {
-            (void)read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_METERING,
-                            EZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID);
-        }
-    }
+    meter_poll_all_locked();
     esp_zigbee_lock_release();
+}
+
+static void meter_kick_timer_cb(void *arg)
+{
+    (void)arg;
+    if (!s_stack_ready) {
+        return;
+    }
+    ESP_LOGI(TAG, "meter kick read (post-bind)");
+    esp_zigbee_lock_acquire(portMAX_DELAY);
+    meter_poll_all_locked();
+    esp_zigbee_lock_release();
+}
+
+static void meter_kick_soon(void)
+{
+    if (!s_meter_kick_timer) {
+        return;
+    }
+    esp_timer_stop(s_meter_kick_timer);
+    esp_err_t err = esp_timer_start_once(s_meter_kick_timer, METER_KICK_DELAY_MS * 1000ULL);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "meter kick schedule failed: %s", esp_err_to_name(err));
+    }
 }
 
 static void meter_poll_ensure_started(void)
@@ -1301,6 +1409,7 @@ static void meter_poll_ensure_started(void)
     } else {
         ESP_LOGI(TAG, "meter poll every %ds", METER_POLL_INTERVAL_S);
     }
+    meter_kick_soon();
 }
 
 static esp_err_t write_cie_address(uint16_t short_addr, uint8_t endpoint)
@@ -1374,6 +1483,8 @@ esp_err_t zigbee_stack_subscribe(uint16_t short_addr, uint8_t endpoint, uint64_t
                                              EZB_ZCL_ATTR_IAS_ZONE_ZONE_STATUS_ID));
     }
     if (caps & MINIHUB_ZB_CAP_ELECTRICAL) {
+        /* Defaults (Tuya-friendly ac_i_d=1000) — skip scale-attr flood; many plugs
+         * answer 0x86 for 0x0600–0x0605 and then drop live-value Reads. */
         (void)meter_scale_get(short_addr);
         subscribe_note(&first_err,
                        bind_cluster(short_addr, endpoint, ieee, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT));
@@ -1389,34 +1500,7 @@ esp_err_t zigbee_stack_subscribe(uint16_t short_addr, uint8_t endpoint, uint64_t
                        config_report_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
                                           EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_RMS_CURRENT_ID,
                                           EZB_ZCL_ATTR_TYPE_UINT16, CURRENT_CHANGE_RAW));
-        /* Scaling factors first, then live values. */
-        subscribe_note(&first_err,
-                       read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
-                                 EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_AC_VOLTAGE_MULTIPLIER_ID));
-        subscribe_note(&first_err,
-                       read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
-                                 EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_AC_VOLTAGE_DIVISOR_ID));
-        subscribe_note(&first_err,
-                       read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
-                                 EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_AC_CURRENT_MULTIPLIER_ID));
-        subscribe_note(&first_err,
-                       read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
-                                 EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_AC_CURRENT_DIVISOR_ID));
-        subscribe_note(&first_err,
-                       read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
-                                 EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_AC_POWER_MULTIPLIER_ID));
-        subscribe_note(&first_err,
-                       read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
-                                 EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_AC_POWER_DIVISOR_ID));
-        subscribe_note(&first_err,
-                       read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
-                                 EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_ACTIVE_POWER_ID));
-        subscribe_note(&first_err,
-                       read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
-                                 EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_RMS_VOLTAGE_ID));
-        subscribe_note(&first_err,
-                       read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_ELECTRICAL_MEASUREMENT,
-                                 EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_RMS_CURRENT_ID));
+        /* Live Reads deferred via meter_kick / periodic poll after bind settles. */
     }
     if (caps & MINIHUB_ZB_CAP_ENERGY) {
         (void)meter_scale_get(short_addr);
@@ -1425,14 +1509,8 @@ esp_err_t zigbee_stack_subscribe(uint16_t short_addr, uint8_t endpoint, uint64_t
                        config_report_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_METERING,
                                           EZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID,
                                           EZB_ZCL_ATTR_TYPE_UINT48, ENERGY_CHANGE_RAW));
-        subscribe_note(&first_err, read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_METERING,
-                                             EZB_ZCL_ATTR_METERING_MULTIPLIER_ID));
-        subscribe_note(&first_err, read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_METERING,
-                                             EZB_ZCL_ATTR_METERING_DIVISOR_ID));
-        subscribe_note(&first_err, read_attr(short_addr, endpoint, EZB_ZCL_CLUSTER_ID_METERING,
-                                             EZB_ZCL_ATTR_METERING_CURRENT_SUMMATION_DELIVERED_ID));
     }
-    meter_sub_add(short_addr, endpoint, caps);
+    meter_sub_add(short_addr, endpoint, ieee, caps);
     meter_poll_ensure_started();
     esp_zigbee_lock_release();
     ESP_LOGI(TAG, "subscribe 0x%04x ep=%u caps=0x%02x → %s", short_addr, endpoint, caps,
@@ -1581,6 +1659,9 @@ static bool app_signal_handler(const ezb_app_signal_t *app_signal)
                      "device update short=0x%04x ieee=0x%016llx status=%u(%s) tc_action=%u parent=0x%04x",
                      p->short_addr, (unsigned long long)p->device_addr.u64, (unsigned)p->status,
                      upddev_status_str(p->status), (unsigned)p->tc_action, p->parent_short);
+            if (p->status == EZB_ZDO_UPDDEV_DEVICE_LEFT) {
+                meter_sub_remove_short(p->short_addr);
+            }
             if (p->status == EZB_ZDO_UPDDEV_UNSECURE_JOIN && p->tc_action == EZB_ZDO_TC_ACTION_ACCEPT &&
                 p->short_addr != 0 && p->short_addr != 0xfffe) {
                 on_unsecure_join(&p->device_addr, p->short_addr);
@@ -1608,6 +1689,7 @@ static bool app_signal_handler(const ezb_app_signal_t *app_signal)
         if (p) {
             ESP_LOGI(TAG, "leave indication short=0x%04x ieee=0x%016llx type=%u", p->short_addr,
                      (unsigned long long)p->device_addr.u64, (unsigned)p->leave_type);
+            meter_sub_remove_short(p->short_addr);
         }
         break;
     }
@@ -1702,10 +1784,102 @@ static void try_product_params_attr(uint16_t short_addr, uint8_t endpoint, uint1
                                   len);
 }
 
+/** ZCL CharString: first byte length, then octets (no NUL). */
+static bool copy_zcl_char_string(const void *value, char *out, size_t out_len)
+{
+    if (!value || !out || out_len < 2) {
+        return false;
+    }
+    const uint8_t *p = (const uint8_t *)value;
+    uint8_t n = p[0];
+    if (n > 32) {
+        n = 32;
+    }
+    size_t copy = (size_t)n;
+    if (copy >= out_len) {
+        copy = out_len - 1;
+    }
+    memcpy(out, p + 1, copy);
+    out[copy] = '\0';
+    return copy > 0;
+}
+
+static const minihub_zigbee_device_t *find_dev_for_attr(uint16_t short_addr, uint8_t endpoint)
+{
+    const minihub_zigbee_device_t *dev = minihub_zigbee_find_by_addr(short_addr, endpoint);
+    if ((!dev || !dev->point_id[0]) && short_addr) {
+        minihub_zigbee_device_t list[MINIHUB_ZB_MAX_DEVICES];
+        size_t n = 0;
+        if (minihub_zigbee_list_devices(list, MINIHUB_ZB_MAX_DEVICES, &n) == ESP_OK) {
+            for (size_t i = 0; i < n; i++) {
+                if (list[i].short_addr == short_addr && list[i].point_id[0]) {
+                    dev = minihub_zigbee_find_by_addr(short_addr, list[i].endpoint);
+                    break;
+                }
+            }
+        }
+    }
+    return (dev && dev->point_id[0]) ? dev : NULL;
+}
+
+static void apply_basic_identity_attr(uint16_t short_addr, uint8_t endpoint, uint16_t attr_id,
+                                      uint8_t attr_type, const void *value)
+{
+    const minihub_zigbee_device_t *dev = find_dev_for_attr(short_addr, endpoint);
+    if (!dev || !value) {
+        ESP_LOGW(TAG, "identity drop short=0x%04x ep=%u attr=0x%04x (no point)", short_addr, endpoint,
+                 attr_id);
+        return;
+    }
+    char buf[48];
+    const char *key = NULL;
+    if (attr_id == EZB_ZCL_ATTR_BASIC_MANUFACTURER_NAME_ID) {
+        key = "manufacturer";
+        if (!copy_zcl_char_string(value, buf, sizeof(buf))) {
+            ESP_LOGW(TAG, "identity %s parse failed short=0x%04x", key, short_addr);
+            return;
+        }
+    } else if (attr_id == EZB_ZCL_ATTR_BASIC_MODEL_IDENTIFIER_ID) {
+        key = "model";
+        if (!copy_zcl_char_string(value, buf, sizeof(buf))) {
+            ESP_LOGW(TAG, "identity %s parse failed short=0x%04x", key, short_addr);
+            return;
+        }
+    } else if (attr_id == EZB_ZCL_ATTR_BASIC_APPLICATION_VERSION_ID) {
+        key = "sw_version";
+        snprintf(buf, sizeof(buf), "%u", (unsigned)*(const uint8_t *)value);
+        (void)attr_type;
+    } else if (attr_id == EZB_ZCL_ATTR_BASIC_HW_VERSION_ID) {
+        key = "hw_version";
+        snprintf(buf, sizeof(buf), "%u", (unsigned)*(const uint8_t *)value);
+        (void)attr_type;
+    } else {
+        return;
+    }
+    cJSON *patch = cJSON_CreateObject();
+    if (!patch) {
+        return;
+    }
+    cJSON_AddStringToObject(patch, key, buf);
+    esp_err_t err = minihub_point_merge_props(dev->point_id, NULL, patch);
+    cJSON_Delete(patch);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "identity %s %s=%s", dev->point_id, key, buf);
+    }
+}
+
 static void emit_attr_from_value(uint16_t short_addr, uint8_t endpoint, uint16_t cluster,
                                  uint16_t attr_id, uint8_t attr_type, const void *value)
 {
     if (!value) {
+        return;
+    }
+    if (cluster == EZB_ZCL_CLUSTER_ID_BASIC &&
+        (attr_id == EZB_ZCL_ATTR_BASIC_MANUFACTURER_NAME_ID ||
+         attr_id == EZB_ZCL_ATTR_BASIC_MODEL_IDENTIFIER_ID ||
+         attr_id == EZB_ZCL_ATTR_BASIC_APPLICATION_VERSION_ID ||
+         attr_id == EZB_ZCL_ATTR_BASIC_HW_VERSION_ID)) {
+        apply_basic_identity_attr(short_addr, endpoint, attr_id, attr_type, value);
         return;
     }
     minihub_zigbee_attr_evt_t evt = {
@@ -1775,7 +1949,7 @@ static void emit_attr_from_value(uint16_t short_addr, uint8_t endpoint, uint16_t
             }
             evt.kind = MINIHUB_ZB_ATTR_POWER_W;
             evt.u.power_w = scale_s16(raw, sc->ac_p_m, sc->ac_p_d);
-            ESP_LOGD(TAG, "attr power 0x%04x ep=%u → %.1f W (raw=%d)", short_addr, endpoint,
+            ESP_LOGI(TAG, "attr power 0x%04x ep=%u → %.1f W (raw=%d)", short_addr, endpoint,
                      (double)evt.u.power_w, (int)raw);
             zigbee_stack_notify_attr(&evt);
         } else if (attr_id == EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_RMS_VOLTAGE_ID) {
@@ -1785,7 +1959,7 @@ static void emit_attr_from_value(uint16_t short_addr, uint8_t endpoint, uint16_t
             }
             evt.kind = MINIHUB_ZB_ATTR_VOLTAGE_V;
             evt.u.voltage_v = scale_u16(raw, sc->ac_v_m, sc->ac_v_d);
-            ESP_LOGD(TAG, "attr voltage 0x%04x ep=%u → %.1f V (raw=%u)", short_addr, endpoint,
+            ESP_LOGI(TAG, "attr voltage 0x%04x ep=%u → %.1f V (raw=%u)", short_addr, endpoint,
                      (double)evt.u.voltage_v, (unsigned)raw);
             zigbee_stack_notify_attr(&evt);
         } else if (attr_id == EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_RMS_CURRENT_ID) {
@@ -1795,7 +1969,7 @@ static void emit_attr_from_value(uint16_t short_addr, uint8_t endpoint, uint16_t
             }
             evt.kind = MINIHUB_ZB_ATTR_CURRENT_A;
             evt.u.current_a = scale_u16(raw, sc->ac_i_m, sc->ac_i_d);
-            ESP_LOGD(TAG, "attr current 0x%04x ep=%u → %.3f A (raw=%u)", short_addr, endpoint,
+            ESP_LOGI(TAG, "attr current 0x%04x ep=%u → %.3f A (raw=%u)", short_addr, endpoint,
                      (double)evt.u.current_a, (unsigned)raw);
             zigbee_stack_notify_attr(&evt);
         } else {
@@ -1821,7 +1995,7 @@ static void emit_attr_from_value(uint16_t short_addr, uint8_t endpoint, uint16_t
             uint64_t raw = read_u48_le(value);
             evt.kind = MINIHUB_ZB_ATTR_ENERGY_WH;
             evt.u.energy_wh = ((float)raw * (float)sc->energy_m) / (float)sc->energy_d;
-            ESP_LOGD(TAG, "attr energy 0x%04x ep=%u → %.1f Wh (raw=%llu)", short_addr, endpoint,
+            ESP_LOGI(TAG, "attr energy 0x%04x ep=%u → %.1f Wh (raw=%llu)", short_addr, endpoint,
                      (double)evt.u.energy_wh, (unsigned long long)raw);
             zigbee_stack_notify_attr(&evt);
         } else {
@@ -1915,7 +2089,7 @@ static void handle_read_attr_rsp(ezb_zcl_cmd_read_attr_rsp_message_t *msg)
     uint16_t short_addr = short_from_header(msg->in.header);
     uint8_t endpoint = msg->in.header->src_ep;
     uint16_t cluster = msg->info.cluster_id;
-    ESP_LOGD(TAG, "ZCL read_attr_rsp from 0x%04x ep=%u cluster=0x%04x", short_addr, endpoint, cluster);
+    ESP_LOGI(TAG, "ZCL read_attr_rsp from 0x%04x ep=%u cluster=0x%04x", short_addr, endpoint, cluster);
 
     for (ezb_zcl_read_attr_rsp_variable_t *var = msg->in.variables; var; var = var->next) {
         if (var->status != EZB_ZCL_STATUS_SUCCESS) {
@@ -1963,7 +2137,9 @@ static esp_err_t create_coordinator_device(void)
                                             (void *)ZB_MODEL_IDENTIFIER);
     }
 
-    /* Client clusters so attribute reports / bind targets / IAS CIE are accepted */
+    /* Client clusters so attribute reports / bind targets / IAS CIE / Basic reads are accepted.
+     * On/off switch already has Basic as server; Read Attributes needs the client role. */
+    ezb_zcl_cluster_desc_t basic_cli = ezb_zcl_basic_create_cluster_desc(NULL, EZB_ZCL_CLUSTER_CLIENT);
     ezb_zcl_cluster_desc_t temp_cli =
         ezb_zcl_temperature_measurement_create_cluster_desc(NULL, EZB_ZCL_CLUSTER_CLIENT);
     ezb_zcl_cluster_desc_t hum_cli =
@@ -1972,6 +2148,14 @@ static esp_err_t create_coordinator_device(void)
     ezb_zcl_cluster_desc_t em_cli =
         ezb_zcl_electrical_measurement_create_cluster_desc(NULL, EZB_ZCL_CLUSTER_CLIENT);
     ezb_zcl_cluster_desc_t meter_cli = ezb_zcl_metering_create_cluster_desc(NULL, EZB_ZCL_CLUSTER_CLIENT);
+    if (basic_cli) {
+        ezb_err_t zerr = ezb_af_endpoint_add_cluster_desc(ep_desc, basic_cli);
+        if (zerr != EZB_ERR_NONE) {
+            ESP_LOGW(TAG, "add basic client: %d", (int)zerr);
+        } else {
+            ESP_LOGI(TAG, "Basic client cluster added");
+        }
+    }
     if (temp_cli) {
         ESP_RETURN_ON_ERROR(esp_zigbee_err_to_esp(ezb_af_endpoint_add_cluster_desc(ep_desc, temp_cli)), TAG,
                             "add temp client");
@@ -2123,6 +2307,26 @@ esp_err_t zigbee_stack_start(void)
             .name = "zb_meter_poll",
         };
         err = esp_timer_create(&args, &s_meter_poll_timer);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    if (!s_meter_kick_timer) {
+        const esp_timer_create_args_t args = {
+            .callback = meter_kick_timer_cb,
+            .name = "zb_meter_kick",
+        };
+        err = esp_timer_create(&args, &s_meter_kick_timer);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    if (!s_ident_timer) {
+        const esp_timer_create_args_t args = {
+            .callback = ident_timer_cb,
+            .name = "zb_ident",
+        };
+        err = esp_timer_create(&args, &s_ident_timer);
         if (err != ESP_OK) {
             return err;
         }
@@ -2309,6 +2513,17 @@ esp_err_t zigbee_stack_onoff(uint16_t short_addr, uint8_t endpoint, minihub_zigb
     ESP_LOGI(TAG, "onoff 0x%04x ep=%u cmd=%d → zb_err=%d", short_addr, endpoint ? endpoint : 1, (int)cmd,
              (int)zb_err);
     return esp_zigbee_err_to_esp(zb_err);
+}
+
+esp_err_t zigbee_stack_move_to_level(uint16_t short_addr, uint8_t endpoint, uint8_t level,
+                                     uint16_t transition_time)
+{
+    (void)short_addr;
+    (void)endpoint;
+    (void)level;
+    (void)transition_time;
+    /* Level Control ZCL writer not implemented yet — control map may still declare it. */
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 #endif /* CONFIG_MINIHUB_ZIGBEE_SDK */

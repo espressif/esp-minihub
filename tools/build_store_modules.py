@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Discover and pack minihub_plugins binary adapters into build MHMD .so + deploy .mhub zip."""
+"""Discover and pack Store modules into deploy .mhub (native MHMD + L2 JS)."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ from store_paths import (  # noqa: E402
     STORE_MODULES,
     module_deploy_dir,
     module_mhmd_path,
+    module_source_dir,
+    plugin_dir_env,
     resolve_deploy_dir,
 )
 
@@ -45,47 +47,128 @@ def resolve_modules_dir(*, root: Path = ROOT) -> Path:
     return candidates[0]
 
 
-def list_binary_modules(store: Path = STORE) -> list[str]:
-    """Dynamically list packable module directory names under minihub_plugins."""
-    ids: list[str] = []
-    if not store.is_dir():
-        return ids
-    for d in sorted(store.iterdir()):
-        if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
-            continue
-        mj, cm = d / "module.json", d / "CMakeLists.txt"
-        if not mj.is_file() or not cm.is_file():
-            continue
-        try:
-            meta = json.loads(mj.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            print(f"WARN: skip {d.name}: bad module.json ({exc})", file=sys.stderr)
-            continue
-        if meta.get("config_only"):
-            continue
+def _load_manifest(d: Path) -> dict | None:
+    mj = d / "module.json"
+    if not mj.is_file():
+        return None
+    try:
+        return json.loads(mj.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"WARN: skip {d.name}: bad module.json ({exc})", file=sys.stderr)
+        return None
+
+
+def module_pack_kind(meta: dict, d: Path) -> str | None:
+    """Return ``js``, ``binary``, or ``None`` if not packable by this tool."""
+    if meta.get("config_only"):
+        return None
+    runtime = meta.get("runtime") or ""
+    if runtime == "js" or (
+        runtime not in ("native", "hybrid", "pack")
+        and (d / "main.js").is_file()
+        and not (d / "CMakeLists.txt").is_file()
+    ):
+        if not (d / "main.js").is_file():
+            return None
+        return "js"
+    if (d / "CMakeLists.txt").is_file():
+        # L3 / hybrid — needs .so after firmware build
         if meta.get("inject") and not meta.get("binary"):
+            return None
+        return "binary"
+    return None
+
+
+def _iter_module_dirs(store: Path = STORE) -> list[Path]:
+    dirs: list[Path] = []
+    seen: set[Path] = set()
+
+    def add(d: Path) -> None:
+        if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
+            return
+        key = d.resolve()
+        if key in seen:
+            return
+        seen.add(key)
+        dirs.append(d)
+
+    if store.is_dir():
+        for d in sorted(store.iterdir()):
+            add(d)
+    for d in plugin_dir_env():
+        if (d / "module.json").is_file():
+            add(d)
+        elif d.is_dir():
+            for sub in sorted(d.iterdir()):
+                add(sub)
+    return dirs
+
+
+def list_packable_modules(store: Path = STORE) -> list[tuple[str, str]]:
+    """Return ``[(module_id, kind), ...]`` where kind is ``js`` or ``binary``."""
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for d in _iter_module_dirs(store):
+        meta = _load_manifest(d)
+        if not meta:
             continue
-        ids.append(d.name)
-    return ids
+        kind = module_pack_kind(meta, d)
+        if not kind:
+            continue
+        if d.name in seen:
+            continue
+        seen.add(d.name)
+        out.append((d.name, kind))
+    return out
 
 
-def resolve_module_ids(requested: list[str] | None) -> list[str]:
-    available = list_binary_modules()
+def list_binary_modules(store: Path = STORE) -> list[str]:
+    """Native/hybrid module ids (have CMakeLists). Kept for callers that need .so only."""
+    return [mid for mid, kind in list_packable_modules(store) if kind == "binary"]
+
+
+def resolve_module_ids(requested: list[str] | None) -> list[tuple[str, str]]:
+    available = list_packable_modules()
+    by_id = {mid: kind for mid, kind in available}
     if not requested or requested == ["all"]:
         if not available:
-            raise SystemExit(f"No binary modules found under {STORE}")
+            raise SystemExit(f"No packable modules found under {STORE} / MINIHUB_PLUGIN_DIRS")
         return available
-    unknown = [m for m in requested if m not in available]
+    unknown = [m for m in requested if m not in by_id]
     if unknown:
         raise SystemExit(
-            f"Unknown or non-binary module(s): {', '.join(unknown)}\n"
-            f"Available: {', '.join(available) or '(none)'}"
+            f"Unknown or not packable module(s): {', '.join(unknown)}\n"
+            f"Available: {', '.join(by_id) or '(none)'}"
         )
-    out: list[str] = []
+    out: list[tuple[str, str]] = []
     for m in requested:
-        if m not in out:
-            out.append(m)
+        if m not in [x[0] for x in out]:
+            out.append((m, by_id[m]))
     return out
+
+
+def pack_js_one(
+    module_id: str,
+    *,
+    root: Path = ROOT,
+    deploy: Path | None = None,
+) -> Path:
+    deploy = resolve_deploy_dir(deploy)
+    deploy_mod = module_deploy_dir(module_id, deploy)
+    store_pkg = deploy_mod / f"{module_id}.mhub"
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "tools" / "pack_store_module.py"),
+            "pack",
+            module_id,
+            "--deploy",
+            str(deploy),
+        ],
+        cwd=str(root),
+        check=True,
+    )
+    return store_pkg
 
 
 def pack_one(
@@ -111,7 +194,7 @@ def pack_one(
     try:
         from sync_store_catalog import read_adapter_version
 
-        expected_av = read_adapter_version(STORE / module_id, module_id)
+        expected_av = read_adapter_version(module_source_dir(module_id, root=root), module_id)
     except Exception:
         expected_av = ""
     if expected_av:
@@ -119,8 +202,9 @@ def pack_one(
         if expected_av.encode("utf-8") not in so_text:
             raise FileNotFoundError(
                 f"{so_elf.name} is stale (missing adapter version {expected_av!r}).\n"
-                f"Run a full firmware build first (e.g. ./tools/build_firmware.py build),\n"
-                f"then re-run ./tools/build_firmware.py modules {module_id}"
+                f"Rebuild that module, then pack it:\n"
+                f"  ./tools/build_firmware.py module {module_id}\n"
+                f"  ./tools/build_firmware.py pack {module_id}"
             )
 
     mhmd_build.parent.mkdir(parents=True, exist_ok=True)
@@ -197,13 +281,18 @@ def pack_modules(
     deploy: Path | None = None,
 ) -> int:
     deploy = resolve_deploy_dir(deploy)
-    ids = resolve_module_ids(requested)
+    items = resolve_module_ids(requested)
     packing_all = not requested or requested == ["all"]
-    print(f"Building modules: {' '.join(ids)}", flush=True)
+    ids = [mid for mid, _ in items]
+    print(f"Packing modules: {' '.join(ids)}", flush=True)
     print(f"Deploy dir: {deploy}", flush=True)
     packed: list[str] = []
     skipped: list[tuple[str, str]] = []  # (id, reason)
-    for mid in ids:
+    for mid, kind in items:
+        if kind == "js":
+            pack_js_one(mid, root=root, deploy=deploy)
+            packed.append(mid)
+            continue
         modules_dir = resolve_modules_dir(root=root)
         so_elf = modules_dir / f"libadapter_{mid}.so"
         if not so_elf.is_file():
@@ -223,15 +312,20 @@ def pack_modules(
     def _print_summary() -> None:
         print(flush=True)
         print("======== .mhub pack summary ========", flush=True)
-        print(f"Candidates: {len(ids)}", flush=True)
+        print(f"Candidates: {len(items)}", flush=True)
         print(f"Packed:     {len(packed)}", flush=True)
         print(f"Not packed: {len(skipped)}", flush=True)
         if packed:
             print("Packed .mhub:", flush=True)
+            kind_by_id = {mid: kind for mid, kind in items}
             for mid in packed:
                 pkg = module_deploy_dir(mid, deploy) / f"{mid}.mhub"
+                tag = "js" if kind_by_id.get(mid) == "js" else "native"
                 if pkg.is_file():
-                    print(f"  + {mid}.mhub  ({pkg.stat().st_size} bytes)  → {pkg}", flush=True)
+                    print(
+                        f"  + {mid}.mhub  ({pkg.stat().st_size} bytes, {tag})  → {pkg}",
+                        flush=True,
+                    )
                 else:
                     print(f"  + {mid}.mhub  (path missing after pack)", flush=True)
         if skipped:
@@ -243,8 +337,8 @@ def pack_modules(
     if not packed:
         _print_summary()
         print(
-            "No libadapter_*.so available — skipping catalog refresh "
-            "(use application/minihub build for full Store packages).",
+            "No modules packed — skipping catalog refresh "
+            "(JS needs main.js; native needs libadapter_*.so after firmware build).",
             flush=True,
         )
         return 0
@@ -258,7 +352,7 @@ def pack_modules(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Pack minihub_plugins binary adapters into MHMD .so (build/) + .mhub (deploy)."
+        description="Pack Store modules into .mhub (L2 JS + L3/hybrid native)."
     )
     parser.add_argument(
         "module_id",
@@ -269,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         "--deploy",
         type=Path,
         default=None,
-        help="deploy root (default: MINIHUB_STORE_DEPLOY or ~/workspace/minihub_store)",
+        help="deploy root (default: MINIHUB_PLUGINS_DEPLOY_DIR or ~/workspace/minihub_store)",
     )
     args = parser.parse_args(argv)
     requested = args.module_id if args.module_id else ["all"]

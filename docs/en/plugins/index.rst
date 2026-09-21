@@ -1,0 +1,19 @@
+Store Plugin Development
+=========================
+
+:link_to_translation:`zh_CN:[中文]`
+
+Develop and pack installable modules for MiniHub Store.
+
+For standard Devices-page widgets, plugin ``type`` / ``devices.json`` must match
+the Host type catalog; see :doc:`../type_catalog`. Point contract and
+``adapters.json``: :doc:`../data_model`.
+
+.. toctree::
+   :maxdepth: 2
+
+   overview
+   develop_l1
+   develop_l2
+   develop_l3
+   pack_and_catalog

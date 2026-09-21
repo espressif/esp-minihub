@@ -61,7 +61,9 @@ Requires a MiniHub **Host** tree + IDF ~6.2 / `esp32s31`. This MCP cannot compil
 - Optional `minihub_module_rpc`
 - Call Core only via `minihub_module_host_api_t` (honor `struct_size`)
 - `REGISTER_ADAPTER` only inside `#if !CONFIG_MINIHUB_DYNAMIC_MODULES`
-- `abi_version` / `core_api_min` / `core_api_max` must match Host
+- `abi_version` must match Host; `core_api_min` must be <= Host core API;
+  `core_api_max` is optional (omit / 0 = no upper bound, so older modules keep
+  loading on newer Hosts)
 - Undefined ELF symbols ⊆ `docs/module_sdk/host_export_allowlist.json`
 - Link `-Wl,-z,max-page-size=4`
 - No `#if CONFIG_*` for Host feature flags inside the plugin

@@ -3,6 +3,14 @@
 # This file is auto-loaded when minihub_bundle is in the build graph.
 menu "MiniHub"
 
+    config MINIHUB_PRODUCT_VERSION
+        string "Product version"
+        default "0.1.0"
+        help
+            Shown in the Web sidebar and on the system page as v<version>.
+            This is not the git describe string; that is reported separately
+            as the commit line.
+
     rsource "../../components/minihub_core/Kconfig.minihub"
     rsource "../../components/minihub_auth/Kconfig.minihub"
     rsource "../../components/minihub_ble_mesh/Kconfig.minihub"

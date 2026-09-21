@@ -1,14 +1,15 @@
-# Build every application/ firmware (+ merged flash bin).
-# Pack Store .mhub once in pack:mhub when libadapter_*.so exist (skip OK if none).
+# Firmware: ./tools/build_firmware.py --app $MINIHUB_APP build merge
+# Store pack: ./tools/build_firmware.py --app $MINIHUB_APP pack all
+# Docs: ./tools/build_docs.sh
+# Products: .app_matrix (application/<name>/). Add a folder name to the list.
 #
-# IDF: ESP32-S31 / MiniHub expects IDF ~6.2 (see docs/build.md).
-# Override IDF_CI_IMAGE in GitLab CI/CD variables for an internal 6.2 / S31 image.
+# IDF: ESP32-S31 / MiniHub expects IDF ~6.2. Override IDF_CI_IMAGE in GitLab
+# CI/CD variables for an internal 6.2 / S31 image.
 #
-# Pre-commit: .gitlab/ci/pre_check.yml (esp-at style).
+# MINIHUB_PLUGINS_REPO_URL (git@ URL) and GITLAB_KEY come from CI/CD Variables.
 
 workflow:
   rules:
-    # Same SHA: keep MR pipeline only (skip branch push while MR is open).
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -25,26 +26,25 @@ stages:
   - pre_check
   - build
   - pack
+  - deploy
 
 variables:
   IDF_CI_IMAGE: "espressif/idf:latest"
-  # Product (-app / MINIHUB_APP): application/<name>/  e.g. minihub
   MINIHUB_APP: "minihub"
-  # Firmware jobs never pack .mhub; pack:mhub owns Store packages
   MINIHUB_SKIP_MHUB: "1"
-  # Matter needs a local ESP_MATTER_PATH tree (not cloned here)
   MINIHUB_BUILD_MATTER: "0"
-  # RainMaker: submodule application/minihub/components/esp-rainmaker (leave unset to follow
-  # application/minihub/config/sdkconfig/feature/rainmaker.defaults). Set to "0" to force stub-only.
-  # MINIHUB_BUILD_RAINMAKER: "0"
-  MINIHUB_CI_ARTIFACTS: "$CI_PROJECT_DIR/ci_artifacts"
-  MINIHUB_STORE_DEPLOY: "$CI_PROJECT_DIR/ci_artifacts/store"
   GIT_DEPTH: "50"
-  # Path-scoped init in tools/ci/build_apps.sh (avoid pulling all submodules)
   GIT_SUBMODULE_STRATEGY: "none"
+  MINIHUB_PLUGINS_DIR: "$CI_PROJECT_DIR/esp-minihub-plugins"
 
 include:
   - local: .gitlab/ci/pre_check.yml
+
+.app_matrix:
+  parallel:
+    matrix:
+      - MINIHUB_APP:
+          - minihub
 
 .idf_env:
   image:
@@ -54,66 +54,138 @@ include:
     - git config --global --add safe.directory "$CI_PROJECT_DIR" || true
     - |
       if [ -f "$IDF_PATH/export.sh" ]; then
-        # shellcheck source=/dev/null
         . "$IDF_PATH/export.sh"
       elif [ -f /opt/esp/idf/export.sh ]; then
-        # shellcheck source=/dev/null
         . /opt/esp/idf/export.sh
       fi
     - idf.py --version || true
-    - python3 --version
-    - mkdir -p "$MINIHUB_CI_ARTIFACTS" "$MINIHUB_STORE_DEPLOY"
 
-.build_app:
-  extends: .idf_env
-  stage: build
-  artifacts:
-    when: on_success
-    expire_in: 14 days
-    name: "minihub-$APP-$CI_COMMIT_SHORT_SHA"
-    paths:
-      # Staged from flasher_args.json flash_files (+ elf/map/merged/sdkconfig) by stage_artifacts.sh
-      - ci_artifacts/$APP/
-      # Needed by pack:mhub (minihub fills these; other apps may be empty)
-      - application/$APP/build/modules/
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH
+.clone_plugins:
+  image:
+    name: $IDF_CI_IMAGE
+    entrypoint: [""]
+  before_script:
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -n $GITLAB_KEY >> ~/.ssh/id_rsa_base64
+    - base64 --decode --ignore-garbage ~/.ssh/id_rsa_base64 > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - echo -e "Host gitlab.espressif.cn\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
+    - git config --global --add safe.directory "$CI_PROJECT_DIR" || true
+    - |
+      if [ -f "$IDF_PATH/export.sh" ]; then
+        . "$IDF_PATH/export.sh"
+      elif [ -f /opt/esp/idf/export.sh ]; then
+        . /opt/esp/idf/export.sh
+      fi
+    - |
+      set -euo pipefail
+      url="$MINIHUB_PLUGINS_REPO_URL"
+      dest="$MINIHUB_PLUGINS_DIR"
+      echo "clone into $dest"
+      rm -rf "$dest"
+      mkdir -p "$(dirname "$dest")"
+      cloned=""
+      seen=" "
+      for ref in "${CI_COMMIT_REF_NAME:-}" master; do
+        [ -n "$ref" ] || continue
+        case "$seen" in *" $ref "*) continue ;; esac
+        seen="$seen$ref "
+        echo "try branch $ref"
+        set +e
+        git ls-remote --heads --exit-code "$url" "$ref"
+        rc=$?
+        set -e
+        if [ "$rc" -eq 0 ]; then
+          git clone --depth 1 --branch "$ref" "$url" "$dest"
+          cloned=$ref
+          break
+        fi
+        if [ "$rc" -eq 2 ]; then
+          echo "  not on remote"
+          continue
+        fi
+        echo "git ls-remote failed (rc=$rc)"
+        exit 1
+      done
+      test -n "$cloned"
+      echo "cloned branch $cloned ($(git -C "$dest" rev-parse --short HEAD))"
+    - export MINIHUB_PLUGIN_DIRS="$MINIHUB_PLUGINS_DIR"
 
 build:app:
-  extends: .build_app
-  parallel:
-    matrix:
-      - APP:
-          - minihub
+  extends:
+    - .idf_env
+    - .clone_plugins
+    - .app_matrix
+  stage: build
   variables:
-    MINIHUB_APP: "$APP"
+    MINIHUB_SKIP_MHUB: "0"
+    MINIHUB_PLUGINS_DEPLOY_DIR: "$CI_PROJECT_DIR/application/$MINIHUB_APP/build/store"
   script:
-    - test -f "application/${APP}/CMakeLists.txt"
-    - bash tools/ci/build_apps.sh
-    - test -f "ci_artifacts/${APP}/firmware/flasher_args.json"
-    - test -f "ci_artifacts/${APP}/firmware/sdkconfig"
-    - test -f "ci_artifacts/${APP}/firmware/${APP}_merged.bin"
-    - test -f "application/${APP}/build/minihub_merged.bin"
-
-# Store pack (no-op success when minihub built no libadapter_*.so)
-pack:mhub:
-  extends: .idf_env
-  stage: pack
-  needs:
-    - job: build:app
-      parallel:
-        matrix:
-          - APP: minihub
-  script:
-    - bash tools/ci/pack_store_modules.sh
+    - git submodule update --init --depth 1
+    - export MINIHUB_PLUGIN_DIRS=$$MINIHUB_PLUGIN_DIRS:$CI_PROJECT_DIR/examples/plugins
+    - ./tools/build_firmware.py --app "$MINIHUB_APP" build merge
   artifacts:
     when: on_success
     expire_in: 14 days
-    name: "minihub-mhub-$CI_COMMIT_SHORT_SHA"
+    name: "$MINIHUB_APP-$CI_COMMIT_SHORT_SHA"
     paths:
-      - ci_artifacts/mhub/
-      - ci_artifacts/store/
+      - application/$MINIHUB_APP/build/*.bin
+      - application/$MINIHUB_APP/build/*.elf
+      - application/$MINIHUB_APP/build/bootloader/bootloader.bin
+      - application/$MINIHUB_APP/build/bootloader/bootloader.elf
+      - application/$MINIHUB_APP/build/partition_table/*.bin
+      - application/$MINIHUB_APP/build/flasher_args.json
+      - application/$MINIHUB_APP/build/**/*.mhub
+      - application/$MINIHUB_APP/sdkconfig
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
+
+build:plugin_standalone:
+  # .clone_plugins already sources IDF. Do not also extend .idf_env:
+  # GitLab replaces before_script, it does not append it, so the clone would be dropped.
+  extends:
+    - .clone_plugins
+    - .app_matrix
+  stage: build
+  needs: []
+  variables:
+    MINIHUB_PLUGIN_DIRS: "$CI_PROJECT_DIR/esp-minihub-plugins"
+    MINIHUB_PLUGINS_DEPLOY_DIR: "$CI_PROJECT_DIR/ci_artifacts/standalone"
+  script:
+    - |
+      set -euo pipefail
+      root="${MINIHUB_PLUGIN_DIRS:-}"
+      if [ -z "$root" ] || [ ! -d "$root" ]; then
+        echo "MINIHUB_PLUGIN_DIRS missing; no plugins"
+        exit 0
+      fi
+      found=0
+      for d in "$root"/*/; do
+        [ -d "$d" ] || continue
+        base=$(basename "$d")
+        case "$base" in .*) continue ;; esac
+        [ -f "$d/module.json" ] || continue
+        echo "plugin: $base"
+        found=1
+      done
+      if [ "$found" -eq 0 ]; then
+        echo "no plugin directories under $root; skip modules/pack"
+        exit 0
+      fi
+      ./tools/build_firmware.py --app "$MINIHUB_APP" modules
+      ./tools/build_firmware.py --app "$MINIHUB_APP" pack all
+  artifacts:
+    when: on_success
+    expire_in: 14 days
+    paths:
+      - ci_artifacts/standalone/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+deploy:plugin_standalone:
+  stage: deploy
+  script:
+    - echo "deploy(ToDo)"

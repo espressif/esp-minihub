@@ -37,6 +37,9 @@ static cJSON *devices_to_json(const minihub_ble_mesh_device_t *devs, size_t coun
         cJSON_AddNumberToObject(obj, "unicast", d->unicast);
         cJSON_AddNumberToObject(obj, "elem_num", d->elem_num);
         cJSON_AddNumberToObject(obj, "caps", d->caps);
+        cJSON_AddNumberToObject(obj, "cid", d->cid);
+        cJSON_AddNumberToObject(obj, "pid", d->pid);
+        cJSON_AddNumberToObject(obj, "vid", d->vid);
         cJSON_AddItemToArray(arr, obj);
     }
     return arr;
@@ -61,6 +64,9 @@ static esp_err_t devices_from_json(const cJSON *arr, minihub_ble_mesh_device_t *
         const cJSON *unicast = cJSON_GetObjectItem(item, "unicast");
         const cJSON *elem_num = cJSON_GetObjectItem(item, "elem_num");
         const cJSON *caps = cJSON_GetObjectItem(item, "caps");
+        const cJSON *cid = cJSON_GetObjectItem(item, "cid");
+        const cJSON *pid = cJSON_GetObjectItem(item, "pid");
+        const cJSON *vid = cJSON_GetObjectItem(item, "vid");
         if (!cJSON_IsString(point_id) || !cJSON_IsString(type)) {
             continue;
         }
@@ -81,6 +87,15 @@ static esp_err_t devices_from_json(const cJSON *arr, minihub_ble_mesh_device_t *
             d->caps = (uint8_t)caps->valuedouble;
         } else {
             d->caps = MINIHUB_BM_CAP_ONOFF;
+        }
+        if (cJSON_IsNumber(cid)) {
+            d->cid = (uint16_t)cid->valuedouble;
+        }
+        if (cJSON_IsNumber(pid)) {
+            d->pid = (uint16_t)pid->valuedouble;
+        }
+        if (cJSON_IsNumber(vid)) {
+            d->vid = (uint16_t)vid->valuedouble;
         }
         n++;
     }

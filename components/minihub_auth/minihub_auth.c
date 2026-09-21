@@ -22,7 +22,8 @@ static char s_token[65];
 static uint8_t s_pw_sha[32];
 static bool s_pw_set;
 static char s_sess_hex[MINIHUB_AUTH_SESS_HEX_LEN + 1];
-static int64_t s_sess_until_us;
+static int64_t s_sess_idle_until_us;
+static int64_t s_sess_abs_until_us;
 static char s_cookie_hdr[160];
 
 static bool web_login_on(void)
@@ -39,11 +40,37 @@ bool minihub_auth_web_login_enabled(void)
     return web_login_on();
 }
 
-static void sess_touch(httpd_req_t *req)
+static void sess_touch_idle(httpd_req_t *req)
 {
-    s_sess_until_us = esp_timer_get_time() + (int64_t)MINIHUB_AUTH_SESS_SEC * 1000000LL;
+    s_sess_idle_until_us = esp_timer_get_time() + (int64_t)MINIHUB_AUTH_SESS_SEC * 1000000LL;
     if (req) {
         minihub_auth_set_session_cookie(req, s_sess_hex);
+    }
+}
+
+static void sess_start(httpd_req_t *req)
+{
+    int64_t now = esp_timer_get_time();
+    s_sess_idle_until_us = now + (int64_t)MINIHUB_AUTH_SESS_SEC * 1000000LL;
+    s_sess_abs_until_us = now + (int64_t)MINIHUB_AUTH_SESS_ABS_SEC * 1000000LL;
+    if (req) {
+        minihub_auth_set_session_cookie(req, s_sess_hex);
+    }
+}
+
+static bool sess_alive(void)
+{
+    int64_t now = esp_timer_get_time();
+    return s_sess_hex[0] && now <= s_sess_idle_until_us && now <= s_sess_abs_until_us;
+}
+
+static void sess_clear(httpd_req_t *req)
+{
+    s_sess_hex[0] = '\0';
+    s_sess_idle_until_us = 0;
+    s_sess_abs_until_us = 0;
+    if (req) {
+        minihub_auth_clear_session_cookie(req);
     }
 }
 
@@ -123,7 +150,8 @@ esp_err_t minihub_auth_init(void)
 {
     s_token[0] = '\0';
     s_sess_hex[0] = '\0';
-    s_sess_until_us = 0;
+    s_sess_idle_until_us = 0;
+    s_sess_abs_until_us = 0;
     s_pw_set = false;
     memset(s_pw_sha, 0, sizeof(s_pw_sha));
 
@@ -173,11 +201,11 @@ esp_err_t minihub_auth_check(httpd_req_t *req)
     if (web_login_on()) {
         char sess[MINIHUB_AUTH_SESS_HEX_LEN + 1];
         if (s_sess_hex[0] && cookie_mh_sess(req, sess) && strcmp(sess, s_sess_hex) == 0) {
-            if (esp_timer_get_time() > s_sess_until_us) {
-                s_sess_hex[0] = '\0';
-                s_sess_until_us = 0;
+            if (!sess_alive()) {
+                sess_clear(req);
             } else {
-                sess_touch(req);
+                /* Any authenticated use slides idle (GET polls count as presence). */
+                sess_touch_idle(req);
                 return ESP_OK;
             }
         }
@@ -198,12 +226,11 @@ esp_err_t minihub_auth_check_token(const char *token)
         return ESP_ERR_INVALID_STATE;
     }
     if (web_login_on() && s_sess_hex[0] && strcmp(token, s_sess_hex) == 0) {
-        if (esp_timer_get_time() <= s_sess_until_us) {
-            sess_touch(NULL);
+        if (sess_alive()) {
+            sess_touch_idle(NULL);
             return ESP_OK;
         }
-        s_sess_hex[0] = '\0';
-        s_sess_until_us = 0;
+        sess_clear(NULL);
     }
     if (s_token[0] && strcmp(token, s_token) == 0) {
         return ESP_OK;
@@ -275,7 +302,7 @@ esp_err_t minihub_auth_login(const char *username, const char *password,
     uint8_t rnd[32];
     esp_fill_random(rnd, sizeof(rnd));
     bytes_to_hex(rnd, sizeof(rnd), s_sess_hex);
-    sess_touch(NULL);
+    sess_start(NULL);
     if (sess_hex) {
         memcpy(sess_hex, s_sess_hex, MINIHUB_AUTH_SESS_HEX_LEN + 1);
     }
@@ -284,8 +311,7 @@ esp_err_t minihub_auth_login(const char *username, const char *password,
 
 void minihub_auth_logout(void)
 {
-    s_sess_hex[0] = '\0';
-    s_sess_until_us = 0;
+    sess_clear(NULL);
 }
 
 void minihub_auth_set_session_cookie(httpd_req_t *req, const char *sess_hex)

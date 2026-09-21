@@ -248,10 +248,30 @@ function localName() {
     return localStorage.getItem('minihub_display_name') || '用户';
 }
 
+/* Compact Store upgrade control after group title+version+count — only when update exists. */
+function sectionModuleUpgradeHtml(ad) {
+    const list = (typeof modules !== 'undefined' && Array.isArray(modules)) ? modules : [];
+    const mod = list.find(function (x) {
+        return x && x.installed !== false && (x.adapter === ad || x.id === ad);
+    });
+    if (!mod || mod.managed === false) return '';
+    const cat = (typeof storeCatalog !== 'undefined' && Array.isArray(storeCatalog))
+        ? storeCatalog.find(function (x) { return x && x.id === mod.id; })
+        : null;
+    const up = !!(cat && cat.upgrade_available) || !!mod.binary_stale;
+    if (!up) return '';
+    const kind = (cat && cat.kind === 'pack') ? 'pack' : 'module';
+    let label = '升级';
+    if (cat && cat.version) label += ' ' + cat.version;
+    return '<button class="btn-sm on section-mod-upg" type="button" title="模块升级（MiniHub Store）" onclick="storeUpgrade(\'' +
+        kind + '\',\'' + esc(mod.id) + '\')">' + esc(label) + '</button>';
+}
+
 function sectionHeader(ad, count) {
     const ver = adapterVersion(ad);
     const verTag = ver ? '<span class="mod-acct">v' + esc(ver) + '</span>' : ''; /* Show actions on overview and filtered view — not only when filter===ad. */
     const showActs = (filter === 'all' || filter === ad);
+    const upg = sectionModuleUpgradeHtml(ad);
     const mod = authModuleFor(ad);
     if (mod) {
         const mid = mod.id;
@@ -272,19 +292,19 @@ function sectionHeader(ad, count) {
                 }
             }
         }
-        return '<div class="section-h auth-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + acct + '<span>' + count + '</span>' + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
+        return '<div class="section-h auth-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + acct + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'matter') {
         const st = matterStatus.ready ? '<span class="mod-acct">控制器就绪</span>' : (showActs ? '<span class="mod-acct off">未就绪</span>' : '');
         const acts = showActs ? '<button class="btn-sm on" type="button" onclick="openMatterAdd()">添加</button>' : '';
-        return '<div class="section-h matter-section-h"><span>' + (ADAPTER_LABEL[ad] || ad) + '</span>' + verTag + st + '<span>' + count + '</span>' + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
+        return '<div class="section-h matter-section-h"><span>' + (ADAPTER_LABEL[ad] || ad) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'zigbee') {
         const zbOn = !!radioProv.zigbee_permit_join;
         const bmBusy = !!(radioProv.ble_mesh_provisioning || radioProv.ble_mesh_permit_provision);
         const st = zbOn ? '<span class="mod-acct">正在入网</span>' : (bmBusy ? '<span class="mod-acct off">BLE Mesh 配网中</span>' : '');
         const acts = showActs ? (zbOn ? '<button class="btn-sm" type="button" onclick="stopZigbeeJoin()">停止入网</button>' : (bmBusy ? '<button class="btn-sm on" type="button" disabled title="BLE Mesh 配网中">允许入网</button>' : '<button class="btn-sm on" type="button" onclick="permitZigbeeJoin()">允许入网</button>')) : '';
-        return '<div class="section-h radio-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + st + '<span>' + count + '</span>' + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
+        return '<div class="section-h radio-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'ble_mesh') {
         const bmPermit = !!radioProv.ble_mesh_permit_provision;
@@ -293,9 +313,9 @@ function sectionHeader(ad, count) {
         const zbBusy = !!radioProv.zigbee_permit_join;
         const st = bmOn ? '<span class="mod-acct">正在配网</span>' : (zbBusy ? '<span class="mod-acct off">Zigbee 入网中</span>' : '');
         const acts = showActs ? (bmPermit ? '<button class="btn-sm" type="button" onclick="stopBleMeshProvision()">停止配网</button>' : (bmProv ? '<button class="btn-sm on" type="button" disabled>正在配网</button>' : (zbBusy ? '<button class="btn-sm on" type="button" disabled title="Zigbee 入网中">允许配网</button>' : '<button class="btn-sm on" type="button" onclick="permitBleMeshProvision()">允许配网</button>'))) : '';
-        return '<div class="section-h radio-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + st + '<span>' + count + '</span>' + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
+        return '<div class="section-h radio-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
-    return '<div class="section-h">' + esc(adapterLabel(ad)) + verTag + '<span>' + count + '</span></div>';
+    return '<div class="section-h">' + esc(adapterLabel(ad)) + verTag + '<span>' + count + '</span>' + upg + '</div>';
 }
 let pointsLoading = false,
     lastPtsSig = '',
@@ -335,7 +355,7 @@ function renderRules() {
             '<button class="btn-sm on" type="button" style="margin-left:8px" onclick="rulesEditOpen(\'' + escAttr(rule.id) + '\')">编辑</button>' +
             '<div class="dcard" style="margin-top:12px">' +
             '<div class="card-top"><div class="card-name">' + esc(rule.name || rule.id || '规则') + '</div>' + (dis ? '' : '<span class="badge sensor">启用</span>') + '</div>' +
-            '<div class="card-meta"><span>' + esc(rule.id || '') + '</span>' + (dis ? '<span>已禁用</span>' : '') + '</div>' +
+            (dis ? '<div class="card-meta"><span>已禁用</span></div>' : '') +
             '<div class="rule-flow">' + ruleStepHtml('当 · 触发', w) + '<div class="rule-arrow">↓</div>' + ruleStepHtml('且 · 条件', i) + '<div class="rule-arrow">↓</div>' + ruleStepHtml('则 · 动作', th) + '</div>' +
             '<details class="rule-tech"><summary>技术详情（JSON）</summary>' +
             '<h4 class="rule-sec">when</h4><pre class="rule-pre">' + esc(JSON.stringify(rule.when || {}, null, 2)) + '</pre>' +
@@ -371,7 +391,7 @@ function propsHtml(p) {
     if (!p.props || typeof p.props !== 'object') return '';
     const meterOrder = ['power_w', 'voltage_v', 'current_a', 'energy_wh'];
     const otherOrder = ['humidity'];
-    const skip = new Set(['extras', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'no_control', 'detail_rows', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'illumination', 'illumination_label', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
+    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'illumination', 'illumination_label', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
     const labels = {
         power_w: '功率',
         voltage_v: '电压',
@@ -621,21 +641,149 @@ async function openDeviceLog(id, ev) {
     }
 }
 
+/*
+ * Overview cards = devices, not raw /api/points rows.
+ * Preferred: one point with props.params (sim.color_bulb).
+ * Legacy: group protocol.endpoint.parameter into one card so brightness/hue
+ * never become their own toggle cards and 能力点 counts devices.
+ */
+function overviewParamsBlobNonEmpty(paramsBlob) {
+    if (!paramsBlob || typeof paramsBlob !== 'object') return false;
+    if (Array.isArray(paramsBlob)) return paramsBlob.length > 0;
+    return Object.keys(paramsBlob).length > 0;
+}
+
+function overviewCollapsePoints(points) {
+    const byKey = Object.create(null);
+    const order = [];
+    if (!Array.isArray(points)) return [];
+
+    function ensure(key, seed) {
+        if (!byKey[key]) {
+            byKey[key] = seed;
+            order.push(key);
+        }
+        return byKey[key];
+    }
+
+    points.forEach(function (pt) {
+        if (!pt || typeof pt.point_id !== 'string') return;
+        if (pt.props && pt.props.visible === false) return;
+
+        const pr = (pt.props && typeof pt.props === 'object') ? pt.props : null;
+        const paramsBlob = pr && pr.params;
+        const seg = pt.point_id.split('.');
+        if (seg.length < 2) return;
+
+        const hasParams = overviewParamsBlobNonEmpty(paramsBlob);
+
+        /* Device-level: non-empty props.params, or 2-segment id. */
+        if (hasParams || seg.length === 2) {
+            const card = Object.assign({}, pt);
+            card.props = Object.assign({}, pr || {});
+            if (hasParams && !card.props.params) card.props.params = paramsBlob;
+            ensure(pt.point_id, card);
+            return;
+        }
+
+        /* Legacy per-param: thread.color_bulb.power → one device card.
+         * Empty props.params on a 3-seg id must NOT take the device-level path. */
+        if (seg.length >= 3) {
+            const parameter = seg[seg.length - 1];
+            const endpoint = seg[seg.length - 2];
+            const protocol = seg.slice(0, -2).join('.');
+            const key = protocol + '.' + endpoint;
+            let card = byKey[key];
+            if (!card) {
+                card = {
+                    point_id: pt.point_id,
+                    type: pt.type || '',
+                    adapter: pt.adapter || '',
+                    online: !!pt.online,
+                    value: pt.value,
+                    props: {
+                        name: endpoint,
+                        params: Object.create(null)
+                    },
+                    _legacy_device: true
+                };
+                byKey[key] = card;
+                order.push(key);
+            }
+            if (pt.online) card.online = true;
+            if (pt.type && !card.type) card.type = pt.type;
+            if (pt.adapter && !card.adapter) card.adapter = pt.adapter;
+            const ent = {
+                value: pt.value != null ? String(pt.value) : ''
+            };
+            if (pr && pr.access != null) ent.access = String(pr.access);
+            if (pr && pr.visible === false) ent.visible = false;
+            card.props.params[parameter] = ent;
+            /* Prefer power point_id for toggle/cmd on old adapters. */
+            if (parameter === 'power') {
+                card.point_id = pt.point_id;
+                card.value = pt.value;
+                card._has_power = true;
+            }
+            return;
+        }
+
+        ensure(pt.point_id, pt);
+    });
+
+    return order.map(function (k) {
+        return byKey[k];
+    });
+}
+
 function cardHtml(p) {
+    if (p && p.props && p.props.visible === false) return '';   /* internal-use point: not rendered on the card */
     const isCover = p.type === 'cover';
     const pct = isCover ? parseInt(p.value, 10) : NaN;
-    const on = isCover ? (Number.isFinite(pct) && pct > 0) : (p.value === 'on' || p.value === 'true' || p.value === 'open' || p.value === 'left_open' || p.value === 'online' || (parseInt(p.value) || 0) > 0);
+    /* Power summary from props.params.power (or flat value). Never treat brightness "80" as on. */
+    const powerVal = pointParamVal(p, 'power');
+    const powerOn = powerVal === 'on' || powerVal === 'true' || powerVal === true ||
+        p.value === 'on' || p.value === 'true' || p.value === 'open' || p.value === 'left_open' || p.value === 'online';
+    const on = isCover ? (Number.isFinite(pct) && pct > 0) : (powerOn || (!(powerVal != null || p.value === 'on' || p.value === 'off' || p.value === 'true' || p.value === 'false') && (parseInt(p.value) || 0) > 0));
     const dis = !p.online ? ' disabled' : '';
     const noCtrl = !!(p.props && p.props.no_control);
+    const readOnly = !!(p.props && p.props.access === 'R');   /* read-only param: show value, no control */
+    /* Overview card toggle = power only. Extra params open generic catalog detail / Devices. */
+    const hasParams = !!(p.props && p.props.params && typeof p.props.params === 'object');
     const ctrlTypes = ['switch', 'light', 'router', 'car', 'camera', 'television', 'air-conditioner', 'fridge', 'water_purifier', 'water_heater', 'appliance', 'washer', 'dishwasher', 'oven'];
-    const ctrl = ((ctrlTypes.includes(p.type) && !noCtrl)) ? '<label class="toggle"><input type="checkbox" data-id="' + p.point_id + '"' + (on ? ' checked' : '') + dis + '>    <span class="slider"></span></label>' : '';
+    const allowToggle = ctrlTypes.includes(p.type) && !noCtrl && !readOnly &&
+        (!hasParams || powerVal != null || p.value === 'on' || p.value === 'off' || p.value === 'true' || p.value === 'false' || !p.value);
+    const ctrl = allowToggle ? '<label class="toggle"><input type="checkbox" data-id="' + p.point_id + '"' + (on ? ' checked' : '') + dis + '>    <span class="slider"></span></label>' : '';
     const delBtn = (p.adapter === 'matter') ? '<button class="btn-sm bad" type="button" onclick="deleteMatterDevice(\'' + p.point_id + '\')">删除</button>' : (p.adapter === 'zigbee') ? '<button class="btn-sm bad" type="button" onclick="deleteZigbeeDevice(\'' + p.point_id + '\')">删除</button>' : (p.adapter === 'ble_mesh') ? '<button class="btn-sm bad" type="button" onclick="deleteBleMeshDevice(\'' + p.point_id + '\')">删除</button>' : '';
     const short = pointDisplayName(p);
     const room = pointRoomName(p);
     const apDetail = ['fridge', 'water_purifier', 'water_heater', 'appliance'].includes(p.type);
     const plugDetail = p.type === 'switch' && switchHasDetail(p);
-    const clickCls = p.type === 'light' ? ' light-click' : (p.type === 'air-conditioner' ? ' ac-click' : (p.type === 'cover' ? ' cover-click' : (apDetail ? ' appliance-click' : (p.type === 'camera' ? ' camera-click' : (p.type === 'speaker' ? ' speaker-click' : (plugDetail ? ' plug-click' : ''))))));
-    const clickFn = p.type === 'light' ? 'openLightDetail' : (p.type === 'air-conditioner' ? 'openAcDetail' : (p.type === 'cover' ? 'openCoverDetail' : (apDetail ? 'openApplianceDetail' : (p.type === 'camera' ? 'openCameraDetail' : (p.type === 'speaker' ? 'openSpeakerDetail' : (plugDetail ? 'openPlugDetail' : ''))))));
+    /* Catalog detail for any device with props.params — not light-only. */
+    let clickCls = '';
+    let clickFn = '';
+    if (hasParams) {
+        clickCls = ' device-click';
+        clickFn = 'openDeviceDetail';
+    } else if (p.type === 'air-conditioner') {
+        clickCls = ' ac-click';
+        clickFn = 'openAcDetail';
+    } else if (p.type === 'cover') {
+        clickCls = ' cover-click';
+        clickFn = 'openCoverDetail';
+    } else if (apDetail) {
+        clickCls = ' appliance-click';
+        clickFn = 'openApplianceDetail';
+    } else if (p.type === 'camera') {
+        clickCls = ' camera-click';
+        clickFn = 'openCameraDetail';
+    } else if (p.type === 'speaker') {
+        clickCls = ' speaker-click';
+        clickFn = 'openSpeakerDetail';
+    } else if (plugDetail) {
+        clickCls = ' plug-click';
+        clickFn = 'openPlugDetail';
+    }
     const clickAttr = clickFn ? (' onclick="' + clickFn + '(\'' + p.point_id + '\',event)"') : '';
     const valShow = (function() {
         if (p.type === 'button') return (p.online ? '就绪' : '离线');
@@ -645,12 +793,25 @@ function cardHtml(p) {
         if (p.value === 'closed') return '关闭';
         if (p.value === 'open' && p.type === 'binary_sensor') return '打开';
         if (p.value === 'online' || p.value === 'offline') return p.value === 'online' ? '在线' : '离线';
-        if (noCtrl && (p.value === 'on' || p.value === 'off')) return on ? '合闸' : '分闸';
-        if (p.value === 'on' || p.value === 'off') return on ? '开' : '关';
+        if (noCtrl && (p.value === 'on' || p.value === 'off' || powerVal === 'on' || powerVal === 'off')) return on ? '合闸' : '分闸';
+        if (p.value === 'on' || p.value === 'off' || powerVal === 'on' || powerVal === 'off') return on ? '开' : '关';
+        if (hasParams && (powerVal != null || p.value === 'on' || p.value === 'off')) return on ? '开' : '关';
         if (p.value === 'unknown' || p.value === 'idle') return p.online ? '—' : '离线';
         return p.value;
     })();
-    return '<div class="dcard' + clickCls + (p.online ? '' : ' offline') + '"' + clickAttr + '><div class="card-top"><div class="card-name">' + (TYPE_ICON[p.type] || '') + ' ' + esc(short) + '</div><span class="badge ' + p.type + '">' + (TYPE_LABEL[p.type] || p.type) + '</span></div>' + '<div class="card-meta"><span>' + ((p.props && p.props.transport) ? (esc(String(p.props.transport)) + ' · ') : '') + (p.online ? '在线' : '离线') + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + (on ? 'on' : 'off') + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">日志</button>' : '') + delBtn + ctrl + '</div></div>';
+    /* Catalog type avatar (/img/devices/light.svg); dim with power when known. */
+    const dimByPower = powerVal != null || p.value === 'on' || p.value === 'off' ||
+        p.value === 'true' || p.value === 'false' || allowToggle;
+    const imageUrl = (typeof dwTypeImageUrl === 'function') ? dwTypeImageUrl(p.type) : '';
+    let iconHtml = '';
+    if (imageUrl && typeof dwDeviceIconHtml === 'function') {
+        iconHtml = dwDeviceIconHtml(imageUrl, dimByPower ? !!on : null);
+    } else if (TYPE_ICON[p.type]) {
+        iconHtml = '<span class="dw-device-icon-fallback">' + TYPE_ICON[p.type] + '</span>';
+    }
+    const proto = (typeof pointProtocol === 'function') ? pointProtocol(p) : '';
+    const onlineLab = (p.online ? '在线' : '离线') + (proto ? (' · ' + esc(proto)) : '');
+    return '<div class="dcard' + clickCls + (p.online ? '' : ' offline') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + (on ? 'on' : 'off') + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">日志</button>' : '') + delBtn + ctrl + '</div></div>';
 }
 
 async function storeAct(kind, id, enabled) {
@@ -1521,83 +1682,19 @@ async function deleteBleMeshDevice(pointId) {
         toast('网络错误');
     }
 }
-let lightDetailId = null,
-    lightModeTab = 'ct',
-    lightCtOpen = false;
-const LIGHT_CT_PRESETS = [{
-    k: 2700,
-    c: '#f97316'
-}, {
-    k: 3500,
-    c: '#fdba74'
-}, {
-    k: 4500,
-    c: '#fef3c7'
-}, {
-    k: 5500,
-    c: '#e0f2fe'
-}];
-
-function lightProps(p) {
-    return (p && p.props && typeof p.props === 'object') ? p.props : {};
-}
-
-function lightHasBright(p) {
-    const pr = lightProps(p);
-    if (pr.supports_brightness === false) return false;
-    return pr.supports_brightness === true || pr.brightness != null;
-}
-
-function lightHasCt(p) {
-    const pr = lightProps(p);
-    if (pr.supports_color_temp === false) return false;
-    return pr.supports_color_temp === true || pr.color_temp != null || pr.temperature != null;
-}
-
-function lightHasColor(p) {
-    const pr = lightProps(p); /* RGB only when Spec/adapter explicitly supports color — never infer for CT-only bulbs */
-    return pr.supports_color === true;
-}
-
-function lightCtVal(p) {
-    const pr = lightProps(p);
-    const v = pr.color_temp != null ? pr.color_temp : pr.temperature;
-    return Number(v) || 2700;
-}
-
-function lightBrightVal(p) {
-    const pr = lightProps(p);
-    if (typeof pr.brightness === 'number') return Math.min(100, Math.max(1, pr.brightness | 0));
-    const n = parseInt(p.value, 10);
-    return n > 0 ? Math.min(100, n) : 100;
-}
-
-function lightColorVal(p) {
-    const pr = lightProps(p);
-    let c = String(pr.color || 'ffffff').replace(/^#/, '');
-    if (c.length !== 6) c = 'ffffff';
-    return '#' + c;
-}
-
-function lightMode(p) {
-    const pr = lightProps(p);
-    if (pr.color_mode === 'rgb' || pr.color_mode === 'ct') return pr.color_mode;
-    return 'ct';
-}
-
-function setLightModeTab(mode) {
-    lightModeTab = mode;
-    const ct = document.getElementById('light-mode-ct');
-    const rgb = document.getElementById('light-mode-rgb');
-    if (ct) ct.classList.toggle('on', mode === 'ct');
-    if (rgb) rgb.classList.toggle('on', mode === 'rgb');
-    const cb = document.getElementById('light-color-block');
-    if (cb && mode === 'rgb') {
-        /* shown by openLightDetail */ }
-    if (cb && mode === 'ct') {
-        const p = pts.find(x => x.point_id === lightDetailId);
-        if (p && !lightHasColor(p)) cb.hidden = true;
+/* Read props.params.<name>.value (or flat legacy props.<name>). Type-agnostic. */
+function pointParamVal(p, name) {
+    const pr = (p && p.props && typeof p.props === 'object') ? p.props : {};
+    if (pr.params && typeof pr.params === 'object' && !Array.isArray(pr.params)) {
+        const ent = pr.params[name];
+        if (ent && ent.value != null) return ent.value;
     }
+    if (Array.isArray(pr.params)) {
+        const ent = pr.params.find(e => e && e.name === name);
+        if (ent && ent.value != null) return ent.value;
+    }
+    if (pr[name] != null) return pr[name];
+    return null;
 }
 
 function switchHasDetail(p) {
@@ -1882,190 +1979,6 @@ function bindHaParityControls() {
     }
 }
 
-function lightIsOn(p) {
-    return !!(p && (p.value === 'on' || p.value === 'true' || p.value === true));
-}
-
-function setLightCtExpanded(open) {
-    lightCtOpen = true;
-    const sl = document.getElementById('light-ct-slider');
-    const ch = document.getElementById('light-ct-chev');
-    if (sl) sl.hidden = false;
-    if (ch) ch.hidden = true;
-}
-
-function renderLightCtPresets(kelvin, online) {
-    const row = document.getElementById('light-preset-row');
-    if (!row) return;
-    const k = Number(kelvin) || 2700;
-    row.innerHTML = LIGHT_CT_PRESETS.map(p => {
-        const on = Math.abs(p.k - k) <= 150 ? ' on' : '';
-        const dis = online ? '' : ' disabled';
-        return '<button type="button" class="light-preset' + on + '" data-k="' + p.k + '" style="background:' + p.c + '"' + dis + ' title="' + p.k + 'K" aria-label="色温 ' + p.k + 'K"></button>';
-    }).join('');
-    row.querySelectorAll('.light-preset').forEach(btn => {
-        btn.onclick = () => {
-            if (!lightDetailId || btn.disabled) return;
-            const kk = parseInt(btn.getAttribute('data-k'), 10) || 2700;
-            const ct = document.getElementById('light-ct');
-            if (ct) ct.value = kk;
-            const lab = document.getElementById('light-ct-val');
-            if (lab) lab.textContent = '色温 ' + kk + 'K';
-            renderLightCtPresets(kk, true);
-            cmd(lightDetailId, 'set_color_temp', {
-                color_temp: kk,
-                temperature: kk
-            });
-        };
-    });
-}
-
-function syncLightPowerUi(p) {
-    const on = lightIsOn(p);
-    const btn = document.getElementById('light-power-btn');
-    const lab = document.getElementById('light-power-label');
-    const st = document.getElementById('light-detail-status');
-    if (btn) {
-        btn.classList.toggle('on', on);
-        btn.classList.toggle('off', !on);
-        btn.disabled = !p.online;
-    }
-    if (lab) lab.textContent = on ? '关闭' : '开启';
-    if (st) st.textContent = p.online ? (on ? '已开启' : '已关闭') : '离线';
-}
-
-function closeLightDetail() {
-    const m = document.getElementById('light-detail-modal');
-    if (m) m.hidden = true;
-    lightDetailId = null;
-    setLightCtExpanded(false);
-}
-
-function openLightDetail(id, ev) {
-    if (ev && ev.target && (ev.target.closest('.toggle') || ev.target.closest('button') || ev.target.closest('input') || ev.target.closest('.card-actions'))) return;
-    const p = pts.find(x => x.point_id === id);
-    if (!p || p.type !== 'light') return;
-    lightDetailId = id;
-    const name = (p.props && p.props.name) || p.point_id.split('/').pop();
-    document.getElementById('light-detail-title').textContent = name;
-    document.getElementById('light-detail-meta').textContent = p.point_id;
-    syncLightPowerUi(p);
-    const hasB = lightHasBright(p),
-        hasCt = lightHasCt(p),
-        hasC = lightHasColor(p);
-    document.getElementById('light-bright-block').hidden = !hasB;
-    document.getElementById('light-ct-block').hidden = !hasCt;
-    document.getElementById('light-mode-block').hidden = !(hasCt && hasC);
-    const _lcb = document.getElementById('light-color-block');
-    if (_lcb) {
-        _lcb.hidden = !hasC;
-        if (!hasC) _lcb.setAttribute('hidden', '');
-    }
-    setLightCtExpanded(true);
-    const pr = document.getElementById('light-presets');
-    if (pr) pr.hidden = !hasCt;
-    if (hasB) {
-        const b = lightBrightVal(p);
-        document.getElementById('light-bright').value = b;
-        document.getElementById('light-bright-val').textContent = b + '%';
-        document.getElementById('light-bright').disabled = !p.online;
-    }
-    if (hasCt) {
-        const ct = lightCtVal(p);
-        document.getElementById('light-ct').value = ct;
-        document.getElementById('light-ct-val').textContent = '色温 ' + ct + 'K';
-        document.getElementById('light-ct').disabled = !p.online;
-        renderLightCtPresets(ct, !!p.online);
-    }
-    if (hasC) {
-        setLightColorUI(lightColorVal(p));
-        document.getElementById('light-color').disabled = !p.online;
-    }
-    if (hasCt && hasC) setLightModeTab(lightMode(p) === 'rgb' ? 'rgb' : 'ct');
-    else if (hasC) setLightModeTab('rgb');
-    else {
-        setLightModeTab('ct');
-        document.getElementById('light-color-block').hidden = true;
-    }
-    document.getElementById('light-detail-modal').hidden = false;
-}
-
-function setLightColorUI(hex) {
-    const c = document.getElementById('light-color');
-    const sw = document.getElementById('light-color-swatch');
-    if (c) c.value = hex;
-    if (sw) sw.style.background = hex;
-}
-
-function bindLightDetailControls() {
-    const b = document.getElementById('light-bright');
-    const ct = document.getElementById('light-ct');
-    const c = document.getElementById('light-color');
-    const pow = document.getElementById('light-power-btn');
-    const tog = document.getElementById('light-ct-toggle');
-    if (pow && !pow._bound) {
-        pow._bound = 1;
-        pow.addEventListener('click', () => {
-            if (!lightDetailId || pow.disabled) return;
-            const p = pts.find(x => x.point_id === lightDetailId);
-            cmd(lightDetailId, lightIsOn(p) ? 'turn_off' : 'turn_on');
-        });
-    }
-    if (tog && !tog._bound) {
-        tog._bound = 1;
-        const act = () => {
-            if (document.getElementById('light-ct-block').hidden) return;
-            setLightCtExpanded(!lightCtOpen);
-        };
-        tog.addEventListener('click', act);
-        tog.addEventListener('keydown', e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                act();
-            }
-        });
-    }
-    if (b && !b._bound) {
-        b._bound = 1;
-        b.addEventListener('input', () => {
-            document.getElementById('light-bright-val').textContent = b.value + '%';
-        });
-        b.addEventListener('change', () => {
-            if (!lightDetailId) return;
-            cmd(lightDetailId, 'set_brightness', {
-                brightness: parseInt(b.value, 10) || 1
-            });
-        });
-    }
-    if (ct && !ct._bound) {
-        ct._bound = 1;
-        ct.addEventListener('input', () => {
-            document.getElementById('light-ct-val').textContent = '色温 ' + ct.value + 'K';
-            renderLightCtPresets(parseInt(ct.value, 10) || 2700, !ct.disabled);
-        });
-        ct.addEventListener('change', () => {
-            if (!lightDetailId) return;
-            const k = parseInt(ct.value, 10) || 2700;
-            cmd(lightDetailId, 'set_color_temp', {
-                color_temp: k,
-                temperature: k
-            });
-        });
-    }
-    if (c && !c._bound) {
-        c._bound = 1;
-        c.addEventListener('input', () => {
-            setLightColorUI(c.value);
-        });
-        c.addEventListener('change', () => {
-            if (!lightDetailId) return;
-            setLightColorUI(c.value);
-            cmd(lightDetailId, 'set_color', {
-                color: c.value
-            });
-        });
-    }
-}
 
 let applianceDetailId = null;
 
@@ -2082,7 +1995,7 @@ function openApplianceDetail(id, ev) {
     applianceDetailId = id;
     const name = (p.props && p.props.name) || pointDisplayName(p);
     document.getElementById('appliance-detail-title').textContent = (TYPE_ICON[p.type] || '') + ' ' + name;
-    document.getElementById('appliance-detail-meta').textContent = (TYPE_LABEL[p.type] || p.type) + (p.online ? ' · 在线' : ' · 离线');
+    document.getElementById('appliance-detail-meta').textContent = ((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + (p.online ? ' · 在线' : ' · 离线');
     const on = p.value === 'on' || p.value === 'true';
     const pow = document.getElementById('appliance-power');
     const noCtrl = !!(p.props && p.props.no_control);

@@ -209,6 +209,44 @@ static double apply_scale(double raw, float mult, float div, float offset)
     return (raw * (double)mult) / (double)div + (double)offset;
 }
 
+/** Ensure props.params exists; drop a flat legacy top-level copy of `prop`. */
+static cJSON *ensure_params_obj(cJSON *props, const char *prop)
+{
+    if (!props) {
+        return NULL;
+    }
+    if (prop && prop[0]) {
+        cJSON_DeleteItemFromObject(props, prop);
+    }
+    cJSON *params = cJSON_GetObjectItem(props, "params");
+    if (!cJSON_IsObject(params)) {
+        cJSON_DeleteItemFromObject(props, "params");
+        params = cJSON_CreateObject();
+        if (!params) {
+            return NULL;
+        }
+        cJSON_AddItemToObject(props, "params", params);
+    }
+    return params;
+}
+
+static cJSON *ensure_param_entry(cJSON *params, const char *prop)
+{
+    if (!params || !prop || !prop[0]) {
+        return NULL;
+    }
+    cJSON *ent = cJSON_GetObjectItem(params, prop);
+    if (!cJSON_IsObject(ent)) {
+        cJSON_DeleteItemFromObject(params, prop);
+        ent = cJSON_CreateObject();
+        if (!ent) {
+            return NULL;
+        }
+        cJSON_AddItemToObject(params, prop, ent);
+    }
+    return ent;
+}
+
 static esp_err_t merge_prop_number(const char *point_id, const char *prop, double val)
 {
     minihub_point_t snap = {0};
@@ -226,8 +264,14 @@ static esp_err_t merge_prop_number(const char *point_id, const char *prop, doubl
     if (!props) {
         return ESP_ERR_NO_MEM;
     }
-    cJSON_DeleteItemFromObject(props, prop);
-    cJSON_AddNumberToObject(props, prop, val);
+    cJSON *params = ensure_params_obj(props, prop);
+    cJSON *ent = ensure_param_entry(params, prop);
+    if (!ent) {
+        cJSON_Delete(props);
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_DeleteItemFromObject(ent, "value");
+    cJSON_AddNumberToObject(ent, "value", val);
     esp_err_t err = minihub_point_set(point_id, value[0] ? value : "off", props);
     cJSON_Delete(props);
     return err;
@@ -250,8 +294,14 @@ static esp_err_t merge_prop_bool(const char *point_id, const char *prop, bool va
     if (!props) {
         return ESP_ERR_NO_MEM;
     }
-    cJSON_DeleteItemFromObject(props, prop);
-    cJSON_AddBoolToObject(props, prop, val);
+    cJSON *params = ensure_params_obj(props, prop);
+    cJSON *ent = ensure_param_entry(params, prop);
+    if (!ent) {
+        cJSON_Delete(props);
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_DeleteItemFromObject(ent, "value");
+    cJSON_AddBoolToObject(ent, "value", val);
     esp_err_t err = minihub_point_set(point_id, value[0] ? value : "off", props);
     cJSON_Delete(props);
     return err;

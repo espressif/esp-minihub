@@ -16,12 +16,13 @@ endif()
 
 set(_matter_srcs matter_sync.c)
 if(_matter_real)
-    list(APPEND _matter_srcs matter_ctrl.cpp matter_wifi_bootstrap.c)
+    list(APPEND _matter_srcs matter_ctrl.cpp matter_wifi_bootstrap.c matter_ota.cpp)
     # Always REQUIRES minihub_thread (stub when Thread off). Conditioning on
     # CONFIG_MINIHUB_THREAD_ADAPTER desyncs with sdkconfig and breaks
     # #include "minihub_thread.h" in matter_ctrl.cpp.
     list(APPEND _matter_requires
-        esp_matter esp_matter_controller chip minihub_provision esp_wifi minihub_thread)
+        esp_matter esp_matter_controller chip minihub_provision esp_wifi minihub_thread
+        minihub_core esp_http_server)
     message(STATUS "minihub_matter: linking esp-matter commissioner")
 else()
     list(APPEND _matter_srcs matter_stub.c)

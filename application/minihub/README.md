@@ -1,4 +1,4 @@
-# minihub (public Host)
+# minihub (generic Host)
 
 **Product:** `minihub` (this directory). Select with `-app minihub` / `MINIHUB_APP=minihub`.
 
@@ -16,19 +16,20 @@ Optional LCD recipe `config/sdkconfig/variants/lcd.yml`:
 ## Build
 
 ```bash
-./tools/build_firmware.py -app minihub zigbee build flash monitor
+./tools/build_firmware.py -app minihub build flash monitor
 
 cp application/minihub/config/sdkconfig/local.overrides.example \
    application/minihub/config/sdkconfig/local.overrides   # optional lab Wi-Fi
 ```
 
-Radio stacks: `zigbee` · `ble_mesh` · `matter`. See [docs/build.md](../../docs/build.md).
+Radio stacks: `zigbee` · `ble_mesh` · `matter`. See [docs/en/getting_started.rst](../../docs/en/getting_started.rst).
 
 ## Store / plugins
 
-See [docs/plugins_and_store.md](../../docs/plugins_and_store.md).
+See [docs/en/plugins/index.rst](../../docs/en/plugins/index.rst).
 
 ```bash
 ./tools/build_firmware.py -app minihub modules
+./tools/build_firmware.py -app minihub pack
 python3 tools/pack_store_module.py pack all
 ```

@@ -60,6 +60,11 @@ patch_marker() {
     echo "$m"
     return
   fi
+  m="$(grep -E '^\+.*minihub_psram_text_exec' "$1" | head -1 | sed 's/^+//' || true)"
+  if [[ -n "$m" ]]; then
+    echo "$m"
+    return
+  fi
   grep -E '^\+[^+]' "$1" | head -1 | sed 's/^+//'
 }
 

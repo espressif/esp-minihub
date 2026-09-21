@@ -18,6 +18,42 @@ if(CONFIG_MINIHUB_DYNAMIC_MODULES)
     endif()
 endif()
 
+set(_plugin_sdk_gen_dir "${CMAKE_BINARY_DIR}/minihub_plugin_sdk_check")
+set(_plugin_sdk_sizes_h "${_plugin_sdk_gen_dir}/plugin_sdk_sizes.h")
+set(_plugin_sdk_abi_c "${_plugin_sdk_gen_dir}/plugin_sdk_abi_check.c")
+get_filename_component(_mh_repo_for_sdk "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+set(_plugin_sdk_h "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk.h")
+
+if(CONFIG_MINIHUB_DYNAMIC_MODULES)
+    # Fail Host build if minihub_plugin_sdk.h drifts from allowlist / Host layouts.
+    file(MAKE_DIRECTORY "${_plugin_sdk_gen_dir}")
+    add_custom_command(
+        OUTPUT "${_plugin_sdk_sizes_h}" "${_plugin_sdk_abi_c}"
+        COMMAND python3 "${_mh_repo_for_sdk}/tools/check_plugin_sdk.py" emit-check
+            --cc "${CMAKE_C_COMPILER}"
+            --sdk "${_plugin_sdk_h}"
+            --sdk-inc "${_mh_repo_for_sdk}/docs/module_sdk/include"
+            --allowlist "${_mh_repo_for_sdk}/docs/module_sdk/host_export_allowlist.json"
+            --sizes-out "${_plugin_sdk_sizes_h}"
+            --check-out "${_plugin_sdk_abi_c}"
+        DEPENDS
+            "${_plugin_sdk_h}"
+            "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk/esp_idf.h"
+            "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk/lwip.h"
+            "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk/cjson.h"
+            "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk/mbedtls.h"
+            "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk/psa.h"
+            "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk/freertos.h"
+            "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk/minihub.h"
+            "${_mh_repo_for_sdk}/docs/module_sdk/host_export_allowlist.json"
+            "${_mh_repo_for_sdk}/tools/check_plugin_sdk.py"
+        COMMENT "Check Store L3 plugin SDK vs Host IDF/MiniHub ABI"
+        VERBATIM
+    )
+    set_source_files_properties("${_plugin_sdk_abi_c}" PROPERTIES GENERATED TRUE)
+    list(APPEND MOD_SRCS "${_plugin_sdk_abi_c}")
+endif()
+
 idf_component_register(
     SRCS ${MOD_SRCS}
     INCLUDE_DIRS "include"
@@ -25,6 +61,7 @@ idf_component_register(
 )
 
 if(CONFIG_MINIHUB_DYNAMIC_MODULES)
+    target_include_directories(${COMPONENT_LIB} PRIVATE "${_plugin_sdk_gen_dir}")
     target_compile_options(${COMPONENT_LIB} PRIVATE -fPIC)
     # elf_loader only exports INCLUDE_DIRS when CONFIG_ELF_LOADER is visible at
     # its first CMake pass; claw incremental builds can miss that. Force headers.

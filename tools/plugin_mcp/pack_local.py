@@ -97,6 +97,14 @@ def pack_plugin_dir(module_dir: Path, out_path: Path | None = None) -> dict[str,
             if ui.is_file():
                 zf.write(ui, "ui.json")
                 names.append("ui.json")
+            devices = module_dir / "devices.json"
+            if devices.is_file():
+                zf.write(devices, "devices.json")
+                names.append("devices.json")
+            catalog = module_dir / "catalog.json"
+            if catalog.is_file():
+                zf.write(catalog, "catalog.json")
+                names.append("catalog.json")
             web = module_dir / "web"
             if web.is_dir():
                 for path in sorted(web.rglob("*")):

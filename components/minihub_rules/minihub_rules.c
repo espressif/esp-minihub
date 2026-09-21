@@ -27,10 +27,14 @@ static const char *TAG = "minihub_rules";
 
 #define MAX_IF_CONDITIONS 4
 #define MAX_THEN_ACTIONS 4
+#define RULE_PARAM_MAX 32
+#define RULE_OP_MAX 8
 
 typedef struct {
     char point_id[MINIHUB_POINT_ID_MAX];
-    char equals[MINIHUB_VALUE_MAX];
+    char parameter[RULE_PARAM_MAX];
+    char op[RULE_OP_MAX];
+    char equals[MINIHUB_VALUE_MAX]; /* threshold / expected value (also JSON "value") */
 } if_condition_t;
 
 typedef struct {
@@ -48,7 +52,9 @@ typedef struct {
     bool enabled;
     char when_type[16];
     char point_id[MINIHUB_POINT_ID_MAX];
-    char equals[MINIHUB_VALUE_MAX];
+    char parameter[RULE_PARAM_MAX];
+    char op[RULE_OP_MAX];
+    char equals[MINIHUB_VALUE_MAX]; /* threshold / expected value (also JSON "value") */
     char time_at[8];
     if_condition_t if_cond[MAX_IF_CONDITIONS];
     size_t if_count;
@@ -93,21 +99,239 @@ static void rebuild_rule_index(void)
     }
 }
 
+/** Normalize op tokens: "=", "eq", "==" → eq; "<="/lt; "≦"/"<="/le; etc. */
+static void normalize_op(const char *raw, char *out, size_t out_sz)
+{
+    if (!out || out_sz == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (!raw || !raw[0]) {
+        strncpy(out, "eq", out_sz - 1);
+        return;
+    }
+    if (strcmp(raw, "eq") == 0 || strcmp(raw, "=") == 0 || strcmp(raw, "==") == 0) {
+        strncpy(out, "eq", out_sz - 1);
+    } else if (strcmp(raw, "ne") == 0 || strcmp(raw, "!=") == 0 || strcmp(raw, "<>") == 0) {
+        strncpy(out, "ne", out_sz - 1);
+    } else if (strcmp(raw, "lt") == 0 || strcmp(raw, "<") == 0) {
+        strncpy(out, "lt", out_sz - 1);
+    } else if (strcmp(raw, "le") == 0 || strcmp(raw, "<=") == 0 || strcmp(raw, "≦") == 0) {
+        strncpy(out, "le", out_sz - 1);
+    } else if (strcmp(raw, "gt") == 0 || strcmp(raw, ">") == 0) {
+        strncpy(out, "gt", out_sz - 1);
+    } else if (strcmp(raw, "ge") == 0 || strcmp(raw, ">=") == 0 || strcmp(raw, "≧") == 0) {
+        strncpy(out, "ge", out_sz - 1);
+    } else {
+        strncpy(out, "eq", out_sz - 1);
+    }
+    out[out_sz - 1] = '\0';
+}
+
+static bool json_value_to_str(const cJSON *v, char *out, size_t out_sz)
+{
+    if (!out || out_sz == 0) {
+        return false;
+    }
+    out[0] = '\0';
+    if (!v) {
+        return false;
+    }
+    if (cJSON_IsString(v) && v->valuestring) {
+        strncpy(out, v->valuestring, out_sz - 1);
+        out[out_sz - 1] = '\0';
+        return true;
+    }
+    if (cJSON_IsBool(v)) {
+        strncpy(out, cJSON_IsTrue(v) ? "true" : "false", out_sz - 1);
+        out[out_sz - 1] = '\0';
+        return true;
+    }
+    if (cJSON_IsNumber(v)) {
+        if (v->valuedouble == (double)v->valueint) {
+            snprintf(out, out_sz, "%d", v->valueint);
+        } else {
+            snprintf(out, out_sz, "%g", v->valuedouble);
+        }
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Read live value for a parameter from props.params.<name>.
+ * Entry may be a plain string/number or { "value": ... }.
+ * Empty parameter → use point summary `value` (legacy equals-on-summary).
+ */
+static bool resolve_compare_lhs(const minihub_point_t *snap, const char *parameter,
+                                char *out, size_t out_sz)
+{
+    if (!snap || !out || out_sz == 0) {
+        return false;
+    }
+    if (!parameter || parameter[0] == '\0') {
+        strncpy(out, snap->value, out_sz - 1);
+        out[out_sz - 1] = '\0';
+        return true;
+    }
+    if (!snap->props) {
+        return false;
+    }
+    const cJSON *params = cJSON_GetObjectItemCaseSensitive(snap->props, "params");
+    if (!cJSON_IsObject(params) && !cJSON_IsArray(params)) {
+        return false;
+    }
+    const cJSON *ent = NULL;
+    if (cJSON_IsObject(params)) {
+        ent = cJSON_GetObjectItemCaseSensitive(params, parameter);
+    } else {
+        cJSON *it = NULL;
+        cJSON_ArrayForEach(it, params) {
+            const cJSON *n = cJSON_GetObjectItemCaseSensitive(it, "name");
+            if (cJSON_IsString(n) && n->valuestring && strcmp(n->valuestring, parameter) == 0) {
+                ent = it;
+                break;
+            }
+        }
+    }
+    if (!ent) {
+        return false;
+    }
+    if (cJSON_IsObject(ent)) {
+        return json_value_to_str(cJSON_GetObjectItemCaseSensitive(ent, "value"), out, out_sz);
+    }
+    return json_value_to_str(ent, out, out_sz);
+}
+
+static bool try_parse_number(const char *s, double *out)
+{
+    if (!s || !out) {
+        return false;
+    }
+    /* Bool-ish tokens are not treated as numbers for ordering ops. */
+    if (strcmp(s, "on") == 0 || strcmp(s, "off") == 0 ||
+        strcmp(s, "true") == 0 || strcmp(s, "false") == 0 ||
+        strcmp(s, "pressed") == 0 || strcmp(s, "released") == 0) {
+        return false;
+    }
+    char *end = NULL;
+    double v = strtod(s, &end);
+    if (end == s || (end && *end != '\0')) {
+        return false;
+    }
+    *out = v;
+    return true;
+}
+
+static bool values_equal_loose(const char *a, const char *b)
+{
+    if (!a) {
+        a = "";
+    }
+    if (!b) {
+        b = "";
+    }
+    if (strcmp(a, b) == 0) {
+        return true;
+    }
+    bool at = (strcmp(a, "on") == 0 || strcmp(a, "true") == 0 || strcmp(a, "1") == 0 ||
+               strcmp(a, "ON") == 0);
+    bool af = (strcmp(a, "off") == 0 || strcmp(a, "false") == 0 || strcmp(a, "0") == 0 ||
+               strcmp(a, "OFF") == 0);
+    bool bt = (strcmp(b, "on") == 0 || strcmp(b, "true") == 0 || strcmp(b, "1") == 0 ||
+               strcmp(b, "ON") == 0);
+    bool bf = (strcmp(b, "off") == 0 || strcmp(b, "false") == 0 || strcmp(b, "0") == 0 ||
+               strcmp(b, "OFF") == 0);
+    if ((at && bt) || (af && bf)) {
+        return true;
+    }
+    double da, db;
+    if (try_parse_number(a, &da) && try_parse_number(b, &db)) {
+        return da == db;
+    }
+    return false;
+}
+
+static bool compare_values(const char *lhs, const char *op_raw, const char *rhs)
+{
+    char op[RULE_OP_MAX];
+    normalize_op(op_raw, op, sizeof(op));
+    if (!lhs) {
+        lhs = "";
+    }
+    if (!rhs) {
+        rhs = "";
+    }
+
+    if (strcmp(op, "eq") == 0) {
+        return values_equal_loose(lhs, rhs);
+    }
+    if (strcmp(op, "ne") == 0) {
+        return !values_equal_loose(lhs, rhs);
+    }
+
+    double dl, dr;
+    bool nl = try_parse_number(lhs, &dl);
+    bool nr = try_parse_number(rhs, &dr);
+    if (nl && nr) {
+        if (strcmp(op, "lt") == 0) {
+            return dl < dr;
+        }
+        if (strcmp(op, "le") == 0) {
+            return dl <= dr;
+        }
+        if (strcmp(op, "gt") == 0) {
+            return dl > dr;
+        }
+        if (strcmp(op, "ge") == 0) {
+            return dl >= dr;
+        }
+    }
+    /* Non-numeric ordering: lexicographic fallback. */
+    int cmp = strcmp(lhs, rhs);
+    if (strcmp(op, "lt") == 0) {
+        return cmp < 0;
+    }
+    if (strcmp(op, "le") == 0) {
+        return cmp <= 0;
+    }
+    if (strcmp(op, "gt") == 0) {
+        return cmp > 0;
+    }
+    if (strcmp(op, "ge") == 0) {
+        return cmp >= 0;
+    }
+    return false;
+}
+
+/** Evaluate point_id + optional parameter against op/expected using a live snapshot. */
+static bool condition_matches_snapshot(const char *point_id, const char *parameter,
+                                       const char *op, const char *expected)
+{
+    if (!point_id || point_id[0] == '\0') {
+        return false;
+    }
+    minihub_point_t snap = {0};
+    if (minihub_point_get_snapshot(point_id, &snap) != ESP_OK) {
+        return false;
+    }
+    char lhs[MINIHUB_VALUE_MAX];
+    bool ok = resolve_compare_lhs(&snap, parameter, lhs, sizeof(lhs));
+    if (snap.props) {
+        cJSON_Delete(snap.props);
+    }
+    if (!ok) {
+        return false;
+    }
+    return compare_values(lhs, op, expected);
+}
+
 static bool if_conditions_match(const rule_t *rule)
 {
     for (size_t i = 0; i < rule->if_count; i++) {
-        minihub_point_t snap = {0};
-        if (minihub_point_get_snapshot(rule->if_cond[i].point_id, &snap) != ESP_OK) {
+        const if_condition_t *ic = &rule->if_cond[i];
+        if (!condition_matches_snapshot(ic->point_id, ic->parameter, ic->op, ic->equals)) {
             return false;
-        }
-        if (strcmp(snap.value, rule->if_cond[i].equals) != 0) {
-            if (snap.props) {
-                cJSON_Delete(snap.props);
-            }
-            return false;
-        }
-        if (snap.props) {
-            cJSON_Delete(snap.props);
         }
     }
     return true;
@@ -278,13 +502,24 @@ static void execute_then(const rule_t *rule, const char *point_id, const char *n
 
 static void match_rules_for_point(const char *point_id, const char *new_value)
 {
+    if (!point_id) {
+        return;
+    }
     uint32_t bucket = hash_point_id(point_id) % RULE_BUCKETS;
     for (uint8_t i = 0; i < s_rule_bucket_len[bucket]; i++) {
         const rule_t *rule = &s_rules[s_rule_buckets[bucket][i]];
-        if (strcmp(rule->point_id, point_id) == 0 && strcmp(rule->equals, new_value) == 0) {
-            if (if_conditions_match(rule)) {
-                execute_then(rule, point_id, new_value);
-            }
+        if (strcmp(rule->point_id, point_id) != 0) {
+            continue;
+        }
+        bool matched;
+        if (rule->parameter[0] != '\0') {
+            matched = condition_matches_snapshot(point_id, rule->parameter, rule->op, rule->equals);
+        } else {
+            /* Legacy: equals against the event summary value. */
+            matched = compare_values(new_value ? new_value : "", rule->op, rule->equals);
+        }
+        if (matched && if_conditions_match(rule)) {
+            execute_then(rule, point_id, new_value);
         }
     }
 }
@@ -393,9 +628,25 @@ static void parse_rule(const cJSON *item, rule_t *rule)
         if (cJSON_IsString(pid)) {
             strncpy(rule->point_id, pid->valuestring, sizeof(rule->point_id) - 1);
         }
-        const cJSON *eq = cJSON_GetObjectItem(when, "equals");
-        if (cJSON_IsString(eq)) {
-            strncpy(rule->equals, eq->valuestring, sizeof(rule->equals) - 1);
+        const cJSON *param = cJSON_GetObjectItem(when, "parameter");
+        if (cJSON_IsString(param) && param->valuestring) {
+            strncpy(rule->parameter, param->valuestring, sizeof(rule->parameter) - 1);
+        }
+        const cJSON *op = cJSON_GetObjectItem(when, "op");
+        if (cJSON_IsString(op) && op->valuestring) {
+            normalize_op(op->valuestring, rule->op, sizeof(rule->op));
+        } else {
+            normalize_op("eq", rule->op, sizeof(rule->op));
+        }
+        /* Prefer "value"; fall back to legacy "equals". */
+        const cJSON *val = cJSON_GetObjectItem(when, "value");
+        if (!cJSON_IsString(val) || !val->valuestring) {
+            val = cJSON_GetObjectItem(when, "equals");
+        }
+        if (cJSON_IsString(val) && val->valuestring) {
+            strncpy(rule->equals, val->valuestring, sizeof(rule->equals) - 1);
+        } else if (cJSON_IsNumber(val) || cJSON_IsBool(val)) {
+            json_value_to_str(val, rule->equals, sizeof(rule->equals));
         }
         const cJSON *at = cJSON_GetObjectItem(when, "at");
         if (cJSON_IsString(at)) {
@@ -411,12 +662,27 @@ static void parse_rule(const cJSON *item, rule_t *rule)
             }
             if_condition_t *ic = &rule->if_cond[rule->if_count];
             const cJSON *pid = cJSON_GetObjectItem(cond, "point_id");
-            const cJSON *eq = cJSON_GetObjectItem(cond, "equals");
+            const cJSON *param = cJSON_GetObjectItem(cond, "parameter");
+            const cJSON *op = cJSON_GetObjectItem(cond, "op");
+            const cJSON *val = cJSON_GetObjectItem(cond, "value");
+            if (!cJSON_IsString(val) || !val->valuestring) {
+                val = cJSON_GetObjectItem(cond, "equals");
+            }
             if (cJSON_IsString(pid)) {
                 strncpy(ic->point_id, pid->valuestring, sizeof(ic->point_id) - 1);
             }
-            if (cJSON_IsString(eq)) {
-                strncpy(ic->equals, eq->valuestring, sizeof(ic->equals) - 1);
+            if (cJSON_IsString(param) && param->valuestring) {
+                strncpy(ic->parameter, param->valuestring, sizeof(ic->parameter) - 1);
+            }
+            if (cJSON_IsString(op) && op->valuestring) {
+                normalize_op(op->valuestring, ic->op, sizeof(ic->op));
+            } else {
+                normalize_op("eq", ic->op, sizeof(ic->op));
+            }
+            if (cJSON_IsString(val) && val->valuestring) {
+                strncpy(ic->equals, val->valuestring, sizeof(ic->equals) - 1);
+            } else if (cJSON_IsNumber(val) || cJSON_IsBool(val)) {
+                json_value_to_str(val, ic->equals, sizeof(ic->equals));
             }
             rule->if_count++;
         }

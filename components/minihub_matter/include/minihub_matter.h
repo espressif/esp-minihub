@@ -67,6 +67,30 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
 /** Remove a Matter point from adapters.json by point_id. */
 esp_err_t minihub_matter_device_remove(const char *point_id);
 
+/** Basic Information (cluster 0x0028, typically endpoint 0). */
+typedef struct {
+    char manufacturer[64];
+    char model[64];
+    char sw_version[32];
+    char hw_version[16];
+} minihub_matter_identity_t;
+
+typedef void (*minihub_matter_identity_cb_t)(uint64_t node_id, const minihub_matter_identity_t *id, void *ctx);
+
+esp_err_t minihub_matter_set_identity_cb(minihub_matter_identity_cb_t cb, void *ctx);
+
+/** Best-effort read of Basic Information. Failure does not unwind commission. */
+esp_err_t minihub_matter_interview_identity(uint64_t node_id);
+
+/**
+ * Offer a Matter OTA image (CSA Provider 0x0029 + AnnounceOTAProvider 0x002A + BDX).
+ *
+ * ``file_path`` is a local Matter OTA image (CSA header) or an ``http(s)`` URL.
+ * Local files are served on loopback for the ESP-Matter BDX HTTP downloader.
+ * Sends AnnounceOTAProvider to the requestor on endpoint 0.
+ */
+esp_err_t minihub_matter_ota_offer(const char *point_id, const char *file_path);
+
 #ifdef __cplusplus
 }
 #endif

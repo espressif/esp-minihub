@@ -55,3 +55,11 @@ esp_err_t minihub_ble_mesh_remove_device(const char *point_id);
 
 const minihub_ble_mesh_device_t *minihub_ble_mesh_find_by_point(const char *point_id);
 const minihub_ble_mesh_device_t *minihub_ble_mesh_find_by_unicast(uint16_t unicast);
+
+/**
+ * Offer an end-device OTA image for a BLE Mesh point.
+ *
+ * Plugins publish ``props.ota`` on the same Host point. Mesh Firmware Update
+ * / BLOB transport is not wired; this returns ``ESP_ERR_NOT_SUPPORTED``.
+ */
+esp_err_t minihub_ble_mesh_ota_offer(const char *point_id, const char *file_path);

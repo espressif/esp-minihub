@@ -233,6 +233,51 @@ static bool type_supports_onoff(const char *type)
     return type && (strcmp(type, "light") == 0 || strcmp(type, "switch") == 0);
 }
 
+static const char *cid_manufacturer(uint16_t cid)
+{
+    if (cid == 0x02E5) {
+        return "Espressif";
+    }
+    return NULL;
+}
+
+/* Merge Composition identity without replacing owner / ota / params. */
+static void apply_identity_props(const minihub_ble_mesh_device_t *dev)
+{
+    if (!dev || !dev->point_id[0]) {
+        return;
+    }
+    cJSON *patch = cJSON_CreateObject();
+    if (!patch) {
+        return;
+    }
+    if (dev->uuid_hex[0]) {
+        cJSON_AddStringToObject(patch, "uuid", dev->uuid_hex);
+    }
+    if (dev->cid) {
+        const char *name = cid_manufacturer(dev->cid);
+        if (name) {
+            cJSON_AddStringToObject(patch, "manufacturer", name);
+        } else {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "0x%04X", (unsigned)dev->cid);
+            cJSON_AddStringToObject(patch, "manufacturer", buf);
+        }
+        char pid[8];
+        snprintf(pid, sizeof(pid), "0x%04X", (unsigned)dev->pid);
+        cJSON_AddStringToObject(patch, "model", pid);
+        char vid[8];
+        snprintf(vid, sizeof(vid), "0x%04X", (unsigned)dev->vid);
+        cJSON_AddStringToObject(patch, "sw_version", vid);
+    }
+    if (!patch->child) {
+        cJSON_Delete(patch);
+        return;
+    }
+    (void)minihub_point_merge_props(dev->point_id, NULL, patch);
+    cJSON_Delete(patch);
+}
+
 static void register_point_from_dev(const minihub_ble_mesh_device_t *dev)
 {
     if (!dev || !dev->point_id[0]) {
@@ -245,6 +290,7 @@ static void register_point_from_dev(const minihub_ble_mesh_device_t *dev)
     strncpy(point.value, default_value_for_type(dev->type), sizeof(point.value) - 1);
     point.online = true;
     minihub_point_register(&point);
+    apply_identity_props(dev);
 
     minihub_pp_bm_param_t params[8];
     size_t n = minihub_pp_ble_mesh_list_params(dev->uuid_hex, params, 8);
@@ -334,12 +380,15 @@ static void on_bm_attr(const minihub_ble_mesh_attr_evt_t *evt, void *ctx)
         int pct = (int)((evt->u.ctl.lightness * 100u) / 65535u);
         char buf[16];
         snprintf(buf, sizeof(buf), "%d", pct);
-        cJSON *props = cJSON_CreateObject();
-        if (props) {
-            cJSON_AddNumberToObject(props, "temperature", evt->u.ctl.temperature);
-            cJSON_AddNumberToObject(props, "lightness", evt->u.ctl.lightness);
+        cJSON *params = cJSON_CreateObject();
+        if (params) {
+            cJSON_AddNumberToObject(params, "temperature", evt->u.ctl.temperature);
+            cJSON_AddNumberToObject(params, "lightness", evt->u.ctl.lightness);
+            minihub_point_merge_params(dev->point_id, buf, params);
+            cJSON_Delete(params);
+        } else {
+            minihub_point_set(dev->point_id, buf, NULL);
         }
-        minihub_point_set(dev->point_id, buf, props);
         try_product_params_attr(dev, evt);
     }
 }
@@ -526,6 +575,21 @@ static esp_err_t ble_mesh_adapter_handle_command(const minihub_command_t *cmd)
         return ESP_ERR_NOT_FOUND;
     }
 
+    if (strcmp(cmd->cmd, "ota") == 0 || strcmp(cmd->cmd, "start_ota") == 0) {
+        const char *path = NULL;
+        const cJSON *pj = cmd->params ? cJSON_GetObjectItem(cmd->params, "path") : NULL;
+        if (!cJSON_IsString(pj) || !pj->valuestring) {
+            pj = cmd->params ? cJSON_GetObjectItem(cmd->params, "file_path") : NULL;
+        }
+        if (!cJSON_IsString(pj) || !pj->valuestring) {
+            pj = cmd->params ? cJSON_GetObjectItem(cmd->params, "url") : NULL;
+        }
+        if (cJSON_IsString(pj) && pj->valuestring) {
+            path = pj->valuestring;
+        }
+        return minihub_ble_mesh_ota_offer(cmd->point_id, path);
+    }
+
 #if CONFIG_MINIHUB_BLE_MESH_SDK
     if (dev->unicast == 0) {
         return ESP_ERR_INVALID_STATE;
@@ -588,11 +652,14 @@ static esp_err_t ble_mesh_adapter_handle_command(const minihub_command_t *cmd)
         if (err == ESP_OK) {
             char buf[16];
             snprintf(buf, sizeof(buf), "%d", bright);
-            cJSON *props = cJSON_CreateObject();
-            if (props) {
-                cJSON_AddNumberToObject(props, "temperature", temp);
+            cJSON *params = cJSON_CreateObject();
+            if (params) {
+                cJSON_AddNumberToObject(params, "temperature", temp);
+                minihub_point_merge_params(cmd->point_id, buf, params);
+                cJSON_Delete(params);
+            } else {
+                minihub_point_set(cmd->point_id, buf, NULL);
             }
-            minihub_point_set(cmd->point_id, buf, props);
         }
         return err;
     }

@@ -1,0 +1,2 @@
+# Derived catalog artifacts live in the CMake binary dir (not this tree).
+# model/*.csv is the only source of truth to commit for the type catalog.

@@ -1,0 +1,16 @@
+parameter,label,data_type,properties,min,max,step,unit,ui_element,options,description,visible,css,image,requires
+brightness,亮度,Int,Read/Write,0,100,1,%,ui.slider,,Brightness level,TRUE,,,power
+current_a,电流,Float,Read,0,16,0.01,A,ui.text,,Electrical current (metering readout),TRUE,,,
+cct,色温,Int,Read/Write,2700,6500,100,K,ui.slider,,Color correlated temperature,TRUE,,,power
+energy_wh,电量,Float,Read,0,999999,1,Wh,ui.text,,Cumulative energy (Wh; metering readout),TRUE,,,
+fault,故障,Int,Read,0,255,1,,ui.text,,Device fault / error code (read-only),TRUE,,,
+hue,颜色,Int,Read/Write,0,360,1,°,ui.slider,,Hue of the light,TRUE,,,power
+indicator,指示灯,Bool,Read/Write,,,,,ui.toggle,,Status / indicator LED,TRUE,,,
+intensity,强度,Int,Read/Write,0,100,1,%,ui.slider,,Intensity,TRUE,,,power
+light-mode,灯光模式,Int,Read/Write,0,2,1,,ui.dropdown,"[{""value"":0,""label"":""默认 (HSV + CCT)""},{""value"":1,""label"":""HSV""},{""value"":2,""label"":""CCT""}]",Light mode,TRUE,,,power
+name,名称,String,Read/Write,,,,,ui.text,,Name of the device,FALSE,,,
+power,电源,Bool,Read/Write,,,,,ui.toggle,,Turn the device on/off,TRUE,,,
+power_w,功率,Float,Read,0,4000,1,W,ui.text,,Active electrical power (metering readout; not on/off power),TRUE,,,
+saturation,饱和度,Int,Read/Write,0,100,1,%,ui.slider,,Saturation,TRUE,,,power
+temperature,温度,Float,Read,-40,125,0.1,°C,ui.text,,Device or ambient temperature (read-only),TRUE,,,
+voltage_v,电压,Float,Read,0,250,0.1,V,ui.text,,Line voltage (metering readout),TRUE,,,

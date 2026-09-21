@@ -1,7 +1,7 @@
 idf_component_register(
-    SRCS "minihub_js.c"
-    INCLUDE_DIRS "include"
-    REQUIRES minihub_core minihub_config esp_http_client
+    SRCS "minihub_js.c" "minihub_js_ext.c"
+    INCLUDE_DIRS "include" "."
+    REQUIRES minihub_core minihub_config minihub_module esp_http_client mbedtls lwip
 )
 
 if(CONFIG_MINIHUB_JS_PLUGINS)

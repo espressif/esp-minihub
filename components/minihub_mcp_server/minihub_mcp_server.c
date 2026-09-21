@@ -120,7 +120,7 @@ static esp_mcp_value_t tool_points_list(const esp_mcp_property_list_t *propertie
     cJSON *root = cJSON_CreateObject();
     cJSON *arr = cJSON_CreateArray();
     if (!root || !arr) {
-        free(points);
+        minihub_point_list_free(points, count);
         cJSON_Delete(root);
         cJSON_Delete(arr);
         return mcp_error("INTERNAL");
@@ -138,7 +138,7 @@ static esp_mcp_value_t tool_points_list(const esp_mcp_property_list_t *propertie
             cJSON_AddItemToArray(arr, item);
         }
     }
-    free(points);
+    minihub_point_list_free(points, count);
 
     return mcp_return_json(root);
 }

@@ -11,6 +11,8 @@ application/*/components/gen_bmgr_codes/
 /sdkconfig.old
 application/*/sdkconfig
 application/*/sdkconfig.old
+application/*/sdkconfig.bak
+*.bak
 
 # Optional local IDF checkout / symlink at repo root
 /esp-idf/
@@ -30,3 +32,20 @@ __pycache__/
 *.py[cod]
 *.host.o
 .DS_Store
+*.code-workspace
+
+# Local IDE / CodeBuddy session notes
+.codebuddy/memory/
+.workbuddy/
+
+# Docs (esp-docs)
+.venv-docs/
+docs/_build/
+/_build/
+# Staged by docs/_extensions/stage_catalog.py at Sphinx configure time
+docs/_static/catalog/
+docs/_static/catalog.zip
+docs/_static/module_sdk.zip
+
+# Local design notes (keep on disk; do not commit)
+docs/superpowers/

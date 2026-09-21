@@ -12,8 +12,9 @@
 Shared fragments: repo-root `config/sdkconfig/`.
 
 ```bash
-./tools/build_firmware.py -app minihub zigbee build
-./tools/build_firmware.py -app minihub ble_mesh build   # + radio_coexist_memory auto
+./tools/build_firmware.py -app minihub build              # reconcile stacks with sdkconfig
+./tools/build_firmware.py -app minihub zigbee build       # force-enable Zigbee if not disabled
+./tools/build_firmware.py -app minihub ble_mesh build     # force-enable BLE Mesh if not disabled
 # Optional LCD HW recipe:
 # ./tools/apply_sdkconfig_variant.sh lcd
 ```

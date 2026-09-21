@@ -49,3 +49,24 @@ check_pre_commit:
       else
         pre-commit run --show-diff-on-failure --all-files
       fi
+
+# Programming Guide (esp-docs HTML). Parallel with firmware in build; does not wait for it.
+docs:html:
+  extends:
+    - .pre_check_template
+  stage: build
+  image: python:3.12-bookworm
+  before_script:
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq doxygen graphviz git
+    - pip install -r docs/requirements.txt
+    - git config --global --add safe.directory "$CI_PROJECT_DIR" || true
+  script:
+    - ./tools/build_docs.sh
+  artifacts:
+    when: on_success
+    expire_in: 30 days
+    name: "minihub-docs-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - docs/_build/en/esp32s31/html/
+      - docs/_build/zh_CN/esp32s31/html/

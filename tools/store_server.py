@@ -5,7 +5,7 @@
 
 Serves catalog.json and /files/<id>.mhub from the deploy directory:
 
-  MINIHUB_STORE_DEPLOY  (default ~/workspace/minihub_store)
+  MINIHUB_PLUGINS_DEPLOY_DIR  (default ~/workspace/minihub_store)
 
 Layout: catalog.json and <id>/<id>.mhub (zip only; MHMD .so stays in repo build/).
 Sources remain under the MiniHub repo components/minihub_plugins/.
@@ -621,13 +621,24 @@ def make_handler(deploy: Path, catalog: Path):
         return profiles
 
     class Handler(BaseHTTPRequestHandler):
+        def _cors(self) -> None:
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
         def _json(self, code: int, obj) -> None:
             body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self._cors()
             self.end_headers()
             self.wfile.write(body)
+
+        def do_OPTIONS(self) -> None:
+            self.send_response(204)
+            self._cors()
+            self.end_headers()
 
         def do_GET(self) -> None:
             if self.path == "/api/catalog":
@@ -643,6 +654,7 @@ def make_handler(deploy: Path, catalog: Path):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/octet-stream")
                 self.send_header("Content-Length", str(len(data)))
+                self._cors()
                 self.end_headers()
                 self.wfile.write(data)
                 return
@@ -849,7 +861,7 @@ def main() -> int:
         "--deploy",
         type=Path,
         default=None,
-        help="deploy root (default: MINIHUB_STORE_DEPLOY or ~/workspace/minihub_store)",
+        help="deploy root (default: MINIHUB_PLUGINS_DEPLOY_DIR or ~/workspace/minihub_store)",
     )
     parser.add_argument(
         "--rebuild-slim",
@@ -865,7 +877,7 @@ def main() -> int:
     srv = HTTPServer((args.host, args.port), Handler)
     print(f"MiniHub Store listening on http://{args.host}:{args.port}")
     print(f"  deploy:  {deploy}")
-    print(f"  catalog: {catalog if catalog.exists() else '(missing — run sync_store_catalog.py)'}")
+    print(f"  catalog: {catalog if catalog.exists() else '(missing — run sync_store_catalog.py --from-store)'}")
     print(f"  modules: {deploy}/<id>/<id>.mhub")
     print("  Spec:    POST /api/miot-spec/resolve|profiles")
     print("  Bridge:  POST /api/bridge/huawei/login|snapshot")

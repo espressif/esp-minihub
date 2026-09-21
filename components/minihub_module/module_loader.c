@@ -38,6 +38,8 @@ typedef struct {
     long binary_size_expected;
     const minihub_adapter_t *adapter;
     minihub_module_rpc_fn rpc;
+    /** Secondary RPC for hybrid: JS primary + native fallback (or vice versa). */
+    minihub_module_rpc_fn rpc_fallback;
     cJSON *ui_json;
     char ui_file_path[192]; /**< optional on-disk ui.json; reloaded for /api/modules */
     bool is_js; /**< L2 QuickJS — listed/managed here, executed by minihub_js */
@@ -128,6 +130,10 @@ esp_err_t minihub_module_host_api_fill(minihub_module_host_api_t *api)
     api->config_save_adapters = minihub_config_save_adapters;
     api->hub_reload = minihub_hub_reload_async;
     api->adapter_soft_reload = minihub_hub_soft_reload_adapter_async;
+    api->module_read_file = minihub_module_read_file;
+    api->event_subscribe = minihub_event_bus_subscribe;
+    api->point_merge_params = minihub_point_merge_params;
+    api->point_merge_props = minihub_point_merge_props;
     return ESP_OK;
 }
 
@@ -141,13 +147,15 @@ static esp_err_t validate_module_info(const minihub_module_info_t *info)
                  info->id, (unsigned)info->abi_version, MINIHUB_MODULE_ABI_VERSION);
         return ESP_ERR_INVALID_VERSION;
     }
-    if (MINIHUB_CORE_API_VERSION < info->core_api_min ||
-        MINIHUB_CORE_API_VERSION > info->core_api_max) {
-        ESP_LOGE(TAG, "module '%s' requires core api [%u,%u], host is %u",
-                 info->id,
-                 (unsigned)info->core_api_min,
-                 (unsigned)info->core_api_max,
-                 MINIHUB_CORE_API_VERSION);
+    if (MINIHUB_CORE_API_VERSION < info->core_api_min) {
+        ESP_LOGE(TAG, "module '%s' requires core api min %u, host is %u",
+                 info->id, (unsigned)info->core_api_min, MINIHUB_CORE_API_VERSION);
+        return ESP_ERR_INVALID_VERSION;
+    }
+    /* core_api_max == 0 means "no upper bound" (only core_api_min is gated). */
+    if (info->core_api_max != 0 && MINIHUB_CORE_API_VERSION > info->core_api_max) {
+        ESP_LOGE(TAG, "module '%s' requires core api max %u, host is %u",
+                 info->id, (unsigned)info->core_api_max, MINIHUB_CORE_API_VERSION);
         return ESP_ERR_INVALID_VERSION;
     }
     return ESP_OK;
@@ -174,6 +182,15 @@ esp_err_t minihub_module_attach_adapter(
     if (err != ESP_OK) {
         return err;
     }
+
+    /*
+     * Factory-preinstalled modules never hit Store install, so adapters.json
+     * may lack this adapter. hub load_all skips unregistered keys → start()
+     * never runs → Store "enabled" with zero /api/points. Create the slot
+     * now (before load_all in the same hub_reload) without force-enabling an
+     * existing user-disabled entry.
+     */
+    (void)minihub_config_ensure_adapter_slot(adapter->name, false);
 
     for (size_t i = 0; i < s_module_count; i++) {
         if (strcmp(s_modules[i].info.id, info->id) == 0) {
@@ -216,6 +233,115 @@ static void parent_dir(const char *path, char *out, size_t out_len)
     }
     memcpy(out, path, n);
     out[n] = '\0';
+}
+
+/** Max bytes for module_read_file (devices.json / small assets). */
+#define MODULE_READ_FILE_MAX  65536
+
+static bool module_rel_name_ok(const char *rel_name)
+{
+    if (!rel_name || !rel_name[0] || rel_name[0] == '/' || rel_name[0] == '\\') {
+        return false;
+    }
+    const char *p = rel_name;
+    while (*p) {
+        if (p[0] == '.' && p[1] == '.' &&
+            (p[2] == '/' || p[2] == '\\' || p[2] == '\0')) {
+            return false;
+        }
+        if (p[0] == '\\') {
+            return false;
+        }
+        const char *slash = strchr(p, '/');
+        size_t seg = slash ? (size_t)(slash - p) : strlen(p);
+        if (seg == 0) {
+            return false;
+        }
+        if (seg == 1 && p[0] == '.') {
+            return false;
+        }
+        if (!slash) {
+            break;
+        }
+        p = slash + 1;
+    }
+    return true;
+}
+
+static module_slot_t *find_module_by_adapter_or_id(const char *name)
+{
+    if (!name || !name[0]) {
+        return NULL;
+    }
+    module_slot_t *by_adapter = find_module_by_adapter(name);
+    if (by_adapter) {
+        return by_adapter;
+    }
+    for (size_t i = 0; i < s_module_count; i++) {
+        if (strcmp(s_modules[i].info.id, name) == 0) {
+            return &s_modules[i];
+        }
+    }
+    return NULL;
+}
+
+esp_err_t minihub_module_read_file(const char *adapter_name, const char *rel_name,
+                                   char **out, size_t *out_len)
+{
+    if (!out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *out = NULL;
+    if (out_len) {
+        *out_len = 0;
+    }
+    if (!adapter_name || !adapter_name[0] || !module_rel_name_ok(rel_name)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    module_slot_t *slot = find_module_by_adapter_or_id(adapter_name);
+    if (!slot || slot->manifest_path[0] == '\0') {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    char dir[192];
+    parent_dir(slot->manifest_path, dir, sizeof(dir));
+    if (dir[0] == '\0') {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    char path[256];
+    if (snprintf(path, sizeof(path), "%s/%s", dir, rel_name) >= (int)sizeof(path)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return ESP_FAIL;
+    }
+    long len = ftell(f);
+    if (len < 0 || len > MODULE_READ_FILE_MAX) {
+        fclose(f);
+        return (len > MODULE_READ_FILE_MAX) ? ESP_ERR_INVALID_SIZE : ESP_FAIL;
+    }
+    rewind(f);
+    char *buf = malloc((size_t)len + 1);
+    if (!buf) {
+        fclose(f);
+        return ESP_ERR_NO_MEM;
+    }
+    size_t n = fread(buf, 1, (size_t)len, f);
+    fclose(f);
+    buf[n] = '\0';
+    *out = buf;
+    if (out_len) {
+        *out_len = n;
+    }
+    return ESP_OK;
 }
 
 /** Crash / incomplete-load guard: /store/modules/<id>/.load_guard */
@@ -429,7 +555,8 @@ static esp_err_t parse_manifest(const char *path, module_slot_t *slot)
     info->loaded = false;
     info->abi_version = MINIHUB_MODULE_ABI_VERSION;
     info->core_api_min = MINIHUB_CORE_API_VERSION;
-    info->core_api_max = MINIHUB_CORE_API_VERSION;
+    /* 0 = unbounded upper bound; modules may omit core_api_max in module.json. */
+    info->core_api_max = 0;
 
     const cJSON *id = cJSON_GetObjectItem(root, "id");
     const cJSON *name = cJSON_GetObjectItem(root, "name");
@@ -695,8 +822,15 @@ static esp_err_t validate_mhub_header(const char *path)
 
 static esp_err_t try_load_binary(module_slot_t *slot, const cJSON *adapter_cfg)
 {
+    if (slot->builtin_id[0] == '\0' && find_builtin_entry(slot->info.id) != NULL) {
+        strncpy(slot->builtin_id, slot->info.id, sizeof(slot->builtin_id) - 1);
+    }
     if (slot->builtin_id[0] != '\0') {
-        return load_builtin_module(slot, adapter_cfg);
+        esp_err_t berr = load_builtin_module(slot, adapter_cfg);
+        if (berr == ESP_OK) {
+            load_guard_clear_slot(slot);
+        }
+        return berr;
     }
 
     if (slot->is_js) {
@@ -704,6 +838,10 @@ static esp_err_t try_load_binary(module_slot_t *slot, const cJSON *adapter_cfg)
         struct stat st;
         if (slot->binary_path[0] && stat(slot->binary_path, &st) == 0 && S_ISREG(st.st_mode)) {
             slot->info.loaded = slot->info.enabled;
+            /* Heal installs that predate L2 adapters.json slot creation. */
+            if (slot->info.enabled && slot->info.adapter_name[0]) {
+                (void)minihub_config_ensure_adapter_slot(slot->info.adapter_name, false);
+            }
             ESP_LOGI(TAG, "JS module '%s' ready (script %ld bytes)",
                      slot->info.id, (long)st.st_size);
             return ESP_OK;
@@ -753,7 +891,12 @@ static esp_err_t try_load_binary(module_slot_t *slot, const cJSON *adapter_cfg)
     }
 
     if (rpc) {
-        slot->rpc = rpc;
+        /* Hybrid entry=js: JS may already own primary RPC — keep it, stash native. */
+        if (slot->rpc && slot->rpc != rpc) {
+            slot->rpc_fallback = rpc;
+        } else {
+            slot->rpc = rpc;
+        }
     }
 
     err = minihub_module_attach_adapter(&slot->info, adapter);
@@ -978,7 +1121,9 @@ cJSON *minihub_module_list_json(void)
         if (s_modules[i].binary_path[0]) {
             cJSON_AddStringToObject(item, "binary", s_modules[i].binary_path);
         }
-        bool managed = s_modules[i].manifest_path[0] != '\0' && s_modules[i].builtin_id[0] == '\0';
+        /* Store-managed = has a package under /store/modules. Preferring a Host
+         * builtin entry for load must not hide Disable/Delete (factory demos). */
+        bool managed = s_modules[i].manifest_path[0] != '\0';
         cJSON_AddBoolToObject(item, "managed", managed);
         bool installed = module_slot_installed(&s_modules[i]);
         cJSON_AddBoolToObject(item, "installed", installed);
@@ -1034,6 +1179,18 @@ bool minihub_module_overview_adapter_visible(const char *adapter_name)
         bool installed = module_slot_installed(&s_modules[i]);
         if (!installed) {
             return false;
+        }
+        /* L2 JS: no C adapter registry. Missing adapters.json slot used to hide
+         * points (Store only ensured slots for native). Treat absent as enabled. */
+        if (s_modules[i].is_js) {
+            cJSON *cfg = minihub_config_get_adapters();
+            const cJSON *adapters = cfg ? cJSON_GetObjectItem(cfg, "adapters") : NULL;
+            const cJSON *adapter_cfg =
+                cJSON_IsObject(adapters) ? cJSON_GetObjectItem(adapters, adapter_name) : NULL;
+            if (!adapter_cfg) {
+                return true;
+            }
+            return adapter_config_enabled(adapter_name);
         }
         if (minihub_adapter_find(adapter_name) != NULL) {
             return adapter_config_enabled(adapter_name);
@@ -1269,6 +1426,10 @@ esp_err_t minihub_module_register_rpc(const char *module_id, minihub_module_rpc_
         slot->info.core_api_max = MINIHUB_CORE_API_VERSION;
         ESP_LOGI(TAG, "host RPC module slot created: %s", module_id);
     }
+    /* Hybrid: JS registerRpc becomes primary; demote prior native RPC to fallback. */
+    if (slot->rpc && slot->rpc != rpc) {
+        slot->rpc_fallback = slot->rpc;
+    }
     slot->rpc = rpc;
     slot->info.loaded = true;
     return ESP_OK;
@@ -1295,9 +1456,16 @@ esp_err_t minihub_module_forget_host_rpc(const char *module_id)
     }
 
     module_slot_t *slot = find_module(module_id);
-    if (slot && slot->manifest_path[0] == '\0') {
-        remove_ephemeral_module_slot(module_id);
-        found = true;
+    if (slot) {
+        if (slot->rpc_fallback) {
+            slot->rpc = slot->rpc_fallback;
+            slot->rpc_fallback = NULL;
+            found = true;
+        }
+        if (slot->manifest_path[0] == '\0') {
+            remove_ephemeral_module_slot(module_id);
+            found = true;
+        }
     }
 
     if (found) {
@@ -1394,7 +1562,11 @@ esp_err_t minihub_module_invoke_rpc(const char *module_id, const char *method,
     if (!slot || !slot->info.loaded || !slot->rpc) {
         return ESP_ERR_INVALID_STATE;
     }
-    return slot->rpc(method, params, out);
+    esp_err_t err = slot->rpc(method, params, out);
+    if (err == ESP_ERR_NOT_FOUND && slot->rpc_fallback) {
+        err = slot->rpc_fallback(method, params, out);
+    }
+    return err;
 }
 
 static esp_err_t write_manifest_enabled(const char *path, bool enabled)
@@ -1452,7 +1624,8 @@ static esp_err_t write_manifest_enabled(const char *path, bool enabled)
 esp_err_t minihub_module_set_enabled(const char *id, bool enabled)
 {
     module_slot_t *slot = find_module(id);
-    if (!slot || slot->manifest_path[0] == '\0' || slot->builtin_id[0] != '\0') {
+    /* Pure Host listings without a Store package cannot be toggled. */
+    if (!slot || slot->manifest_path[0] == '\0') {
         return slot ? ESP_ERR_NOT_SUPPORTED : ESP_ERR_NOT_FOUND;
     }
     esp_err_t err = write_manifest_enabled(slot->manifest_path, enabled);
@@ -1463,6 +1636,10 @@ esp_err_t minihub_module_set_enabled(const char *id, bool enabled)
     /* Enabling again is an explicit retry — drop a sticky crash guard. */
     if (enabled) {
         load_guard_clear_slot(slot);
+        /* Re-enable should also revive a missing/disabled adapters.json slot. */
+        if (slot->info.adapter_name[0]) {
+            (void)minihub_config_ensure_adapter_slot(slot->info.adapter_name, true);
+        }
     }
     ESP_LOGI(TAG, "module '%s' enabled=%d", id, enabled);
     return ESP_OK;
@@ -1496,10 +1673,10 @@ esp_err_t minihub_module_delete(const char *id)
         return ESP_OK;
     }
 
-    if (slot->builtin_id[0] != '\0') {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
-    if (!module_binary_installed(slot)) {
+    /* Host-linked demos may set builtin_id for preferred load; Store package
+     * delete is still allowed (next boot skips without the manifest). */
+    if (!module_binary_installed(slot) && slot->builtin_id[0] == '\0' &&
+        find_builtin_entry(slot->info.id) == NULL) {
         ESP_LOGW(TAG, "module '%s' not installed (binary missing)", id);
         return ESP_ERR_NOT_SUPPORTED;
     }
@@ -1574,7 +1751,14 @@ esp_err_t minihub_module_load_all(const cJSON *adapters_root)
             continue;
         }
 
-        /* Native packages only: sticky "loading" means last boot crashed mid-entry. */
+        /* Host-linked demo / factory modules: prefer builtin over .so dlopen. */
+        if (slot->builtin_id[0] == '\0' && find_builtin_entry(slot->info.id) != NULL) {
+            strncpy(slot->builtin_id, slot->info.id, sizeof(slot->builtin_id) - 1);
+            ESP_LOGI(TAG, "module '%s' uses Host builtin entry", slot->info.id);
+        }
+
+        /* Native packages only: sticky "loading" means last boot crashed mid-entry.
+         * Skip the guard when a Host builtin can load instead of the .so. */
         if (!slot->is_js && slot->builtin_id[0] == '\0' &&
             load_guard_read(slot) == LOAD_GUARD_STATE_LOADING) {
             ESP_LOGW(TAG,

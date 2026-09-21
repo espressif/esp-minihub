@@ -32,6 +32,13 @@ LIBGCC_EXTERNS: dict[str, str] = {
     "__divdf3": "extern double __divdf3(double, double);",
     "__fixdfdi": "extern long long __fixdfdi(double);",
     "__floatdidf": "extern double __floatdidf(long long);",
+    # Soft-float compares (libgcc); plugins may emit any of these for double ops.
+    "__eqdf2": "extern int __eqdf2(double, double);",
+    "__nedf2": "extern int __nedf2(double, double);",
+    "__gtdf2": "extern int __gtdf2(double, double);",
+    "__gedf2": "extern int __gedf2(double, double);",
+    "__ltdf2": "extern int __ltdf2(double, double);",
+    "__ledf2": "extern int __ledf2(double, double);",
 }
 
 
@@ -240,6 +247,7 @@ def render_c(symbols: list[str], so_name: str) -> str:
         "#include <stdlib.h>",
         "#include <string.h>",
         "#include <strings.h>",
+        "#include <sys/stat.h>",
         "#include <time.h>",
         "#include <unistd.h>",
         '#include "esp_elf.h"',
@@ -393,6 +401,18 @@ def main() -> int:
             "esp_timer_get_time",
             "minihub_net_dns_probe",
             "heap_caps_get_free_size",
+            "mkdir",
+            "stat",
+            "unlink",
+            "rmdir",
+            "esp_http_client_open",
+            "esp_http_client_fetch_headers",
+            "esp_http_client_get_content_length",
+            "esp_http_client_read",
+            "esp_http_client_close",
+            "minihub_point_list_by_adapter",
+            "minihub_point_list_free",
+            "minihub_command_invoke",
         }
         allow_syms = sorted(set(symbols) | always)
         allow_path = args.allowlist_json

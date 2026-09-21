@@ -168,7 +168,7 @@ async function loadSystem() {
         const st = sysSnap.storage || {};
         const ms = sysSnap.modstore || {};
         const grid = document.getElementById('sys-info-grid');
-        const ver = 'v' + (sysSnap.version || '0.2.0');
+        const ver = 'v' + (sysSnap.version || '0.1.0');
         const idfLine = sysSnap.idf_version ? ('IDF: ' + sysSnap.idf_version) : '';
         const commitLine = sysSnap.commit ? ('MiniHub: ' + sysSnap.commit) : '';
         grid.innerHTML = '<div class="sys-card"><h4>固件版本</h4><div class="v">' + esc(ver) + '</div>' + (idfLine ? '<div class="s">' + esc(idfLine) + '</div>' : '') + (commitLine ? '<div class="s">' + esc(commitLine) + '</div>' : '') + '</div>' + sysCard('芯片类型', fmtChip(sysSnap.chip), [sysSnap.chip_cores != null ? ('Cores: ' + sysSnap.chip_cores) : '', sysSnap.chip_revision != null ? ('Revision: ' + sysSnap.chip_revision) : ''].filter(Boolean).join(', ')) + sysCard('Flash', fmtBytes(sysSnap.flash_size), '总容量') + sysCard('内部 RAM', fmtBytes(ram.internal_free), '共 ' + fmtBytes(ram.internal_total)) + sysCard('PSRAM', fmtBytes(ram.psram_free), '共 ' + fmtBytes(ram.psram_total)) + sysCard('Storage', fmtBytes(st.free), '剩余 · 共 ' + fmtBytes(st.total) + ' · 已用 ' + fmtBytes(st.used)) + sysCard('Modstore', fmtBytes(ms.free), '剩余 · 共 ' + fmtBytes(ms.total) + ' · 已用 ' + fmtBytes(ms.used)) + sysCard('运行时间', (Number(sysSnap.uptime_s) || 0) + ' s', '');

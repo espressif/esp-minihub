@@ -16,6 +16,20 @@
 #define MINIHUB_PACKS_DIR         MINIHUB_CONFIG_DIR "/packs"
 #define MINIHUB_MODULE_TMP_DIR    MINIHUB_VFS_MOUNT "/tmp"
 
+/**
+ * Device / control icons (SVG) live in storage, not in the firmware: the build
+ * stages components/minihub_device_widget/images into the `storage` partition
+ * (littlefs) at /data/images, so icons can be added/replaced at runtime next to
+ * /data/config/devices.csv. That directory is split by what an icon depicts:
+ *   /data/images/devices/<device>.svg                 device-class icon (avatar)
+ *   /data/images/parameters/<device>_<parameter>.svg  control icon (mockup)
+ * The icon root, the two sub-directory names and the Web console /img/ URI
+ * prefix are defined in minihub_device_widget.h (MINIHUB_DW_IMAGES_DIR /
+ * MINIHUB_DW_IMAGES_{DEVICES,PARAMETERS}_SUBDIR / MINIHUB_IMAGES_URI_PREFIX) -
+ * that component is the single source of truth and the lower layer, so this
+ * header only documents the on-device layout.
+ */
+
 /** LittleFS partition for store downloads (.mhub / pack JSON) */
 #define MINIHUB_STORE_MOUNT       "/store"
 #define MINIHUB_STORE_MODULES_DIR MINIHUB_STORE_MOUNT "/modules"

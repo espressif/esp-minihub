@@ -12,8 +12,10 @@
 esp_err_t minihub_config_init(void);
 
 /**
- * Writable data root after init: `/data` (Host LittleFS) or `/fatfs` (claw FAT).
- * Safe before init: returns `/data` if that mount exists, else `/fatfs` when present.
+ * Writable data root after init: `/data` (Host LittleFS), `/fatfs` (claw FAT),
+ * or `/nand` (Mosaic NAND DATA).
+ * Safe before init: returns `/data` if that mount exists, else `/fatfs` or `/nand`
+ * when present.
  */
 const char *minihub_paths_data_root(void);
 /** `{data_root}/tmp` for MHMD extract / scratch files (created by config init). */
@@ -27,6 +29,16 @@ cJSON *minihub_config_get_scenes(void);
 esp_err_t minihub_config_reload(void);
 /** Write adapters.json to LittleFS and refresh cache */
 esp_err_t minihub_config_save_adapters(cJSON *adapters_root);
+/**
+ * Ensure adapters.json has a slot for @p adapter_name so hub load_all/start
+ * will activate a Store-registered adapter.
+ * - Missing key → create { "enabled": true, "devices": [] } and save.
+ * - Existing key + force_enable → set enabled true (leave devices alone).
+ * - Existing key without force_enable → no-op.
+ * Used by Store install and by module_loader for factory-preinstalled modules
+ * that never go through the install API (otherwise ENABLED ≠ points).
+ */
+esp_err_t minihub_config_ensure_adapter_slot(const char *adapter_name, bool force_enable);
 /** Remove one adapter key from adapters.json (no-op if missing). */
 esp_err_t minihub_config_remove_adapter(const char *adapter_name);
 /** Drop one manual devices[] entry from adapters.json (no-op if missing). */
