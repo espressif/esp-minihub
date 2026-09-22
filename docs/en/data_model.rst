@@ -274,7 +274,7 @@ Fields the Host reads per adapter:
     * ``writable`` — true allows writes
     * ``batch_as_props`` — true stores a register batch in point ``props``
 
-Store modules (L2/L3) add their own key, for example ``miot``. Install creates
+Store modules (L2/L3) add their own key, for example ``my_module``. Install creates
 the slot if missing. L1 packs **merge** ``inject`` into the named adapter block
 (see :doc:`plugins/develop_l1`).
 

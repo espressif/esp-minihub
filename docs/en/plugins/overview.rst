@@ -80,9 +80,8 @@ defaults). Installing L3 at most creates an empty ``adapters.json`` slot
 widgets (:doc:`../type_catalog`). Point fields and adapters / rules:
 :doc:`../data_model`. Do not invent a C struct per lamp or switch. Demos:
 L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js``, L3
-``color_bulb`` / ``meter_plug``. Vendor MIoT modules (``miot`` L3,
-``miot_js`` L2) are in the sibling repo ``esp-minihub-plugins``; point
-``MINIHUB_PLUGIN_DIRS`` at that clone.
+``color_bulb`` / ``meter_plug``. Extra vendor plugins live outside this tree —
+export ``MINIHUB_PLUGIN_DIRS`` at a sibling Store plugin repo before configure.
 
 Source tree
 -----------

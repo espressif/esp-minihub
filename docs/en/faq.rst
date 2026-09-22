@@ -34,7 +34,7 @@ If a native module crashes during ``dlopen``, Host writes
 
 .. code-block:: json
 
-   { "id": "miot", "clear_load_guard": true, "reload": true }
+   { "id": "color_bulb", "clear_load_guard": true, "reload": true }
 
 Check the serial log for ABI errors. L3 ``module.json`` ``abi_version`` and
 ``core_api_*`` must bracket the Host (header ``MINIHUB_MODULE_ABI_VERSION``).

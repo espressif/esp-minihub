@@ -19,7 +19,7 @@ Customer programming guide is RST / esp-docs: [docs/en/](docs/en/index.rst) · [
 
 Chinese mirrors: `docs/zh_CN/` (same relative paths as `docs/en/`).
 
-End-user / lab notes belong under the app only when present — **not** as MIoT Host docs.
+End-user / lab notes belong under the app only when present — **not** as Host Core docs.
 
 ## Git
 

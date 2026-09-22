@@ -73,9 +73,8 @@ Host 与插件
 设备页才有标准控件（:doc:`../type_catalog`）。点位字段与 adapters / 规则见
 :doc:`../data_model`。不要按灯/开关发明 C 结构。演示：L1
 ``examples/plugins/ble_mesh_pack``，L2 ``color_bulb_js``，L3
-``color_bulb`` / ``meter_plug``。厂商 MIoT 模块（``miot`` L3、
-``miot_js`` L2）在旁路仓库 ``esp-minihub-plugins``；把
-``MINIHUB_PLUGIN_DIRS`` 指到那份克隆。
+``color_bulb`` / ``meter_plug``。额外厂商插件不在本仓库 —
+在 CMake 之前把 ``MINIHUB_PLUGIN_DIRS`` 指到旁路 Store 插件仓库。
 
 源码与设备路径
 --------------

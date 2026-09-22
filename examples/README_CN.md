@@ -14,7 +14,7 @@
 | [ble_mesh_ota](plugins/ble_mesh_ota/) | **L3** | 同一套认领/目录逻辑，作用在 Host BLE Mesh 点上。Mesh 固件更新空中路径仍是 Host stub。 |
 | [matter_ota](plugins/matter_ota/) | **L3** | 同一套逻辑，作用在 Host Matter endpoint（`light/matter_n*_ep*`）。启动 OTA 时 Hub 走 CSA Provider + BDX。 |
 
-小米 MIoT（`miot` L3、`miot_js` L2）不在本仓库，在旁路仓库 [esp-minihub-plugins](https://gitlab.espressif.cn:6688/ae_group/minihub/esp-minihub-plugins)。把 `MINIHUB_PLUGIN_DIRS` 指到那份克隆。
+厂商 Store 插件不在本仓库。在 configure / pack 之前把 `MINIHUB_PLUGIN_DIRS` 指到旁路插件仓库。
 
 射频 OTA 插件 **不得** 再 `point_register` 第二个 id。用 `merge_props` 丰富
 Host 已有点（`owner` / `ota`）。

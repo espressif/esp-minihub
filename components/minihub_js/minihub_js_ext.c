@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  *
- * host.net.udp — IPv4 UDP for miIO LAN
+ * host.net.udp — IPv4 UDP datagrams for LAN plugin protocols
  * host.crypto  — md5/sha1/sha256/hmacSha256/aes128Cbc (base64 I/O)
  */
 
@@ -464,7 +464,7 @@ static JSValue js_aes128_cbc(JSContext *ctx, JSValueConst argv0, bool encrypt)
         return JS_ThrowTypeError(ctx, "key/iv must be 16 bytes");
     }
 
-    /* mbedtls 4: legacy cipher.h gone — use PSA AES-CBC PKCS7 (same as miio_lan.c). */
+    /* mbedtls 4: legacy cipher.h gone — use PSA AES-CBC PKCS7. */
     if (psa_crypto_init() != PSA_SUCCESS) {
         free(key);
         free(iv);

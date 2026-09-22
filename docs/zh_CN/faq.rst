@@ -32,7 +32,7 @@ Store 安装返回 400 / 404 / 409
 
 .. code-block:: json
 
-   { "id": "miot", "clear_load_guard": true, "reload": true }
+   { "id": "color_bulb", "clear_load_guard": true, "reload": true }
 
 串口查 ABI。L3 须让 ``module.json`` 的 ``abi_version`` 与 ``core_api_*`` 覆盖
 当前 Host（头文件 ``MINIHUB_MODULE_ABI_VERSION`` ）。见 :doc:`api/module_abi` 。
