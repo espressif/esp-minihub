@@ -314,7 +314,7 @@ to GET/POST/PUT.
 Methods — host.net
 ------------------
 
-IPv4 UDP helpers for LAN protocols (e.g. miIO). Binary payloads use **base64**.
+IPv4 UDP helpers for LAN protocols. Binary payloads use **base64**.
 Implementation: ``components/minihub_js/minihub_js_ext.c``.
 
 host.net.udp.open(opts?)
@@ -328,7 +328,7 @@ host.net.udp.sendto(fd, { ip, port, data_b64 })
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 host.net.udp.recvfrom(fd, { timeout_ms, max_len? })
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Returns ``{ ip, port, data_b64 }`` or ``null`` on timeout.
 
@@ -348,7 +348,7 @@ return **base64**. Inputs accept a string or ``{ data }`` / ``{ data_b64 }``.
 * ``host.crypto.aes128CbcEncrypt({ key_b64, iv_b64, data_b64 })`` → base64 (PKCS7)
 * ``host.crypto.aes128CbcDecrypt({ key_b64, iv_b64, data_b64 })`` → base64
 
-Demo: ``examples/plugins/miot_js/`` (pure L2 cloud + miIO LAN).
+Demo: ``examples/plugins/color_bulb_js/``.
 
 Methods — host.config
 ---------------------
@@ -412,8 +412,7 @@ Register an RPC handler for **this** module id (only valid inside ``setup``).
 Web UI and ``POST /api/modules/<id>/rpc`` call ``handler(method, params)``.
 
 On **hybrid** modules, JS handlers become the primary RPC; methods not
-registered in JS fall through to the native ``minihub_module_rpc`` (e.g.
-``lan_*`` in ``miot_js``).
+registered in JS fall through to the native ``minihub_module_rpc``.
 
 Parameters
 ^^^^^^^^^^

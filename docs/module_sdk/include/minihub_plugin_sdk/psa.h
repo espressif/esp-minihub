@@ -103,6 +103,9 @@ typedef uint8_t psa_ecc_family_t;
 /** @brief CTR block cipher mode.
  *  @note IDF: ``components/mbedtls/mbedtls/include/psa/crypto.h`` */
 #define PSA_ALG_CTR                    ((psa_algorithm_t)0x04c01000)
+/** @brief CBC with PKCS#7 padding.
+ *  @note IDF: ``components/mbedtls/mbedtls/include/psa/crypto.h`` */
+#define PSA_ALG_CBC_PKCS7              ((psa_algorithm_t)0x04404100)
 /** @brief CCM AEAD mode.
  *  @note IDF: ``components/mbedtls/mbedtls/include/psa/crypto.h`` */
 #define PSA_ALG_CCM                    ((psa_algorithm_t)0x05500100)

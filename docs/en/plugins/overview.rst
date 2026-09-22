@@ -53,8 +53,8 @@ catalog, and install: :doc:`pack_and_catalog`.
        ABI. **Requires:** a matching cross compiler (or in-tree firmware
        build); ``abi_version`` / ``core_api_*`` must bracket the Host; symbols
        on the allowlist. See :doc:`../api/module_abi`.
-       Example ``miot``: ``module.json`` + ``miot.so`` + ``ui.json``, no
-       ``main.js``, no ``inject`` — that is L3, not L1.
+       Example ``color_bulb``: ``module.json`` + ``color_bulb.so`` (+ optional
+       ``devices.json``), no ``main.js``, no ``inject`` — that is L3, not L1.
      - :doc:`develop_l3`
    * - Hybrid
      - **L2 + L3 only:** same ``.mhub`` contains both ``.so`` and
@@ -80,17 +80,17 @@ defaults). Installing L3 at most creates an empty ``adapters.json`` slot
 widgets (:doc:`../type_catalog`). Point fields and adapters / rules:
 :doc:`../data_model`. Do not invent a C struct per lamp or switch. Demos:
 L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js``, L3
-``color_bulb`` / ``meter_plug``.
+``color_bulb`` / ``meter_plug``. Extra vendor plugins live outside this tree —
+export ``MINIHUB_PLUGIN_DIRS`` at a sibling Store plugin repo before configure.
 
 Source tree
 -----------
 
 Optional in-repo sources:
 
-* Production: ``components/minihub_plugins/ID/`` (reference: ``miot``)
-* Demos: ``examples/plugins/ID/`` via ``MINIHUB_PLUGIN_DIRS`` (export
-  **before** CMake). Index: ``examples/README.md``. Public Host
-  ``store_preinstall`` defaults to empty.
+* Demos: ``examples/plugins/ID/``
+  (export ``MINIHUB_PLUGIN_DIRS`` **before** CMake for extras). Index:
+  ``examples/README.md``. Public Host ``store_preinstall`` defaults to empty.
 
 On device after install:
 
@@ -121,7 +121,7 @@ List module ids in ``application/APP/manifest.yml``:
 .. code-block:: yaml
 
    store_preinstall:
-     - miot
+     - color_bulb
 
 Firmware build copies packed ``.mhub`` files into ``modstore`` (mounted as
 ``/store``). The ``preinstall`` field in ``module.json`` is not used for factory
@@ -130,12 +130,12 @@ bundling.
 Development loop (summary)
 --------------------------
 
-1. Edit sources under ``components/minihub_plugins/ID/`` (or
-   ``examples/plugins/ID/`` with ``MINIHUB_PLUGIN_DIRS``)
+1. Edit sources under ``examples/plugins/ID/`` (or
+   ``MINIHUB_PLUGIN_DIRS``)
 2. For L3, compile the ``.so`` first (standalone cross-compile or with the Host;
    see :doc:`develop_l3`), then ``python3 tools/pack_store_module.py pack ID``
 3. After ``.mhub`` is in the store directory:
-   ``python3 tools/sync_store_catalog.py --from-store`` then
+   ``python3 tools/sync_store_catalog.py`` then
    ``python3 tools/store_server.py``
 4. On Hub: install from catalog or upload ``.mhub``, then ``POST /api/hub/reload``
 
@@ -158,7 +158,7 @@ Developer scripts (L1 / L2 / L3)
      - yes
      - yes
      - yes
-     - Scaffold under ``components/minihub_plugins/``
+     - Scaffold under ``examples/plugins/``
    * - ``tools/pack_store_module.py pack ID|all``
      - yes
      - yes
@@ -169,16 +169,16 @@ Developer scripts (L1 / L2 / L3)
      - —
      - yes
      - Wrap ELF with MHMD header
+   * - ``tools/sync_store_catalog.py``
+     - yes
+     - yes
+     - yes
+     - Rewrite ``catalog.json`` from deployed ``DEPLOY/ID/ID.mhub`` (default)
    * - ``tools/sync_store_catalog.py all``
      - yes
      - yes
      - yes
-     - Repack from sources, then refresh ``catalog.json``
-   * - ``tools/sync_store_catalog.py --from-store``
-     - yes
-     - yes
-     - yes
-     - Rewrite ``catalog.json`` from deployed ``DEPLOY/ID/ID.mhub`` (no sources)
+     - Pack from sources, then rewrite ``catalog.json`` the same way
    * - ``tools/store_server.py``
      - yes
      - yes
@@ -193,7 +193,7 @@ Developer scripts (L1 / L2 / L3)
      - —
      - —
      - yes
-     - In-tree Host ``.so`` + pack
+     - Compile in-tree native ``.so`` (``modules``) or pack (``pack``)
    * - ``tools/build_plugin_standalone.py ID``
      - —
      - —
@@ -226,7 +226,7 @@ Tier / loader:
 * ``runtime`` — ``pack`` (L1), ``js`` (L2), omitted/native (L3), or ``hybrid``
   (L2 + L3 in one package only; see the table)
 * ``adapter`` — ``adapters.json`` key Host will create/enable
-* ``binary`` — L3 filename inside the unpacked dir (example ``miot.so``)
+* ``binary`` — L3 filename inside the unpacked dir (example ``color_bulb.so``)
 * ``ui_file`` — optional Web form (``ui.json``)
 * ``abi_version`` · ``core_api_min`` · ``core_api_max`` — must bracket Host
   (see :doc:`../api/module_abi`)

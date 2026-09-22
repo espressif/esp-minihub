@@ -307,18 +307,18 @@ Attention
 方法 — host.net
 ---------------
 
-IPv4 UDP（如 miIO）。二进制载荷使用 **base64**。实现：``components/minihub_js/minihub_js_ext.c``。
+IPv4 UDP。二进制载荷使用 **base64**。实现：``components/minihub_js/minihub_js_ext.c``。
 
 host.net.udp.open(opts?)
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-``opts.broadcast``（可选 bool）开启广播。返回小整数 socket 句柄。
+``opts.broadcast`` （可选 bool）开启广播。返回小整数 socket 句柄。
 
 host.net.udp.sendto(fd, { ip, port, data_b64 })
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 host.net.udp.recvfrom(fd, { timeout_ms, max_len? })
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 返回 ``{ ip, port, data_b64 }``，超时为 ``null``。
 
@@ -338,7 +338,7 @@ host.net.udp.close(fd)
 * ``host.crypto.aes128CbcEncrypt({ key_b64, iv_b64, data_b64 })`` → base64（PKCS7）
 * ``host.crypto.aes128CbcDecrypt({ key_b64, iv_b64, data_b64 })`` → base64
 
-示例：``examples/plugins/miot_js/``（纯 L2 云 + miIO LAN）。
+示例：``examples/plugins/color_bulb_js/``。
 
 方法 — host.config
 ------------------
@@ -402,7 +402,7 @@ host.module.registerRpc(method, handler)
 ``POST /api/modules/<id>/rpc`` 会调用 ``handler(method, params)``。
 
 在 **hybrid** 模块上，JS 处理器为 RPC 主路径；未在 JS 注册的方法会回落到
-原生 ``minihub_module_rpc``（例如 ``miot_js`` 的 ``lan_*``）。
+原生 ``minihub_module_rpc``。
 
 Parameters
 ^^^^^^^^^^

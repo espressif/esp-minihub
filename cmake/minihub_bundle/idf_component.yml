@@ -5,7 +5,7 @@
 ## esp_flash_dispatcher is the registry package (not a Core source tree).
 ## elf_loader: minihub_module/idf_component.yml when CONFIG_MINIHUB_DYNAMIC_MODULES.
 ## gen_bmgr_codes is product-local (idf.py bmgr → application/<app>/components/).
-## Does not include components/minihub_plugins (runtime Store plugins).
+## Does not include runtime Store plugins (examples/plugins + MINIHUB_PLUGIN_DIRS).
 dependencies:
   json:
     path: ../../components/json

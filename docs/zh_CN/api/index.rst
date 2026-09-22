@@ -8,7 +8,7 @@ MiniHub 的对外接口分为 Host 开发 API 与 Store 插件 API 两类。
 面向 OEM 产品、局域网集成、自动化脚本，以及在 ``components/`` 内编写 **静态链接**
 适配器的开发者：REST/MCP 操作 Hub，或在 Host 固件中实现 ``minihub_adapter_t`` 。
 
-面向 ``components/minihub_plugins/`` 或 ``examples/plugins/`` 下的 L2（JS）与
+面向 ``examples/plugins/`` 或 ``MINIHUB_PLUGIN_DIRS`` 下的 L2（JS）与
 L3（原生）模块作者：通过 Host
 虚表 / JS 对象访问 Core，并用 REST 安装、启用与 RPC。仓库外 L3 应
 ``#include "minihub_plugin_sdk.h"`` （ :doc:`plugin_host` ）。

@@ -22,7 +22,7 @@ L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
 
 .. code-block:: text
 
-   components/minihub_plugins/ID/
+   examples/plugins/ID/
      module.json
      main.js              # 必需 — 须导出 setup(host)
      ui.json              # 可选 — Web 模块面板
@@ -89,7 +89,8 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
      });
    }
 
-可选 ``ui.json`` 描述 Web UI 中的模块表单（完整示例见 ``miot/ui.json`` ）。
+可选 ``ui.json`` 描述 Web UI 中的模块表单（完整示例见
+``examples/plugins/color_bulb_js/`` ）。
 
 接入 ``adapters.json``
 ----------------------

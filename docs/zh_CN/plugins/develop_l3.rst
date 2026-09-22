@@ -98,8 +98,9 @@ L3 模块在外层 ``.mhub`` zip 内携带 **原生 ELF** ``.so`` 。加载器�
    python3 /path/to/module_sdk/sync_store_catalog.py --from-store \
      --deploy ~/workspace/minihub_store
 
-``-B build`` 放在插件目录内。本仓库 ``tools/build_plugin_standalone.py`` 会做
-configure、编译，并可加 ``--pack``。Host 树内编译仍写到
+``-B build`` 放在插件目录内。``build_plugin_standalone.py``（本仓库
+``tools/`` 或 ``docs/module_sdk/``；``module_sdk.zip`` 里与 cmake 片段同目录）
+会做 configure、编译，并可加 ``--pack``。Host 树内编译仍写到
 ``application/minihub/build/<id>.so``。
 
 ``examples/plugins/`` 演示（双路径）
@@ -118,8 +119,8 @@ configure、编译，并可加 ``--pack``。Host 树内编译仍写到
 仓库内跟 Host 一起编
 ^^^^^^^^^^^^^^^^^^^^
 
-源码放 ``components/minihub_plugins/ID/`` （生产）或 ``examples/plugins/ID/``
-（演示：CMake **之前** export ``MINIHUB_PLUGIN_DIRS``），用
+源码放 ``examples/plugins/ID/`` （演示）或 ``MINIHUB_PLUGIN_DIRS``
+列出的树（CMake **之前** export），用
 ``idf_component_register`` ；
 ``REQUIRES`` 只加实际用到的公开库。使能 ``CONFIG_MINIHUB_DYNAMIC_MODULES`` 时加
 ``-fPIC`` 。固件编译经 ``cmake/minihub_module_so.cmake`` 生成
@@ -154,7 +155,7 @@ L3 常用脚本
 
 .. code-block:: text
 
-   components/minihub_plugins/my_native/
+   examples/plugins/my_native/
      module.json
      module_entry.c       # 导出 minihub_module_entry（可选 minihub_module_rpc）
      my_native_adapter.c  # minihub_adapter_t 实现

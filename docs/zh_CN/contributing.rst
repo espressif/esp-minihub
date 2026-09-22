@@ -23,7 +23,7 @@
    * - OEM Host 产品（板级、分区、出厂配置）
      - ``application/APP/`` — 见 :doc:`application/index` 再 :doc:`host_customization`
    * - 厂商云 / 生态逻辑
-     - ``components/minihub_plugins/ID/`` 或 ``examples/plugins/ID/`` 的 Store
+     - ``examples/plugins/ID/`` 或 ``MINIHUB_PLUGIN_DIRS`` 的 Store
        ``.mhub`` — 请勿写进 Host Core
    * - 共享 Host Core 修复
      - ``components/`` 下 ``minihub_`` 前缀组件、``adapters/`` — 保持生态中立

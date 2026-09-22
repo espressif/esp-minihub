@@ -2,7 +2,7 @@
 # After that include, call minihub_register_kconfig() before project().
 # After project() (DEFER): L3 .so targets and CHIP -fno-rtti.
 #
-#   set(MINIHUB_IMPORT_STORE_MODULES_DISABLED ON)  # skip minihub_plugins
+#   set(MINIHUB_IMPORT_STORE_MODULES_DISABLED ON)  # skip L3 .so from MINIHUB_PLUGIN_DIRS
 #   include("${MINIHUB_REPO_ROOT}/cmake/minihub_bundle/minihub_import.cmake")
 #   include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 #   minihub_register_kconfig()
@@ -30,23 +30,10 @@ list(APPEND EXTRA_COMPONENT_DIRS
     "${MINIHUB_BUNDLE_DIR}"
 )
 if(NOT MINIHUB_IMPORT_STORE_MODULES_DISABLED)
-    list(APPEND EXTRA_COMPONENT_DIRS "${MINIHUB_IMPORT_ROOT}/components/minihub_plugins")
-    # Ids / realpaths already visible via components/minihub_plugins.
-    # MINIHUB_PLUGIN_DIRS must not re-add the same plugin as a second EXTRA_COMPONENT_DIRS
-    # entry (duplicate component name / module_so_* target).
+    # L3 sources come from MINIHUB_PLUGIN_DIRS (plugin dir or parent). Demos:
+    # examples/plugins via that env — not a Host builtin component tree.
     set(_mh_store_ids "")
     set(_mh_store_reals "")
-    file(GLOB _mh_store_cms "${MINIHUB_IMPORT_ROOT}/components/minihub_plugins/*/CMakeLists.txt")
-    foreach(_c ${_mh_store_cms})
-        get_filename_component(_d ${_c} DIRECTORY)
-        get_filename_component(_id ${_d} NAME)
-        get_filename_component(_real ${_d} REALPATH)
-        list(APPEND _mh_store_ids "${_id}")
-        list(APPEND _mh_store_reals "${_real}")
-    endforeach()
-    # MINIHUB_PLUGIN_DIRS: ;/:-separated dirs (each a plugin dir with module.json, or a
-    # parent holding several). Lets a plugin build without being copied/symlinked
-    # into components/minihub_plugins.
     if(DEFINED ENV{MINIHUB_PLUGIN_DIRS} AND NOT "$ENV{MINIHUB_PLUGIN_DIRS}" STREQUAL "")
         string(REPLACE ":" ";" _mh_env_pl "$ENV{MINIHUB_PLUGIN_DIRS}")
         foreach(_pd ${_mh_env_pl})
@@ -62,6 +49,8 @@ if(NOT MINIHUB_IMPORT_STORE_MODULES_DISABLED)
                 if(_id IN_LIST _mh_store_ids OR _real IN_LIST _mh_store_reals)
                     continue()
                 endif()
+                list(APPEND _mh_store_ids "${_id}")
+                list(APPEND _mh_store_reals "${_real}")
                 list(APPEND EXTRA_COMPONENT_DIRS "${_pd}")
             elseif(NOT EXISTS "${_pd}/module.json")
                 file(GLOB _pd_sub "${_pd}/*/CMakeLists.txt")
@@ -72,6 +61,8 @@ if(NOT MINIHUB_IMPORT_STORE_MODULES_DISABLED)
                     if(_id IN_LIST _mh_store_ids OR _real IN_LIST _mh_store_reals)
                         continue()
                     endif()
+                    list(APPEND _mh_store_ids "${_id}")
+                    list(APPEND _mh_store_reals "${_real}")
                     list(APPEND EXTRA_COMPONENT_DIRS "${_d}")
                 endforeach()
             endif()
@@ -127,33 +118,15 @@ if(DEFINED ENV{ESP_MATTER_PATH} AND NOT "${_mh_matter_off}" STREQUAL "0")
 endif()
 
 # Collect NATIVE (L3) plugin SOURCE dirs (module.json + CMakeLists.txt) into <out>.
-# Combines the in-tree components/minihub_plugins/<id> with any dirs named in
-# MINIHUB_PLUGIN_DIRS (;/:-separated). A MINIHUB_PLUGIN_DIRS entry may be a single
-# plugin dir or a parent dir holding several plugin subdirs. L1/L2 (runtime js/pack,
-# main.js only, no CMakeLists.txt) are excluded — use minihub_store_module_dirs for
-# .mhub staging. Deduplicate by plugin id and by canonical REALPATH.
+# Only MINIHUB_PLUGIN_DIRS (;/:-separated). Export examples/plugins there to
+# compile in-tree demos — they are not a Host builtin tree.
+# A MINIHUB_PLUGIN_DIRS entry may be a single plugin dir or a parent dir.
+# L1/L2 (no CMakeLists.txt) are excluded — use minihub_store_module_dirs for
+# .mhub staging. Deduplicate by plugin id and REALPATH.
 function(minihub_plugin_dirs out)
     set(_dirs "")
     set(_seen_ids "")
     set(_seen_reals "")
-    set(_store_root "${MINIHUB_REPO_ROOT}/components/minihub_plugins")
-    if(NOT EXISTS "${_store_root}")
-        set(_store_root "${CMAKE_SOURCE_DIR}/components/minihub_plugins")
-    endif()
-    if(EXISTS "${_store_root}")
-        file(GLOB _BUILTIN "${_store_root}/*/CMakeLists.txt")
-        foreach(_c ${_BUILTIN})
-            get_filename_component(_d ${_c} DIRECTORY)
-            get_filename_component(_id ${_d} NAME)
-            get_filename_component(_real ${_d} REALPATH)
-            if(_id IN_LIST _seen_ids OR _real IN_LIST _seen_reals)
-                continue()
-            endif()
-            list(APPEND _seen_ids "${_id}")
-            list(APPEND _seen_reals "${_real}")
-            list(APPEND _dirs "${_d}")
-        endforeach()
-    endif()
     if(DEFINED ENV{MINIHUB_PLUGIN_DIRS} AND NOT "$ENV{MINIHUB_PLUGIN_DIRS}" STREQUAL "")
         string(REPLACE ":" ";" _env_pl "$ENV{MINIHUB_PLUGIN_DIRS}")
         foreach(_pd ${_env_pl})
@@ -196,32 +169,11 @@ endfunction()
 
 # All Store module dirs with module.json (L1/L2/L3) for .mhub staging / catalog.
 # Unlike minihub_plugin_dirs, includes runtime js/pack plugins that have no
-# CMakeLists.txt. Dedupes by id and REALPATH.
+# CMakeLists.txt. Sources: MINIHUB_PLUGIN_DIRS only. Dedupes by id and REALPATH.
 function(minihub_store_module_dirs out)
     set(_dirs "")
     set(_seen_ids "")
     set(_seen_reals "")
-    set(_store_root "${MINIHUB_REPO_ROOT}/components/minihub_plugins")
-    if(NOT EXISTS "${_store_root}")
-        set(_store_root "${CMAKE_SOURCE_DIR}/components/minihub_plugins")
-    endif()
-    if(EXISTS "${_store_root}")
-        file(GLOB _BUILTIN "${_store_root}/*/module.json")
-        foreach(_j ${_BUILTIN})
-            get_filename_component(_d ${_j} DIRECTORY)
-            get_filename_component(_id ${_d} NAME)
-            if(_id MATCHES "^_")
-                continue()
-            endif()
-            get_filename_component(_real ${_d} REALPATH)
-            if(_id IN_LIST _seen_ids OR _real IN_LIST _seen_reals)
-                continue()
-            endif()
-            list(APPEND _seen_ids "${_id}")
-            list(APPEND _seen_reals "${_real}")
-            list(APPEND _dirs "${_d}")
-        endforeach()
-    endif()
     if(DEFINED ENV{MINIHUB_PLUGIN_DIRS} AND NOT "$ENV{MINIHUB_PLUGIN_DIRS}" STREQUAL "")
         string(REPLACE ":" ";" _env_pl "$ENV{MINIHUB_PLUGIN_DIRS}")
         foreach(_pd ${_env_pl})

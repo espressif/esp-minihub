@@ -59,37 +59,21 @@ def store_preinstall_ids(repo: Path, app: str) -> list[str]:
             f"application/{app}/manifest.yml: store_preinstall must be a list of module ids"
         )
     ids: list[str] = []
-    store_root = repo / "components" / "minihub_plugins"
     sys.path.insert(0, str(ROOT / "tools"))
-    from store_paths import plugin_dir_env  # noqa: E402
+    from store_paths import module_source_dir  # noqa: E402
 
-    env_dirs = plugin_dir_env()
     for item in raw:
         if not isinstance(item, str) or not item.strip():
             raise SystemExit(f"application/{app}/manifest.yml: invalid store_preinstall entry {item!r}")
         mid = item.strip()
-        mod_json = store_root / mid / "module.json"
-        if mod_json.is_file():
-            if mid not in ids:
-                ids.append(mid)
-            continue
-        # Also accept modules discovered via MINIHUB_PLUGIN_DIRS (single plugin
-        # dir with module.json, or a parent dir holding several plugins).
-        found = False
-        for d in env_dirs:
-            if (d / "module.json").is_file() and d.name == mid:
-                found = True
-                break
-            if (d / mid / "module.json").is_file():
-                found = True
-                break
-        if found:
+        mod_dir = module_source_dir(mid, root=repo)
+        if (mod_dir / "module.json").is_file():
             if mid not in ids:
                 ids.append(mid)
             continue
         raise SystemExit(
-            f"store_preinstall: unknown module {mid!r} (missing {mod_json}; "
-            f"also not found under MINIHUB_PLUGIN_DIRS)"
+            f"store_preinstall: unknown module {mid!r} (missing {mod_dir / 'module.json'}; "
+            f"not under examples/plugins or MINIHUB_PLUGIN_DIRS)"
         )
     return ids
 

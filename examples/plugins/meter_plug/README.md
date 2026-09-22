@@ -3,7 +3,7 @@
 [English](README.md) | [中文](README_CN.md)
 
 Standalone L3 native demo under `examples/plugins/` (not in default
-`application/minihub` or `components/minihub_plugins/`). Registers **one online
+`application/minihub`). Registers **one online
 metered switch** (`type=switch`: power + voltage/current/power) — **no hardware**.
 
 Uses the Host `switch` catalog. Does **not** ship labels / widgets / CSS / icons.

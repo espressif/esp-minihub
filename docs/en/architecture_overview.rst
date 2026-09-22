@@ -39,7 +39,7 @@ bundled adapters) runs on the device; vendor/third-party behavior ships as
    │  └─ minihub_store / minihub_module / minihub_pack  Store       │
    ├──────────────────────────────────────────────────────────────┤
    │ minihub_adapters  zigbee / matter / thread / ble_mesh / …     │
-   │ minihub_plugins    vendor adapters (Store .mhub)              │
+   │ examples/plugins + MINIHUB_PLUGIN_DIRS  Store .mhub sources    │
    └──────────────────────────────────────────────────────────────┘
                    │ protocol frames
                    ▼

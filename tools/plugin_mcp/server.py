@@ -61,7 +61,7 @@ TOOLS = [
         "description": (
             "Generate L1/L2/L3 template files. Returns file contents so the client "
             "can write them without this firmware tree. Optionally write to out_dir "
-            "or in-tree components/minihub_plugins/<id>/."
+            "or in-tree examples/plugins/<id>/."
         ),
         "inputSchema": _schema(
             {
@@ -77,7 +77,7 @@ TOOLS = [
                 },
                 "in_tree": {
                     "type": "boolean",
-                    "description": "Write to esp-minihub components/minihub_plugins/<id>/",
+                    "description": "Write to esp-minihub examples/plugins/<id>/",
                 },
                 "force": {"type": "boolean", "description": "Overwrite existing out_dir"},
             },

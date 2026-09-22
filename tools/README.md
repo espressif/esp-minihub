@@ -110,7 +110,7 @@ Ids: lowercase + underscores, no hyphens (`^[a-z][a-z0-9_]{0,30}$`).
 
 ### `new_store_module.py`
 
-Copy `docs/module_sdk/templates/l{1,2,3}/` → `components/minihub_plugins/<id>/`.
+Copy `docs/module_sdk/templates/l{1,2,3}/` → `examples/plugins/<id>/`.
 
 ```bash
 python3 tools/new_store_module.py --tier l1 --id my_pack --name "My pack"
@@ -157,14 +157,12 @@ Also: `./tools/build_firmware.py pack`.
 
 ### `sync_store_catalog.py`
 
-Pack module(s) and rewrite deploy `catalog.json`.
-
-`all` repacks from plugin sources. After `.mhub` files are already in the store directory, `--from-store` only walks `DEPLOY/ID/ID.mhub` and rewrites `catalog.json` (no sources). The script is also copied into `module_sdk.zip`.
+Rewrite deploy `catalog.json`. Default (no args): walk `DEPLOY/ID/ID.mhub` only — no sources, no `MINIHUB_PLUGIN_DIRS`. `--from-store` is the same. Pass `all` or an id to pack from sources first, then rewrite the catalog the same way. The script is also copied into `module_sdk.zip`.
 
 ```bash
+python3 tools/sync_store_catalog.py
+python3 tools/sync_store_catalog.py --deploy ~/workspace/minihub_store
 python3 tools/sync_store_catalog.py all
-python3 tools/sync_store_catalog.py --from-store
-python3 tools/sync_store_catalog.py --from-store --deploy ~/workspace/minihub_store
 python3 tools/sync_store_catalog.py my_js --deploy ~/workspace/minihub_store
 ```
 
@@ -174,7 +172,7 @@ LAN Store HTTP (default `:8080`): `catalog.json` and `/files/<id>.mhub`.
 
 ```bash
 python3 tools/store_server.py --port 8080
-python3 tools/store_server.py --deploy ~/workspace/minihub_store --rebuild-slim
+python3 tools/store_server.py --deploy ~/workspace/minihub_store
 ```
 
 Point Hub Store at this host (`custom_url`), then refresh + install.
@@ -192,7 +190,7 @@ Repo wiring: `.cursor/mcp.json`, `.vscode/mcp.json`. Tools: `plugin_guide`, `sca
 
 ### `store_paths.py`
 
-Shared path helpers (`STORE_MODULES`, deploy dir). Import only.
+Shared path helpers (`DEMO_PLUGINS`, deploy dir). Import only.
 
 ### `check_module_so_layout.py`
 
@@ -259,4 +257,4 @@ MINIHUB_FONT_UI_ONLY=1 ./tools/ui_font/build_subset.sh   # smaller, UI ASCII onl
 
 `collect_chars.py` / `gen_chars_3000.py` feed the subset list; you usually run the shell wrapper.
 
-Vendor-only helpers (not this directory): `components/minihub_plugins/<id>/tools/`.
+Vendor-only helpers (not this directory): plugin `tools/` under `MINIHUB_PLUGIN_DIRS`.

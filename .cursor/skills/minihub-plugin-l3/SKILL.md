@@ -19,7 +19,7 @@ L3 is a **Store packaging tier**: native MHMD `.so` loaded at runtime (not stati
 
 | Kind | Location |
 |------|----------|
-| Production / vendor plugin | `components/minihub_plugins/<id>/` (scaffold default) or sibling repo `esp-minihub-plugins` |
+| Production / vendor plugin | sibling repo `esp-minihub-plugins` via `MINIHUB_PLUGIN_DIRS` |
 | Standalone demos | `examples/plugins/<id>/` via `export MINIHUB_PLUGIN_DIRS=...` at **configure** time |
 
 Do **not** move demos into Host `require` or leave them in public `store_preinstall` (default `[]`). Optional temporary preinstall: app `manifest.yml` + rebuild; clear afterward.
@@ -73,7 +73,7 @@ python3 tools/generate_devices_property_from_json.py \
     examples/plugins/color_bulb/device_desc.gen.h
 ```
 
-Production plugin under `components/minihub_plugins/<id>/` (no extra env):
+Production / vendor plugin (set `MINIHUB_PLUGIN_DIRS`):
 
 ```bash
 ./tools/build_firmware.py -app minihub zigbee ble_mesh build
@@ -97,7 +97,7 @@ python3 tools/pack_store_module.py mhmd \
     application/minihub/build/modules/libadapter_my_native.so \
     application/minihub/build/my_native.so
 python3 tools/pack_store_module.py pack my_native
-python3 tools/sync_store_catalog.py all
+python3 tools/sync_store_catalog.py
 python3 tools/store_server.py --port 8080
 ```
 
@@ -122,4 +122,4 @@ Load guard: `/store/modules/<id>/.load_guard`. Clear via `POST /api/modules` wit
 
 If you add a new libc/IDF symbol, regenerate allowlist with `tools/gen_host_export_symbols.py` after a successful module link.
 
-Docs: `docs/plugins_and_store.md`, `tools/README.md`, `examples/plugins/*/README.md`, `components/minihub_plugins/README.md`.
+Docs: `docs/en/plugins/`, `tools/README.md`, `examples/plugins/*/README.md`.

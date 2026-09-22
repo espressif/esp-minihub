@@ -21,7 +21,7 @@ L1 only **injects into an existing Host adapter**. Do not invent a new radio sta
 
 | Kind | Location |
 |------|----------|
-| Real Store pack | `components/minihub_plugins/<id>/` (scaffold default) |
+| Real Store pack | sibling repo via `MINIHUB_PLUGIN_DIRS`, or `examples/plugins/<id>/` (`new_store_module.py` default) |
 | Standalone demos | `examples/plugins/<id>/` + `MINIHUB_PLUGIN_DIRS` — **not** Host `require`, **not** default `store_preinstall`. Reference: `examples/plugins/ble_mesh_pack` |
 
 Public `application/minihub` keeps `store_preinstall: []`. Do not bake demo packs into Host builtin.
@@ -46,7 +46,7 @@ Or IDE MCP: `scaffold_plugin` with `tier=l1` (`python3 tools/minihub_plugin_mcp.
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product under `application/` |
 | `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Catalog + `.mhub` |
-| `MINIHUB_PLUGIN_DIRS` | (empty) | Extra source trees (`:`/`;`). Needed only if the pack is **not** under `components/minihub_plugins/` |
+| `MINIHUB_PLUGIN_DIRS` | (empty) | Extra source trees (`:`/`;`). Vendor plugins are not in the Host tree |
 
 No firmware compile. Packer zips `module.json` only (no `main.js`, no `.so`).
 
@@ -57,8 +57,8 @@ No firmware compile. Packer zips `module.json` only (no `main.js`, no `.so`).
 export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"
 
 python3 tools/pack_store_module.py pack my_pack
-python3 tools/sync_store_catalog.py all
-# or: python3 tools/sync_store_catalog.py my_pack --deploy ~/workspace/minihub_store
+python3 tools/sync_store_catalog.py
+# or pack then catalog: python3 tools/sync_store_catalog.py my_pack --deploy ~/workspace/minihub_store
 python3 tools/store_server.py --port 8080
 ```
 

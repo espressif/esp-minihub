@@ -25,7 +25,7 @@ What belongs where
    * - OEM Host product (board, partitions, factory JSON)
      - ``application/APP/`` — see :doc:`application/index` then :doc:`host_customization`
    * - Vendor cloud / ecosystem logic
-     - ``components/minihub_plugins/ID/`` or ``examples/plugins/ID/`` as Store
+     - ``examples/plugins/ID/`` or ``MINIHUB_PLUGIN_DIRS`` as Store
        ``.mhub`` — **not** Host Core
    * - Shared Host Core fix
      - ``components/`` ``minihub_``-prefixed libs, ``adapters/`` — keep ecosystem-agnostic

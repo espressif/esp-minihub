@@ -3,7 +3,7 @@
 [English](README.md) | [中文](README_CN.md)
 
 Standalone **L1 pack** under `examples/plugins/` (not in default
-`application/minihub` or `components/minihub_plugins/`). It ships **only**
+`application/minihub`). It ships **only**
 `module.json`: no `main.js`, no `.so`, no radio `devices[]`.
 
 Host `minihub_pack` **merges** `inject` into the existing `adapters.ble_mesh`

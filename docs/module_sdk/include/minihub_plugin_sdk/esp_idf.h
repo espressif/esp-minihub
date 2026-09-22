@@ -67,6 +67,31 @@ typedef int esp_err_t;
 /** @brief Operation timed out.
  *  @note IDF: ``components/esp_common/include/esp_err.h`` */
 #define ESP_ERR_TIMEOUT         0x107
+/** @brief Received response was invalid.
+ *  @note IDF: ``components/esp_common/include/esp_err.h`` */
+#define ESP_ERR_INVALID_RESPONSE 0x108
+/** @brief CRC or checksum was invalid.
+ *  @note IDF: ``components/esp_common/include/esp_err.h`` */
+#define ESP_ERR_INVALID_CRC     0x109
+/** @brief Version was invalid.
+ *  @note IDF: ``components/esp_common/include/esp_err.h`` */
+#define ESP_ERR_INVALID_VERSION 0x10A
+
+/** @brief NVS error base.
+ *  @note IDF: ``components/nvs_flash/include/nvs.h`` */
+#define ESP_ERR_NVS_BASE                 0x1100
+/** @brief NVS entry / namespace not found.
+ *  @note IDF: ``components/nvs_flash/include/nvs.h`` */
+#define ESP_ERR_NVS_NOT_FOUND            (ESP_ERR_NVS_BASE + 0x02)
+/** @brief NVS storage full.
+ *  @note IDF: ``components/nvs_flash/include/nvs.h`` */
+#define ESP_ERR_NVS_NOT_ENOUGH_SPACE     (ESP_ERR_NVS_BASE + 0x05)
+/** @brief NVS invalid handle.
+ *  @note IDF: ``components/nvs_flash/include/nvs.h`` */
+#define ESP_ERR_NVS_INVALID_HANDLE       (ESP_ERR_NVS_BASE + 0x07)
+/** @brief NVS string/blob buffer too short.
+ *  @note IDF: ``components/nvs_flash/include/nvs.h`` */
+#define ESP_ERR_NVS_INVALID_LENGTH       (ESP_ERR_NVS_BASE + 0x0c)
 
 /** @brief Convert ``esp_err_t`` to a string name.
  *  @note IDF: ``components/esp_common/include/esp_err.h`` */

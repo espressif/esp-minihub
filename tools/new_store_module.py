@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Copy docs/module_sdk/templates/l{1,2,3} → components/minihub_plugins/<id>/."""
+"""Copy docs/module_sdk/templates/l{1,2,3} → examples/plugins/<id>/ (or --out)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "docs" / "module_sdk" / "templates"
-STORE = ROOT / "components" / "minihub_plugins"
+STORE = ROOT / "examples" / "plugins"
 
 ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
 
@@ -33,7 +33,12 @@ def main() -> int:
     parser.add_argument("--tier", required=True, choices=("l1", "l2", "l3"))
     parser.add_argument("--id", required=True, help="directory name / module.json id (lowercase, underscores)")
     parser.add_argument("--name", default="", help="display name (default: id)")
-    parser.add_argument("--force", action="store_true", help="overwrite existing minihub_plugins/<id>/")
+    parser.add_argument("--force", action="store_true", help="overwrite existing destination")
+    parser.add_argument(
+        "--out",
+        default="",
+        help="destination directory (default: examples/plugins/<id>)",
+    )
     args = parser.parse_args()
 
     module_id = args.id.strip()
@@ -49,7 +54,7 @@ def main() -> int:
         print(f"missing template {src}", file=sys.stderr)
         return 1
 
-    dest = STORE / module_id
+    dest = Path(args.out).expanduser().resolve() if args.out.strip() else (STORE / module_id)
     if dest.exists():
         if not args.force:
             print(f"{dest} already exists (pass --force to replace)", file=sys.stderr)

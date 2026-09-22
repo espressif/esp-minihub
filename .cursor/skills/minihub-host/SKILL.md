@@ -26,8 +26,8 @@ description: Develop MiniHub Host firmware products (application folder, Kconfig
 | Bundled adapters (Zigbee / BLE Mesh / Matter / MQTT / Modbus, …) | Vendor / demo plugins |
 
 - Do **not** add vendor cloud adapters or demo plugins to Host `require`.
-- Public `application/minihub` uses `store_preinstall: []`. Optional factory ids resolve under `components/minihub_plugins/<id>/` **or** `MINIHUB_PLUGIN_DIRS` (e.g. `examples/plugins`).
-- Standalone demos live in `examples/plugins/` — not Host builtin, not default `minihub_plugins`.
+- Public `application/minihub` uses `store_preinstall: []`. Optional factory ids resolve under `examples/plugins/<id>/` **or** `MINIHUB_PLUGIN_DIRS`.
+- Standalone demos live in `examples/plugins/` — not Host builtin.
 
 ## Plugins vs Host build
 

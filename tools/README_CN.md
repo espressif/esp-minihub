@@ -111,7 +111,7 @@ Id：小写 + 下划线，禁止连字符（`^[a-z][a-z0-9_]{0,30}$`）。
 
 ### `new_store_module.py`
 
-复制 `docs/module_sdk/templates/l{1,2,3}/` → `components/minihub_plugins/<id>/`。
+复制 `docs/module_sdk/templates/l{1,2,3}/` → `examples/plugins/<id>/`。
 
 ```bash
 python3 tools/new_store_module.py --tier l1 --id my_pack --name "My pack"
@@ -158,14 +158,12 @@ python3 tools/build_store_modules.py my_native --deploy ~/workspace/minihub_stor
 
 ### `sync_store_catalog.py`
 
-打包模块并重写部署目录的 `catalog.json`。
-
-`all` 按插件源码重新打包。`.mhub` 已经在 store 目录里时，用 `--from-store` 只遍历 `DEPLOY/ID/ID.mhub` 并重写 `catalog.json`（不需要源码）。该脚本也会打进 `module_sdk.zip`。
+重写部署目录的 `catalog.json`。无参数时默认只遍历 `DEPLOY/ID/ID.mhub`（不需要源码，也不看 `MINIHUB_PLUGIN_DIRS`）。`--from-store` 与默认相同。传入 `all` 或模块 id 会先按源码打包，再同样重写 catalog。该脚本也会打进 `module_sdk.zip`。
 
 ```bash
+python3 tools/sync_store_catalog.py
+python3 tools/sync_store_catalog.py --deploy ~/workspace/minihub_store
 python3 tools/sync_store_catalog.py all
-python3 tools/sync_store_catalog.py --from-store
-python3 tools/sync_store_catalog.py --from-store --deploy ~/workspace/minihub_store
 python3 tools/sync_store_catalog.py my_js --deploy ~/workspace/minihub_store
 ```
 
@@ -175,7 +173,7 @@ python3 tools/sync_store_catalog.py my_js --deploy ~/workspace/minihub_store
 
 ```bash
 python3 tools/store_server.py --port 8080
-python3 tools/store_server.py --deploy ~/workspace/minihub_store --rebuild-slim
+python3 tools/store_server.py --deploy ~/workspace/minihub_store
 ```
 
 Hub Store 指向该主机（`custom_url`），然后 refresh + install。
@@ -193,7 +191,7 @@ python3 tools/plugin_mcp/test_plugin_mcp.py
 
 ### `store_paths.py`
 
-共享路径助手（`STORE_MODULES`、部署目录）。仅供 import。
+共享路径助手（`DEMO_PLUGINS`、部署目录）。仅供 import。
 
 ### `check_module_so_layout.py`
 
@@ -244,4 +242,4 @@ MINIHUB_FONT_UI_ONLY=1 ./tools/ui_font/build_subset.sh   # 更小，仅 UI ASCII
 
 `collect_chars.py` / `gen_chars_3000.py` 生成子集字符表；日常一般跑 shell 包装脚本。
 
-仅 vendor 的助手（不在本目录）：`components/minihub_plugins/<id>/tools/`。
+仅 vendor 的助手（不在本目录）：`MINIHUB_PLUGIN_DIRS` 下插件自己的 `tools/`。

@@ -255,7 +255,7 @@ CID/PID/VID 与 ``uuid``；Matter Basic Information 与 ``node_id``）。品类�
     * ``writable`` — true 时允许写
     * ``batch_as_props`` — true 时一批寄存器写入点位 ``props``
 
-Store 模块 (L2/L3) 使用自己的键，例如 ``miot`` 。安装时若槽位不存在会创建。
+Store 模块 (L2/L3) 使用自己的键，例如 ``my_module`` 。安装时若槽位不存在会创建。
 L1 包把 ``inject`` **合并** 进指定适配器块（见 :doc:`plugins/develop_l1` ）。
 
 **不要** 把厂商云凭证写进通用 Host 的出厂配置。用户登录后由模块写入 NVS 或模块私有文件。

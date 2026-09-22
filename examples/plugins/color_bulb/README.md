@@ -3,7 +3,7 @@
 [English](README.md) | [中文](README_CN.md)
 
 Standalone L3 native demo under `examples/plugins/` (not in default
-`application/minihub` or `components/minihub_plugins/`). Registers **two online
+`application/minihub`). Registers **two online
 color bulbs** (`type=light`) and handles Web UI commands — **no hardware**.
 
 Uses the Host `light` catalog (`minihub_device_widget/model` → runtime

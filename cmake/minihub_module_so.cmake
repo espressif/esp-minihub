@@ -4,7 +4,7 @@ function(minihub_add_module_so module_id component_name)
     if(NOT CONFIG_MINIHUB_DYNAMIC_MODULES)
         return()
     endif()
-    # Same plugin id can appear via components/minihub_plugins and MINIHUB_PLUGIN_DIRS; only one
+    # Same plugin id can appear via examples/plugins and MINIHUB_PLUGIN_DIRS; only one
     # module_so_<id> custom target is allowed.
     if(TARGET module_so_${module_id})
         return()
@@ -88,7 +88,7 @@ function(minihub_add_module_so module_id component_name)
                 MINIHUB_PLUGINS_DEPLOY_DIR=${_mh_deploy}
                 MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
                 MINIHUB_APP=$ENV{MINIHUB_APP}
-                ${_mh_python} ${_mh_catalog_py} --catalog-only --deploy ${_mh_deploy}
+                ${_mh_python} ${_mh_catalog_py} --deploy ${_mh_deploy}
         COMMAND ${CMAKE_COMMAND} -E make_directory
                 ${CMAKE_BINARY_DIR}/modstore_image/files
         COMMAND ${CMAKE_COMMAND} -E copy
@@ -107,7 +107,7 @@ endfunction()
 
 function(minihub_register_module_sos)
     # Build a .so per NATIVE (L3) plugin. Sources come from
-    # components/minihub_plugins/<id> and MINIHUB_PLUGIN_DIRS.
+    # examples/plugins/<id> and MINIHUB_PLUGIN_DIRS.
     # minihub_plugin_dirs already excludes L1/L2 (no CMakeLists); also skip
     # runtime js/pack here so a stray entry never creates libadapter_*.so /
     # idf::<id> ninja edges. L2 .mhub staging is configure-time only.

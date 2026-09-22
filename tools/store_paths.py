@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared paths for Store module sources vs deploy artifacts.
 
-Sources stay under components/minihub_plugins/<id>/ (module.json, sources, ui).
-If a module is not under that built-in dir, it can be located via the
-MINIHUB_PLUGIN_DIRS env var (":" / ";" separated; each entry is either a
-single plugin dir or a parent dir holding several plugins).
+In-tree demos live under examples/plugins/<id>/. Extra / vendor trees via
+MINIHUB_PLUGIN_DIRS (":" / ";" separated; each entry is either a single
+plugin dir or a parent dir holding several plugins). When that env is set,
+pack / catalog discovery uses only those trees (same as CMake); append
+``examples/plugins`` to also pack demos. When unset, scan demos only.
 Built artifacts go to:
 
   build/<id>.so                 — L3 MHMD+ELF intermediate (local only)
@@ -22,7 +23,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STORE_MODULES = ROOT / "components" / "minihub_plugins"
+DEMO_PLUGINS = ROOT / "examples" / "plugins"
 
 
 def default_deploy_dir() -> Path:
@@ -63,14 +64,13 @@ def plugin_dir_env() -> list[Path]:
 def _find_module_dir(module_id: str, *, root: Path) -> Path:
     """Locate a module source dir named ``<module_id>``.
 
-    Search order: built-in ``components/minihub_plugins/<id>``, then each
-    ``MINIHUB_PLUGIN_DIRS`` entry (which may be the plugin dir itself or a
-    parent dir). Falls back to the built-in path so callers keep consistent
-    error messages.
+    Search order matches CMake / Host configure:
+      1. each ``MINIHUB_PLUGIN_DIRS`` entry (plugin dir itself or a parent)
+      2. ``examples/plugins/<id>`` (in-tree demos; always a last-resort lookup)
+
+    Falls back to the demo path so callers keep consistent error messages.
     """
-    builtin = root / "components" / "minihub_plugins" / module_id
-    if (builtin / "module.json").is_file():
-        return builtin
+    demo = root / "examples" / "plugins" / module_id
     for d in plugin_dir_env():
         # Entry may be the plugin dir itself — only match when the basename is
         # the requested id (avoid returning color_bulb when packing meter_plug).
@@ -79,7 +79,9 @@ def _find_module_dir(module_id: str, *, root: Path) -> Path:
         cand = d / module_id
         if (cand / "module.json").is_file():
             return cand
-    return builtin
+    if (demo / "module.json").is_file():
+        return demo
+    return demo
 
 
 def module_source_dir(module_id: str, *, root: Path = ROOT) -> Path:
@@ -87,10 +89,12 @@ def module_source_dir(module_id: str, *, root: Path = ROOT) -> Path:
 
 
 def iter_module_source_dirs(*, root: Path = ROOT) -> list[Path]:
-    """All plugin dirs with ``module.json``: ``minihub_plugins`` + ``MINIHUB_PLUGIN_DIRS``.
+    """All plugin dirs with ``module.json``.
 
-    Dedupes by resolved path so the same plugin is not listed twice when it is
-    reachable via both the built-in tree and an env entry.
+    When ``MINIHUB_PLUGIN_DIRS`` is set, only those trees (same as CMake L3
+    discovery) — Host CI that also wants demos must append
+    ``examples/plugins`` to the env. When unset, scan in-tree demos.
+    Dedupes by resolved path.
     """
     dirs: list[Path] = []
     seen: set[str] = set()
@@ -108,16 +112,20 @@ def iter_module_source_dirs(*, root: Path = ROOT) -> list[Path]:
         seen.add(key)
         dirs.append(d)
 
-    store = root / "components" / "minihub_plugins"
-    if store.is_dir():
-        for d in sorted(store.iterdir()):
+    env_dirs = plugin_dir_env()
+    if env_dirs:
+        for d in env_dirs:
+            if (d / "module.json").is_file():
+                consider(d)
+            elif d.is_dir():
+                for sub in sorted(d.iterdir()):
+                    consider(sub)
+        return dirs
+
+    demos = root / "examples" / "plugins"
+    if demos.is_dir():
+        for d in sorted(demos.iterdir()):
             consider(d)
-    for d in plugin_dir_env():
-        if (d / "module.json").is_file():
-            consider(d)
-        elif d.is_dir():
-            for sub in sorted(d.iterdir()):
-                consider(sub)
     return dirs
 
 

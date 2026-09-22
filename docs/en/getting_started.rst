@@ -72,7 +72,7 @@ Product model
 .. code-block:: text
 
    application/APP/          Product (board, manifest, factory JSON)
-   components/               Shared Core + adapters + minihub_plugins/
+   components/               Shared Core + adapters
    config/                   Shared manifest base + sdkconfig fragments
    cmake/generated/          Sync output (gitignored)
 
@@ -90,8 +90,8 @@ Compose sdkconfig: ``tools/compose_sdkconfig.py``. Stack list:
 Develop a Store plugin (quick path)
 -----------------------------------
 
-1. Add ``components/minihub_plugins/ID/`` (or a demo under
-   ``examples/plugins/ID/`` with ``MINIHUB_PLUGIN_DIRS``; see
+1. Add ``examples/plugins/ID/`` (or a vendor tree via
+   ``MINIHUB_PLUGIN_DIRS``; see
    :doc:`plugins/develop_l1`, :doc:`plugins/develop_l2`, or
    :doc:`plugins/develop_l3`)
 2. ``python3 tools/pack_store_module.py pack ID``

@@ -105,7 +105,7 @@ In the firmware repo:
 
 ```
 python3 tools/pack_store_module.py pack <id>
-python3 tools/sync_store_catalog.py all
+python3 tools/sync_store_catalog.py
 python3 tools/store_server.py
 ```
 

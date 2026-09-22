@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Pack minihub_plugins/<id>/ into deploy/<id>/<id>.mhub, or wrap native .so (MHMD).
+"""Pack examples/plugins/<id>/ (or MINIHUB_PLUGIN_DIRS) into deploy/<id>/<id>.mhub, or wrap native .so (MHMD).
 
 Two orthogonal steps (do not conflate):
 
@@ -37,7 +37,7 @@ DEFAULT_PACK_FORMAT = "zip"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from store_paths import (  # noqa: E402
-    STORE_MODULES,
+    iter_module_source_dirs,
     module_deploy_dir,
     module_mhmd_path,
     module_source_dir,
@@ -266,27 +266,12 @@ def pack_store_module(
 
 
 def iter_packable_ids() -> list[str]:
-    from store_paths import plugin_dir_env
-
     ids: list[str] = []
     seen: set[str] = set()
-    if STORE_MODULES.is_dir():
-        for d in sorted(STORE_MODULES.iterdir()):
-            if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
-                continue
-            if (d / "module.json").is_file():
-                ids.append(d.name)
-                seen.add(d.name)
-    for d in plugin_dir_env():
-        if (d / "module.json").is_file():
-            if d.name not in seen:
-                ids.append(d.name)
-                seen.add(d.name)
-        elif d.is_dir():
-            for sub in sorted(d.iterdir()):
-                if sub.is_dir() and (sub / "module.json").is_file() and sub.name not in seen:
-                    ids.append(sub.name)
-                    seen.add(sub.name)
+    for d in iter_module_source_dirs():
+        if d.name not in seen:
+            seen.add(d.name)
+            ids.append(d.name)
     return ids
 
 
@@ -302,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_pack = sub.add_parser(
         "pack",
-        help="Pack minihub_plugins/<id>/ → deploy/<id>/<id>.mhub",
+        help="Pack plugin dir → deploy/<id>/<id>.mhub",
     )
     p_pack.add_argument("module_id", nargs="+", help="module id(s), or 'all'")
     p_pack.add_argument(

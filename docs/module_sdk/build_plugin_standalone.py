@@ -1,0 +1,1 @@
+../../tools/build_plugin_standalone.py

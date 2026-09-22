@@ -73,8 +73,7 @@ JSON 编写：:doc:`data_model` （点位 / adapters / 规则）；类型目录�
 * ``minihub_js`` — QuickJS L2 运行时
 * ``minihub_device_widget`` — 类型目录（CSV → 文案 / 控件）
 * ``adapters/*`` — 静态协议栈
-* ``minihub_plugins/ID/`` — 仓库内 Store 源码（生产，如 ``miot``）
-* ``examples/plugins/ID/`` — 独立演示（``MINIHUB_PLUGIN_DIRS``）
+* ``examples/plugins/ID/`` — 仓库内 Store 演示（额外树用 ``MINIHUB_PLUGIN_DIRS``）
 
 存储布局（通用 Host）
 ----------------------

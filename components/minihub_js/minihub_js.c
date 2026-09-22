@@ -812,7 +812,7 @@ static JSValue js_http_request(JSContext *ctx, JSValueConst this_val, int argc, 
     esp_http_client_config_t cfg = {
         .url = url,
         .timeout_ms = 15000,
-        /* Passport cookies / long Location need room (match L3 miot_http). */
+        /* Long Set-Cookie / Location headers need room for cloud login redirects. */
         .buffer_size = 4096,
         .buffer_size_tx = 4096,
         .disable_auto_redirect = true,
@@ -855,7 +855,7 @@ static JSValue js_http_request(JSContext *ctx, JSValueConst this_val, int argc, 
         }
     }
 
-    /* Prefer plaintext body (Xiaomi passport JSON); avoid opaque gzip. */
+    /* Prefer plaintext body for JSON APIs; avoid opaque gzip. */
     (void)esp_http_client_set_header(client, "Accept-Encoding", "identity");
 
     JSValue headers_v = JS_GetPropertyStr(ctx, argv[0], "headers");

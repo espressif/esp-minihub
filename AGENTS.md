@@ -11,7 +11,7 @@ Customer programming guide is RST / esp-docs: [docs/en/](docs/en/index.rst) · [
 | Topic | RST (preferred) |
 |-------|-----------------|
 | Build / Host product | `docs/en/getting_started.rst` · `docs/en/host_customization.rst` |
-| Plugins / Store | `docs/en/plugins/` · allowlist `docs/module_sdk/` · `components/minihub_plugins/README.md` |
+| Plugins / Store | `docs/en/plugins/` · allowlist `docs/module_sdk/` · `examples/plugins/` |
 | Data model / type catalog | `docs/en/data_model.rst` · `docs/en/architecture_overview.rst` · `components/minihub_device_widget/README.md` |
 | REST / JS / MCP / C ABI | `docs/en/api/` |
 | Networking / Matter | `docs/en/networking.rst` · `docs/en/matter.rst` (upstream: [ESP-IDF docs](https://github.com/espressif/esp-idf/tree/master/docs), [ESP-Matter docs](https://github.com/espressif/esp-matter/tree/main/docs)) |
@@ -19,7 +19,7 @@ Customer programming guide is RST / esp-docs: [docs/en/](docs/en/index.rst) · [
 
 Chinese mirrors: `docs/zh_CN/` (same relative paths as `docs/en/`).
 
-End-user / lab notes belong under the app only when present — **not** as MIoT Host docs.
+End-user / lab notes belong under the app only when present — **not** as Host Core docs.
 
 ## Git
 
@@ -60,7 +60,7 @@ Repo configs: `.cursor/mcp.json`, `.vscode/mcp.json`. Tools: `plugin_guide`, `sc
 ## Host constraints
 
 - Product = `application/<name>/`. Default public Host: `application/minihub`.
-- Shared Core: `components/minihub_*`, bundled Hub adapters under `components/minihub_adapters/`. Store plugin sources: `components/minihub_plugins/<id>/` (production) or `examples/plugins/<id>/` via `MINIHUB_PLUGIN_DIRS` (demos). Products include `cmake/minihub_bundle/minihub_import.cmake` then `minihub_register_kconfig()`; or one yml path `cmake/minihub_bundle`. Do not put ecosystem-specific rules in Core.
+- Shared Core: `components/minihub_*`, bundled Hub adapters under `components/minihub_adapters/`. Store plugin sources: `examples/plugins/<id>/` (in-tree demos) or a sibling repo via `MINIHUB_PLUGIN_DIRS`. Products include `cmake/minihub_bundle/minihub_import.cmake` then `minihub_register_kconfig()`; or one yml path `cmake/minihub_bundle`. Do not put ecosystem-specific rules in Core.
 - Vendor / demo adapters ship as Store `.mhub`, not Host `require`. Public Host `store_preinstall` stays empty unless intentionally bundling factory modules.
 - ESP-IDF **~6.2** + target **esp32s31** (`idf.py --preview`). IDF 5.x has no S31 toolchain.
 - Optional **on-device** MCP: `CONFIG_MINIHUB_MCP_SERVER=y` + `git submodule update --init components/esp-claw`. Unrelated to the plugin-author IDE MCP above.
@@ -84,9 +84,10 @@ Repo configs: `.cursor/mcp.json`, `.vscode/mcp.json`. Tools: `plugin_guide`, `sc
 - Device **type** is described declaratively, not in C:
   - Type-level UI catalog: `components/minihub_device_widget/model/*.csv` → generated
     registry (single source of truth for labels / widget / bounds / icons). It
-    has **no** `visible` column and **no** per-device override column: the
-    catalog keyed by parameter NAME describes how a parameter is *rendered*,
-    and offers every parameter of the type. Adding a type needs no C change.
+    has **no effective** `visible` column (a leftover CSV header is tolerated and
+    ignored) and **no** per-device override column: the catalog keyed by
+    parameter NAME describes how a parameter is *rendered*, and offers every
+    parameter of the type. Adding a type needs no C change.
   - Instance-level descriptor: a plugin's `devices.json` (embedded into
     `device_desc.gen.h`) lists THIS device's params, init values, and optional
     `access` / `visible` / `min` / `max` / `step` / `unit`; those fill

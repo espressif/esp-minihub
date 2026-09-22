@@ -9,8 +9,8 @@ OEM products, LAN integration, automation scripts, and **statically linked**
 adapters under ``components/``: REST/MCP against the hub, or implement
 ``minihub_adapter_t`` in Host firmware.
 
-L2 (JS) and L3 (native) modules under ``components/minihub_plugins/`` or
-``examples/plugins/``: use the
+L2 (JS) and L3 (native) modules under ``examples/plugins/`` or
+``MINIHUB_PLUGIN_DIRS``: use the
 host vtable / JS ``host`` object, plus REST for install, enable, and RPC.
 Out-of-tree L3 C sources should ``#include "minihub_plugin_sdk.h"``
 (:doc:`plugin_host`).
