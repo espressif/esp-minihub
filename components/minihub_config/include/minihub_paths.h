@@ -38,7 +38,7 @@
  * Module packages live under `/store/modules/<id>/`:
  *   module.json, <id>.mhub, optional ui.json
  * Legacy flat `/store/modules/<id>.json` + `<id>.mhub` still accepted by the loader.
- * Source of truth in tree: components/minihub_plugins/<id>/
+ * Source of truth in tree: examples/plugins/<id>/ or MINIHUB_PLUGIN_DIRS
  */
 #define MINIHUB_MODULES_DIR       MINIHUB_STORE_MODULES_DIR
 /** Default search path for relative "binary" names (prefer per-module dir) */

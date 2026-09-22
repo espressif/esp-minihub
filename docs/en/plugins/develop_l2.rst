@@ -22,7 +22,7 @@ Directory layout
 
 .. code-block:: text
 
-   components/minihub_plugins/ID/
+   examples/plugins/ID/
      module.json
      main.js              # required — must export setup(host)
      ui.json              # optional — Web UI module panel
@@ -93,8 +93,8 @@ Minimal ``main.js``:
      });
    }
 
-Optional ``ui.json`` describes module fields in the Web UI (see ``miot/ui.json``
-for a full example).
+Optional ``ui.json`` describes module fields in the Web UI (see
+``examples/plugins/color_bulb_js/`` for a Devices-page demo).
 
 Wire into ``adapters.json``
 ---------------------------

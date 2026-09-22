@@ -37,7 +37,7 @@ Host Core 的依赖。
    │  └─ minihub_store / minihub_module / minihub_pack  Store    │
    ├──────────────────────────────────────────────────────────────┤
    │ minihub_adapters  zigbee / matter / thread / ble_mesh / …   │
-   │ minihub_plugins    厂商适配器（Store .mhub）                │
+   │ examples/plugins + MINIHUB_PLUGIN_DIRS  Store .mhub 源码       │
    └──────────────────────────────────────────────────────────────┘
                    │ 协议帧
                    ▼

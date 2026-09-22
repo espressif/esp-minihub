@@ -65,9 +65,9 @@ LCD 选项
      - Flash 分区表（``nvs`` / ``ota`` / ``storage`` / ``modstore`` 等）。起点而非
        所有 SKU 规格，见 :doc:`../production`。
    * - ``CMakeLists.txt``
-     - IDF 工程入口：把仓库 ``components/`` 、``adapters/`` 、
-       ``minihub_plugins/`` 加入 ``EXTRA_COMPONENT_DIRS``；演示走
-       ``MINIHUB_PLUGIN_DIRS`` （``examples/plugins``），不进这份列表；
+     - IDF 工程入口：把仓库 ``components/`` 、``adapters/``
+       加入 ``EXTRA_COMPONENT_DIRS``；Store 插件走
+       ``MINIHUB_PLUGIN_DIRS`` （``examples/plugins``），不是 Host 内置树；
        按环境可选 Matter / RainMaker。
    * - ``README.md``
      - 本产品实验室编译备忘（``-app minihub``、LCD 选项）。
@@ -105,7 +105,7 @@ LCD 选项
 源码在可选 submodule ``components/esp-rainmaker/``。
 
 改过 ``manifest.yml`` 后直接编译即可（``build_firmware.py`` 会自动合并
-manifest）；``store_preinstall`` 列出 ``components/minihub_plugins/``
+manifest）；``store_preinstall`` 列出 ``examples/plugins/``
 （以及 ``MINIHUB_PLUGIN_DIRS``）中的模块 id，打进出厂 ``modstore`` 镜像。
 公共 Host 默认列表为空，除非你有意工厂预装。
 

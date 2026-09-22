@@ -8,7 +8,7 @@ Serves catalog.json and /files/<id>.mhub from the deploy directory:
   MINIHUB_PLUGINS_DEPLOY_DIR  (default ~/workspace/minihub_store)
 
 Layout: catalog.json and <id>/<id>.mhub (zip only; MHMD .so stays in repo build/).
-Sources remain under the MiniHub repo components/minihub_plugins/.
+Sources remain under examples/plugins/ or MINIHUB_PLUGIN_DIRS.
 
 Also assists MIoT Spec sync on Hub:
   POST /api/miot-spec/resolve   {"models":[…]} → {"urns":{model:{type,version,status}}}
@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from store_paths import STORE_MODULES, resolve_deploy_dir  # noqa: E402
+from store_paths import module_source_dir, resolve_deploy_dir  # noqa: E402
 
 try:
     from bridges import huawei_mesh as bridge_huawei
@@ -54,7 +54,7 @@ def resolve_store_file(deploy: Path, name: str) -> Path | None:
     stem, suffix = path.stem, path.suffix.lower()
     mod_dir = deploy / stem
     if suffix == ".json":
-        src = STORE_MODULES / stem / "module.json"
+        src = module_source_dir(stem) / "module.json"
         return src if src.is_file() else None
     if not mod_dir.is_dir():
         return None
@@ -877,7 +877,7 @@ def main() -> int:
     srv = HTTPServer((args.host, args.port), Handler)
     print(f"MiniHub Store listening on http://{args.host}:{args.port}")
     print(f"  deploy:  {deploy}")
-    print(f"  catalog: {catalog if catalog.exists() else '(missing — run sync_store_catalog.py --from-store)'}")
+    print(f"  catalog: {catalog if catalog.exists() else '(missing — run sync_store_catalog.py)'}")
     print(f"  modules: {deploy}/<id>/<id>.mhub")
     print("  Spec:    POST /api/miot-spec/resolve|profiles")
     print("  Bridge:  POST /api/bridge/huawei/login|snapshot")

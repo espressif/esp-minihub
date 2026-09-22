@@ -37,6 +37,7 @@ __pycache__/
 # Local IDE / CodeBuddy session notes
 .codebuddy/memory/
 .workbuddy/
+.agent/
 
 # Docs (esp-docs)
 .venv-docs/
@@ -49,3 +50,6 @@ docs/_static/module_sdk.zip
 
 # Local design notes (keep on disk; do not commit)
 docs/superpowers/
+
+# Store pack artifacts (build locally / deploy outside the tree)
+*.mhub

@@ -18,8 +18,8 @@ MiniHub 把 **产品** 与 **Core** 分开：
 
 * ``application/APP/`` — 实际烧录的 Host：板级、分区表、sdkconfig 组合、出厂
   JSON、``app_main``、产品 Kconfig。目录名即产品名（``APP``）。
-* ``components/`` — 共享 Core、协议适配器，以及仓库内 Store 源码
-  （``minihub_plugins/``；演示在 ``examples/plugins/``）。所有产品都链接 Core
+* ``components/`` — 共享 Core、协议适配器。Store 源码在
+  ``examples/plugins/`` 或 ``MINIHUB_PLUGIN_DIRS``。所有产品都链接 Core
   与适配器，不要拷进 ``application/APP/``。
 * 仓库根 ``config/`` — 共享 manifest 基座（``config/minihub_manifest.yml`` 里的
   ``_host_base``）以及共享 sdkconfig 片段。

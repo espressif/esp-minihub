@@ -26,8 +26,11 @@ Pack commands
    # L3 in-tree: firmware build (packs .mhub on success)
    ./tools/build_firmware.py -app minihub build
 
-   # Pack only when in-tree .so already exists (not "build modules")
+   # Compile every in-tree native plugin .so (does not pack)
    ./tools/build_firmware.py -app minihub modules
+
+   # Pack only when in-tree .so already exists (does not compile C)
+   ./tools/build_firmware.py -app minihub pack
 
    # Any tier: zip only; does not compile C
    python3 tools/pack_store_module.py pack ID
@@ -39,30 +42,30 @@ Pack commands
    # No-IDF build for examples/plugins L3 demos
    python3 tools/build_plugin_standalone.py color_bulb
 
-   # After .mhub files are already in the store directory, rewrite catalog.json.
-   # Walks DEPLOY/ID/ID.mhub and reads module.json inside each zip. No sources.
-   python3 tools/sync_store_catalog.py --from-store
-   python3 tools/sync_store_catalog.py --from-store --deploy ~/workspace/minihub_store
+   # After .mhub files are in the store directory, rewrite catalog.json.
+   # Default: walk DEPLOY/ID/ID.mhub (no sources, no MINIHUB_PLUGIN_DIRS).
+   python3 tools/sync_store_catalog.py
+   python3 tools/sync_store_catalog.py --deploy ~/workspace/minihub_store
 
-   # Same catalog refresh when you still have plugin sources (also repacks)
+   # Pack from plugin sources, then rewrite catalog the same way
    python3 tools/sync_store_catalog.py all
    python3 tools/store_server.py
 
-``./tools/build_firmware.py … modules`` discovers plugin dirs that have both
-``module.json`` and ``CMakeLists.txt``: ``components/minihub_plugins/*/`` plus
-``MINIHUB_PLUGIN_DIRS`` (colon or semicolon separated; each item is one plugin
-or a parent of several). It links ``libadapter_ID.so``, wraps MHMD, writes
-``DEPLOY/ID/ID.mhub``, then refreshes ``catalog.json`` **size** to match that
-zip (do not leave a stale catalog). A successful firmware ``build`` runs the
-same pack step automatically when those sources are on the CMake path.
+``./tools/build_firmware.py … modules`` compiles every native plugin that has
+both ``module.json`` and ``CMakeLists.txt`` (``examples/plugins/*/``
+plus ``MINIHUB_PLUGIN_DIRS``). It does not pack. ``./tools/build_firmware.py …
+pack`` wraps an existing ``libadapter_ID.so`` into MHMD and
+``DEPLOY/ID/ID.mhub``, then refreshes ``catalog.json`` **size**. A successful
+firmware ``build`` runs that pack step automatically when those sources are on
+the CMake path.
 
 After the ``.mhub`` files are already in the store directory (for example
 ``~/workspace/minihub_store/ble_mesh_pack/ble_mesh_pack.mhub``), run
-``sync_store_catalog.py --from-store``. It walks each ``DEPLOY/ID/ID.mhub``,
-reads ``module.json`` (and ``ui.json`` when the zip has one), and writes
-``catalog.json``. Plugin sources are not required. The same script is inside
-``module_sdk.zip``. The local Store server serves that file; copying a zip
-alone does not update the catalog. Default deploy root is
+``sync_store_catalog.py`` (``--from-store`` is the default). It walks each
+``DEPLOY/ID/ID.mhub``, reads ``module.json`` (and ``ui.json`` when the zip has
+one), and writes ``catalog.json``. Plugin sources are not required. The same
+script is inside ``module_sdk.zip``. The local Store server serves that file;
+copying a zip alone does not update the catalog. Default deploy root is
 ``MINIHUB_PLUGINS_DEPLOY_DIR`` or ``~/workspace/minihub_store``.
 
 Deploy layout
@@ -88,11 +91,11 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
 
    {
      "kind": "module",
-     "id": "miot",
-     "name": "Xiaomi MIoT adapter",
+     "id": "color_bulb",
+     "name": "Color Bulb (simulated)",
      "version": "0.1.0",
-     "url": "/files/miot.mhub",
-     "adapter": "miot",
+     "url": "/files/color_bulb.mhub",
+     "adapter": "color_bulb",
      "size": 3762,
      "binary_size": 12000
    }
@@ -102,7 +105,7 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
 * ``url`` — path or absolute HTTP URL of the ``.mhub``
 * ``adapter`` — optional; Host creates an ``adapters.json`` slot on install
 * ``size`` — **outer zip** byte length (must match the ``.mhub`` on disk;
-  ``pack`` / ``modules`` rewrites this)
+  ``pack`` rewrites this)
 * ``binary_size`` — inner MHMD ``.so`` size (not the zip)
 
 Install on a running Hub
@@ -123,7 +126,7 @@ Install on a running Hub
    curl -X POST http://$HUB/api/store/refresh
    curl -X POST http://$HUB/api/store/install \
      -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"miot"}'
+     -d '{"kind":"module","id":"color_bulb"}'
 
    curl -X POST http://$HUB/api/hub/reload
 
@@ -138,7 +141,7 @@ Verify installation
    curl http://$HUB/api/packs
    curl http://$HUB/api/config/adapters
 
-Serial logs: ``loaded module 'miot'``, or JS ``setup ok`` for L2.
+Serial logs: ``loaded module 'color_bulb'``, or JS ``setup ok`` for L2.
 
 Upgrade / uninstall
 -------------------
@@ -148,11 +151,11 @@ Upgrade:
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/upgrade -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"miot"}'
+     -d '{"kind":"module","id":"color_bulb"}'
 
 Uninstall:
 
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/uninstall -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"miot"}'
+     -d '{"kind":"module","id":"color_bulb"}'

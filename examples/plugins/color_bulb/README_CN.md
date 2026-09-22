@@ -2,8 +2,7 @@
 
 [English](README.md) | [中文](README_CN.md)
 
-位于 `examples/plugins/` 的独立 L3 native 演示（**不**在默认 `application/minihub`
-或 `components/minihub_plugins/`）。注册**两盏在线彩色球泡灯**（`type=light`）并响应
+位于 `examples/plugins/` 的独立 L3 native 演示（**不**在默认 `application/minihub`）。注册**两盏在线彩色球泡灯**（`type=light`）并响应
 Web UI —— **无真实硬件**。
 
 使用 Host 的 `light` 类型目录（`minihub_device_widget/model` → 运行时

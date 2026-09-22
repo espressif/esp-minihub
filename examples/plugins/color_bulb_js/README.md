@@ -3,7 +3,7 @@
 [English](README.md) | [中文](README_CN.md)
 
 Standalone **L2 QuickJS** demo under `examples/plugins/` (not in default
-`application/minihub` or `components/minihub_plugins/`). Registers **three
+`application/minihub`). Registers **three
 online simulated lights** (`type=light`) with Devices-page widgets and a JS
 command handler — **no hardware**.
 

@@ -1,0 +1,1 @@
+../../tools/sync_store_catalog.py

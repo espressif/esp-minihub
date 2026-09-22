@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Pack Store modules and rewrite deploy catalog.json.
+"""Rewrite deploy catalog.json from packed .mhub files.
 
-``--from-store`` scans ``DEPLOY/ID/ID.mhub`` only (no plugin sources) and
-rewrites ``catalog.json`` from each zip's ``module.json``.
+Default (no args, or ``--from-store``): scan ``DEPLOY/ID/ID.mhub`` only —
+no plugin sources, no ``MINIHUB_PLUGIN_DIRS``. Pass a module id (or ``all``)
+to pack from sources first, then rewrite the catalog the same way.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from store_paths import (  # noqa: E402
 
 
 def iter_module_dirs() -> list[Path]:
-    """Plugin sources for catalog: minihub_plugins + MINIHUB_PLUGIN_DIRS."""
+    """Plugin sources for catalog: MINIHUB_PLUGIN_DIRS, else examples/plugins."""
     return iter_module_source_dirs(root=ROOT)
 
 
@@ -276,13 +277,27 @@ def sync_module(module_id: str, deploy: Path) -> int:
     return 0
 
 
+def _write_from_store(deploy: Path) -> int:
+    try:
+        catalog = rebuild_catalog_from_store(deploy)
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(
+        f"sync_store_catalog: wrote {deploy / 'catalog.json'} "
+        f"({len(catalog)} modules, from store .mhub)"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "module_id",
         nargs="?",
-        default="all",
-        help="module id, or 'all' (default)",
+        default=None,
+        help="pack this id (or 'all') from sources, then rewrite catalog; "
+        "omit to only scan deploy .mhub",
     )
     parser.add_argument(
         "--deploy",
@@ -293,28 +308,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--catalog-only",
         action="store_true",
-        help="rewrite catalog.json sizes from existing deploy/*.mhub (no repack; needs sources)",
+        help="rewrite catalog.json from plugin sources (no pack, no .mhub scan)",
     )
     parser.add_argument(
         "--from-store",
         action="store_true",
-        help="write catalog.json by scanning deploy/<id>/<id>.mhub (no plugin sources)",
+        help="scan deploy/<id>/<id>.mhub (default when no module id is given)",
     )
     args = parser.parse_args(argv)
     deploy = resolve_deploy_dir(args.deploy)
     arg = args.module_id
-
-    if args.from_store:
-        try:
-            catalog = rebuild_catalog_from_store(deploy)
-        except FileNotFoundError as exc:
-            print(exc, file=sys.stderr)
-            return 1
-        print(
-            f"sync_store_catalog: wrote {deploy / 'catalog.json'} "
-            f"({len(catalog)} modules, from store .mhub)"
-        )
-        return 0
 
     if args.catalog_only:
         catalog = rebuild_catalog(deploy)
@@ -324,25 +327,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    if args.from_store or not arg:
+        return _write_from_store(deploy)
+
     if arg in ("all", "--all", "-a"):
         for module_dir in iter_module_dirs():
             rc = sync_module(module_dir.name, deploy)
             if rc != 0:
                 return rc
-        catalog = rebuild_catalog(deploy)
-        print(
-            f"sync_store_catalog: wrote {deploy / 'catalog.json'} ({len(catalog)} modules)"
-        )
-        return 0
+        return _write_from_store(deploy)
 
     rc = sync_module(arg, deploy)
     if rc != 0:
         return rc
-    catalog = rebuild_catalog(deploy)
-    print(
-        f"sync_store_catalog: wrote {deploy / 'catalog.json'} ({len(catalog)} modules)"
-    )
-    return 0
+    return _write_from_store(deploy)
 
 
 if __name__ == "__main__":

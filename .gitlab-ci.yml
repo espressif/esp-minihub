@@ -123,7 +123,7 @@ build:app:
     MINIHUB_PLUGINS_DEPLOY_DIR: "$CI_PROJECT_DIR/application/$MINIHUB_APP/build/store"
   script:
     - git submodule update --init --depth 1
-    - export MINIHUB_PLUGIN_DIRS=$$MINIHUB_PLUGIN_DIRS:$CI_PROJECT_DIR/examples/plugins
+    - export MINIHUB_PLUGIN_DIRS=$MINIHUB_PLUGIN_DIRS:$CI_PROJECT_DIR/examples/plugins
     - ./tools/build_firmware.py --app "$MINIHUB_APP" build merge
   artifacts:
     when: on_success
@@ -136,7 +136,8 @@ build:app:
       - application/$MINIHUB_APP/build/bootloader/bootloader.elf
       - application/$MINIHUB_APP/build/partition_table/*.bin
       - application/$MINIHUB_APP/build/flasher_args.json
-      - application/$MINIHUB_APP/build/**/*.mhub
+      - $MINIHUB_PLUGINS_DEPLOY_DIR/**/*.mhub
+      - $MINIHUB_PLUGINS_DEPLOY_DIR/catalog.json
       - application/$MINIHUB_APP/sdkconfig
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -171,11 +172,13 @@ build:plugin_standalone:
         found=1
       done
       if [ "$found" -eq 0 ]; then
-        echo "no plugin directories under $root; skip modules/pack"
+        echo "no plugin directories under $root; skip standalone"
         exit 0
       fi
-      ./tools/build_firmware.py --app "$MINIHUB_APP" modules
-      ./tools/build_firmware.py --app "$MINIHUB_APP" pack all
+      export MINIHUB_PLUGIN_DIRS="$root"
+      export MINIHUB_PLUGINS_DEPLOY_DIR="${MINIHUB_PLUGINS_DEPLOY_DIR:-$CI_PROJECT_DIR/ci_artifacts/standalone}"
+      mkdir -p "$MINIHUB_PLUGINS_DEPLOY_DIR"
+      python3 tools/build_plugin_standalone.py --all --no-demos --pack
   artifacts:
     when: on_success
     expire_in: 14 days

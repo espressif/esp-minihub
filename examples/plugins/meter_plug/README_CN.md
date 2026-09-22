@@ -2,8 +2,7 @@
 
 [English](README.md) | [中文](README_CN.md)
 
-位于 `examples/plugins/` 的独立 L3 native 演示（**不**在默认 `application/minihub`
-或 `components/minihub_plugins/`）。注册**一个在线计量插座**（`type=switch`：开关 +
+位于 `examples/plugins/` 的独立 L3 native 演示（**不**在默认 `application/minihub`）。注册**一个在线计量插座**（`type=switch`：开关 +
 电压/电流/功率）—— **无真实硬件**。
 
 使用 Host 的 `switch` 类型目录。**不**拷贝 label / widget / CSS / 图标。

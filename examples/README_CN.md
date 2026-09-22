@@ -24,7 +24,7 @@ Host 已有点（`owner` / `ota`）。
 ```bash
 export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"
 python3 tools/pack_store_module.py pack <id>    # 或 pack all
-python3 tools/sync_store_catalog.py all
+python3 tools/sync_store_catalog.py
 python3 tools/store_server.py --port 8080
 ```
 
@@ -43,4 +43,4 @@ python3 tools/build_plugin_standalone.py color_bulb
 （`build_plugin_standalone.py` 或带 `MINIHUB_PLUGIN_DIRS` 的 Host 构建）。
 
 新建模块脚手架：`python3 tools/new_store_module.py --tier l1|l2|l3 --id …`
-（默认写到 `components/minihub_plugins/`；演示请拷进 `plugins/`）。
+(默认写到 `examples/plugins/`；厂商仓库用 `--out` / `MINIHUB_PLUGIN_DIRS`)。

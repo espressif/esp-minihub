@@ -53,22 +53,22 @@ Matter 构建需要大 app 槽。链接报装不下时放大 ``ota_0`` / ``ota_1
 工厂预装 Store
 --------------
 
-在 ``application/APP/manifest.yml`` 列出 ``components/minihub_plugins/ID/``
+在 ``application/APP/manifest.yml`` 列出 ``examples/plugins/ID/``
 中已有（或 ``MINIHUB_PLUGIN_DIRS`` 拉入）的模块 id。
-的模块 id。选型与 ``module.json`` 的 ``preinstall`` 无效，见
+选型与 ``module.json`` 的 ``preinstall`` 无效，见
 :ref:`store-preinstall` 。打包细节见 :doc:`plugins/pack_and_catalog` 。
 
 .. code-block:: yaml
 
    store_preinstall:
-     - miot
+     - color_bulb
 
 仓库内 L3 须打开 ``CONFIG_MINIHUB_DYNAMIC_MODULES`` 并 ``build`` （会生成 ``.so``
 并 pack）。已有制品时：
 
 .. code-block:: bash
 
-   ./tools/build_firmware.py -app minihub modules
+   ./tools/build_firmware.py -app minihub pack
    python3 tools/pack_store_module.py pack all
    ./tools/build_firmware.py -app minihub -p PORT flash
 

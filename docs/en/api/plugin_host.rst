@@ -11,11 +11,12 @@ the MiniHub source tree. Ship ``docs/module_sdk/include/`` plus a matching cross
 compiler (ESP32-S31: ``riscv32-esp-elf-gcc``).
 
 Download (HTML): :download:`module_sdk.zip <../../_static/module_sdk.zip>` —
-``include/`` headers, ``host_export_allowlist.json``,
-``minihub_plugin_standalone.cmake``, ``pack_store_module.py`` (and
-``store_paths.py``, which it imports), ``sync_store_catalog.py`` (rewrite
-``catalog.json`` from deployed ``.mhub`` files), and README. Unzip and pass
-``-I module_sdk/include``. No MiniHub clone required.
+``include/``, ``templates/``, ``host_export_allowlist.json``,
+``minihub_plugin_standalone.cmake``, ``build_plugin_standalone.py``,
+``pack_store_module.py`` (and ``store_paths.py``, which it imports),
+``sync_store_catalog.py`` (rewrite ``catalog.json`` from deployed ``.mhub``
+files), and README. Unzip and pass ``-I module_sdk/include``. No MiniHub clone
+required.
 
 .. code-block:: c
 

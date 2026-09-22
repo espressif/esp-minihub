@@ -105,9 +105,11 @@ pack script lives in a MiniHub checkout):
    python3 /path/to/module_sdk/sync_store_catalog.py --from-store \
      --deploy ~/workspace/minihub_store
 
-Prefer ``-B build`` inside the plugin directory. In this repository,
-``tools/build_plugin_standalone.py`` does configure, build, and can ``--pack``.
-Host in-tree builds still write ``application/minihub/build/<id>.so``.
+Prefer ``-B build`` inside the plugin directory.
+``build_plugin_standalone.py`` (in this tree: ``tools/`` or
+``docs/module_sdk/``; in ``module_sdk.zip`` next to the cmake fragment) does
+configure, build, and can ``--pack``. Host in-tree builds still write
+``application/minihub/build/<id>.so``.
 
 Example demos under ``examples/plugins/`` (dual path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -126,9 +128,8 @@ fragment above. Without IDF:
 In-tree with the Host
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Sources live in ``components/minihub_plugins/ID/`` (production) or
-``examples/plugins/ID/`` (demos: export ``MINIHUB_PLUGIN_DIRS`` **before**
-CMake) with ``idf_component_register``.
+Sources live in ``examples/plugins/ID/`` (demos) or a tree listed in
+``MINIHUB_PLUGIN_DIRS`` (export **before** CMake) with ``idf_component_register``.
 ``REQUIRES`` only the public libs you call. With
 ``CONFIG_MINIHUB_DYNAMIC_MODULES``, add ``-fPIC``. Firmware build uses
 ``cmake/minihub_module_so.cmake`` to produce
@@ -163,7 +164,7 @@ Directory layout (scaffold ``my_native``)
 
 .. code-block:: text
 
-   components/minihub_plugins/my_native/
+   examples/plugins/my_native/
      module.json
      module_entry.c       # exports minihub_module_entry (+ optional minihub_module_rpc)
      my_native_adapter.c  # minihub_adapter_t implementation

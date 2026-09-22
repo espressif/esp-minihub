@@ -66,9 +66,9 @@ Directory layout
      - Flash map (``nvs`` / ``ota`` / ``storage`` / ``modstore``, …). A starting
        point, not every SKU; see :doc:`../production`.
    * - ``CMakeLists.txt``
-     - IDF project: adds repo ``components/``, ``adapters/``, and
-       ``minihub_plugins/`` to ``EXTRA_COMPONENT_DIRS``; demos use
-       ``MINIHUB_PLUGIN_DIRS`` (``examples/plugins``), not this list;
+     - IDF project: adds repo ``components/`` and
+       ``adapters/`` to ``EXTRA_COMPONENT_DIRS``; Store plugins use
+       ``MINIHUB_PLUGIN_DIRS`` (``examples/plugins``), not a Host builtin tree;
        optional Matter / RainMaker from the environment.
    * - ``README.md``
      - Lab build notes for this product (``-app minihub``, LCD option).
@@ -108,7 +108,7 @@ sources. RainMaker sources live in the optional submodule
 
 After editing ``manifest.yml``, just build (``build_firmware.py`` merges the
 manifest). ``store_preinstall`` lists module ids under
-``components/minihub_plugins/`` (plus ``MINIHUB_PLUGIN_DIRS``) packed into the
+``examples/plugins/`` (plus ``MINIHUB_PLUGIN_DIRS``) packed into the
 factory ``modstore`` image. Public Host keeps the list empty unless you
 intentionally factory-bundle modules.
 

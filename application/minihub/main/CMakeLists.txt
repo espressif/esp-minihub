@@ -43,7 +43,7 @@ endif()
 
 # Store L3 plugins: pull into the IDF build graph so libadapter_*.so can be linked
 # from their archives. They are NOT registered as Host adapters when
-# CONFIG_MINIHUB_DYNAMIC_MODULES=y (see REGISTER_ADAPTER guards in minihub_plugins).
+# CONFIG_MINIHUB_DYNAMIC_MODULES=y (see REGISTER_ADAPTER guards in Store plugins).
 # --gc-sections drops unused objects from the app ELF when nothing references them.
 if(CONFIG_MINIHUB_DYNAMIC_MODULES)
     # Pull plugin components into the IDF build graph (built-in + MINIHUB_PLUGINS).

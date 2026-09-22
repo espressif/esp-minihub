@@ -14,16 +14,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from store_paths import (  # noqa: E402
+    DEMO_PLUGINS,
     ROOT,
-    STORE_MODULES,
+    iter_module_source_dirs,
     module_deploy_dir,
     module_mhmd_path,
     module_source_dir,
-    plugin_dir_env,
     resolve_deploy_dir,
 )
 
-STORE = STORE_MODULES
+STORE = DEMO_PLUGINS
 
 
 def app_name() -> str:
@@ -80,27 +80,24 @@ def module_pack_kind(meta: dict, d: Path) -> str | None:
 
 
 def _iter_module_dirs(store: Path = STORE) -> list[Path]:
+    """Plugin dirs with module.json: demos + MINIHUB_PLUGIN_DIRS.
+
+    ``store`` is kept for callers that pass an alternate root; when it is the
+    default demo tree, prefer ``iter_module_source_dirs`` so env trees are included.
+    """
+    if store.resolve() == DEMO_PLUGINS.resolve():
+        return iter_module_source_dirs()
     dirs: list[Path] = []
     seen: set[Path] = set()
-
-    def add(d: Path) -> None:
-        if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
-            return
-        key = d.resolve()
-        if key in seen:
-            return
-        seen.add(key)
-        dirs.append(d)
-
     if store.is_dir():
         for d in sorted(store.iterdir()):
-            add(d)
-    for d in plugin_dir_env():
-        if (d / "module.json").is_file():
-            add(d)
-        elif d.is_dir():
-            for sub in sorted(d.iterdir()):
-                add(sub)
+            if not d.is_dir() or d.name.startswith(".") or d.name.startswith("_"):
+                continue
+            if (d / "module.json").is_file():
+                key = d.resolve()
+                if key not in seen:
+                    seen.add(key)
+                    dirs.append(d)
     return dirs
 
 
@@ -132,7 +129,9 @@ def resolve_module_ids(requested: list[str] | None) -> list[tuple[str, str]]:
     by_id = {mid: kind for mid, kind in available}
     if not requested or requested == ["all"]:
         if not available:
-            raise SystemExit(f"No packable modules found under {STORE} / MINIHUB_PLUGIN_DIRS")
+            raise SystemExit(
+                f"No packable modules found under {STORE} / MINIHUB_PLUGIN_DIRS"
+            )
         return available
     unknown = [m for m in requested if m not in by_id]
     if unknown:
@@ -261,11 +260,11 @@ def refresh_host_and_catalog(*, root: Path = ROOT, deploy: Path | None = None) -
         cwd=str(root),
         check=True,
     )
+    # Default catalog rewrite scans deploy .mhub only (no plugin sources).
     subprocess.run(
         [
             sys.executable,
             str(root / "tools" / "sync_store_catalog.py"),
-            "all",
             "--deploy",
             str(deploy),
         ],

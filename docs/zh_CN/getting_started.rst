@@ -72,7 +72,7 @@ Store 动态模块等。参考板：``esp32_s31_function_coreboard_1``。
 .. code-block:: text
 
    application/APP/          产品（板级、manifest、出厂配置）
-   components/               共享 Core + 适配器 + minihub_plugins/
+   components/               共享 Core + 适配器
    config/                   共享 manifest 基座 + sdkconfig 片段
    cmake/generated/          sync 输出（git 忽略）
 
@@ -89,8 +89,8 @@ Store 动态模块等。参考板：``esp32_s31_function_coreboard_1``。
 Store 插件快速路径
 ------------------
 
-1. 新增 ``components/minihub_plugins/ID/`` （或 ``examples/plugins/ID/``
-   并设置 ``MINIHUB_PLUGIN_DIRS`` ；见 :doc:`plugins/develop_l1` 、
+1. 新增 ``examples/plugins/ID/`` （或通过 ``MINIHUB_PLUGIN_DIRS``
+   指向厂商仓库；见 :doc:`plugins/develop_l1` 、
    :doc:`plugins/develop_l2` 或 :doc:`plugins/develop_l3` ）
 2. ``python3 tools/pack_store_module.py pack ID``
 3. 本机运行 ``python3 tools/store_server.py`` （Hub 通过局域网拉包，不是在设备上跑）

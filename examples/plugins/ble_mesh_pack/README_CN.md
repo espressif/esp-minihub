@@ -2,8 +2,7 @@
 
 [English](README.md) | [中文](README_CN.md)
 
-独立 **L1 pack**，位于 `examples/plugins/`（不在默认 `application/minihub` 或
-`components/minihub_plugins/`）。包内 **只有** `module.json`：无 `main.js`、无
+独立 **L1 pack**，位于 `examples/plugins/`（不在默认 `application/minihub`）。包内 **只有** `module.json`：无 `main.js`、无
 `.so`、无射频 `devices[]`。
 
 Host `minihub_pack` 在加载或 `POST /api/hub/reload` 时把 `inject` **合并** 进已有

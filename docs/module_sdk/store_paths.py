@@ -1,0 +1,1 @@
+../../tools/store_paths.py

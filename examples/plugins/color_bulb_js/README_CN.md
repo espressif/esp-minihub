@@ -3,7 +3,7 @@
 [English](README.md) | [中文](README_CN.md)
 
 独立 **L2 QuickJS** 演示，位于 `examples/plugins/`（不在默认
-`application/minihub` 或 `components/minihub_plugins/`）。注册 **三盏在线模拟灯**
+`application/minihub`）。注册 **三盏在线模拟灯**
 （`type=light`），带设备页控件与 JS 命令处理 —— **无真实硬件**。
 
 与 [`color_bulb`](../color_bulb/)（L3 C，厨房/客厅）配套，**不**替代 C 插件。

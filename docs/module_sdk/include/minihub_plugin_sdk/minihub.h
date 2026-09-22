@@ -115,6 +115,20 @@ typedef struct {
 } minihub_adapter_t;
 
 /**
+ * @brief Fail if Host ``MINIHUB_CORE_API_VERSION`` is outside ``[min_v, max_v]``.
+ *
+ * Pass ``module.json`` ``core_api_min`` / ``core_api_max``.
+ * @note MiniHub: ``components/minihub_adapter/include/minihub_adapter.h``
+ */
+static inline esp_err_t minihub_adapter_check_core_api(uint32_t min_v, uint32_t max_v)
+{
+    if (MINIHUB_CORE_API_VERSION < min_v || MINIHUB_CORE_API_VERSION > max_v) {
+        return ESP_ERR_INVALID_VERSION;
+    }
+    return ESP_OK;
+}
+
+/**
  * @brief Host services passed into ``minihub_module_entry``.
  *
  * Prefer these over linking Core. Check ``struct_size`` before calling fields

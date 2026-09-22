@@ -14,7 +14,6 @@ from pathlib import Path
 
 _DOCS_DIR = Path(__file__).resolve().parents[1]
 _REPO = _DOCS_DIR.parent
-_TOOLS = _REPO / "tools"
 _WIDGET = _REPO / "components" / "minihub_device_widget"
 _STAGED = _DOCS_DIR / "_static" / "catalog"
 
@@ -64,7 +63,7 @@ _SDK_ZIP = _DOCS_DIR / "_static" / "module_sdk.zip"
 
 
 def stage_module_sdk_zip() -> Path:
-    """Pack Plugin SDK headers plus the out-of-tree pack script."""
+    """Pack Plugin SDK headers, cmake, and pack scripts (same layout as docs/module_sdk/)."""
     include = _SDK_SRC / "include"
     if not include.is_dir():
         raise FileNotFoundError(f"module SDK missing: {include}")
@@ -75,16 +74,21 @@ def stage_module_sdk_zip() -> Path:
             _SDK_SRC / "README.md",
             _SDK_SRC / "host_export_allowlist.json",
             _SDK_SRC / "minihub_plugin_standalone.cmake",
-            _TOOLS / "pack_store_module.py",
-            _TOOLS / "store_paths.py",
-            _TOOLS / "sync_store_catalog.py",
+            _SDK_SRC / "pack_store_module.py",
+            _SDK_SRC / "store_paths.py",
+            _SDK_SRC / "sync_store_catalog.py",
+            _SDK_SRC / "build_plugin_standalone.py",
         )
         for src in extra:
-            if not src.is_file():
+            real = src.resolve()
+            if not real.is_file():
                 raise FileNotFoundError(f"module SDK zip missing {src}")
-            zf.write(src, f"module_sdk/{src.name}")
-        for path in sorted(include.rglob("*")):
-            if path.is_file():
-                rel = path.relative_to(_SDK_SRC).as_posix()
-                zf.write(path, f"module_sdk/{rel}")
+            # Git tree may symlink pack_*.py → tools/; zip always stores the file body.
+            zf.write(real, f"module_sdk/{src.name}")
+        for path in sorted(_SDK_SRC.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(_SDK_SRC).as_posix()
+            if rel.startswith("include/") or rel.startswith("templates/"):
+                zf.write(path.resolve(), f"module_sdk/{rel}")
     return _SDK_ZIP

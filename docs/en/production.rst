@@ -54,7 +54,7 @@ grow ``ota_0`` / ``ota_1`` — do not shrink ``modstore`` first.
 Factory Store preinstall
 ------------------------
 
-List module ids that exist under ``components/minihub_plugins/ID/`` (or
+List module ids that exist under ``examples/plugins/ID/`` (or
 ids pulled in via ``MINIHUB_PLUGIN_DIRS``) in
 ``application/APP/manifest.yml``. The ``preinstall`` field in ``module.json`` is
 ignored; see :ref:`store-preinstall`. Packing: :doc:`plugins/pack_and_catalog`.
@@ -62,14 +62,14 @@ ignored; see :ref:`store-preinstall`. Packing: :doc:`plugins/pack_and_catalog`.
 .. code-block:: yaml
 
    store_preinstall:
-     - miot
+     - color_bulb
 
 In-tree L3 needs ``CONFIG_MINIHUB_DYNAMIC_MODULES`` and ``build`` (emits the
 ``.so`` and packs). When artifacts already exist:
 
 .. code-block:: bash
 
-   ./tools/build_firmware.py -app minihub modules
+   ./tools/build_firmware.py -app minihub pack
    python3 tools/pack_store_module.py pack all
    ./tools/build_firmware.py -app minihub -p PORT flash
 

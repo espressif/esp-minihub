@@ -50,8 +50,8 @@ Host 与插件
        **要求：** 与 Host 同架构交叉编译（或跟固件一起编）；
        ``abi_version`` / ``core_api_*`` 覆盖当前 Host；符号在 allowlist
        内。见 :doc:`../api/module_abi` 。
-       参考 ``miot`` ： ``module.json`` + ``miot.so`` + ``ui.json`` ，无
-       ``main.js`` 、无 ``inject`` ，是 L3 不是 L1。
+       参考 ``color_bulb`` ： ``module.json`` + ``color_bulb.so`` （+ 可选
+       ``devices.json``），无 ``main.js`` 、无 ``inject`` ，是 L3 不是 L1。
      - :doc:`develop_l3`
    * - Hybrid
      - **仅 L2 + L3：** 同一 ``.mhub`` 内同时有 ``.so`` 与 ``main.js`` ，
@@ -73,17 +73,18 @@ Host 与插件
 设备页才有标准控件（:doc:`../type_catalog`）。点位字段与 adapters / 规则见
 :doc:`../data_model`。不要按灯/开关发明 C 结构。演示：L1
 ``examples/plugins/ble_mesh_pack``，L2 ``color_bulb_js``，L3
-``color_bulb`` / ``meter_plug``。
+``color_bulb`` / ``meter_plug``。厂商 MIoT 模块（``miot`` L3、
+``miot_js`` L2）在旁路仓库 ``esp-minihub-plugins``；把
+``MINIHUB_PLUGIN_DIRS`` 指到那份克隆。
 
 源码与设备路径
 --------------
 
 可选仓库内源码：
 
-* 生产：``components/minihub_plugins/ID/`` （参考 ``miot``）
-* 演示：``examples/plugins/ID/`` ，通过 ``MINIHUB_PLUGIN_DIRS`` （须在
-  **CMake 之前** export）。索引：``examples/README_CN.md``。公共 Host
-  默认 ``store_preinstall`` 为空。
+* 演示：``examples/plugins/ID/``
+  （额外树须在 **CMake 之前** export ``MINIHUB_PLUGIN_DIRS``）。索引：
+  ``examples/README_CN.md``。公共 Host 默认 ``store_preinstall`` 为空。
 
 安装后在设备上：
 
@@ -113,7 +114,7 @@ Host 与插件
 .. code-block:: yaml
 
    store_preinstall:
-     - miot
+     - color_bulb
 
 固件打包会把 ``.mhub`` 写入 ``modstore`` （挂载为 ``/store`` ）。
 ``module.json`` 里的 ``preinstall`` 字段不参与工厂打包。
@@ -121,12 +122,11 @@ Host 与插件
 开发循环（摘要）
 ----------------
 
-1. 编辑 ``components/minihub_plugins/ID/`` （或设了
-   ``MINIHUB_PLUGIN_DIRS`` 的 ``examples/plugins/ID/``）
+1. 编辑 ``examples/plugins/ID/`` （或 ``MINIHUB_PLUGIN_DIRS``）
 2. L3 先编 ``.so`` （仓库外单独交叉编译，或跟 Host 一起编，见
    :doc:`develop_l3` ），再 ``python3 tools/pack_store_module.py pack ID``
 3. ``.mhub`` 已在 store 目录后：
-   ``python3 tools/sync_store_catalog.py --from-store`` ，再
+   ``python3 tools/sync_store_catalog.py`` ，再
    ``python3 tools/store_server.py``
 4. Hub：从目录安装或上传 ``.mhub``，再 ``POST /api/hub/reload``
 
@@ -147,7 +147,7 @@ Host 与插件
 * ``runtime`` — ``pack`` (L1)、``js`` (L2)、省略/原生 (L3)、或 ``hybrid``
   （仅 L2 + L3 同包，见上表）
 * ``adapter`` — Host 会创建/启用的 ``adapters.json`` 键
-* ``binary`` — L3 解压后的文件名 (如 ``miot.so``)
+* ``binary`` — L3 解压后的文件名 (如 ``color_bulb.so``)
 * ``ui_file`` — 可选 Web 表单 (``ui.json``)
 * ``abi_version`` · ``core_api_min`` · ``core_api_max`` — 须覆盖 Host 版本
   (见 :doc:`../api/module_abi`)

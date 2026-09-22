@@ -79,8 +79,7 @@ Key components
 * ``minihub_js`` — QuickJS L2 runtime
 * ``minihub_device_widget`` — type catalog (CSV → labels / widgets)
 * ``adapters/*`` — static protocol stacks
-* ``minihub_plugins/ID/`` — in-tree Store sources (production, e.g. ``miot``)
-* ``examples/plugins/ID/`` — standalone demos (``MINIHUB_PLUGIN_DIRS``)
+* ``examples/plugins/ID/`` — in-tree Store demos (``MINIHUB_PLUGIN_DIRS`` for extras)
 
 Storage layout (generic Host)
 -----------------------------

@@ -19,7 +19,7 @@ L2 is a **Store packaging tier** (JS module → `.mhub`), not a Host Core layer.
 
 | Kind | Location |
 |------|----------|
-| Real Store JS module | `components/minihub_plugins/<id>/` (scaffold default) |
+| Real Store JS module | sibling repo via `MINIHUB_PLUGIN_DIRS`, or `examples/plugins/<id>/` (scaffold default) |
 | Standalone demos | `examples/plugins/<id>/` + `MINIHUB_PLUGIN_DIRS` |
 
 Do **not** put demos into Host `application/*/components` or default `store_preinstall` (public product list is empty).
@@ -73,7 +73,7 @@ No native compile. Packer zips `module.json` + `main.js` (+ `ui.json` / `web/` i
 export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"
 
 python3 tools/pack_store_module.py pack my_js
-python3 tools/sync_store_catalog.py all
+python3 tools/sync_store_catalog.py
 python3 tools/store_server.py --port 8080
 ```
 

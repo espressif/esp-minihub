@@ -4,7 +4,10 @@
 |------|---------|
 | `include/` | Standalone L3 headers (`minihub_plugin_sdk.h`) — compile without IDF or Host tree |
 | `host_export_allowlist.json` | Host ELF symbols L3 `.so` may leave undefined |
-| `minihub_plugin_standalone.cmake` | Optional no-IDF CMake fragment (copy into the plugin dir) |
+| `minihub_plugin_standalone.cmake` | Optional no-IDF CMake fragment |
+| `build_plugin_standalone.py` | Discover + cmake + pack (L3 cmake, then L1/L2 zip) |
+| `pack_store_module.py` | MHMD wrap + `.mhub` zip (`store_paths.py` alongside) |
+| `sync_store_catalog.py` | Rewrite `catalog.json` from deploy `.mhub` files |
 | `templates/l1/` | L1 pack (`inject` into mqtt) |
 | `templates/l2/` | L2 JS (`main.js`) |
 | `templates/l3/` | L3 native (`minihub_module_entry`) |
@@ -12,7 +15,7 @@
 ```bash
 python3 tools/new_store_module.py --tier l2 --id my_js --name "My JS"
 python3 tools/pack_store_module.py pack my_js
-python3 tools/sync_store_catalog.py all
+python3 tools/sync_store_catalog.py
 ```
 
 Do not copy an existing vendor plugin as a template. Agent workflow: `AGENTS.md` and `.cursor/skills/minihub-plugin-l*/`.
@@ -45,7 +48,7 @@ ESP-IDF or the MiniHub firmware tree.
 
 1. This directory (`include/`) plus `host_export_allowlist.json`
 2. `minihub_plugin_standalone.cmake` (optional CMake fragment)
-3. `pack_store_module.py`, `store_paths.py`, and `sync_store_catalog.py` (copied into `module_sdk.zip` from `tools/` when docs are built; keep them side by side). After `.mhub` files are in the store directory, run `python3 sync_store_catalog.py --from-store` to rewrite `catalog.json`.
+3. `build_plugin_standalone.py`, `pack_store_module.py`, `store_paths.py`, and `sync_store_catalog.py` (next to this cmake; in git they symlink to `tools/`). Standalone consumers unzip `module_sdk.zip` and never need an `esp-minihub` clone. After `.mhub` files are in the store directory, run `python3 sync_store_catalog.py` to rewrite `catalog.json` from those zips.
 4. A cross compiler that matches Host (ESP32-S31: `riscv32-esp-elf-gcc`)
 
 You do **not** need IDF component headers or MiniHub `components/` on the

@@ -19,8 +19,8 @@ MiniHub splits **product** from **Core**:
 * ``application/APP/`` — the Host you flash: board, partition table, sdkconfig
   recipe, factory JSON, ``app_main``, and product Kconfig. Folder name is the
   product name (``APP``).
-* ``components/`` — shared Core, protocol adapters, and in-tree Store sources
-  (``minihub_plugins/``; demos in ``examples/plugins/``). Every product links
+* ``components/`` — shared Core and protocol adapters. Store sources
+  live in ``examples/plugins/`` or ``MINIHUB_PLUGIN_DIRS``. Every product links
   Core and adapters; do not copy them into
   ``application/APP/``.
 * Repo ``config/`` — shared manifest base (``_host_base`` in
