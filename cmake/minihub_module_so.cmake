@@ -58,17 +58,16 @@ function(minihub_add_module_so module_id component_name)
         set(_mh_deploy "$ENV{HOME}/workspace/minihub_store")
     endif()
     set(_mh_pack_py "${MINIHUB_REPO_ROOT}/tools/pack_store_module.py")
-    set(_mh_catalog_py "${MINIHUB_REPO_ROOT}/tools/sync_store_catalog.py")
     set(_mh_python "${Python3_EXECUTABLE}")
     if(NOT _mh_python)
         set(_mh_python "python3")
     endif()
     # Configure-time staging may copy a stale deploy .mhub before libadapter_*.so
-    # exists. After linking, always refresh MHMD + deploy .mhub + catalog size +
-    # modstore_image so littlefs_modstore_bin (DEPENDS module_so_*) does not flash
-    # an old ELF or a catalog size that disagrees with files/<id>.mhub.
+    # exists. After linking, refresh MHMD + deploy .mhub + modstore files/<id>.mhub.
+    # Do NOT rewrite/copy shared catalog.json here: ninja builds module_so_* in
+    # parallel and concurrent cmake -E copy of the same catalog fails with
+    # "Error copying file ... catalog.json". Catalog sync is module_store_catalog.
     set(_mh_modstore_mhub "${CMAKE_BINARY_DIR}/modstore_image/files/${module_id}.mhub")
-    set(_mh_modstore_catalog "${CMAKE_BINARY_DIR}/modstore_image/catalog.json")
 
     add_custom_command(OUTPUT ${so_output} ${mhmd_output} ${_mh_modstore_mhub}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${out_dir}
@@ -84,19 +83,11 @@ function(minihub_add_module_so module_id component_name)
                 MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
                 MINIHUB_APP=$ENV{MINIHUB_APP}
                 ${_mh_python} ${_mh_pack_py} ${module_id} --deploy ${_mh_deploy}
-        COMMAND ${CMAKE_COMMAND} -E env
-                MINIHUB_PLUGINS_DEPLOY_DIR=${_mh_deploy}
-                MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
-                MINIHUB_APP=$ENV{MINIHUB_APP}
-                ${_mh_python} ${_mh_catalog_py} --deploy ${_mh_deploy}
         COMMAND ${CMAKE_COMMAND} -E make_directory
                 ${CMAKE_BINARY_DIR}/modstore_image/files
         COMMAND ${CMAKE_COMMAND} -E copy
                 ${_mh_deploy}/${module_id}/${module_id}.mhub
                 ${_mh_modstore_mhub}
-        COMMAND ${CMAKE_COMMAND} -E copy
-                ${_mh_deploy}/catalog.json
-                ${_mh_modstore_catalog}
         DEPENDS ${so_dependencies}
         COMMENT "Build module .so + pack .mhub: ${module_id}"
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
@@ -112,6 +103,7 @@ function(minihub_register_module_sos)
     # runtime js/pack here so a stray entry never creates libadapter_*.so /
     # idf::<id> ninja edges. L2 .mhub staging is configure-time only.
     minihub_plugin_dirs(_MOD_DIRS)
+    set(_MH_MODULE_SO_TARGETS "")
     foreach(_MOD_DIR ${_MOD_DIRS})
         get_filename_component(_MOD ${_MOD_DIR} NAME)
         if(_MOD MATCHES "^_")
@@ -130,14 +122,57 @@ function(minihub_register_module_sos)
             continue()
         endif()
         if(TARGET module_so_${_MOD})
+            list(APPEND _MH_MODULE_SO_TARGETS module_so_${_MOD})
             continue()
         endif()
         minihub_add_module_so(${_MOD} ${_MOD})
         message(STATUS "store module .so target: ${_MOD}")
-        # littlefs image is created in main/CMakeLists at configure time; sos
-        # are registered later via DEFER — attach build-order deps here.
-        if(TARGET littlefs_modstore_bin AND TARGET module_so_${_MOD})
-            add_dependencies(littlefs_modstore_bin module_so_${_MOD})
-        endif()
+        list(APPEND _MH_MODULE_SO_TARGETS module_so_${_MOD})
     endforeach()
+
+    # One catalog rewrite after all packs finish — sizes match files/*.mhub and
+    # ninja no longer races on the shared catalog.json.
+    if(NOT MINIHUB_REPO_ROOT)
+        get_filename_component(MINIHUB_REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
+    endif()
+    if(DEFINED ENV{MINIHUB_PLUGINS_DEPLOY_DIR} AND NOT "$ENV{MINIHUB_PLUGINS_DEPLOY_DIR}" STREQUAL "")
+        set(_mh_deploy "$ENV{MINIHUB_PLUGINS_DEPLOY_DIR}")
+    else()
+        set(_mh_deploy "$ENV{HOME}/workspace/minihub_store")
+    endif()
+    set(_mh_python "${Python3_EXECUTABLE}")
+    if(NOT _mh_python)
+        set(_mh_python "python3")
+    endif()
+    set(_mh_catalog_py "${MINIHUB_REPO_ROOT}/tools/sync_store_catalog.py")
+    set(_mh_modstore_catalog "${CMAKE_BINARY_DIR}/modstore_image/catalog.json")
+
+    if(NOT TARGET module_store_catalog)
+        add_custom_command(OUTPUT ${_mh_modstore_catalog}
+            COMMAND ${CMAKE_COMMAND} -E env
+                    MINIHUB_PLUGINS_DEPLOY_DIR=${_mh_deploy}
+                    MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
+                    MINIHUB_APP=$ENV{MINIHUB_APP}
+                    ${_mh_python} ${_mh_catalog_py} --deploy ${_mh_deploy}
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                    ${CMAKE_BINARY_DIR}/modstore_image
+            COMMAND ${CMAKE_COMMAND} -E copy
+                    ${_mh_deploy}/catalog.json
+                    ${_mh_modstore_catalog}
+            DEPENDS ${_MH_MODULE_SO_TARGETS}
+            COMMENT "Sync Store catalog into modstore_image"
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            VERBATIM
+        )
+        add_custom_target(module_store_catalog ALL DEPENDS ${_mh_modstore_catalog})
+    endif()
+
+    if(TARGET littlefs_modstore_bin)
+        foreach(_t ${_MH_MODULE_SO_TARGETS})
+            add_dependencies(littlefs_modstore_bin ${_t})
+        endforeach()
+        if(TARGET module_store_catalog)
+            add_dependencies(littlefs_modstore_bin module_store_catalog)
+        endif()
+    endif()
 endfunction()
