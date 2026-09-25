@@ -49,10 +49,55 @@ Built-in device types
      - power
      - bulb icon (below)
    * - ``switch``
-     - power, voltage_v, current_a, power_w, energy_wh
+     - power, voltage_v, current_a, power_w, energy_wh, temperature, fault, indicator
      - power
      - power
      - switch / outlet icon (below)
+   * - ``sensor_air_quality``
+     - co2, pm25, pressure_hpa, battery
+     - co2
+     - co2
+     - air-quality icon (below)
+   * - ``sensor_contact``
+     - contact, battery
+     - contact
+     - contact
+     - contact icon (below)
+   * - ``sensor_illuminance``
+     - illuminance, battery
+     - illuminance
+     - illuminance
+     - illuminance icon (below)
+   * - ``sensor_motion``
+     - motion, battery
+     - motion
+     - motion
+     - motion icon (below)
+   * - ``sensor_occupancy``
+     - occupancy, battery
+     - occupancy
+     - occupancy
+     - occupancy icon (below)
+   * - ``sensor_smoke``
+     - smoke, battery
+     - smoke
+     - smoke
+     - smoke icon (below)
+   * - ``sensor_tamper``
+     - tamper, battery
+     - tamper
+     - tamper
+     - tamper icon (below)
+   * - ``sensor_temp_humidity``
+     - temperature, humidity, battery
+     - temperature
+     - temperature
+     - temperature / humidity icon (below)
+   * - ``sensor_water``
+     - leak, battery
+     - leak
+     - leak
+     - water-leak icon (below)
 
 Plugin ``devices.json`` declares **only the subset this device uses**. Demos:
 
@@ -61,10 +106,14 @@ Plugin ``devices.json`` declares **only the subset this device uses**. Demos:
 * ``examples/plugins/meter_plug`` → ``type: switch`` (writable power; read-only
   voltage / current / watts)
 
-Adapters may also register type strings such as ``sensor``, ``binary_sensor``,
-or ``unknown``. Those points work for rules and REST, but if the type is missing
-from the catalog the Devices page shows **type not registered** with no standard
-widget card. Add the type to the CSV before you expect catalog UI.
+The catalog ships the following sensor types: ``sensor_contact``,
+``sensor_motion``, ``sensor_occupancy``, ``sensor_tamper``, ``sensor_water``,
+``sensor_smoke``, ``sensor_illuminance``, ``sensor_temp_humidity``,
+``sensor_air_quality``. Adapters may also register
+other type strings such as ``unknown``; those points work for rules and REST, but
+if the type is missing from the catalog the Devices page shows **type not
+registered** with no standard widget card. Add the type to the CSV before you
+expect catalog UI.
 
 Built-in parameters and widgets
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -155,6 +204,84 @@ hidden. Hue / saturation / CCT are **sliders**; rainbow or tone comes from CSS.
      - —
      - text
      - metadata; no device lists it by default → usually no control
+   * - ``temperature``
+     - Temperature
+     - Float
+     - -40–125 °C, step 0.1
+     - text (read-only)
+     - switch, sensor_temp_humidity
+   * - ``humidity``
+     - Humidity
+     - Float
+     - 0–100 %, step 0.1
+     - text (read-only)
+     - sensor_temp_humidity
+   * - ``illuminance``
+     - Illuminance
+     - Float
+     - 0–100000 lx, step 1
+     - text (read-only)
+     - sensor_illuminance
+   * - ``co2``
+     - CO2
+     - Int
+     - 0–5000 ppm, step 1
+     - text (read-only)
+     - sensor_air_quality
+   * - ``pm25``
+     - PM2.5
+     - Float
+     - 0–1000 µg/m³, step 0.1
+     - text (read-only)
+     - sensor_air_quality
+   * - ``pressure_hpa``
+     - Pressure
+     - Float
+     - 300–1100 hPa, step 0.1
+     - text (read-only)
+     - sensor_air_quality
+   * - ``battery``
+     - Battery
+     - Int
+     - 0–100 %, step 1
+     - text (read-only)
+     - sensor_* (all)
+   * - ``contact``
+     - Contact
+     - Bool
+     - —
+     - text (read-only)
+     - sensor_contact
+   * - ``motion``
+     - Motion
+     - Bool
+     - —
+     - text (read-only)
+     - sensor_motion
+   * - ``leak``
+     - Water leak
+     - Bool
+     - —
+     - text (read-only)
+     - sensor_water
+   * - ``smoke``
+     - Smoke
+     - Bool
+     - —
+     - text (read-only)
+     - sensor_smoke
+   * - ``occupancy``
+     - Occupancy
+     - Bool
+     - —
+     - text (read-only)
+     - sensor_occupancy
+   * - ``tamper``
+     - Tamper
+     - Bool
+     - —
+     - text (read-only)
+     - sensor_tamper
 
 ``ui.hidden`` = never draw at the type level. Instance ``visible: false`` =
 hide **this** device's param while keeping it in ``props.params``. Read-only
@@ -184,6 +311,51 @@ Device **avatars** are SVG under
      - ``images/devices/switch.svg``
      - .. image:: ../_static/catalog/images/devices/switch.svg
           :alt: switch device icon
+          :width: 64px
+   * - ``sensor_air_quality``
+     - ``images/devices/sensor_air_quality.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_air_quality.svg
+          :alt: air quality sensor icon
+          :width: 64px
+   * - ``sensor_contact``
+     - ``images/devices/sensor_contact.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_contact.svg
+          :alt: contact sensor icon
+          :width: 64px
+   * - ``sensor_illuminance``
+     - ``images/devices/sensor_illuminance.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_illuminance.svg
+          :alt: illuminance sensor icon
+          :width: 64px
+   * - ``sensor_motion``
+     - ``images/devices/sensor_motion.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_motion.svg
+          :alt: motion sensor icon
+          :width: 64px
+   * - ``sensor_occupancy``
+     - ``images/devices/sensor_occupancy.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_occupancy.svg
+          :alt: occupancy sensor icon
+          :width: 64px
+   * - ``sensor_smoke``
+     - ``images/devices/sensor_smoke.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_smoke.svg
+          :alt: smoke sensor icon
+          :width: 64px
+   * - ``sensor_tamper``
+     - ``images/devices/sensor_tamper.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_tamper.svg
+          :alt: tamper sensor icon
+          :width: 64px
+   * - ``sensor_temp_humidity``
+     - ``images/devices/sensor_temp_humidity.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_temp_humidity.svg
+          :alt: temperature / humidity sensor icon
+          :width: 64px
+   * - ``sensor_water``
+     - ``images/devices/sensor_water.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_water.svg
+          :alt: water-leak sensor icon
           :width: 64px
 
 Parameter rows are **not** per-parameter SVGs: controls are CSS widgets from
@@ -286,6 +458,12 @@ On register (one point per array element):
 * ``type`` = ``devices.json`` ``type`` (must be a catalog ``device_id``)
 * Fill ``props.params`` from ``params`` (``init`` → ``value``; optional
   ``access`` / ``visible`` / ``min`` / ``max`` / ``step`` / ``unit`` / ``requires``)
+* Presentation overrides, per parameter: ``icon`` (must reference a shipped
+  ``./images/...`` icon), ``ui_element`` (one of ``ui.toggle`` / ``ui.slider`` /
+  ``ui.dropdown`` / ``ui.text`` / ``ui.hidden``) and ``css`` (plain class names).
+  Per device: ``icon``. Leave any of them out and the catalog default for the
+  device ``type`` is used. ``generate_devices_property_from_json.py`` rejects
+  unknown icons, widgets outside the closed set, and unsafe ``css``.
 
 A single object (not an array) is still accepted for one-device plugins.
 

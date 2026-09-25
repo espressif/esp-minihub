@@ -164,6 +164,10 @@ static cJSON *cb_params_from_desc(const cJSON *params_arr)
         const cJSON *jstep = cJSON_GetObjectItemCaseSensitive(p, "step");
         const cJSON *junit = cJSON_GetObjectItemCaseSensitive(p, "unit");
         const cJSON *jreq = cJSON_GetObjectItemCaseSensitive(p, "requires");
+        /* Presentation overrides: unset keeps the catalog default for `type`. */
+        const cJSON *jicon = cJSON_GetObjectItemCaseSensitive(p, "icon");
+        const cJSON *jui = cJSON_GetObjectItemCaseSensitive(p, "ui_element");
+        const cJSON *jcss = cJSON_GetObjectItemCaseSensitive(p, "css");
 
         char value[MINIHUB_VALUE_MAX];
         cb_json_to_point_str(cJSON_GetObjectItemCaseSensitive(p, "init"), value, sizeof(value));
@@ -198,6 +202,15 @@ static cJSON *cb_params_from_desc(const cJSON *params_arr)
             if (dup) {
                 cJSON_AddItemToObject(ent, "requires", dup);
             }
+        }
+        if (cJSON_IsString(jicon) && jicon->valuestring && jicon->valuestring[0]) {
+            cJSON_AddStringToObject(ent, "icon", jicon->valuestring);
+        }
+        if (cJSON_IsString(jui) && jui->valuestring && jui->valuestring[0]) {
+            cJSON_AddStringToObject(ent, "ui_element", jui->valuestring);
+        }
+        if (cJSON_IsString(jcss) && jcss->valuestring && jcss->valuestring[0]) {
+            cJSON_AddStringToObject(ent, "css", jcss->valuestring);
         }
         cJSON_AddItemToObject(out, name->valuestring, ent);
     }
@@ -239,6 +252,12 @@ static esp_err_t cb_register_one(const cJSON *desc)
     if (pt.props) {
         cJSON_AddStringToObject(pt.props, "manufacturer", CB_MANUFACTURER);
         cJSON_AddStringToObject(pt.props, "category", CB_CATEGORY);
+        /* Device-class icon override; unset falls back to /img/devices/<type>.svg. */
+        const cJSON *jdev_icon = cJSON_GetObjectItemCaseSensitive(desc, "icon");
+        if (cJSON_IsString(jdev_icon) && jdev_icon->valuestring &&
+            jdev_icon->valuestring[0]) {
+            cJSON_AddStringToObject(pt.props, "icon", jdev_icon->valuestring);
+        }
         cJSON *params_dup = cJSON_Duplicate(slot->params, true);
         if (params_dup) {
             cJSON_AddItemToObject(pt.props, "params", params_dup);

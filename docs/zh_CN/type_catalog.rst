@@ -46,10 +46,55 @@ Host **类型目录** 决定设备页怎么画：有哪些类型、参数标签�
      - power
      - 灯泡图标 （见下）
    * - ``switch``
-     - power, voltage_v, current_a, power_w, energy_wh
+     - power, voltage_v, current_a, power_w, energy_wh, temperature, fault, indicator
      - power
      - power
      - 插座/开关图标 （见下）
+   * - ``sensor_air_quality``
+     - co2, pm25, pressure_hpa, battery
+     - co2
+     - co2
+     - 空气质量图标 （见下）
+   * - ``sensor_contact``
+     - contact, battery
+     - contact
+     - contact
+     - 门磁图标 （见下）
+   * - ``sensor_illuminance``
+     - illuminance, battery
+     - illuminance
+     - illuminance
+     - 光照度图标 （见下）
+   * - ``sensor_motion``
+     - motion, battery
+     - motion
+     - motion
+     - 人体移动图标 （见下）
+   * - ``sensor_occupancy``
+     - occupancy, battery
+     - occupancy
+     - occupancy
+     - 有人图标 （见下）
+   * - ``sensor_smoke``
+     - smoke, battery
+     - smoke
+     - smoke
+     - 烟雾图标 （见下）
+   * - ``sensor_tamper``
+     - tamper, battery
+     - tamper
+     - tamper
+     - 防拆图标 （见下）
+   * - ``sensor_temp_humidity``
+     - temperature, humidity, battery
+     - temperature
+     - temperature
+     - 温湿度图标 （见下）
+   * - ``sensor_water``
+     - leak, battery
+     - leak
+     - leak
+     - 漏水图标 （见下）
 
 插件 ``devices.json`` **只需声明本台设备真正用到的子集**；不必把类型上全部
 参数都挂上。演示：
@@ -58,9 +103,12 @@ Host **类型目录** 决定设备页怎么画：有哪些类型、参数标签�
   saturation；cct 用 ``visible: false`` 藏起）
 * ``examples/plugins/meter_plug`` → ``type: switch`` （power 可写；电压电流功率只读）
 
-Zigbee / Matter / MQTT 等适配器还可登记 ``sensor``、``binary_sensor``、
-``unknown`` 等 **type 字符串**。它们能进点位表与规则，但若类型不在目录里，
-设备页会显示 **类型未登记**，没有标准控件卡。要出标准 UI，先把类型写进 CSV。
+目录内已内置以下传感器类型：``sensor_contact``、``sensor_motion``、
+``sensor_occupancy``、``sensor_tamper``、``sensor_water``、``sensor_smoke``、
+``sensor_illuminance``、``sensor_temp_humidity``、``sensor_air_quality``。Zigbee / Matter / MQTT 等
+适配器也可登记 ``unknown`` 等其它 type 字符串：它们能进点位表与规则，但若类型
+不在目录里，设备页会显示 **类型未登记**，没有标准控件卡。要出标准 UI，先把
+类型写进 CSV。
 
 内置参数与控件
 ^^^^^^^^^^^^^^
@@ -151,6 +199,84 @@ hidden。色相 / 饱和度 / 色温都是 **slider**，彩虹或色带靠 CSS�
      - —
      - text
      - 元数据；无设备默认挂它 → 一般不画控件
+   * - ``temperature``
+     - 温度
+     - Float
+     - -40–125 °C, step 0.1
+     - text（只读）
+     - switch, sensor_temp_humidity
+   * - ``humidity``
+     - 湿度
+     - Float
+     - 0–100 %, step 0.1
+     - text（只读）
+     - sensor_temp_humidity
+   * - ``illuminance``
+     - 光照度
+     - Float
+     - 0–100000 lx, step 1
+     - text（只读）
+     - sensor_illuminance
+   * - ``co2``
+     - 二氧化碳
+     - Int
+     - 0–5000 ppm, step 1
+     - text（只读）
+     - sensor_air_quality
+   * - ``pm25``
+     - PM2.5
+     - Float
+     - 0–1000 µg/m³, step 0.1
+     - text（只读）
+     - sensor_air_quality
+   * - ``pressure_hpa``
+     - 气压
+     - Float
+     - 300–1100 hPa, step 0.1
+     - text（只读）
+     - sensor_air_quality
+   * - ``battery``
+     - 电量
+     - Int
+     - 0–100 %, step 1
+     - text（只读）
+     - sensor_* （所有）
+   * - ``contact``
+     - 门磁
+     - Bool
+     - —
+     - text（只读）
+     - sensor_contact
+   * - ``motion``
+     - 人体移动
+     - Bool
+     - —
+     - text（只读）
+     - sensor_motion
+   * - ``leak``
+     - 漏水
+     - Bool
+     - —
+     - text（只读）
+     - sensor_water
+   * - ``smoke``
+     - 烟雾
+     - Bool
+     - —
+     - text（只读）
+     - sensor_smoke
+   * - ``occupancy``
+     - 有人
+     - Bool
+     - —
+     - text（只读）
+     - sensor_occupancy
+   * - ``tamper``
+     - 防拆
+     - Bool
+     - —
+     - text（只读）
+     - sensor_tamper
 
 ``ui.hidden`` = 类型级永不画行。实例 ``visible: false`` = **这台** 设备藏参数，
 但仍留在 ``props.params``。只读传感器用实例 ``access: "R"`` （仍显示，无拖动）。
@@ -179,6 +305,51 @@ hidden。色相 / 饱和度 / 色温都是 **slider**，彩虹或色带靠 CSS�
      - ``images/devices/switch.svg``
      - .. image:: ../_static/catalog/images/devices/switch.svg
           :alt: switch device icon
+          :width: 64px
+   * - ``sensor_air_quality``
+     - ``images/devices/sensor_air_quality.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_air_quality.svg
+          :alt: air quality sensor icon
+          :width: 64px
+   * - ``sensor_contact``
+     - ``images/devices/sensor_contact.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_contact.svg
+          :alt: contact sensor icon
+          :width: 64px
+   * - ``sensor_illuminance``
+     - ``images/devices/sensor_illuminance.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_illuminance.svg
+          :alt: illuminance sensor icon
+          :width: 64px
+   * - ``sensor_motion``
+     - ``images/devices/sensor_motion.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_motion.svg
+          :alt: motion sensor icon
+          :width: 64px
+   * - ``sensor_occupancy``
+     - ``images/devices/sensor_occupancy.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_occupancy.svg
+          :alt: occupancy sensor icon
+          :width: 64px
+   * - ``sensor_smoke``
+     - ``images/devices/sensor_smoke.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_smoke.svg
+          :alt: smoke sensor icon
+          :width: 64px
+   * - ``sensor_tamper``
+     - ``images/devices/sensor_tamper.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_tamper.svg
+          :alt: tamper sensor icon
+          :width: 64px
+   * - ``sensor_temp_humidity``
+     - ``images/devices/sensor_temp_humidity.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_temp_humidity.svg
+          :alt: temperature / humidity sensor icon
+          :width: 64px
+   * - ``sensor_water``
+     - ``images/devices/sensor_water.svg``
+     - .. image:: ../_static/catalog/images/devices/sensor_water.svg
+          :alt: water-leak sensor icon
           :width: 64px
 
 参数行 **不是** 每参数一张 SVG：交互控件是 ``device_widgets.js`` /
@@ -269,6 +440,11 @@ reload。reload 为原子且可容错 （坏行被跳过、无法解析的文件
 * ``type`` = ``devices.json`` 的 ``type`` （须是目录里的 ``device_id``）
 * 把 ``params`` 填进 ``props.params`` （``init`` → ``value``；可写
   ``access`` / ``visible`` / ``min`` / ``max`` / ``step`` / ``unit`` / ``requires``）
+* 展示覆盖项：参数级 ``icon`` （只能引用已随固件发布的 ``./images/...`` 图标）、
+  ``ui_element`` （取 ``ui.toggle`` / ``ui.slider`` / ``ui.dropdown`` / ``ui.text`` /
+  ``ui.hidden`` 之一）、``css`` （纯类名）；设备级 ``icon``。不写则用该 ``type``
+  在目录里的默认样式。``generate_devices_property_from_json.py`` 会拦掉不存在的
+  图标、封闭集合之外的控件名和不安全的 ``css``。
 
 单对象（非数组）仍可用于只登记一台的插件。
 
