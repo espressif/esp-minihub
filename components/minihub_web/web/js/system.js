@@ -1,4 +1,3 @@
-/* MiniHub web — system page */
 let sysIface = 'eth',
     sysSnap = null;
 

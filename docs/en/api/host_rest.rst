@@ -502,7 +502,7 @@ PUT /api/dev/web/
 
    ``PUT /api/dev/web/`` *relative-path*
 
-Write a Host console file under ``/store/preinstall/web/`` (max 512 KiB).
+Write a Host console file under ``/data/web/`` (max 512 KiB).
 Example: ``PUT /api/dev/web/login.html``. Requires the same auth as other
 writes when login or a Bearer token is configured. Operator flow:
 :doc:`../web_console`.

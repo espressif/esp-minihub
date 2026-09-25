@@ -116,11 +116,17 @@ def cmd_seed_config(args: argparse.Namespace) -> int:
         src = resolve_config_path(args.repo, args.app, name)
         if src is None or not src.is_dir():
             continue
+        kept = [
+            child
+            for child in sorted(src.iterdir())
+            if child.is_file() and not child.name.startswith("example_")
+        ]
+        if not kept:
+            continue
         out = dest / name
         out.mkdir(parents=True, exist_ok=True)
-        for child in sorted(src.iterdir()):
-            if child.is_file():
-                (out / child.name).write_bytes(child.read_bytes())
+        for child in kept:
+            (out / child.name).write_bytes(child.read_bytes())
         print(f"  → {out}/ (from {src})")
     return 0
 

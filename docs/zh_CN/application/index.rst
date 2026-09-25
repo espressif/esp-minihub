@@ -79,7 +79,7 @@ Compose：``tools/compose_sdkconfig.py``。协议栈列表：
   用 ``.mhub`` 或私有产品树交付。
 
 Web 控制台来自 ``components/minihub_web/web/``，打进
-``/store/preinstall/web/``。默认没有 ``application/APP/web/`` 覆盖层，除非改该
+``/data/web/``。默认没有 ``application/APP/web/`` 覆盖层，除非改该
 产品的 ``CMakeLists.txt``。见 :doc:`../web_console`。
 
 仓库里若再增加通用产品，在 ``minihub.rst`` 旁增加同级 RST，并写入上方

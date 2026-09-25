@@ -1,4 +1,3 @@
-/* MiniHub web — scenes page */
 let scenesCfg = {
     scenes: []
 };

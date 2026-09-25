@@ -484,7 +484,7 @@ PUT /api/dev/web/
 
    ``PUT /api/dev/web/`` *相对路径*
 
-把 Host 控制台文件写入 ``/store/preinstall/web/`` （最大 512 KiB）。例如
+把 Host 控制台文件写入 ``/data/web/`` （最大 512 KiB）。例如
 ``PUT /api/dev/web/login.html`` 。若已开登录或 Bearer，鉴权与其它写入相同。操作步骤见
 :doc:`../web_console` 。
 

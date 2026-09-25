@@ -11,7 +11,7 @@ sizes: :doc:`host_customization`. REST overview: :doc:`api/host_rest`.
 NVS factory reset (hold the configured GPIO) does **not** wipe LittleFS
 ``/data`` or ``/store``. Use a full ``flash`` when the jig needs a clean
 filesystem. App OTA likewise does **not** replace the Web console on
-``/store/preinstall/web/``; see :doc:`web_console`.
+``/data/web/``; see :doc:`web_console`.
 
 Slots and image size
 --------------------

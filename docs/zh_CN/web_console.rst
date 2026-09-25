@@ -4,7 +4,7 @@
 :link_to_translation:`en:[English]`
 
 Host 控制台（HTML/CSS/JS）可由 OEM 换皮。它 **不打进** app 二进制。构建时拷入
-``modstore`` LittleFS 镜像；运行时 HTTP 从 ``/store/preinstall/web/`` 读取。
+``storage`` LittleFS 镜像；运行时 HTTP 从 ``/data/web/`` 读取。
 
 源码与设备路径
 --------------
@@ -20,8 +20,8 @@ Host 控制台（HTML/CSS/JS）可由 OEM 换皮。它 **不打进** app 二进�
      …               其它静态文件对应 GET /web/ 加文件名
 
 打开 ``CONFIG_MINIHUB_WEB_UI`` 时，
-``application/minihub/main/CMakeLists.txt`` 把该目录打进 ``modstore`` 镜像，对应
-``/store/preinstall/web/`` 。
+``application/minihub/main/CMakeLists.txt`` 把该目录压缩进 ``storage`` 镜像，对应
+``/data/web/`` 。
 
 .. list-table::
    :header-rows: 1
@@ -30,15 +30,16 @@ Host 控制台（HTML/CSS/JS）可由 OEM 换皮。它 **不打进** app 二进�
    * - 浏览器
      - 设备上的文件
    * - ``GET /``
-     - ``/store/preinstall/web/index.html``
+     - ``/data/web/index.html``
    * - ``GET /login``
-     - ``/store/preinstall/web/login.html``
+     - ``/data/web/login.html``
    * - ``GET /web/`` 加文件名
-     - ``/store/preinstall/web/`` 加同一文件名
+     - ``/data/web/`` 加同一文件名
 
-缺少 ``index.html`` 时，固件回退到 ROM 提示页（按 ``Accept-Language`` 中/英）。
-该页 **不能** OEM 换皮；应把 ``index.html`` 写回 ``modstore`` 。缺少
-``login.html`` 时，``GET /login`` 返回 404（UTF-8 纯文本）。
+``/data/web/`` 缺少 ``index.html`` 时，固件会再试遗留路径
+``/store/preinstall/web/`` （迁移前已烧过的设备），再回退到 ROM 提示页（按
+``Accept-Language`` 中/英）。该 ROM 页 **不能** OEM 换皮；应把 ``index.html``
+写回 ``storage`` 。缺少 ``login.html`` 时，``GET /login`` 返回 404（UTF-8 纯文本）。
 
 打开 Web 登录后，``GET /`` 与 ``GET /web/…`` 可能需要会话 Cookie；``GET /login``
 保持公开，以便显示登录表单。
@@ -82,17 +83,17 @@ Kconfig 与登录
 --------------------------------
 
 1. 修改 ``components/minihub_web/web/`` 下的文件（或在构建前把皮肤覆盖进去）。
-2. 重新编译，让 CMake 重新生成 ``modstore`` 。
-3. 烧录 **Store 分区**，不要只烧 app：
+2. 重新编译，让 CMake 重新生成 ``storage`` 。
+3. 烧录 **storage 分区**，不要只烧 app：
 
    .. code-block:: bash
 
       ./tools/build_firmware.py -app minihub build
-      ./tools/build_firmware.py -app minihub -p PORT modstore-flash
+      ./tools/build_firmware.py -app minihub -p PORT storage-flash
 
-``app-flash`` 会保留现有 ``/store`` 。**现场 OTA** 只写 ``ota_0`` / ``ota_1`` ，
-**不会** 更新 ``/store/preinstall/web/`` 。实验室 ``app-flash`` 或现场 OTA 之后，
-设备仍提供旧 HTML，直到 ``modstore-flash`` 或整机 ``flash`` 。合并镜像见
+``app-flash`` 会保留现有 ``/data`` 。**现场 OTA** 只写 ``ota_0`` / ``ota_1`` ，
+**不会** 更新 ``/data/web/`` 。实验室 ``app-flash`` 或现场 OTA 之后，
+设备仍提供旧 HTML，直到 ``storage-flash`` 或整机 ``flash`` 。合并镜像见
 :doc:`production` 。OTA 见 :doc:`ota` 。
 
 通用 Host 只从 ``components/minihub_web/web/`` 拷贝。没有
@@ -101,7 +102,7 @@ Kconfig 与登录
 运行中替换（不必重烧）
 ------------------------
 
-``PUT /api/dev/web/`` 加上相对路径，把请求体写入 ``/store/preinstall/web/``
+``PUT /api/dev/web/`` 加上相对路径，把请求体写入 ``/data/web/``
 下对应文件（最大 512 KiB）。相对路径不得含 ``..`` 。
 
 .. code-block:: bash

@@ -1,4 +1,3 @@
-/* MiniHub web — shared state, helpers, navigation */
 let pts = [],
     packs = [],
     modules = [],
@@ -95,7 +94,6 @@ const TYPE_LABEL = {
     appliance: '家电'
 };
 
-/* Prefer props.category (product name) over catalog type label. Widgets still use p.type. */
 function dwTypeDisplay(p) {
     const pr = (p && p.props && typeof p.props === 'object') ? p.props : {};
     const cat = pr.category || pr.product || pr.product_name;
@@ -178,12 +176,29 @@ function authStatus(ad) {
     };
 }
 
+let _syncPollTimer = null;
+function pollAuthSyncWhileBusy() {
+    if (_syncPollTimer) return;
+    const tick = async function () {
+        await loadMeta();
+        const busy = authModules().some(function (m) {
+            const st = authStatus(m.adapter);
+            return !!(st && st.syncing);
+        });
+        if (view === 'overview') renderOverview();
+        if (!busy) {
+            _syncPollTimer = null;
+            return;
+        }
+        _syncPollTimer = setTimeout(tick, 1500);
+    };
+    _syncPollTimer = setTimeout(tick, 200);
+}
+
 function fillTpl(s, vars) {
     return String(s || '').replace(/\{(\w+)\}/g, (m, k) => vars[k] != null ? vars[k] : m);
 }
 
-/* Protocol prefix on the point (`thread.color_bulb` → thread), not hardcoded. */
-/* Vendor plugin claim. Radio commands still use p.adapter. */
 function pointGroup(p) {
     const owner = p && p.props && typeof p.props.owner === 'string' ? p.props.owner : '';
     if (owner && adapterEnabled(owner)) return owner;
@@ -222,7 +237,7 @@ function pointDisplayName(p) {
     const n = p && p.props && p.props.name;
     if (n && String(n).trim()) return String(n).trim();
     const id = (p && p.point_id) || '';
-    /* Device ids are <protocol>.<endpoint>[.<param>]; show the endpoint. */
+
     const dot = id.split('.');
     if (dot.length >= 2) return dot[dot.length - (dot.length >= 3 ? 2 : 1)];
     return id.split('/').pop();
@@ -290,7 +305,7 @@ function esc(s) {
 }
 
 function switchView(v) {
-    /* Devices list lives on Overview only; no separate Devices nav page. */
+
     if (v === 'devices') v = 'overview';
     view = v;
     document.querySelectorAll('.view').forEach(el => el.hidden = true);
@@ -400,7 +415,7 @@ async function loadPoints() {
         const r = await fetch('/api/points');
         if (!r.ok) throw new Error('points');
         const next = await r.json();
-        const sig = JSON.stringify(next);
+        const sig = pointsUiSig(next);
         const changed = sig !== lastPtsSig;
         lastPtsSig = sig;
         pts = next;
@@ -409,7 +424,7 @@ async function loadPoints() {
         if (changed) {
             if (view === 'overview') renderOverview();
             if (view === 'map' && window.L) renderMap();
-            /* Open detail modal: re-render from point via catalog widgets (any type). */
+
             if (typeof refreshDeviceDetail === 'function') refreshDeviceDetail();
         }
     } catch (e) {
@@ -437,11 +452,9 @@ async function loadModulesForAuth() {
 }
 function renderOverview() {
     const q = query.toLowerCase();
-    /* Warm type catalog so Overview cards can show /img/devices/<type>.svg. */
+
     if (typeof ensureDwCatalog === 'function' && typeof dwCatalog !== 'undefined' && !dwCatalog) {
-        ensureDwCatalog().then(function () {
-            if (view === 'overview') renderOverview();
-        }).catch(function () {});
+        ensureDwCatalog().catch(function () {});
     }
     /* Collapse registry rows to devices before filter/stats/cards.
      * Otherwise legacy per-param points (thread.color_bulb.brightness …)
@@ -505,10 +518,13 @@ function renderOverview() {
     });
     const groupKeys = Object.keys(groups).sort().filter(adapterEnabled);
     if (!list.length && !html && !groupKeys.length) {
+        lastOverviewHtml = '';
         el.innerHTML = '<div class="empty">暂无设备</div>';
         return;
     }
     if (!list.length && html && !groupKeys.length) {
+        if (html === lastOverviewHtml) return;
+        lastOverviewHtml = html;
         el.innerHTML = html;
         return;
     }
@@ -523,6 +539,8 @@ function renderOverview() {
     if (filter === 'all' && loose.length) {
         html += '<div class="section"><div class="grid">' + loose.map(cardHtml).join('') + '</div></div>';
     }
+    if (html === lastOverviewHtml) return;
+    lastOverviewHtml = html;
     el.innerHTML = html;
     el.querySelectorAll('.toggle input:not(:disabled)').forEach(inp => {
         inp.onchange = () => cmd(inp.dataset.id, inp.checked ? 'turn_on' : 'turn_off');

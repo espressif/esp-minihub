@@ -1,11 +1,10 @@
-/* MiniHub web — store page */
 async function loadStoreData() {
     try {
         const [p, m] = await Promise.all([fetch('/api/packs'), fetch('/api/modules')].map(r => r.catch(() => null)));
         packs = p && p.ok ? await p.json() : [];
         modules = m && m.ok ? await m.json() : [];
         if (view === 'store') renderStore();
-        if (view === 'overview') renderOverview(); /* Catalog separate — must not block installed packs/modules if remote store is down. */
+        if (view === 'overview') renderOverview();
         const c = await fetch('/api/store/catalog').catch(() => null);
         storeCatalogOk = !!(c && c.ok);
         storeCatalog = storeCatalogOk ? await c.json() : [];

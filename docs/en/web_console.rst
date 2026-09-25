@@ -4,8 +4,8 @@ Replace the Web console
 :link_to_translation:`zh_CN:[中文]`
 
 OEM-skinnable Host console (HTML/CSS/JS). It is **not** compiled into the app
-binary. The build copies files onto the ``modstore`` LittleFS image; the HTTP
-server reads them at runtime from ``/store/preinstall/web/``.
+binary. The build copies files onto the ``storage`` LittleFS image; the HTTP
+server reads them at runtime from ``/data/web/``.
 
 Source and device path
 -----------------------
@@ -21,8 +21,7 @@ In-tree source (generic Host):
      …               other static files as GET /web/ plus the file name
 
 When ``CONFIG_MINIHUB_WEB_UI`` is on, ``application/minihub/main/CMakeLists.txt``
-copies that directory into the ``modstore`` image as
-``/store/preinstall/web/``.
+minifies that directory into the ``storage`` image as ``/data/web/``.
 
 .. list-table::
    :header-rows: 1
@@ -31,16 +30,17 @@ copies that directory into the ``modstore`` image as
    * - Browser
      - File on device
    * - ``GET /``
-     - ``/store/preinstall/web/index.html``
+     - ``/data/web/index.html``
    * - ``GET /login``
-     - ``/store/preinstall/web/login.html``
+     - ``/data/web/login.html``
    * - ``GET /web/`` plus file name
-     - ``/store/preinstall/web/`` plus the same name
+     - ``/data/web/`` plus the same name
 
-If ``index.html`` is missing, the firmware serves a small ROM page (Chinese or
-English from ``Accept-Language``). That page is **not** OEM-editable; restore
-``index.html`` on ``modstore``. If ``login.html`` is missing, ``GET /login``
-returns 404 (UTF-8 plain text).
+If ``index.html`` is missing under ``/data/web/``, the firmware tries the legacy
+path ``/store/preinstall/web/`` (devices flashed before this migration), then a
+small ROM page (Chinese or English from ``Accept-Language``). That ROM page is
+**not** OEM-editable; restore ``index.html`` on ``storage``. If ``login.html``
+is missing, ``GET /login`` returns 404 (UTF-8 plain text).
 
 ``GET /`` and ``GET /web/…`` may require a session cookie when Web login is
 enabled; ``GET /login`` stays public so the browser can show the form.
@@ -89,18 +89,18 @@ Replace at build (factory / lab)
 
 1. Edit files under ``components/minihub_web/web/`` (or copy a skin over that
    directory before build).
-2. Rebuild so CMake restages ``modstore``.
-3. Flash the **Store partition**, not only the app:
+2. Rebuild so CMake restages ``storage``.
+3. Flash the **storage partition**, not only the app:
 
    .. code-block:: bash
 
       ./tools/build_firmware.py -app minihub build
-      ./tools/build_firmware.py -app minihub -p PORT modstore-flash
+      ./tools/build_firmware.py -app minihub -p PORT storage-flash
 
-``app-flash`` keeps the existing ``/store``. **Field OTA** writes ``ota_0`` /
-``ota_1`` only; it does **not** update ``/store/preinstall/web/``. After a lab
+``app-flash`` keeps the existing ``/data``. **Field OTA** writes ``ota_0`` /
+``ota_1`` only; it does **not** update ``/data/web/``. After a lab
 ``app-flash`` or field OTA, the device still serves the old HTML until
-``modstore-flash`` or a full factory ``flash``. Merge image: :doc:`production`.
+``storage-flash`` or a full factory ``flash``. Merge image: :doc:`production`.
 OTA: :doc:`ota`.
 
 The generic Host copies from ``components/minihub_web/web/`` only. There is no
@@ -111,8 +111,7 @@ Replace on a running Hub (no reflash)
 -------------------------------------
 
 ``PUT /api/dev/web/`` followed by a relative path writes the body under
-``/store/preinstall/web/`` (max 512 KiB). The relative path must not contain
-``..``.
+``/data/web/`` (max 512 KiB). The relative path must not contain ``..``.
 
 .. code-block:: bash
 

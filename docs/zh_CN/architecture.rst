@@ -90,7 +90,7 @@ JSON 编写：:doc:`data_model` （点位 / adapters / 规则）；类型目录�
      model/             可选上传的 devices.csv + parameters.csv
    /data/config/packs/  可选 L1 包暂存（因产品而异）
    /store/modules/ID/   已安装 Store 模块（module.json、.so、main.js 等）
-   /store/preinstall/web/  Host Web 控制台（index.html、login.html 等）
+   /data/web/           Host Web 控制台（index.html、login.html 等）
    /data/tmp/           MHMD 解压 / 临时目录（模块加载器）
 
 NVS 保存 Wi-Fi 凭据、Store URL 覆盖、OTA 元数据等 — 完整 ``adapters.json`` 在

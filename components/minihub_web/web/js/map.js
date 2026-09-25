@@ -1,4 +1,3 @@
-/* MiniHub web — map page */
 function paintMapDevices(hub) {
     if (!deviceLayer || !hub) return;
     deviceLayer.clearLayers();
@@ -65,7 +64,7 @@ async function renderMap() {
     if (typeof L === 'undefined') {
         info.textContent = '地图库未加载';
         return;
-    } /* Draw devices immediately; geo may arrive later (do not block on IP locate). */
+    }
     const fallback = {
         ok: true,
         source: 'default',

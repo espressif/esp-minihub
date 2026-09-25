@@ -46,8 +46,17 @@
 /** Per-module static UI assets (served when CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB) */
 #define MINIHUB_MODULE_WEB_SUBDIR "web"
 
-/** Host Web console (OEM-skinnable); staged into modstore at build */
+/**
+ * Host Web console (OEM-skinnable) on storage — staged into the `storage`
+ * LittleFS image at build as /data/web/. PUT /api/dev/web writes here.
+ */
+#define MINIHUB_WEB_DIR              MINIHUB_VFS_MOUNT "/web"
+#define MINIHUB_WEB_INDEX            MINIHUB_WEB_DIR "/index.html"
+#define MINIHUB_WEB_LOGIN            MINIHUB_WEB_DIR "/login.html"
+
+/** Store factory preinstall (product_params quirks, zigbee map, …) on /store */
 #define MINIHUB_PREINSTALL_DIR       MINIHUB_STORE_MOUNT "/preinstall"
+/** Legacy Web path (pre-storage migration); HTTP read fallback only */
 #define MINIHUB_PREINSTALL_WEB_DIR   MINIHUB_PREINSTALL_DIR "/web"
 #define MINIHUB_PREINSTALL_WEB_INDEX MINIHUB_PREINSTALL_WEB_DIR "/index.html"
 #define MINIHUB_PREINSTALL_WEB_LOGIN MINIHUB_PREINSTALL_WEB_DIR "/login.html"

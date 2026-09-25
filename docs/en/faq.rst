@@ -75,9 +75,9 @@ Do not add a C struct per type. Details: :doc:`type_catalog`.
 How do I replace the Web console?
 ----------------------------------
 
-Edit ``components/minihub_web/web/`` then ``modstore-flash``, or
+Edit ``components/minihub_web/web/`` then ``storage-flash``, or
 ``PUT /api/dev/web/`` on a running Hub. ``app-flash`` does not update
-``/store``. Details: :doc:`web_console`.
+``/data/web``. Details: :doc:`web_console`.
 
 How do I flash a factory image / run OTA?
 -----------------------------------------

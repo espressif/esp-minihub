@@ -1,4 +1,3 @@
-/* device_widgets.css - label + real control rows for the Devices page */
 .dw-params {
   display: flex;
   flex-direction: column;
@@ -16,7 +15,6 @@
   display: none !important;
 }
 
-/* Expandable Devices cards: click header/card to reveal non-power params */
 .dcard.dw-card {
   cursor: default;
 }
@@ -69,7 +67,15 @@
   border-color: var(--accent2);
 }
 
-/* card-top is space-between; keep avatar + name left-aligned (Overview + Devices) */
+.dw-param-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  object-fit: contain;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
 .dw-device-icon + .card-name,
 .dw-device-icon-fallback + .card-name { flex: 1; min-width: 0; }
 
@@ -78,14 +84,11 @@
   flex: none;
 }
 
-/* Device type missing from /api/device_widgets: rows fall back to the raw
- * parameter name, so say so instead of looking like a broken catalog. */
 .badge.warn {
   background: rgba(248, 113, 113, .15);
   color: #f87171;
 }
 
-/* Power off: secondary writable controls stay visible but cannot be sent. */
 .dw-param.is-gated {
     opacity: 0.45;
 }
@@ -119,7 +122,6 @@
   line-height: 1.3;
 }
 
-/* Optional tiny param glyph (labels-first rows usually omit these). */
 .dw-param-icon {
   width: 16px;
   height: 16px;
@@ -138,7 +140,6 @@
   min-width: 0;
 }
 
-/* Device-class avatar (card header); param icons use .dw-param-icon */
 .dw-device-icon {
   width: 32px;
   height: 32px;
@@ -148,7 +149,6 @@
   background: var(--bg2);
   border: 1px solid var(--border);
   margin-right: 8px;
-  transition: opacity .2s ease, filter .2s ease;
 }
 .dw-device-icon.is-on {
   opacity: 1;
@@ -170,7 +170,6 @@
   line-height: 1;
 }
 
-/* Legacy thin ranges (non-tile). Tile bars use .dw-tile-range below. */
 .dw-param input[type="range"].dw-range:not(.dw-tile-range),
 .dw-param input[type="range"]:not(.dw-tile-range) {
   -webkit-appearance: none;
@@ -228,10 +227,6 @@
   height: 8px;
 }
 
-/*
- * Refined bar slider: medium track, soft fill or spectrum, small thumb.
- * Drag anywhere still works; not an HA/iOS fat-pill copy.
- */
 .dw-param.dw-param-tile {
   align-items: center;
   min-height: 40px;
@@ -302,7 +297,6 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .05);
 }
 
-/* Spectrum tracks: full-width meaning; thumb marks the value. */
 .dw-tile-slider.is-hue .dw-tile-range,
 .dw-tile-slider.tone-hue .dw-tile-range {
   background: linear-gradient(
@@ -463,7 +457,6 @@
   flex: none;
 }
 
-/* Power / toggle rows: align with slider rows (label left, control right). */
 .dw-param:not(.dw-param-tile) .dw-ctl {
   min-height: var(--bar-h, 12px);
 }
@@ -515,7 +508,6 @@
   flex: none;
 }
 
-/* Device detail modal: 关闭 left, 详情/返回 right */
 .device-detail-actions {
   display: flex;
   align-items: center;

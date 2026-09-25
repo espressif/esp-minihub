@@ -82,7 +82,7 @@ Keep in ``components/`` (or Store plugins):
   ``configs/`` seeds or Core. Ship as ``.mhub`` or a private product tree.
 
 Web console files come from ``components/minihub_web/web/`` into
-``/store/preinstall/web/``. There is no ``application/APP/web/`` overlay unless
+``/data/web/``. There is no ``application/APP/web/`` overlay unless
 you change that product's ``CMakeLists.txt``. See :doc:`../web_console`.
 
 When another generic product lands under ``application/``, add a sibling RST next

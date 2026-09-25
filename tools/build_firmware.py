@@ -74,6 +74,7 @@ IDF_VERBS = frozenset(
         "uf2",
         "uf2-app",
         "modstore-flash",
+        "storage-flash",
     }
 )
 

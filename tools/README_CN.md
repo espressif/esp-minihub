@@ -29,7 +29,7 @@ python3 tools/dev_sync.py --port 9000
 
 | 资源 | 设备 API | 设备路径 |
 |------|----------|----------|
-| Web | `PUT /api/dev/web/<rel>`；读 `GET /web/<rel>` | `/store/preinstall/web/` |
+| Web | `PUT /api/dev/web/<rel>`；读 `GET /web/<rel>` | `/data/web/` |
 | adapters | `GET/PUT /api/config/adapters` | `/data/config/adapters.json` |
 | 类型目录 | `GET/PUT /api/dev/catalog/{devices,parameters}.csv` | `/data/config/model/` → 扁平 `/data/config/devices.csv` + reload |
 | 图标 | （面板标注即将支持） | `/data/images/…` |
