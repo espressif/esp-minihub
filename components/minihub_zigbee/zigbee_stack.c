@@ -154,7 +154,9 @@ int aps_secur_joiner_setup_key_pair(void *key_pair);
 void *aps_secur_get_key_pair_by_addr(const ezb_extaddr_t *addr);
 
 #define ZB_COORD_ENDPOINT 1
-#define ZB_STORAGE_PARTITION "zb_storage"
+/* Zigbee NVRAM shares RainMaker factory NVS (see partitions.csv fctry).
+ * SDK takes this via platform_config.storage_partition_name — not hardcoded. */
+#define ZB_STORAGE_PARTITION "fctry"
 #define DISCOVER_STEP_TIMEOUT_MS 12000
 #define BDB_RETRY_MS 1000
 #define DISC_QUEUE_DEPTH 4
@@ -2253,11 +2255,14 @@ esp_err_t zigbee_stack_start(void)
 
     esp_err_t err = nvs_flash_init_partition(ZB_STORAGE_PARTITION);
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        /* Shared with RainMaker claim data — erase wipes both Zigbee NVRAM and fctry. */
+        ESP_LOGW(TAG, "fctry NVS needs erase (%s); RainMaker factory data will be cleared",
+                 esp_err_to_name(err));
         ESP_ERROR_CHECK(nvs_flash_erase_partition(ZB_STORAGE_PARTITION));
         err = nvs_flash_init_partition(ZB_STORAGE_PARTITION);
     }
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "zb_storage NVS init failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "fctry NVS init for Zigbee failed: %s", esp_err_to_name(err));
         return err;
     }
 

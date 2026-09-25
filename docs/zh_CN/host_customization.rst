@@ -115,13 +115,15 @@ Host 二次开发
 ----
 
 通用 Host 的 ``partitions.csv`` 只是一份参考。产品有特殊分区需求时须自行规划，
-例如 Zigbee 的 ``zb_storage`` / ``zb_fct`` 、RainMaker 的 ``fctry`` ，以及 OTA
-槽大小、``storage`` / ``modstore`` 等。
+例如 RainMaker / Zigbee 共用的 ``fctry`` NVS 大小、OTA 槽大小、``storage`` /
+``modstore`` 等。Zigbee 栈 NVRAM 使用 ``fctry`` NVS（通过
+``storage_partition_name``）；通用 Host 不再单独划分 ``zb_storage`` /
+``zb_fct``。
 
 Web 控制台
 ----------
 
-控制台 HTML 打在 ``modstore`` 的 ``/store/preinstall/web/`` 。换皮
+控制台 HTML 打在 ``storage`` 的 ``/data/web/`` 。换皮
 ``index.html`` / ``login.html`` 或用 curl 推文件见 :doc:`web_console` 。通用
 ``CMakeLists.txt`` 只拷 ``components/minihub_web/web/`` ，没有
 ``application/APP/web/`` 覆盖层。
