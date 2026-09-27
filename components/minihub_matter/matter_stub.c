@@ -59,6 +59,15 @@ esp_err_t minihub_matter_commission_code(uint64_t node_id, const char *pairing_c
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t minihub_matter_commission_preflight(minihub_matter_discovery_t discovery,
+                                              const char *wifi_ssid)
+{
+    (void)discovery;
+    (void)wifi_ssid;
+    snprintf(s_last_error, sizeof(s_last_error), "%s", "matter commissioner not built");
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairing_code,
                                             minihub_matter_discovery_t discovery,
                                             const char *wifi_ssid, const char *wifi_password)
@@ -96,14 +105,8 @@ esp_err_t minihub_matter_set_pending_device(uint64_t node_id, const uint16_t *en
     return ESP_ERR_NOT_SUPPORTED;
 }
 
-esp_err_t minihub_matter_devices_set_commission_phase(uint64_t node_id, const char *phase,
-                                                      const char *error_msg)
-{
-    (void)node_id;
-    (void)phase;
-    (void)error_msg;
-    return ESP_ERR_NOT_SUPPORTED;
-}
+/* No minihub_matter_devices_set_commission_phase() here: matter_sync.c is compiled in
+ * both configurations (CMakeLists SRCS), so a stub copy is a multiple definition. */
 
 esp_err_t minihub_matter_commission_pin(uint64_t node_id, uint32_t setup_pin)
 {

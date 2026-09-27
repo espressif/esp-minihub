@@ -38,6 +38,25 @@ static matter_device_t s_devices[MAX_MATTER_DEVICES];
 static size_t s_device_count;
 static bool s_started;
 
+/* Basic Information is only on the fabric, so a republish would otherwise have to
+ * re-interview every node — and an interview blocks on the CHIP stack lock, which
+ * commissioning holds. Cache it per node so publish_points can rebuild props locally. */
+static struct {
+    uint64_t node_id;
+    minihub_matter_identity_t id;
+} s_identity[MAX_MATTER_DEVICES];
+static size_t s_identity_count;
+
+static const minihub_matter_identity_t *cached_identity(uint64_t node_id)
+{
+    for (size_t i = 0; i < s_identity_count; i++) {
+        if (s_identity[i].node_id == node_id) {
+            return &s_identity[i].id;
+        }
+    }
+    return NULL;
+}
+
 static uint64_t parse_node_id(const char *s)
 {
     if (!s || !s[0]) {
@@ -89,12 +108,28 @@ static void apply_identity_props(const matter_device_t *dev, const minihub_matte
     cJSON_Delete(patch);
 }
 
+static void remember_identity(uint64_t node_id, const minihub_matter_identity_t *id)
+{
+    for (size_t i = 0; i < s_identity_count; i++) {
+        if (s_identity[i].node_id == node_id) {
+            s_identity[i].id = *id;
+            return;
+        }
+    }
+    if (s_identity_count < MAX_MATTER_DEVICES) {
+        s_identity[s_identity_count].node_id = node_id;
+        s_identity[s_identity_count].id = *id;
+        s_identity_count++;
+    }
+}
+
 static void on_matter_identity(uint64_t node_id, const minihub_matter_identity_t *id, void *ctx)
 {
     (void)ctx;
     if (!id) {
         return;
     }
+    remember_identity(node_id, id);
     for (size_t i = 0; i < s_device_count; i++) {
         if (s_devices[i].node_id == node_id) {
             apply_identity_props(&s_devices[i], id);
@@ -180,19 +215,10 @@ static esp_err_t matter_adapter_init(const cJSON *config)
     return ESP_OK;
 }
 
-static esp_err_t matter_adapter_start(void)
+/* Register or refresh every configured device's point in place. minihub_point_register()
+ * overwrites an existing id, so calling this again never removes and re-adds a card. */
+static void publish_points(void)
 {
-    esp_err_t err = minihub_matter_init();
-    if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
-        if (minihub_matter_ready()) {
-            err = ESP_OK;
-        } else {
-            /* Still register configured points so overview/delete stay usable. */
-            ESP_LOGE(TAG, "Matter init failed: %s (registering points anyway)",
-                     esp_err_to_name(err));
-        }
-    }
-
     for (size_t i = 0; i < s_device_count; i++) {
         minihub_point_t point = {0};
         strncpy(point.point_id, s_devices[i].point_id, sizeof(point.point_id) - 1);
@@ -227,12 +253,28 @@ static esp_err_t matter_adapter_start(void)
             cJSON_Delete(point.props);
             point.props = NULL;
         }
-        apply_identity_props(&s_devices[i], NULL);
+        apply_identity_props(&s_devices[i], cached_identity(s_devices[i].node_id));
         /* apply_identity_props() writes props via minihub_point_set(), which marks
          * any write as online — re-assert the state the row actually earned. */
         (void)minihub_point_set_online(s_devices[i].point_id,
                                        !commissioning && minihub_matter_ready());
     }
+}
+
+static esp_err_t matter_adapter_start(void)
+{
+    esp_err_t err = minihub_matter_init();
+    if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
+        if (minihub_matter_ready()) {
+            err = ESP_OK;
+        } else {
+            /* Still register configured points so overview/delete stay usable. */
+            ESP_LOGE(TAG, "Matter init failed: %s (registering points anyway)",
+                     esp_err_to_name(err));
+        }
+    }
+
+    publish_points();
 
     s_started = true;
     if (minihub_matter_ready()) {
@@ -248,6 +290,22 @@ static esp_err_t matter_adapter_stop(void)
 {
     s_started = false;
     minihub_point_unregister_by_adapter("matter");
+    return ESP_OK;
+}
+
+/* Config-only change — a row appeared, or its commission_phase moved. Republish in
+ * place so the console never sees the card disappear. Deliberately does not interview:
+ * the caller is usually an httpd task, and Basic Information reads are best-effort
+ * blocking work for the adapter_poll/start path. Rows deleted from the config are
+ * unregistered by the delete path, not here. */
+static esp_err_t matter_adapter_resync(const cJSON *cfg)
+{
+    if (!cfg) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    s_device_count = 0;
+    parse_devices(cfg);
+    publish_points();
     return ESP_OK;
 }
 
@@ -327,6 +385,7 @@ const minihub_adapter_t matter_adapter = {
     .stop = matter_adapter_stop,
     .handle_command = matter_adapter_handle_command,
     .poll = matter_adapter_poll,
+    .resync = matter_adapter_resync,
 };
 
 REGISTER_ADAPTER(matter_adapter);

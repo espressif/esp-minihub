@@ -19,6 +19,7 @@
 
 /* Linked by minihub_hub; weak so matter can build without a hard REQUIRES cycle. */
 extern "C" esp_err_t minihub_hub_reload_async(void) __attribute__((weak));
+extern "C" esp_err_t minihub_hub_resync_adapter_async(const char *adapter_name) __attribute__((weak));
 #if CONFIG_MINIHUB_THREAD_ADAPTER
 #include "minihub_thread.h"
 #endif
@@ -375,8 +376,15 @@ static void finalize_commission_task(void *arg)
         esp_err_t perr = minihub_matter_devices_set_commission_phase(pending.node_id, phase, err_msg);
         ESP_LOGI(TAG, "post-commission phase node=%" PRIu64 " result=%s phase_err=%s", pending.node_id,
                  esp_err_to_name(result), esp_err_to_name(perr));
-        if (pending.do_reload && minihub_hub_reload_async) {
-            (void)minihub_hub_reload_async();
+        if (pending.do_reload) {
+            /* Republish the matter points in place. A full hub reload stops every
+             * adapter, and each one unregisters its points, so the whole console
+             * device list disappears for the ~1.7 s that restart takes. */
+            if (minihub_hub_resync_adapter_async) {
+                (void)minihub_hub_resync_adapter_async("matter");
+            } else if (minihub_hub_reload_async) {
+                (void)minihub_hub_reload_async();
+            }
         }
     }
 
@@ -444,9 +452,17 @@ static void on_commissioning_failure(chip::ScopedNodeId peer_id, CHIP_ERROR erro
 {
     (void)peer_id;
     (void)additional;
+    /* commission_error is 96 bytes in adapters.json, so the card gets the compact
+     * form and the actionable hint goes to the log only. */
+    if (error == CHIP_ERROR_WRONG_NODE_ID) {
+        ESP_LOGW(TAG, "device rejected the operational credential (kInvalidNodeOpId): node id "
+                      "%" PRIu64 " is already on this fabric, or the device still holds an old "
+                      "fabric — factory-reset it or commission under another node id",
+                 peer_id.GetNodeId());
+    }
     char buf[96];
-    snprintf(buf, sizeof(buf), "commission failed at %s (chip_stage=%d): %s",
-             commission_stage_name(s_commission_stage), static_cast<int>(stage),
+    snprintf(buf, sizeof(buf), "commission failed at %s (%s): %s",
+             commission_stage_name(s_commission_stage), chip::Controller::StageToString(stage),
              chip::ErrorStr(error));
     set_error(buf);
     s_pairing_in_progress = false;
@@ -760,12 +776,69 @@ static void ensure_dnssd_ready(void)
     }
 }
 
+/**
+ * Can this commissioning request start at all? Same conditions
+ * minihub_matter_commission_code_ex() enforces, answered before it consumes a
+ * node id or writes config. Handlers call this first: creating the eager
+ * 配网中 card and only then being refused leaves a permanent
+ * commission_phase:"failed" row for a device that was never attempted.
+ *
+ * Note minihub_matter_ready() alone is NOT the predicate — the commissioner can
+ * stay started while the Thread BR is off, which is exactly the case that
+ * produces a phantom card.
+ */
+esp_err_t minihub_matter_commission_preflight(minihub_matter_discovery_t discovery,
+                                              const char *wifi_ssid)
+{
+    if (!s_started) {
+        set_error("matter commissioner not ready");
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
+        if (wifi_ssid && wifi_ssid[0]) {
+            return ESP_OK;
+        }
+        wifi_config_t cfg = {};
+        if (minihub_provision_load_credentials(&cfg) != ESP_OK || !cfg.sta.ssid[0]) {
+            set_error("ble_wifi needs wifi_ssid (or Hub provision Wi-Fi)");
+            return ESP_ERR_INVALID_ARG;
+        }
+        return ESP_OK;
+    }
+    if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+        if (!minihub_thread_ready()) {
+            set_error("ble_thread needs Thread BR running (adapters.thread.enabled)");
+            return ESP_ERR_INVALID_STATE;
+        }
+        uint8_t buf[256];
+        size_t len = 0;
+        if (minihub_thread_dataset_copy(buf, sizeof(buf), &len) != ESP_OK || len == 0) {
+            set_error("ble_thread: no active Thread dataset");
+            return ESP_ERR_INVALID_STATE;
+        }
+#else
+        set_error("ble_thread requires CONFIG_MINIHUB_THREAD_ADAPTER");
+        return ESP_ERR_NOT_SUPPORTED;
+#endif
+    }
+    return ESP_OK;
+}
+
 esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairing_code,
                                             minihub_matter_discovery_t discovery,
                                             const char *wifi_ssid, const char *wifi_password)
 {
-    if (!s_started || !pairing_code || !pairing_code[0]) {
-        set_error(!s_started ? "matter commissioner not ready" : "empty pairing code");
+    if (!pairing_code || !pairing_code[0]) {
+        set_error("empty pairing code");
+        return ESP_ERR_INVALID_ARG;
+    }
+    esp_err_t perr = minihub_matter_commission_preflight(discovery, wifi_ssid);
+    if (perr != ESP_OK) {
+        return perr;
+    }
+    if (!s_started) {
+        set_error("matter commissioner not ready");
         ESP_LOGW(TAG, "commission refused: %s", minihub_matter_last_error());
         return ESP_ERR_INVALID_STATE;
     }

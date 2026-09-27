@@ -3864,6 +3864,33 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
 
     const bool want_commission = cJSON_IsString(code) && code->valuestring[0];
     if (want_commission) {
+        /* Refuse before writing anything: commission_code_ex only reports
+         * ESP_ERR_INVALID_STATE afterwards, so upserting first would leave a
+         * permanent commission_phase:"failed" row — a card for a device that was
+         * never attempted (typical when the Thread BR is off and the commissioner
+         * cannot init). */
+        /* Refuse before writing anything: commission_code_ex only reports failure
+         * afterwards, so upserting first would leave a permanent
+         * commission_phase:"failed" row — a card for a device that was never
+         * attempted. The preflight mirrors the kickoff's own conditions (readiness
+         * alone is not enough: the commissioner stays up while the Thread BR is off). */
+        esp_err_t preflight = minihub_matter_commission_preflight(discovery, ssid_s);
+        if (preflight != ESP_OK) {
+            const char *why = minihub_matter_last_error();
+            cJSON_Delete(root);
+            cJSON *busy = cJSON_CreateObject();
+            if (!busy) {
+                return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+            }
+            cJSON_AddStringToObject(busy, "result", "error");
+            cJSON_AddNumberToObject(busy, "node_id", (double)node_id);
+            cJSON_AddStringToObject(busy, "commission", esp_err_to_name(preflight));
+            cJSON_AddStringToObject(busy, "message", why ? why : esp_err_to_name(preflight));
+            cJSON_AddBoolToObject(busy, "matter_ready", minihub_matter_ready());
+            err = send_json(req, busy);
+            cJSON_Delete(busy);
+            return err;
+        }
         /* Eager card: upsert as waiting, start commission, return immediately.
          * Never block httpd on commission_wait — that stalls /api/points. */
         size_t synced = 0;
@@ -3873,7 +3900,10 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
             commission_err = minihub_matter_devices_set_commission_phase(node_id, "waiting", NULL);
         }
         if (commission_err == ESP_OK && do_reload) {
-            (void)minihub_hub_reload_async();
+            /* Republish in place. A full hub reload unregisters every adapter's
+             * points and they only come back when start_all() finishes ~1.7 s
+             * later, which reads as the card vanishing mid-commissioning. */
+            (void)minihub_hub_resync_adapter_async("matter");
         }
         if (commission_err == ESP_OK) {
             commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
@@ -3889,7 +3919,7 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
                                                                   ? minihub_matter_last_error()
                                                                   : esp_err_to_name(commission_err));
             if (do_reload) {
-                (void)minihub_hub_reload_async();
+                (void)minihub_hub_resync_adapter_async("matter");
             }
         }
         cJSON_Delete(root);
@@ -3928,7 +3958,7 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     }
 
     if (do_reload) {
-        (void)minihub_hub_reload_async();
+        (void)minihub_hub_resync_adapter_async("matter");
     }
 
     cJSON *resp = cJSON_CreateObject();

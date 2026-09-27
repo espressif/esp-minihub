@@ -896,6 +896,26 @@ static esp_err_t dispatch_matter_devices(const char *body, cJSON **out)
 
     const bool want_commission = cJSON_IsString(code) && code->valuestring[0];
     if (want_commission) {
+        /* Same gate as REST, and the same preflight the kickoff enforces: refuse
+         * before writing, so a commissioning that cannot start never leaves a
+         * commission_phase:"failed" row behind. */
+        esp_err_t preflight = minihub_matter_commission_preflight(discovery, ssid_s);
+        if (preflight != ESP_OK) {
+            const char *why = minihub_matter_last_error();
+            cJSON_Delete(root);
+            cJSON *busy = cJSON_CreateObject();
+            if (!busy) {
+                return ESP_ERR_NO_MEM;
+            }
+            cJSON_AddBoolToObject(busy, "ok", false);
+            cJSON_AddStringToObject(busy, "result", "error");
+            cJSON_AddNumberToObject(busy, "node_id", (double)node_id);
+            cJSON_AddStringToObject(busy, "commission", esp_err_to_name(preflight));
+            cJSON_AddStringToObject(busy, "message", why ? why : esp_err_to_name(preflight));
+            cJSON_AddBoolToObject(busy, "matter_ready", minihub_matter_ready());
+            *out = busy;
+            return ESP_OK;
+        }
         size_t synced = 0;
         esp_err_t commission_err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing,
                                                                  &synced, transport);
@@ -903,7 +923,7 @@ static esp_err_t dispatch_matter_devices(const char *body, cJSON **out)
             commission_err = minihub_matter_devices_set_commission_phase(node_id, "waiting", NULL);
         }
         if (commission_err == ESP_OK && do_reload) {
-            (void)minihub_hub_reload_async();
+            (void)minihub_hub_resync_adapter_async("matter");
         }
         if (commission_err == ESP_OK) {
             commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
@@ -919,7 +939,7 @@ static esp_err_t dispatch_matter_devices(const char *body, cJSON **out)
                                                                   ? minihub_matter_last_error()
                                                                   : esp_err_to_name(commission_err));
             if (do_reload) {
-                (void)minihub_hub_reload_async();
+                (void)minihub_hub_resync_adapter_async("matter");
             }
         }
         cJSON_Delete(root);
@@ -959,7 +979,10 @@ static esp_err_t dispatch_matter_devices(const char *body, cJSON **out)
     }
 
     if (do_reload) {
-        (void)minihub_hub_reload();
+        /* Was a synchronous minihub_hub_reload(): a full reload inside an RPC
+         * handler blocks the caller for the whole radio restart and blanks every
+         * adapter's points. Republish matter in place instead. */
+        (void)minihub_hub_resync_adapter_async("matter");
     }
 
     cJSON *resp = cJSON_CreateObject();

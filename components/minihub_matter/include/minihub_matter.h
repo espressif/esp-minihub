@@ -43,6 +43,20 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
                                             const char *wifi_ssid, const char *wifi_password);
 
 /**
+ * Answer whether commission_code_ex() could start, without starting it.
+ *
+ * Call this BEFORE writing adapters.json or publishing a 配网中 card: the kickoff
+ * can only fail after it has consumed a node id, and a card written first stays
+ * behind as commission_phase:"failed" for a device that was never attempted.
+ * On failure minihub_matter_last_error() carries the reason.
+ *
+ * @note minihub_matter_ready() is not a substitute — the commissioner stays
+ *       started while the Thread BR is off.
+ */
+esp_err_t minihub_matter_commission_preflight(minihub_matter_discovery_t discovery,
+                                              const char *wifi_ssid);
+
+/**
  * Block until the commission started by commission_code_ex reaches
  * commissioning_success, a failure callback, or timeout.
  * Does not write adapters.json. ESP_OK only after commissioning_success.

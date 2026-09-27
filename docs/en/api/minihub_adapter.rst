@@ -19,6 +19,16 @@ call order for an enabled adapter:
 
 5. On reload or shutdown: ``stop()`` · ``deinit()``
 
+6. Optional ``resync(config)`` — republish this adapter's points **in place** after a
+   config-only change (a device row appeared, or its status moved) without ``stop()`` /
+   ``start()``. Host reaches it through ``minihub_adapter_resync()``; handlers and RPC
+   should use ``minihub_hub_resync_adapter_async()``, because a resync waits on the
+   adapter lifecycle lock that ``poll`` can hold for seconds. Leave it ``NULL`` (or
+   return ``ESP_ERR_NOT_SUPPORTED``) and the worker falls back to a full reload — which
+   unregisters every adapter's points until ``start_all()`` finishes, so the console
+   visibly loses and re-adds the devices. The Matter adapter implements it to keep
+   commissioning cards on screen while they change state.
+
 Register static adapters with ``REGISTER_ADAPTER(symbol)``; generated
 ``adapters_setup.c`` registers manifest adapters at boot. Before unloading a dynamic
 module, hold ``minihub_adapter_lifecycle_lock()`` so ``poll`` cannot run inside a

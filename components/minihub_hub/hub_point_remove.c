@@ -205,7 +205,10 @@ esp_err_t minihub_hub_points_remove(const cJSON *req, cJSON **resp)
         }
 
         if (matter_removed && do_reload) {
-            (void)minihub_hub_reload_async();
+            /* The deleted point is already gone (dropped above); republish the rest
+             * in place instead of a full reload, which would blank every other
+             * adapter's devices for the ~1.7 s restart takes. */
+            (void)minihub_hub_resync_adapter_async("matter");
         }
 
         *resp = remove_ok(removed_arr, removed, NULL, matter_removed && do_reload);

@@ -46,6 +46,12 @@ static char s_soft_queue[SOFT_RELOAD_QUEUE_MAX][32];
 static volatile size_t s_soft_queue_len;
 static portMUX_TYPE s_soft_mux = portMUX_INITIALIZER_UNLOCKED;
 
+/* One coalesced slot: resync republishes from the live config, so a second
+ * request behind the first has nothing extra to say. */
+static volatile bool s_resync_pending;
+static char s_resync_name[32];
+static portMUX_TYPE s_resync_mux = portMUX_INITIALIZER_UNLOCKED;
+
 static void hub_reload_task(void *arg);
 
 static esp_err_t hub_soft_reload_locked(const char *adapter_name)
@@ -206,9 +212,15 @@ static void hub_reload_task(void *arg)
     (void)arg;
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        while (s_reload_pending || s_soft_pending) {
+        while (s_reload_pending || s_soft_pending || s_resync_pending) {
             if (s_reload_pending) {
                 s_reload_pending = false;
+                /* A full reload stops and restarts every adapter, which republishes
+                 * all points — a resync queued behind it is redundant. */
+                portENTER_CRITICAL(&s_resync_mux);
+                s_resync_pending = false;
+                s_resync_name[0] = '\0';
+                portEXIT_CRITICAL(&s_resync_mux);
                 esp_err_t err = minihub_hub_reload();
                 if (err != ESP_OK) {
                     ESP_LOGW(TAG, "async hub reload failed: %s", esp_err_to_name(err));
@@ -237,6 +249,28 @@ static void hub_reload_task(void *arg)
                     }
                 }
             }
+            if (s_resync_pending) {
+                char name[32];
+                name[0] = '\0';
+                portENTER_CRITICAL(&s_resync_mux);
+                memcpy(name, s_resync_name, sizeof(name));
+                s_resync_pending = false;
+                s_resync_name[0] = '\0';
+                portEXIT_CRITICAL(&s_resync_mux);
+                if (name[0]) {
+                    esp_err_t err = minihub_hub_resync_adapter(name);
+                    if (err == ESP_ERR_NOT_SUPPORTED || err == ESP_ERR_NOT_FOUND) {
+                        /* No in-place republish for this adapter: fall back to the
+                         * reload that the caller would have had before. */
+                        ESP_LOGI(TAG, "resync '%s' unavailable (%s), reloading", name,
+                                 esp_err_to_name(err));
+                        err = minihub_hub_reload();
+                    }
+                    if (err != ESP_OK) {
+                        ESP_LOGW(TAG, "async resync '%s' failed: %s", name, esp_err_to_name(err));
+                    }
+                }
+            }
         }
     }
 }
@@ -258,6 +292,44 @@ esp_err_t minihub_hub_soft_reload_adapter(const char *adapter_name)
     s_reload_busy = false;
     xSemaphoreGive(s_reload_mu);
     return err;
+}
+
+esp_err_t minihub_hub_resync_adapter(const char *adapter_name)
+{
+    if (!adapter_name || !adapter_name[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    /* Same reason as hub_soft_reload_locked: do not re-read the file here, use the
+     * live tree so a concurrent save cannot be clobbered by a stale parse. */
+    cJSON *adapters = minihub_config_get_adapters();
+    if (!adapters) {
+        return ESP_FAIL;
+    }
+    return minihub_adapter_resync(adapter_name, adapters);
+}
+
+esp_err_t minihub_hub_resync_adapter_async(const char *adapter_name)
+{
+    if (!adapter_name || !adapter_name[0]) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    /* Resync waits on the adapter lifecycle lock, which adapter_poll holds for as
+     * long as a poll cycle takes (seconds, if a Matter read is in flight). Callers
+     * are usually httpd URI handlers, so never take that lock here. */
+    if (s_reload_pending) {
+        return ESP_OK; /* the queued reload republishes everything anyway */
+    }
+    esp_err_t err = ensure_reload_task();
+    if (err != ESP_OK) {
+        return err;
+    }
+    portENTER_CRITICAL(&s_resync_mux);
+    strncpy(s_resync_name, adapter_name, sizeof(s_resync_name) - 1);
+    s_resync_name[sizeof(s_resync_name) - 1] = '\0';
+    s_resync_pending = true;
+    portEXIT_CRITICAL(&s_resync_mux);
+    xTaskNotifyGive(s_reload_task);
+    return ESP_OK;
 }
 
 esp_err_t minihub_hub_soft_reload_adapter_async(const char *adapter_name)

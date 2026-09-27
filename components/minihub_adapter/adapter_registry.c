@@ -522,6 +522,51 @@ esp_err_t minihub_adapter_soft_reload(const char *name, const cJSON *adapters_ro
     return ESP_OK;
 }
 
+static bool adapter_is_active(const minihub_adapter_t *adapter)
+{
+    for (size_t i = 0; i < s_active_count; i++) {
+        if (s_active[i] == adapter) {
+            return true;
+        }
+    }
+    return false;
+}
+
+esp_err_t minihub_adapter_resync(const char *name, const cJSON *adapters_root)
+{
+    if (!name || !adapters_root) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (minihub_adapter_lifecycle_lock(60000) != ESP_OK) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    /* minihub_adapter_find() walks the whole linker section, so it also answers
+     * for adapters that are compiled in but disabled in adapters.json. Only a
+     * running adapter may republish points. */
+    const minihub_adapter_t *adapter = minihub_adapter_find(name);
+    if (!adapter || !adapter_is_active(adapter)) {
+        minihub_adapter_lifecycle_unlock();
+        return ESP_ERR_NOT_FOUND;
+    }
+    if (!adapter->resync) {
+        minihub_adapter_lifecycle_unlock();
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    const cJSON *adapters = cJSON_GetObjectItem(adapters_root, "adapters");
+    const cJSON *adapter_cfg = adapters ? cJSON_GetObjectItem(adapters, name) : NULL;
+    if (!adapter_cfg) {
+        minihub_adapter_lifecycle_unlock();
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    esp_err_t err = adapter->resync(adapter_cfg);
+    ESP_LOGI(TAG, "resynced adapter '%s': %s", name, esp_err_to_name(err));
+    minihub_adapter_lifecycle_unlock();
+    return err;
+}
+
 esp_err_t minihub_adapter_reload_all(const cJSON *config)
 {
     esp_err_t err = minihub_adapter_stop_all();

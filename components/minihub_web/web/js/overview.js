@@ -391,7 +391,7 @@ function propsHtml(p) {
     if (!p.props || typeof p.props !== 'object') return '';
     const meterOrder = ['power_w', 'voltage_v', 'current_a', 'energy_wh'];
     const otherOrder = ['humidity'];
-    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'illumination', 'illumination_label', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
+    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'commission_phase', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'illumination', 'illumination_label', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
     const labels = {
         power_w: '功率',
         voltage_v: '电压',
@@ -1561,6 +1561,8 @@ function closeMatterAdd() {
 }
 
 const MATTER_STAGE_LABEL = { discovering: '设备发现中', binding: '设备绑定中', activating: '设备激活中' };
+const MATTER_STAGE_STEP = { discovering: 1, binding: 2, activating: 3 };
+const MATTER_STAGE_TOTAL = 3;
 
 /* A waiting row is only "配网中" while the Hub is actually running that node;
  * the live stage comes from /api/matter/status, not from adapters.json. */
@@ -1570,7 +1572,9 @@ function matterCommissionLabel(p, cPhase) {
     const running = st && st.commission === 'running' && st.commission_node_id != null &&
         String(st.commission_node_id) === String((p.props || {}).node_id);
     if (!running) return '等待配网中';
-    return '配网中 · ' + (MATTER_STAGE_LABEL[st.commission_stage] || '进行中');
+    const step = MATTER_STAGE_STEP[st.commission_stage];
+    return '配网中 · ' + (MATTER_STAGE_LABEL[st.commission_stage] || '进行中') +
+        (step ? ('（步骤 ' + step + '/' + MATTER_STAGE_TOTAL + '）') : '');
 }
 
 async function pollMatterCommissionCard(nodeId) {
