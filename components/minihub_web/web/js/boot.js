@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-09-21-auth-expiry';
+window.mhWebBuild = '2026-09-26-1s-refresh';
 
 /* Session gone → /login. A 401 is not enough: fetch follows a 302 to /login
  * and the final status is 200, and an already-open console keeps its last
@@ -119,7 +119,9 @@ loadAdapters().then(async () => {
     loadStoreData();
 });
 renderLocalUser();
-setInterval(loadPoints, 8000);
+/* 1 s: drives the 更新 stamp and is also the fast path for noticing a session
+ * that a newer login replaced (single-slot session → 401 → guard → /login). */
+setInterval(loadPoints, 1000);
 setInterval(loadRtspCamStatusSafe, 12000);
 setInterval(() => loadAdapters().then(async () => {
     await loadModulesForAuth();

@@ -29,6 +29,11 @@ esp_err_t minihub_matter_init(void)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+bool minihub_matter_ready(void)
+{
+    return false;
+}
+
 esp_err_t minihub_matter_attach_thread(void)
 {
     return ESP_ERR_NOT_SUPPORTED;

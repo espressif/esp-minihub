@@ -228,6 +228,10 @@ static esp_err_t matter_adapter_start(void)
             point.props = NULL;
         }
         apply_identity_props(&s_devices[i], NULL);
+        /* apply_identity_props() writes props via minihub_point_set(), which marks
+         * any write as online — re-assert the state the row actually earned. */
+        (void)minihub_point_set_online(s_devices[i].point_id,
+                                       !commissioning && minihub_matter_ready());
     }
 
     s_started = true;
