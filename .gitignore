@@ -1,5 +1,6 @@
 # ESP-IDF build outputs (any app / depth)
 build/
+build_*/
 managed_components/
 dependencies.lock
 
@@ -34,10 +35,14 @@ __pycache__/
 .DS_Store
 *.code-workspace
 
-# Local IDE / CodeBuddy session notes
-.codebuddy/memory/
+# Agent workspace (Cursor / CodeBuddy / Qwen / Qoder share one rule set).
+# .agent/skills/ and .agent/mcp/ are the shared, versioned artifacts;
+# .agent/private/ is process (handoffs, plans, reviews, memory, probes),
+# kept local and exported to its own system.
+.agent/private/
+.codebuddy/
+.superpowers
 .workbuddy/
-.agent/
 
 # Docs (esp-docs)
 .venv-docs/

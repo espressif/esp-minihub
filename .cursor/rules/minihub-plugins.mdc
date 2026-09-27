@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Store plugins
 
-1. New modules: `python3 tools/new_store_module.py --tier l1|l2|l3 --id <id>` then the matching `.cursor/skills/minihub-plugin-l*/SKILL.md`. Scaffold lands in `examples/plugins/<id>/`. Vendor plugins live in a sibling repo via `MINIHUB_PLUGIN_DIRS`, not Host builtin / default `store_preinstall`.
+1. New modules: `python3 tools/new_store_module.py --tier l1|l2|l3 --id <id>` then the matching `.agent/skills/minihub-plugin-l*/SKILL.md`. Scaffold lands in `examples/plugins/<id>/`. Vendor plugins live in a sibling repo via `MINIHUB_PLUGIN_DIRS`, not Host builtin / default `store_preinstall`.
 2. `module.json` `id` must equal the directory name. `kind` is `"module"` or `"pack"` only. L1/L2/L3 are Store packaging tiers, not Host Core layers.
 3. L3: export `minihub_module_entry`; wrap Host calls through `minihub_module_host_api_t`; `#if !CONFIG_MINIHUB_DYNAMIC_MODULES` around `REGISTER_ADAPTER`. Undefined symbols must stay on `docs/module_sdk/host_export_allowlist.json`. One device = one point (`props.params`); reuse Host device-widget catalog — no per-type C structs.
 4. Pack: `python3 tools/pack_store_module.py pack <id>` then `python3 tools/sync_store_catalog.py all`. L3 needs a Host build first so `libadapter_<id>.so` exists (or standalone MHMD under `plugin/build/`).

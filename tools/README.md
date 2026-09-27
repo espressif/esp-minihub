@@ -186,7 +186,7 @@ python3 tools/minihub_plugin_mcp.py
 python3 tools/plugin_mcp/test_plugin_mcp.py
 ```
 
-Repo wiring: `.cursor/mcp.json`, `.vscode/mcp.json`. Tools: `plugin_guide`, `scaffold_plugin`, `validate_plugin`, `pack_plugin`. Implementation: `tools/plugin_mcp/`.
+Repo wiring: `.agent/mcp/cursor.mcp.json` and `.agent/mcp/vscode.mcp.json`, symlinked to `.cursor/mcp.json` and `.vscode/mcp.json`. Tools: `plugin_guide`, `scaffold_plugin`, `validate_plugin`, `pack_plugin`. Implementation: `tools/plugin_mcp/`.
 
 ### `store_paths.py`
 

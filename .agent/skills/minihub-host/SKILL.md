@@ -40,7 +40,7 @@ description: Develop MiniHub Host firmware products (application folder, Kconfig
 | Re-wrap existing L3 ELF | `./tools/build_firmware.py pack [all\|<id>]` |
 | Factory-flash a module | App `manifest.yml` `store_preinstall: [<id>]` then rebuild/flash. Does not replace Store install. Public product stays `[]`. |
 
-L1/L2: no Host link step — `python3 tools/pack_store_module.py pack <id>` then `sync_store_catalog.py`. L3: `./tools/build_firmware.py module <id>` produces `application/<app>/build/modules/libadapter_<id>.so`; `./tools/build_firmware.py pack <id>` wraps MHMD `build/<id>.so` into `.mhub`. Details: `.cursor/skills/minihub-plugin-l{1,2,3}/`.
+L1/L2: no Host link step — `python3 tools/pack_store_module.py pack <id>` then `sync_store_catalog.py`. L3: `./tools/build_firmware.py module <id>` produces `application/<app>/build/modules/libadapter_<id>.so`; `./tools/build_firmware.py pack <id>` wraps MHMD `build/<id>.so` into `.mhub`. Details: `.agent/skills/minihub-plugin-l{1,2,3}/`.
 
 ## Workflow
 

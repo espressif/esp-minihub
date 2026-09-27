@@ -187,7 +187,7 @@ python3 tools/minihub_plugin_mcp.py
 python3 tools/plugin_mcp/test_plugin_mcp.py
 ```
 
-仓库接线：`.cursor/mcp.json`、`.vscode/mcp.json`。工具：`plugin_guide`、`scaffold_plugin`、`validate_plugin`、`pack_plugin`。实现：`tools/plugin_mcp/`。
+仓库接线：`.agent/mcp/cursor.mcp.json` 与 `.agent/mcp/vscode.mcp.json`，软链到 `.cursor/mcp.json` 和 `.vscode/mcp.json`。工具：`plugin_guide`、`scaffold_plugin`、`validate_plugin`、`pack_plugin`。实现：`tools/plugin_mcp/`。
 
 ### `store_paths.py`
 

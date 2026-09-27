@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "minihub-plugin": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${workspaceFolder}/tools/minihub_plugin_mcp.py"]
+    }
+  }
+}

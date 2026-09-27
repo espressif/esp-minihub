@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Documentation
 
-1. Read `.cursor/skills/minihub-docs/SKILL.md`.
+1. Read `.agent/skills/minihub-docs/SKILL.md`.
 2. Prefer `docs/en/` + `docs/zh_CN/` RST when those trees exist; keep the same relative `.rst` paths in both languages.
 3. Prefer RST as the source of truth; do not dual-write Markdown chapters that duplicate `docs/en/`.
 4. Build: `./tools/build_docs.sh` (uses `.venv-docs` when present). Warnings fail the build.
