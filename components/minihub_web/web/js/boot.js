@@ -31,7 +31,7 @@ window.mhWebBuild = '2026-09-27-boot-retry';
             return;
         }
         redirecting = true;
-        location.replace('/login');
+        location.replace('/login?reason=expired');
     }
     function responseNeedsLogin(r, url) {
         if (!r || shouldIgnore(url)) {
