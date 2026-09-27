@@ -23,7 +23,14 @@ Needs `doxygen` on PATH for C API pages.
 ## Style
 
 - RST: no ``literals`` containing `<...>`. CJK titles: underline at least as wide as the title.
-- zh_CN: do not put `**bold**` immediately before a fullwidth `（`.
+- CJK inline markup (measured with docutils for `` x ``, **bold**, *em*, `:doc:`; Sphinx warnings are
+  fatal here): an inline markup **end-string needs a real boundary after it** — whitespace, or
+  `。 ， 、 ： ） ；`. An opening bracket `（ ( 「` is not a boundary, and neither is a CJK word
+  character (`**粗**阻塞`). Insert a space. The reported line is the *paragraph* start, not the offender,
+  and the same bad shape often renders clean when a later pair in the block rescues the open — so fix
+  what the gate flags and re-run the gate; do not sweep by grep.
+- `./tools/build_docs.sh` generates a target sdkconfig from the Host app, so it needs `IDF_PATH` and,
+  whenever the feature list pulls in Matter, `ESP_MATTER_PATH` — otherwise it dies before Sphinx runs.
 - Align with code:
   - Store `kind` is `module` or `pack`; Store config field `custom_url`
   - L1 / L2 / L3 are **Store packaging tiers**, not Host Core layers

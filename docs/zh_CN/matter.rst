@@ -100,7 +100,7 @@ discovery 取值（``discovery`` 字段）
 
 Web 添加对话框始终使用 BLE + DNS-SD（CHIP ``DiscoveryType::kAll``）：
 
-* ``ble_thread``（关闭 Wi-Fi 开关时的默认）— BLE + 注入 Hub Thread 数据集
+* ``ble_thread`` （关闭 Wi-Fi 开关时的默认）— BLE + 注入 Hub Thread 数据集
 * ``ble_wifi`` / ``first_time`` — BLE + 注入 **设备** Wi-Fi 凭据
 
 ``POST /api/matter/commission`` 仍可接受 ``network``（仅 DNS-SD / multi-admin）和
@@ -110,8 +110,8 @@ Web 添加对话框始终使用 BLE + DNS-SD（CHIP ``DiscoveryType::kAll``）�
 ^^^^^^^^^^^^^^^^
 
 ``POST /api/matter/devices`` 在提供 ``pairing_code`` 时**立刻 upsert** 设备并写入
-``commission_phase: "waiting"``（概览显示 **等待配网中**），再启动配网，并立即返回
-``commission: "started"``，**不会**阻塞 HTTP 处理线程。成功后清除 phase，卡片变为
+``commission_phase: "waiting"`` （概览显示 **等待配网中**），再启动配网，并立即返回
+``commission: "started"``，**不会** 阻塞 HTTP 处理线程。成功后清除 phase，卡片变为
 正常设备；失败或 180 秒看门狗超时则保留卡片为 ``commission_phase: "failed"``
 （可删除）。用 ``GET /api/matter/status`` 轮询 ``commission``：``idle`` |
 ``running`` | ``ok`` | ``failed``。省略 ``pairing_code`` 时仍只 upsert、不配网
