@@ -60,7 +60,8 @@ JSON fields: :ref:`adapters-json`.
 REST endpoints
 --------------
 
-* ``GET /api/matter/status`` — commissioner ready / pairing state (JSON)
+* ``GET /api/matter/status`` — commissioner ready / pairing state and per-node
+  ``subscriptions`` liveness (JSON)
 * ``POST /api/matter/commission`` — start pairing only
 * ``POST /api/matter/devices`` — commission (optional) + upsert into ``adapters.json``
 
@@ -168,7 +169,122 @@ After CASE session succeeds, control lights via standard Hub command API:
      -H 'Content-Type: application/json' \
      -d '{"point_id":"matter.light.2","cmd":"turn_on"}'
 
-Supported today: OnOff cluster (``turn_on`` / ``turn_off`` / ``toggle``).
+Supported today: OnOff cluster (``turn_on`` / ``turn_off`` / ``toggle``). That write is
+optimistic — see :ref:`matter-state-reporting` for how the device's own value comes back.
+
+.. _matter-state-reporting:
+
+State reporting
+---------------
+
+``/api/command`` stores the requested value the moment the OnOff command is handed to
+CHIP, so the card shows what MiniHub asked for, not what the device ended up doing.
+The device's own state arrives over an attribute subscription.
+
+For every commissioned node the Matter adapter arms **one** subscription covering the
+OnOff attribute (``0x0000`` of cluster ``0x0006``) on all of that node's endpoints in
+``adapters.json``. It is armed when the adapter starts, armed again when a commissioning
+turns a pending row into a device (adapter ``resync``), and re-armed from the adapter
+poll pass if a subscription died. Each report writes that endpoint's point (``on`` /
+``off``) through the generic point registry. A report never overwrites a row whose
+``commission_phase`` is still set, and never marks such a row online.
+
+Report delivery is one callback slot: ``minihub_matter_set_attr_cb()``. The Matter
+adapter registers it at ``init`` and never clears it, so today it is the only consumer.
+
+Whether reports are arriving
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+   curl -s http://HUB/api/matter/status
+
+.. code-block:: json
+
+   {
+     "ready": true,
+     "last_error": "subscribe connect failed: Error CHIP:0x00000032",
+     "subscriptions": [
+       { "node_id": 2, "endpoints": [1], "live": true, "reports": 3 }
+     ]
+   }
+
+``subscriptions`` is present in both build configurations; the Matter-stub build emits
+an empty array. The numbers above show the field shape, not a bench reading.
+
+* ``live`` — that node's subscription is established. Liveness is tracked **per node**,
+  not per endpoint: the ESP-Matter established / terminated callbacks carry only
+  ``(node_id, subscription_id)``, so all endpoints of one node rise and fall together.
+* ``reports`` — boolean reports delivered for that node. OnOff is the only attribute
+  armed, so in practice these are OnOff reports; the counter itself is not filtered by
+  cluster. It is cumulative per node and resets only when that node's row is torn down
+  (``minihub_matter_drop_node``) or reallocated to a different node — re-arming a node
+  that is not live does **not** clear it. Read this, not ``value``, as the proof that a
+  report arrived: ``minihub_point_set()`` ignores an unchanged value, so ``value`` cannot
+  tell "the device reported ``off`` " from "nothing happened".
+* ``last_error`` — the most recent commissioner error, shown only while non-empty (for
+  example the CHIP connect error above). It is **not** a per-node log: a later unrelated
+  success that clears it (an OnOff command, a new commissioning) overwrites or empties it,
+  so a failed arm stays visible only until then. The poll pass retries a node that never
+  came up, but it runs only once a minute and counts a node's backoff when it arms, so with
+  a stopwatch you see a retry on the next minute, then roughly 2, 4 and 8 minutes later,
+  settling at the 10-minute cap — the nominal 30-second floor is never observable.
+* A node whose endpoint set changed is torn down first (a real
+  ``send_shutdown_subscription``) and then re-armed; a node that disappeared from
+  ``adapters.json`` is reclaimed the same way, because a re-commissioned device gets a
+  **new** node id and the old row would otherwise stay armed forever.
+
+Bench demo
+^^^^^^^^^^
+
+The observable that must appear — this is the acceptance condition, see the status note
+below:
+
+1. ``GET /api/matter/status`` shows the node with ``live`` true.
+2. Reset the card, so the Hub's own write cannot be mistaken for a report:
+   ``POST /api/hub/reload`` re-publishes the configured rows. Read the baseline value from
+   ``GET /api/points`` and the baseline ``reports`` from ``GET /api/matter/status`` — the
+   point list does not carry ``reports``.
+3. Change the device **without** the Hub — its own button, a power cycle, or a second
+   controller. Issue no ``/api/command`` while watching.
+4. Read ``GET /api/matter/status`` and ``GET /api/points`` again. **Pass**: ``reports``
+   went up and the point value moved to the device's real state. If the value moved while
+   ``reports`` stayed flat, a Hub command wrote it and that run proves nothing.
+
+**Pending a reachable device.** This procedure has not been run end to end anywhere. On
+the development bench the commissioned node does not answer CASE, so ``live`` stayed
+``false``, ``reports`` stayed ``0``, and no report ever arrived — steps 3 and 4 are
+therefore unverified, including how long a report takes to show up. The subscribe
+intervals in ``components/minihub_matter/matter_ctrl.cpp`` (``MATTER_SUB_MIN_INTERVAL`` =
+5 s, ``MATTER_SUB_MAX_INTERVAL`` = 30 s) are **configured bounds** on how often the
+device may report; they are not a measured button-press-to-card latency.
+
+Limits
+^^^^^^
+
+* **Boolean attributes only.** A report whose TLV does not decode as a bool is dropped.
+  OnOff is the only attribute armed; level, colour and cover position each need their own
+  decode plus a per-cluster value mapping.
+* **8 nodes, 16 endpoints per node.** The subscription table holds ``MATTER_SUB_MAX`` = 8
+  nodes; a 9th is not accepted (``ESP_ERR_NO_MEM``, ``last_error`` says
+  ``subscribe: table full``). The per-node endpoint list is capped at 16, the same limit
+  as one commissioning.
+* **No on-demand re-read.** ``minihub_matter_read_onoff()`` is implemented (an accepted
+  call returns ``ESP_ERR_NOT_FINISHED`` and the value arrives through the same report
+  callback) but nothing calls it, and there is no periodic re-read: steady state is
+  subscription-only. While an arm never comes up, the card keeps the last value it was
+  given — by a Hub command, or the ``off`` written at registration.
+* **``online`` is not the device answering.** A non-pending Matter row is marked online
+  while the commissioner is up, so a card can read online with ``live`` false, ``reports``
+  ``0`` and a stale value. That combination is exactly what an unreachable Matter device
+  looks like today; check ``subscriptions`` before believing the card.
+* **Sleepy devices (ICD) are untested.** Their subscriptions need a long idle interval and
+  an active-schedule decision; assume they do not work until one is measured.
+* **Multi-fabric** keeps the ``get_fabric_index()`` assumption inherited from the existing
+  commissioning code.
+* **No events.** ESP-Matter's subscribe takes an event-path list and an event-callback
+  slot; MiniHub's subscription passes neither (zero event paths, a ``nullptr`` callback),
+  so no Matter events are subscribed or delivered today.
 
 Point identity and vendor extras
 --------------------------------

@@ -46,6 +46,13 @@ esp_err_t minihub_matter_set_identity_cb(minihub_matter_identity_cb_t cb, void *
     return ESP_OK;
 }
 
+esp_err_t minihub_matter_set_attr_cb(minihub_matter_attr_bool_cb_t cb, void *ctx)
+{
+    (void)cb;
+    (void)ctx;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 esp_err_t minihub_matter_interview_identity(uint64_t node_id)
 {
     (void)node_id;
@@ -133,6 +140,27 @@ esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t minihub_matter_subscribe_node(uint64_t node_id, const uint16_t *endpoint_ids, size_t count)
+{
+    (void)node_id;
+    (void)endpoint_ids;
+    (void)count;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_matter_drop_node(uint64_t node_id)
+{
+    (void)node_id;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+/* Rendered by the stub status JSON too, so /api/matter/status always carries the
+ * same "subscriptions" field regardless of build configuration. */
+cJSON *minihub_matter_subscriptions_json(void)
+{
+    return cJSON_CreateArray();
+}
+
 cJSON *minihub_matter_status_json(void)
 {
     cJSON *root = cJSON_CreateObject();
@@ -149,6 +177,10 @@ cJSON *minihub_matter_status_json(void)
         cJSON_AddStringToObject(prefill, "ssid", "");
         cJSON_AddBoolToObject(prefill, "has_password", false);
         cJSON_AddItemToObject(root, "wifi_prefill", prefill);
+    }
+    cJSON *subs = minihub_matter_subscriptions_json();
+    if (subs) {
+        cJSON_AddItemToObject(root, "subscriptions", subs);
     }
     if (s_last_error[0]) {
         cJSON_AddStringToObject(root, "last_error", s_last_error);

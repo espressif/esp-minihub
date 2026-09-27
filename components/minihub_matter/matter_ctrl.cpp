@@ -28,6 +28,7 @@ extern "C" esp_err_t minihub_hub_resync_adapter_async(const char *adapter_name) 
 #include <esp_matter_controller_cluster_command.h>
 #include <esp_matter_controller_pairing_command.h>
 #include <esp_matter_controller_read_command.h>
+#include <esp_matter_controller_subscribe_command.h>
 #include <esp_matter_controller_utils.h>
 #include <app-common/zap-generated/ids/Attributes.h>
 #include <app-common/zap-generated/ids/Clusters.h>
@@ -125,6 +126,8 @@ typedef struct {
     bool valid;
 } matter_read_slot_t;
 
+/* Optimistic last-issued state, written by minihub_matter_onoff() only. Nothing
+ * invalidates it, so read_onoff must not consume it — see the Task 1 ruling. */
 static matter_read_slot_t s_last_read;
 
 #define IDENTITY_SLOT_MAX 16
@@ -140,6 +143,40 @@ typedef struct {
 static identity_slot_t s_id_slots[IDENTITY_SLOT_MAX];
 static minihub_matter_identity_cb_t s_identity_cb;
 static void *s_identity_ctx;
+
+static minihub_matter_attr_bool_cb_t s_attr_cb;
+static void *s_attr_ctx;
+
+esp_err_t minihub_matter_set_attr_cb(minihub_matter_attr_bool_cb_t cb, void *ctx)
+{
+    s_attr_cb = cb;
+    s_attr_ctx = ctx;
+    return ESP_OK;
+}
+
+/* Bookkeeping for a report about to reach the consumer sink. Defined after the
+ * subscription table (declared forward here). Counts reports per node so
+ * /api/matter/status can prove a report arrived even when the value did not
+ * change, and warns (rate-limited) when the (node, endpoint) matches no armed
+ * row — that is the silent-drop case when config and the real endpoint differ.
+ * Runs on the CHIP event task inside the stack lock. */
+static void note_sub_report(uint64_t node_id, uint16_t endpoint_id);
+
+/* esp_matter::controller::attribute_report_cb_t target. Runs on the CHIP event
+ * task inside the stack lock. */
+static void on_attr_report(uint64_t node_id, const chip::app::ConcreteDataAttributePath &path,
+                           chip::TLV::TLVReader *data, const chip::app::StatusIB &status)
+{
+    if (!s_attr_cb || data == nullptr || !status.IsSuccess()) {
+        return;
+    }
+    bool val = false;
+    if (chip::app::DataModel::Decode(*data, val) != CHIP_NO_ERROR) {
+        return; /* non-boolean attribute, or decode failure */
+    }
+    note_sub_report(node_id, path.mEndpointId);
+    s_attr_cb(node_id, path.mEndpointId, path.mClusterId, path.mAttributeId, val, s_attr_ctx);
+}
 
 static void set_error(const char *msg)
 {
@@ -1085,6 +1122,31 @@ esp_err_t minihub_matter_onoff(uint64_t node_id, uint16_t endpoint_id, bool on)
     return ESP_OK;
 }
 
+/* Async failure sinks for a read issued by minihub_matter_read_onoff(): without
+ * these the object just deletes itself and nothing is visible anywhere.
+ *
+ * on_connect_failure_cb_t gets the read_command as its context and
+ * esp_matter deletes that object right after the call
+ * (esp_matter_controller_read_command.cpp:58), so ctx is never dereferenced.
+ * These run on the CHIP event task, like the commissioning callbacks that also
+ * call set_error(). */
+static void on_read_connect_failure(void *ctx, const chip::ScopedNodeId &peer_id, CHIP_ERROR error)
+{
+    (void)ctx;
+    ESP_LOGW(TAG, "read: node %" PRIu64 " connect failed: %s", peer_id.GetNodeId(), chip::ErrorStr(error));
+    char buf[96];
+    snprintf(buf, sizeof(buf), "read connect failed: %s", chip::ErrorStr(error));
+    set_error(buf);
+}
+
+static void on_read_error(uint64_t node_id, CHIP_ERROR error)
+{
+    ESP_LOGW(TAG, "read: node %" PRIu64 " failed: %s", node_id, chip::ErrorStr(error));
+    char buf[96];
+    snprintf(buf, sizeof(buf), "attribute read failed: %s", chip::ErrorStr(error));
+    set_error(buf);
+}
+
 esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool *out_on)
 {
     if (!out_on) {
@@ -1093,13 +1155,406 @@ esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool
     if (!s_started) {
         return ESP_ERR_INVALID_STATE;
     }
-    if (s_last_read.valid && s_last_read.node_id == node_id && s_last_read.endpoint_id == endpoint_id) {
-        *out_on = s_last_read.on;
+    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+    /* The 11-arg single-path ctor is esp_matter_controller_read_command.h:75
+     * (only fabric_filtered defaults); read_cb_done stays nullptr because the
+     * value path is on_attr_report. */
+    auto *cmd = chip::Platform::New<esp_matter::controller::read_command>(
+        node_id, endpoint_id, k_onoff_cluster, k_onoff_attr,
+        esp_matter::controller::READ_ATTRIBUTE, on_attr_report, nullptr, nullptr,
+        on_read_connect_failure, on_read_error);
+    if (!cmd) {
+        return ESP_ERR_NO_MEM;
+    }
+    /* read_command owns itself (deleted in OnDone, on a connect failure at
+     * esp_matter_controller_read_command.cpp:58, or inside send_command() itself
+     * at :86) — never free cmd here and never touch it after send_command(): an
+     * accepted send may already be a dangling pointer. send_command() returning
+     * ESP_OK only means the request was handed to CHIP, so report it as
+     * ESP_ERR_NOT_FINISHED: *out_on was NOT written, the value arrives through
+     * on_attr_report. */
+    esp_err_t serr = cmd->send_command();
+    return serr == ESP_OK ? ESP_ERR_NOT_FINISHED : serr;
+}
+
+#define MATTER_SUB_MAX 8
+#define MATTER_SUB_MIN_INTERVAL 5
+#define MATTER_SUB_MAX_INTERVAL 30
+/* One commissioning can carry up to k_pending_ep_max endpoints for a single
+ * node, so the per-node endpoint list must not be smaller; MATTER_SUB_MAX (8)
+ * nodes is the real cap and is documented in the header. */
+static constexpr size_t k_sub_ep_max = k_pending_ep_max;
+
+typedef struct {
+    uint64_t node_id; /* 0 = free row; commissioned node ids are >= 2 */
+    uint16_t endpoints[k_sub_ep_max];
+    size_t endpoint_count;
+    bool live;        /* per node: the esp-matter callbacks are node-granular */
+    uint32_t subscription_id;
+    /* Boolean reports counted for this node row by note_sub_report(): cumulative
+     * per row, cleared only when the row is freed (the drop_node() memset, or the
+     * failed-fresh-arm one) before reallocation to another node — re-arming an
+     * existing row preserves it. Not filtered by cluster, attribute or endpoint:
+     * any decoded boolean report about the node bumps it. */
+    uint32_t reports;
+} matter_sub_slot_t;
+
+static matter_sub_slot_t s_subs[MATTER_SUB_MAX];
+
+/* A subscription that established after its row was already dropped. drop_node()
+ * cannot tear down an arm that has not reported an id yet (subscription_id == 0),
+ * so if that arm later succeeds nothing tracks it and it keeps writing points.
+ * Those are parked here and shut down from the next subscribe call, which runs
+ * outside the CHIP event task. Guarded by s_sub_mux. */
+static struct {
+    uint64_t node_id;
+    uint32_t sub_id;
+} s_sub_orphans[MATTER_SUB_MAX];
+static size_t s_sub_orphan_count;
+
+/* Readers run on the httpd task (status JSON), writers on the CHIP event task
+ * (established/terminated) and on the subscribe_node caller. Same
+ * reader/writer pairing as s_commission_mux, so the same protection. */
+static portMUX_TYPE s_sub_mux = portMUX_INITIALIZER_UNLOCKED;
+
+/* Caller must hold s_sub_mux. */
+static int sub_slot(uint64_t node_id, bool alloc)
+{
+    for (int i = 0; i < MATTER_SUB_MAX; i++) {
+        if (s_subs[i].node_id == node_id) {
+            return i;
+        }
+    }
+    if (!alloc) {
+        return -1;
+    }
+    for (int i = 0; i < MATTER_SUB_MAX; i++) {
+        if (s_subs[i].node_id == 0) {
+            s_subs[i].node_id = node_id;
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int64_t s_sub_nomatch_warn_ms; /* rate-limit, CHIP event task only */
+
+/* Called from on_attr_report before forwarding to the sink. The row lookup and the
+ * counter bump happen under the mux; the WARN is emitted outside it (logging must not
+ * run in a critical section). Reports are counted per node whenever the node has a
+ * tracked row; a (node, endpoint) that matches no armed row is the signal that config
+ * and the device disagree — live can read true while reports stays 0 (nothing armed
+ * matches what the device reports), which is exactly what the status counter exposes. */
+static void note_sub_report(uint64_t node_id, uint16_t endpoint_id)
+{
+    bool have_row = false;
+    bool matched = false;
+    portENTER_CRITICAL(&s_sub_mux);
+    for (int i = 0; i < MATTER_SUB_MAX; i++) {
+        if (s_subs[i].node_id != node_id) {
+            continue;
+        }
+        have_row = true;
+        s_subs[i].reports++;
+        for (size_t e = 0; e < s_subs[i].endpoint_count; e++) {
+            if (s_subs[i].endpoints[e] == endpoint_id) {
+                matched = true;
+            }
+        }
+    }
+    portEXIT_CRITICAL(&s_sub_mux);
+    if (matched) {
+        return;
+    }
+    /* No armed row carries this endpoint (either no row for the node at all — e.g. an
+     * on-demand read of an unsubscribed node — or a stale endpoint list after config
+     * moved). Rate-limit so a chatty mismatch cannot flood the log. */
+    (void)have_row;
+    int64_t now = esp_timer_get_time() / 1000;
+    if (now - s_sub_nomatch_warn_ms >= 5000) {
+        s_sub_nomatch_warn_ms = now;
+        ESP_LOGW(TAG, "report node=%" PRIu64 " ep=%u matches no armed subscription", node_id,
+                 (unsigned)endpoint_id);
+    }
+}
+
+static void on_sub_established(uint64_t node_id, uint32_t subscription_id)
+{
+    bool tracked = false;
+    portENTER_CRITICAL(&s_sub_mux);
+    for (int i = 0; i < MATTER_SUB_MAX; i++) {
+        if (s_subs[i].node_id == node_id) {
+            s_subs[i].live = true;
+            s_subs[i].subscription_id = subscription_id;
+            tracked = true;
+        }
+    }
+    if (!tracked) {
+        /* The row was dropped while this arm was in flight. Queue it: it has no
+         * owner otherwise, and it will keep delivering reports. */
+        bool dup = false;
+        for (size_t i = 0; i < s_sub_orphan_count; i++) {
+            if (s_sub_orphans[i].node_id == node_id && s_sub_orphans[i].sub_id == subscription_id) {
+                dup = true;
+                break;
+            }
+        }
+        if (!dup && s_sub_orphan_count < MATTER_SUB_MAX) {
+            s_sub_orphans[s_sub_orphan_count].node_id = node_id;
+            s_sub_orphans[s_sub_orphan_count].sub_id = subscription_id;
+            s_sub_orphan_count++;
+        }
+    }
+    portEXIT_CRITICAL(&s_sub_mux);
+    if (tracked) {
+        ESP_LOGI(TAG, "subscription up node=%" PRIu64 " id=0x%" PRIx32, node_id, subscription_id);
+    } else {
+        ESP_LOGW(TAG, "subscription up for untracked node=%" PRIu64 " id=0x%" PRIx32
+                      " (row dropped mid-arm); queued for shutdown",
+                 node_id, subscription_id);
+    }
+}
+
+/* Runs on the caller's task (adapter poll/resync via subscribe_node), never on the
+ * CHIP event task, so taking the stack lock here is acceptable. */
+static void reap_sub_orphans(void)
+{
+    struct {
+        uint64_t node_id;
+        uint32_t sub_id;
+    } pending[MATTER_SUB_MAX];
+    size_t n = 0;
+
+    portENTER_CRITICAL(&s_sub_mux);
+    n = s_sub_orphan_count;
+    if (n > 0) {
+        memcpy(pending, s_sub_orphans, sizeof(pending[0]) * n);
+        s_sub_orphan_count = 0;
+        memset(s_sub_orphans, 0, sizeof(s_sub_orphans));
+    }
+    portEXIT_CRITICAL(&s_sub_mux);
+    if (n == 0) {
+        return;
+    }
+
+    /* Runs on the caller's task (adapter poll/resync via subscribe_node), never on
+     * the CHIP event task, so taking the stack lock here is acceptable. */
+    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+    for (size_t i = 0; i < n; i++) {
+        esp_err_t err = esp_matter::controller::send_shutdown_subscription(pending[i].node_id,
+                                                                          pending[i].sub_id);
+        ESP_LOGW(TAG, "reaped orphan subscription node=%" PRIu64 " id=0x%" PRIx32 ": %s",
+                 pending[i].node_id, pending[i].sub_id, esp_err_to_name(err));
+    }
+}
+
+static void on_sub_terminated(uint64_t node_id, uint32_t subscription_id)
+{
+    portENTER_CRITICAL(&s_sub_mux);
+    for (int i = 0; i < MATTER_SUB_MAX; i++) {
+        if (s_subs[i].node_id == node_id && s_subs[i].subscription_id == subscription_id) {
+            s_subs[i].live = false;
+            s_subs[i].subscription_id = 0;
+        }
+    }
+    portEXIT_CRITICAL(&s_sub_mux);
+    ESP_LOGW(TAG, "subscription down node=%" PRIu64 " id=0x%" PRIx32, node_id, subscription_id);
+}
+
+/* esp-matter deletes the subscribe_command right after this callback
+ * (esp_matter_controller_subscribe_command.cpp:53-63), so ctx is never
+ * dereferenced — same discipline as on_read_connect_failure. */
+static void on_subscribe_connect_failure(void *ctx, const chip::ScopedNodeId &peer_id, CHIP_ERROR error)
+{
+    (void)ctx;
+    ESP_LOGW(TAG, "subscribe: node %" PRIu64 " connect failed: %s", peer_id.GetNodeId(), chip::ErrorStr(error));
+    char buf[96];
+    snprintf(buf, sizeof(buf), "subscribe connect failed: %s", chip::ErrorStr(error));
+    set_error(buf);
+}
+
+esp_err_t minihub_matter_subscribe_node(uint64_t node_id, const uint16_t *endpoint_ids, size_t count)
+{
+    if (!endpoint_ids || count == 0 || count > k_sub_ep_max) {
+        set_error("subscribe: bad endpoint list");
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_started || node_id < 2) {
+        set_error("subscribe: commissioner not ready");
+        return ESP_ERR_INVALID_STATE;
+    }
+    /* Opportunistic: shut down any subscription that established after its row was
+     * dropped. Returns without touching the stack lock when there is nothing queued. */
+    reap_sub_orphans();
+
+    /* Claim (or refresh) the node's row under the mux, but send outside it:
+     * portENTER_CRITICAL is a spinlock and the CHIP stack lock may block. */
+    matter_sub_slot_t prior = {};
+    int idx;
+    bool fresh;
+    portENTER_CRITICAL(&s_sub_mux);
+    idx = sub_slot(node_id, false);
+    fresh = (idx < 0);
+    if (fresh) {
+        idx = sub_slot(node_id, true);
+    } else {
+        prior = s_subs[idx];
+    }
+    if (idx < 0) {
+        portEXIT_CRITICAL(&s_sub_mux);
+        set_error("subscribe: table full"); /* the poll path will not re-arm this node */
+        return ESP_ERR_NO_MEM;
+    }
+    if (s_subs[idx].live) {
+        const uint32_t live_id = s_subs[idx].subscription_id;
+        portEXIT_CRITICAL(&s_sub_mux);
+        /* Silent today: the adapter only logs a NOT_FINISHED arm, so a short-circuit
+         * here is indistinguishable from "never attempted" in the console log. */
+        ESP_LOGI(TAG, "subscribe: node %" PRIu64 " already live (id=0x%" PRIx32 "), not re-arming",
+                 node_id, live_id);
         return ESP_OK;
     }
-    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-    (void)esp_matter::controller::send_read_attr_command(node_id, endpoint_id, k_onoff_cluster, k_onoff_attr);
-    return ESP_ERR_NOT_FINISHED;
+    memcpy(s_subs[idx].endpoints, endpoint_ids, count * sizeof(uint16_t));
+    s_subs[idx].endpoint_count = count;
+    s_subs[idx].live = false;
+    s_subs[idx].subscription_id = 0;
+    portEXIT_CRITICAL(&s_sub_mux);
+
+    esp_err_t err;
+    {
+        esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+        chip::Platform::ScopedMemoryBufferWithSize<chip::app::AttributePathParams> attr_paths;
+        chip::Platform::ScopedMemoryBufferWithSize<chip::app::EventPathParams> event_paths;
+        if (!attr_paths.Alloc(count)) {
+            err = ESP_ERR_NO_MEM;
+            set_error("subscribe: attribute path alloc failed");
+        } else {
+            for (size_t i = 0; i < count; i++) {
+                attr_paths[i] = chip::app::AttributePathParams(endpoint_ids[i], k_onoff_cluster, k_onoff_attr);
+            }
+            /* subscribe_command deletes itself in OnDone (auto_resubscribe re-arms
+             * first) and on every synchronous failure path
+             * (esp_matter_controller_subscribe_command.cpp:47-49, :53-63, :88). */
+            auto *cmd = chip::Platform::New<esp_matter::controller::subscribe_command>(
+                node_id, std::move(attr_paths), std::move(event_paths),
+                MATTER_SUB_MIN_INTERVAL, MATTER_SUB_MAX_INTERVAL, true /* auto_resubscribe */,
+                on_attr_report, nullptr, on_sub_established, on_sub_terminated,
+                on_subscribe_connect_failure, true /* keep_subscription */);
+            if (!cmd) {
+                err = ESP_ERR_NO_MEM;
+                set_error("subscribe: command alloc failed");
+            } else {
+                /* send_command() returning ESP_OK only means the request was handed
+                 * to CHIP, and the object may already have deleted itself on a
+                 * synchronous failure path — do not touch cmd afterwards. */
+                esp_err_t serr = cmd->send_command();
+                if (serr == ESP_OK) {
+                    return ESP_ERR_NOT_FINISHED;
+                }
+                err = serr;
+                set_error("subscribe request failed");
+            }
+        }
+    }
+
+    /* Synchronous failure: roll the row back (fresh → free the slot, existing
+     * → restore its prior list) so failed attempts cannot fill the table.
+     * Asynchronous silent failures (self-delete after connect) leave the row
+     * not-live, which is exactly what the poll path re-arms on. */
+    portENTER_CRITICAL(&s_sub_mux);
+    if (fresh) {
+        memset(&s_subs[idx], 0, sizeof(s_subs[idx]));
+    } else {
+        s_subs[idx] = prior;
+    }
+    portEXIT_CRITICAL(&s_sub_mux);
+    return err;
+}
+
+/* Tear down a node's subscription and free its row(s). A re-commissioned device gets
+ * a NEW node id; rows keyed by the old id are otherwise never reclaimed, so the old
+ * endpoint list stays armed forever while /api/matter/status still reads healthy. This
+ * is the truthful drop the adapter's subscribe_commissioned() calls before re-arming.
+ *
+ * Order per the ruling: send the real esp-matter teardown first, then free the table
+ * row. send_shutdown_subscription() needs the stack lock (a blocking mutex) so it runs
+ * OUTSIDE s_sub_mux; the subscription_id is captured under the mux first. Only one
+ * caller (subscribe_commissioned, under the adapter lifecycle lock) runs at a time, so
+ * no concurrent re-arm slips in during the teardown window. */
+esp_err_t minihub_matter_drop_node(uint64_t node_id)
+{
+    if (node_id < 2) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    uint32_t sub_id = 0;
+    portENTER_CRITICAL(&s_sub_mux);
+    for (int i = 0; i < MATTER_SUB_MAX; i++) {
+        if (s_subs[i].node_id == node_id && s_subs[i].subscription_id != 0) {
+            sub_id = s_subs[i].subscription_id;
+        }
+    }
+    portEXIT_CRITICAL(&s_sub_mux);
+
+    if (sub_id != 0) {
+        esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+        esp_err_t terr = esp_matter::controller::send_shutdown_subscription(node_id, sub_id);
+        if (terr != ESP_OK) {
+            ESP_LOGW(TAG, "drop node=%" PRIu64 " shutdown sub=0x%" PRIx32 " failed: %s", node_id, sub_id,
+                     esp_err_to_name(terr));
+        }
+    }
+
+    bool found = false;
+    portENTER_CRITICAL(&s_sub_mux);
+    for (int i = 0; i < MATTER_SUB_MAX; i++) {
+        if (s_subs[i].node_id == node_id) {
+            memset(&s_subs[i], 0, sizeof(s_subs[i]));
+            found = true;
+        }
+    }
+    portEXIT_CRITICAL(&s_sub_mux);
+
+    if (!found) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    ESP_LOGI(TAG, "dropped subscription row node=%" PRIu64 " (sub=0x%" PRIx32 ")", node_id, sub_id);
+    return ESP_OK;
+}
+
+cJSON *minihub_matter_subscriptions_json(void)
+{
+    /* Snapshot under the mux, build cJSON outside it: cJSON_* allocates and
+     * must not run inside a critical section. */
+    matter_sub_slot_t snap[MATTER_SUB_MAX];
+    portENTER_CRITICAL(&s_sub_mux);
+    memcpy(snap, s_subs, sizeof(snap));
+    portEXIT_CRITICAL(&s_sub_mux);
+
+    cJSON *arr = cJSON_CreateArray();
+    if (!arr) {
+        return NULL;
+    }
+    for (int i = 0; i < MATTER_SUB_MAX; i++) {
+        if (snap[i].node_id == 0) {
+            continue;
+        }
+        cJSON *item = cJSON_CreateObject();
+        if (!item) {
+            continue;
+        }
+        cJSON_AddNumberToObject(item, "node_id", (double)snap[i].node_id);
+        cJSON *eps = cJSON_CreateArray();
+        if (eps) {
+            for (size_t e = 0; e < snap[i].endpoint_count; e++) {
+                cJSON_AddItemToArray(eps, cJSON_CreateNumber((double)snap[i].endpoints[e]));
+            }
+            cJSON_AddItemToObject(item, "endpoints", eps);
+        }
+        cJSON_AddBoolToObject(item, "live", snap[i].live);
+        cJSON_AddNumberToObject(item, "reports", (double)snap[i].reports);
+        cJSON_AddItemToArray(arr, item);
+    }
+    return arr;
 }
 
 cJSON *minihub_matter_status_json(void)
@@ -1158,6 +1613,11 @@ cJSON *minihub_matter_status_json(void)
         }
         cJSON_AddBoolToObject(prefill, "has_password", has_password);
         cJSON_AddItemToObject(root, "wifi_prefill", prefill);
+    }
+
+    cJSON *subs = minihub_matter_subscriptions_json();
+    if (subs) {
+        cJSON_AddItemToObject(root, "subscriptions", subs);
     }
     return root;
 }

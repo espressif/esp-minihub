@@ -7,6 +7,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include "cJSON.h"
 #include "esp_err.h"
@@ -92,7 +93,71 @@ esp_err_t minihub_matter_commission_code(uint64_t node_id, const char *pairing_c
 esp_err_t minihub_matter_commission_pin(uint64_t node_id, uint32_t setup_pin);
 
 esp_err_t minihub_matter_onoff(uint64_t node_id, uint16_t endpoint_id, bool on);
+
+/**
+ * Read the OnOff attribute of endpoint_id on node_id.
+ *
+ * ESP_OK means *out_on was written. ESP_ERR_NOT_FINISHED means the request was
+ * accepted and the value will arrive through the callback set by
+ * minihub_matter_set_attr_cb(); *out_on is then untouched. Any other code means
+ * the read was not accepted. A read accepted this way can still fail
+ * asynchronously — that shows up in minihub_matter_last_error(), not here.
+ */
 esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool *out_on);
+
+/**
+ * Subscribe to the OnOff attribute (0x0000 of cluster 0x0006) for every
+ * endpoint of one node. One subscription per **node**: the esp-matter
+ * established/terminated callbacks report only (node_id, subscription_id), so
+ * per-endpoint liveness cannot be observed; liveness is tracked per node and
+ * covers all of that node's endpoints. Idempotent while the node's
+ * subscription is live — while live the endpoint list is not re-read.
+ * Reports go to the callback from minihub_matter_set_attr_cb().
+ *
+ * @param endpoint_ids  OnOff endpoints of this node, up to 16 (same cap as one
+ *                      commissioning); ESP_ERR_INVALID_ARG above that, never a
+ *                      silent truncation. The table itself is keyed by node and
+ *                      holds only MATTER_SUB_MAX = 8 nodes — fewer than the 16
+ *                      endpoints one commissioning can carry — so a 9th node
+ *                      fails with ESP_ERR_NO_MEM.
+ *
+ * ESP_OK means already live; ESP_ERR_NOT_FINISHED means the request was handed
+ * to CHIP (liveness shows up in minihub_matter_subscriptions_json()); any
+ * other code means the request was not accepted and the tracked row is rolled
+ * back so its slot stays reusable. While a node's subscription is live the
+ * endpoint list is NOT re-read, so to change a live node's endpoints the caller
+ * must drop the node first and re-subscribe — see minihub_matter_drop_node().
+ */
+esp_err_t minihub_matter_subscribe_node(uint64_t node_id, const uint16_t *endpoint_ids, size_t count);
+
+/**
+ * Tear down a node's subscription and free its tracked row(s).
+ *
+ * A re-commissioned device gets a NEW node id; rows keyed by the old id are
+ * otherwise never reclaimed, so the stale endpoint list stays armed forever
+ * while the status JSON still reads the node healthy. Callers use this to drop
+ * nodes that are no longer commissioned, and to force a re-arm when a node's
+ * endpoint set changes (subscribe_node() will not edit a live subscription).
+ *
+ * Performs the real teardown esp_matter::controller::send_shutdown_subscription
+ * (node_id, subscription_id) when the row was live, then frees the row.
+ * ESP_OK when a row existed and was dropped, ESP_ERR_NOT_FOUND when the node had
+ * no tracked row, ESP_ERR_INVALID_ARG for node_id < 2.
+ */
+esp_err_t minihub_matter_drop_node(uint64_t node_id);
+
+/**
+ * Tracked subscriptions as an array of
+ * { "node_id": <number>, "endpoints": [<number>, ...], "live": <bool>,
+ *   "reports": <number> }, one row per subscribed node. "reports" counts the
+ * OnOff reports delivered for that node — the value does not need to change for
+ * it to move, so it proves a report arrived. It is cumulative per node and resets
+ * only when that node's row is dropped (minihub_matter_drop_node) or reallocated to
+ * another node; re-arming a node that is not live does not clear it.
+ * Caller owns the returned object.
+ * NULL on allocation failure.
+ */
+cJSON *minihub_matter_subscriptions_json(void);
 
 cJSON *minihub_matter_status_json(void);
 const char *minihub_matter_last_error(void);
@@ -129,6 +194,21 @@ typedef struct {
 typedef void (*minihub_matter_identity_cb_t)(uint64_t node_id, const minihub_matter_identity_t *id, void *ctx);
 
 esp_err_t minihub_matter_set_identity_cb(minihub_matter_identity_cb_t cb, void *ctx);
+
+/**
+ * Attribute report callback. Only boolean-valued attributes are decoded today
+ * (the OnOff attribute, 0x0000 of cluster 0x0006); the cluster and attribute ids
+ * are passed through so a consumer can filter on them without a new symbol being
+ * added.
+ *
+ * Called on the CHIP event task with the stack lock held: copy what you need
+ * and return. Do not call back into minihub_matter_*.
+ */
+typedef void (*minihub_matter_attr_bool_cb_t)(uint64_t node_id, uint16_t endpoint_id,
+                                              uint32_t cluster_id, uint32_t attribute_id,
+                                              bool value, void *ctx);
+
+esp_err_t minihub_matter_set_attr_cb(minihub_matter_attr_bool_cb_t cb, void *ctx);
 
 /** Best-effort read of Basic Information. Failure does not unwind commission. */
 esp_err_t minihub_matter_interview_identity(uint64_t node_id);
