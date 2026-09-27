@@ -1,6 +1,6 @@
 ---
 name: minihub-host
-description: Develop MiniHub Host firmware products (application folder, Kconfig, JSON seeds, radio stacks, OEM copy). Use when the user changes Host, app_main, partitions, sdkconfig features, adapters.json, or copies a new product from minihub.
+description: Develop MiniHub Host firmware products (application folder, Kconfig, JSON seeds, radio stacks, OEM copy). Use when the user changes Host, app_main, partitions, sdkconfig features, adapters.json, or copies a new product from minihub; also when the console web assets do not update after app-flash, a serial port is busy during a flash, a Matter-stub build is needed, or web console sessions appear to evict each other.
 ---
 
 # MiniHub Host
@@ -56,6 +56,16 @@ export IDF_PATH=/path/to/esp-idf-v6.2
 ```
 
 `thread` and `zigbee` cannot be combined. Matter needs `ESP_MATTER_PATH`.
+
+## Bench traps
+
+| Symptom | What is actually going on |
+|---------|---------------------------|
+| Edited `components/minihub_web/web/**`, ran `app-flash`, browser still shows the old console | The console's JS/CSS ships in the **`modstore`** littlefs partition (`application/minihub/main/CMakeLists.txt`, `littlefs_create_partition_image(modstore …)`), and `app-flash` writes only the app. Flash `modstore-flash`, or hot-push one file: `curl -X PUT http://<hub>/api/dev/web/js/<file>.js --data-binary @components/minihub_web/web/js/<file>.js`. Prove which build is live from `window.mhWebBuild` in `web/js/boot.js` — bump that marker with every JS change, and hard-refresh after. |
+| Two console clients keep logging each other out, or an auth test says the opposite of the code | Web auth holds **one** session slot (`s_sess_hex` in `components/minihub_auth/minihub_auth.c`): the newest login invalidates every other cookie. `Authorization: Bearer <CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN>` bypasses sessions entirely, so a curl+Bearer probe never observes eviction. Idle 300 s slides on document loads and writes only; absolute cap 8 h. |
+| Need a build where `minihub_matter` compiles `matter_stub.c` while `CONFIG_MINIHUB_MATTER_ADAPTER=y` | `build_firmware.py` cannot produce it: `ensure_matter_stack()` re-adds the `matter` stack whenever that Kconfig is on, and `MINIHUB_BUILD_MATTER` is derived from the stack list, so a CLI/`env` value is overwritten. Run `idf.py --preview build` directly with `MINIHUB_BUILD_MATTER=0` and no `ESP_MATTER_PATH` (what CI does) — that is also the only configuration that links `matter_stub.c`, so every symbol callers outside the component use must exist there. |
+| Reporting a build or test result | `cmd > log 2>&1; tail log` reports `tail`'s status, and a trailing `grep` returns 1 when it matches nothing — both look like the build's verdict. Use `cmd > log 2>&1; rc=$?; … ; exit $rc` and quote the recorded `rc`. |
+| `Could not open …/cu.usbserial-…: Resource busy` | The human's serial monitor owns the port. `lsof /dev/cu.usbserial-110` before flashing; ask, never kill it, and never leave your own `serlog`/monitor capture holding a port someone else needs. |
 
 ## MCP
 
