@@ -1560,14 +1560,22 @@ function closeMatterAdd() {
     document.getElementById('matter-add-modal').hidden = true;
 }
 
+const MATTER_STAGE_LABEL = { discovering: '设备发现中', binding: '设备绑定中', activating: '设备激活中' };
+
 async function pollMatterCommissionCard(nodeId) {
     const deadline = Date.now() + 180000;
+    let lastStage = '';
     while (Date.now() < deadline) {
         await new Promise((res) => setTimeout(res, 1500));
         try {
             await loadPoints();
             const sr = await fetch('/api/matter/status');
             const st = await sr.json().catch(() => ({}));
+            const stage = st.commission_stage || '';
+            if (stage && stage !== lastStage) {
+                lastStage = stage;
+                toast((MATTER_STAGE_LABEL[stage] || stage) + '… node ' + (st.commission_node_id || nodeId));
+            }
             if (st.commission === 'ok') {
                 await loadMeta();
                 await loadPoints();
@@ -1576,7 +1584,8 @@ async function pollMatterCommissionCard(nodeId) {
             }
             if (st.commission === 'failed') {
                 await loadPoints();
-                toast('配网失败: ' + String(st.last_error || st.commission_result || '').slice(0, 80));
+                toast('配网失败' + (lastStage ? ('（' + (MATTER_STAGE_LABEL[lastStage] || lastStage) + '）') : '') +
+                    ': ' + String(st.last_error || st.commission_result || '').slice(0, 80));
                 return;
             }
         } catch (e) {

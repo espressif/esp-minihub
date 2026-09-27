@@ -57,7 +57,7 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
        BLOB)
      - ``examples/plugins/ble_mesh_ota``
    * - :doc:`matter`
-     - ``light/matter_n{node}_ep{ep}``
+     - ``{transport}.matter_n{node}_ep{ep}``
        **per endpoint**
      - EP0 Basic Information;
        ``node_id``

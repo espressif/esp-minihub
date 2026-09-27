@@ -56,7 +56,7 @@ Host Core 的依赖。
 
    适配器（如 Zigbee、Matter、BLE Mesh）发现设备后，为每个设备注册
    **恰好一个** ``minihub_point_t`` （Matter 按 endpoint）。点 id 如
-   ``zigbee.zb_7d4b``、``light/matter_n2_ep1``、``sim.color_bulb``。
+   ``zigbee.zb_7d4b``、``thread.matter_n2_ep1``、``sim.color_bulb``。
    Thread 适配器只做 Border Router，**不** 登记设备点，见 :doc:`thread`。
    实时参数、访问权限、可见性、实例上下界都存放在该点上的结构化 JSON
    里——典型为 ``props.params.<name> = { "value", 可选 access / visible / min /
@@ -75,7 +75,8 @@ Host Core 的依赖。
    在文件缺失时从内嵌副本 seed，再加载它。
 
    该目录是**协议无关**的：不含 transport 字段。适配器前缀（``zigbee.`` /
-   Matter 的 ``light/matter_n…`` 等）来自点的注册，因此同样的 ``light`` /
+   Matter 的 ``thread.matter_n…`` 或 ``wifi.matter_n…`` 等）来自点的注册，
+   因此同样的 ``light`` /
    ``switch`` 控件不论设备以何种方式接入都能渲染。内置类型表、控件与开发
    用法见 :doc:`type_catalog`。
 

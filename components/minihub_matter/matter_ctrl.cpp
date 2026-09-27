@@ -80,6 +80,26 @@ enum {
 static int s_commission_phase = COMMISSION_PHASE_IDLE;
 static uint64_t s_commission_node_id;
 
+/* Sub-state of COMMISSION_PHASE_WAITING. esp-matter only hands us PASE,
+ * success and failure, so this is as fine-grained as the signals allow. */
+enum {
+    COMMISSION_STAGE_NONE = 0,
+    COMMISSION_STAGE_DISCOVERING = 1,  /* finding the beacon, PASE handshake */
+    COMMISSION_STAGE_BINDING = 2,      /* PASE up: NOC + network credentials */
+    COMMISSION_STAGE_ACTIVATING = 3,   /* on the fabric: resolve + first read */
+};
+static int s_commission_stage = COMMISSION_STAGE_NONE;
+
+static const char *commission_stage_name(int stage)
+{
+    switch (stage) {
+    case COMMISSION_STAGE_DISCOVERING: return "discovering";
+    case COMMISSION_STAGE_BINDING: return "binding";
+    case COMMISSION_STAGE_ACTIVATING: return "activating";
+    default: return "idle";
+    }
+}
+
 typedef struct {
     bool valid;
     uint64_t node_id;
@@ -260,6 +280,10 @@ static void signal_commission_done(esp_err_t err)
         s_commission_phase = COMMISSION_PHASE_DONE;
         s_commission_result = err;
         give = true;
+        if (err == ESP_OK) {
+            s_commission_stage = COMMISSION_STAGE_NONE;
+        }
+        /* On failure keep the stage: the UI says where it stopped. */
         if (err != ESP_OK) {
             clear_pending_device_locked();
         }
@@ -315,6 +339,7 @@ static bool arm_commission_wait(void)
     portENTER_CRITICAL(&s_commission_mux);
     s_commission_phase = COMMISSION_PHASE_WAITING;
     s_commission_result = ESP_OK;
+    s_commission_stage = COMMISSION_STAGE_DISCOVERING;
     clear_pending_device_locked();
     portEXIT_CRITICAL(&s_commission_mux);
     arm_commission_watchdog();
@@ -392,7 +417,10 @@ static void on_pairing_complete(CHIP_ERROR err)
         set_error(buf);
         s_pairing_in_progress = false;
         schedule_finalize(ESP_FAIL);
+        return;
     }
+    s_commission_stage = COMMISSION_STAGE_BINDING;
+    ESP_LOGI(TAG, "commission stage -> binding (PASE up)");
 }
 
 static void on_commissioning_success(chip::ScopedNodeId peer_id)
@@ -402,6 +430,9 @@ static void on_commissioning_success(chip::ScopedNodeId peer_id)
     s_pairing_in_progress = false;
     set_error(NULL);
     s_commission_node_id = peer_id.GetNodeId();
+    /* Credentials are on the device; still resolving it operationally and
+     * reading BasicInformation, which is what "activating" means here. */
+    s_commission_stage = COMMISSION_STAGE_ACTIVATING;
     (void)minihub_matter_interview_identity(peer_id.GetNodeId());
     /* Stay in WAITING until phase clear (+ optional reload) finishes. */
     schedule_finalize(ESP_OK);
@@ -412,10 +443,11 @@ static void on_commissioning_failure(chip::ScopedNodeId peer_id, CHIP_ERROR erro
                                      std::optional<chip::Credentials::AttestationVerificationResult> additional)
 {
     (void)peer_id;
-    (void)stage;
     (void)additional;
     char buf[96];
-    snprintf(buf, sizeof(buf), "commission failed: %s", chip::ErrorStr(error));
+    snprintf(buf, sizeof(buf), "commission failed at %s (chip_stage=%d): %s",
+             commission_stage_name(s_commission_stage), static_cast<int>(stage),
+             chip::ErrorStr(error));
     set_error(buf);
     s_pairing_in_progress = false;
     schedule_finalize(ESP_FAIL);
@@ -815,6 +847,7 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
         portENTER_CRITICAL(&s_commission_mux);
         if (s_commission_phase == COMMISSION_PHASE_WAITING) {
             s_commission_phase = COMMISSION_PHASE_IDLE;
+            s_commission_stage = COMMISSION_STAGE_NONE;
         }
         portEXIT_CRITICAL(&s_commission_mux);
         if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
@@ -991,6 +1024,9 @@ cJSON *minihub_matter_status_json(void)
     cJSON_AddBoolToObject(root, "pairing", s_pairing_in_progress);
     cJSON_AddStringToObject(root, "mode", "commissioner");
     cJSON_AddStringToObject(root, "commission", commission);
+    if (s_commission_stage != COMMISSION_STAGE_NONE) {
+        cJSON_AddStringToObject(root, "commission_stage", commission_stage_name(s_commission_stage));
+    }
     if (s_commission_node_id >= 2) {
         cJSON_AddNumberToObject(root, "commission_node_id", (double)s_commission_node_id);
     }

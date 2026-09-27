@@ -173,7 +173,8 @@ CASE 会话成功后，通过标准 Hub 命令 API 控制：
 ------------------
 
 每个已配网 Matter **endpoint** 对应 **一条** Host 点（现有
-``light/matter_n{node}_ep{ep}`` 或 ``adapters.json`` 里的 ``point_id``）。
+``{transport}.matter_n{node}_ep{ep}``——``transport`` 为 ``thread`` /
+``wifi`` / ``ethernet``——或 ``adapters.json`` 里的 ``point_id``）。
 本次不把多 endpoint 合并成「一 node 一点」。登记后 Host 读 EP0 Basic
 Information（cluster ``0x0028``，尽力而为；失败不阻断配网）：
 

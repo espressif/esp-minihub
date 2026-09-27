@@ -194,9 +194,6 @@ function pointProtocol(p) {
     if (!p) return '';
     if (p.protocol) return String(p.protocol);
     if (p.props && p.props.protocol) return String(p.props.protocol);
-    /* Matter point ids are "<type>/<node>", not "<protocol>.<device>", so the
-     * prefix fallback finds nothing; its radio is a per-device property. */
-    if (p.props && p.props.transport) return String(p.props.transport);
     const id = String(p.point_id || '');
     const dot = id.indexOf('.');
     return dot > 0 ? id.slice(0, dot) : '';

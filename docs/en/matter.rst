@@ -174,7 +174,8 @@ Point identity and vendor extras
 --------------------------------
 
 Each commissioned Matter **endpoint** is **one** Host point (existing
-``light/matter_n{node}_ep{ep}`` or the ``point_id`` in ``adapters.json``).
+``{transport}.matter_n{node}_ep{ep}`` — ``transport`` being ``thread``,
+``wifi`` or ``ethernet`` — or the ``point_id`` in ``adapters.json``).
 This round does **not** collapse endpoints into one point per node. After
 register, Host reads EP0 Basic Information (cluster ``0x0028``, best-effort;
 commission is not blocked on failure):

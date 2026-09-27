@@ -54,7 +54,7 @@ Wi-Fi、802.15.4、BLE Mesh 再其它适配器的顺序 start。互斥不改写
        BLOB）
      - ``examples/plugins/ble_mesh_ota``
    * - :doc:`matter`
-     - ``light/matter_n{node}_ep{ep}``
+     - ``{transport}.matter_n{node}_ep{ep}``
        **按 endpoint**
      - EP0 Basic Information；
        ``node_id``

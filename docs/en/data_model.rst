@@ -15,7 +15,7 @@ MiniHub Core works on **points**, not on C structs for lamps or switches:
 * **One physical device = one** ``minihub_point_t`` (Matter is **one
   endpoint** — see :doc:`matter`)
 * ``point_id`` = ``protocol.device`` (e.g. ``sim.color_bulb``,
-  ``zigbee.zb_7d4b``, ``light/matter_n2_ep1``)
+  ``zigbee.zb_7d4b``, ``thread.matter_n2_ep1``)
 * Live parameters live on that point under ``props.params.<name>``
 * ``type`` is a string (``light`` / ``switch`` / …) — **not** a closed Core enum
 * **How the UI draws** comes from the Host **type catalog** (CSV),

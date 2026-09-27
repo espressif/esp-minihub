@@ -170,9 +170,13 @@ static cJSON *find_device_by_endpoint(cJSON *devices, uint64_t node_id, uint16_t
     return NULL;
 }
 
-static void make_point_id(uint64_t node_id, uint16_t endpoint_id, char *out, size_t out_len)
+/* point_id is "<protocol>.<device>"; for Matter the radio is per device, so the
+ * commissioning transport decides the prefix (thread / wifi / ethernet). */
+static void make_point_id(uint64_t node_id, uint16_t endpoint_id, const char *transport,
+                          char *out, size_t out_len)
 {
-    snprintf(out, out_len, "light/matter_n%" PRIu64 "_ep%u", node_id, (unsigned)endpoint_id);
+    const char *proto = (transport && transport[0]) ? transport : "matter";
+    snprintf(out, out_len, "%s.matter_n%" PRIu64 "_ep%u", proto, node_id, (unsigned)endpoint_id);
 }
 
 esp_err_t minihub_matter_next_node_id(uint64_t *out_node_id)
@@ -236,14 +240,8 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
 
         cJSON *existing = merge_existing ? find_device_by_endpoint(devices, node_id, ep) : NULL;
         char point_id[64];
+        make_point_id(node_id, ep, transport, point_id, sizeof(point_id));
         if (existing) {
-            const cJSON *pid = cJSON_GetObjectItem(existing, "point_id");
-            if (cJSON_IsString(pid)) {
-                strncpy(point_id, pid->valuestring, sizeof(point_id) - 1);
-                point_id[sizeof(point_id) - 1] = '\0';
-            } else {
-                make_point_id(node_id, ep, point_id, sizeof(point_id));
-            }
             cJSON_DeleteItemFromObject(existing, "node_id");
             cJSON_DeleteItemFromObject(existing, "endpoint_id");
             cJSON_DeleteItemFromObject(existing, "type");
@@ -262,7 +260,6 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
             continue;
         }
 
-        make_point_id(node_id, ep, point_id, sizeof(point_id));
         if (find_device_entry(devices, point_id)) {
             continue;
         }
