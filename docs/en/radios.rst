@@ -11,6 +11,15 @@ logic (claim, cloud catalog, OTA flag) is a Store plugin on the **same**
 Matter-over-Thread end-devices are Matter points. MQTT / Modbus are
 config-only; see :doc:`data_model`.
 
+Wi-Fi STA is a Host adapter (``adapters.wifi``). Ethernet is **not** an
+adapter — ``minihub_net_init()`` still starts it. Three 2.4 GHz groups may
+run **at most two at a time**: Wi-Fi, IEEE 802.15.4 (Zigbee **or** Thread),
+and BLE Mesh. Priority if all three are enabled: keep Wi-Fi + 802.15.4,
+skip BLE Mesh. Zigbee and Thread never start together (firmware cannot
+link both; JSON that enables both skips Thread). ``minihub_adapter_start_all()``
+starts radios in that order (Wi-Fi, then 802.15.4, then BLE Mesh), then
+other adapters. Mutex does not rewrite ``adapters.json``.
+
 Identity, claim, OTA
 --------------------
 
@@ -28,6 +37,11 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
      - Identity (Host)
      - Air OTA
      - Demo plugin
+   * - wifi
+     - **no** device points (STA uplink)
+     - —
+     - —
+     - —
    * - :doc:`zigbee`
      - ``zigbee.zb_XXXX``, one
        node one point
@@ -35,7 +49,7 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
      - Stub (``NOT_SUPPORTED``)
      - ``examples/plugins/zigbee_ota``
    * - :doc:`ble_mesh`
-     - ``light/bm_XXXX``, one
+     - ``ble_mesh.bm_XXXX``, one
        node one point
      - Composition CID/PID/VID;
        ``uuid``

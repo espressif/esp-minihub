@@ -29,8 +29,8 @@ else()
     set(MINIHUB_MAIN_REQUIRES
         minihub_core minihub_config minihub_adapter minihub_rules minihub_scenes
         minihub_web minihub_pack minihub_module minihub_hub minihub_auth minihub_ota
-        minihub_provision minihub_net minihub_lcd minihub_rainmaker adapter_mqtt adapter_zigbee
-        adapter_matter adapter_thread nvs_flash esp_wifi esp_netif esp_event lwip esp_system
+        minihub_provision minihub_net minihub_lcd minihub_rainmaker adapter_mqtt adapter_wifi
+        adapter_zigbee adapter_matter adapter_thread nvs_flash esp_wifi esp_netif esp_event lwip esp_system
     )
 endif()
 

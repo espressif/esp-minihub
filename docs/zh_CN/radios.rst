@@ -10,6 +10,14 @@ OTA 标记）走 Store 插件，写在 **同一** ``point_id`` 上，不要为�
 **Thread 不是设备适配器：** 只做 OpenThread Border Router。Matter-over-Thread
 终端出现在 Matter 点上。MQTT / Modbus 只有配置块，见 :doc:`data_model`。
 
+Wi-Fi STA 是 Host 适配器（``adapters.wifi``）。以太网 **不是** 适配器，仍由
+``minihub_net_init()`` 拉起。2.4 GHz 三组（Wi-Fi、IEEE 802.15.4 的 Zigbee
+**或** Thread、BLE Mesh）**最多同时开两组**。三组都 ``enabled`` 时保留
+Wi-Fi + 802.15.4，跳过 BLE Mesh。Zigbee 与 Thread 绝不同时 start（固件也不能
+同时链接；JSON 双开则跳过 Thread）。``minihub_adapter_start_all()`` 按
+Wi-Fi、802.15.4、BLE Mesh 再其它适配器的顺序 start。互斥不改写
+``adapters.json``。
+
 身份、认领、OTA
 ================
 
@@ -26,6 +34,11 @@ OTA 标记）走 Store 插件，写在 **同一** ``point_id`` 上，不要为�
      - 身份（Host 写）
      - 空中升级
      - 演示插件
+   * - wifi
+     - **无** 设备点（STA 上行）
+     - —
+     - —
+     - —
    * - :doc:`zigbee`
      - ``zigbee.zb_XXXX`` 一台一
        点
@@ -33,7 +46,7 @@ OTA 标记）走 Store 插件，写在 **同一** ``point_id`` 上，不要为�
      - 桩（``NOT_SUPPORTED``）
      - ``examples/plugins/zigbee_ota``
    * - :doc:`ble_mesh`
-     - ``light/bm_XXXX`` 一台一
+     - ``ble_mesh.bm_XXXX`` 一台一
        点
      - Composition CID/PID/VID；
        ``uuid``

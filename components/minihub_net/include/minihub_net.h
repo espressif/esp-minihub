@@ -31,8 +31,7 @@ extern "C" {
 /**
  * @brief Initialize netif/event loop and start Ethernet (if enabled)
  *
- * Wi-Fi STA connect is deferred to minihub_net_start_wifi() so Zigbee / BLE Mesh can
- * claim internal BT heap before esp_wifi_init().
+ * Wi-Fi STA connect is deferred to minihub_net_start_wifi() (wifi adapter start).
  *
  * @return
  *     - ESP_OK: succeed
@@ -42,7 +41,7 @@ esp_err_t minihub_net_init(void);
 /**
  * @brief Start Wi-Fi STA with NVS credentials (or provisioning)
  *
- * Call after Zigbee is ready when both share the radio.
+ * Invoked by the wifi Host adapter after minihub_adapter_start_all() mutex.
  *
  * @return
  *     - ESP_OK: succeed

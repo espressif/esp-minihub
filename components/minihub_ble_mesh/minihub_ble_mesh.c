@@ -219,22 +219,20 @@ esp_err_t minihub_ble_mesh_remove_device(const char *point_id)
     (void)minihub_ble_mesh_init();
 
     uint16_t unicast = 0;
-    const char *slash = strrchr(point_id, '/');
-    const char *short_id = slash ? slash + 1 : point_id;
+    const char *short_id = minihub_bm_stable_suffix(point_id);
     for (size_t i = 0; i < s_device_count; i++) {
         if (strcmp(s_devices[i].point_id, point_id) == 0) {
             unicast = s_devices[i].unicast;
             break;
         }
-        const char *ts = strrchr(s_devices[i].point_id, '/');
-        const char *tshort = ts ? ts + 1 : s_devices[i].point_id;
-        if (short_id[0] && strcmp(tshort, short_id) == 0) {
+        const char *tshort = minihub_bm_stable_suffix(s_devices[i].point_id);
+        if (short_id && tshort && strcmp(tshort, short_id) == 0) {
             unicast = s_devices[i].unicast;
             break;
         }
     }
     /* Orphan UI points (in registry, not in NVS) — parse bm_XXXX from point_id. */
-    if (unicast == 0) {
+    if (unicast == 0 && short_id) {
         unsigned u = 0;
         if (sscanf(short_id, "bm_%x", &u) == 1 && u > 0 && u <= 0x7fff) {
             unicast = (uint16_t)u;
@@ -259,13 +257,18 @@ esp_err_t minihub_ble_mesh_remove_device(const char *point_id)
     if (ureg != ESP_OK && ureg != ESP_ERR_NOT_FOUND) {
         ESP_LOGW(TAG, "point unregister %s: %s", point_id, esp_err_to_name(ureg));
     }
-    /* Also drop alternate type prefix for same unicast (light/bm_X vs switch/bm_X). */
+    /* Drop canonical + legacy slash ids for the same unicast. */
     if (unicast) {
         char alt[MINIHUB_POINT_ID_MAX];
+        if (minihub_bm_format_point_id(alt, sizeof(alt), unicast) == 0 &&
+            strcmp(alt, point_id) != 0) {
+            (void)minihub_bm_nvs_remove(alt, s_devices, &s_device_count);
+            (void)minihub_point_unregister(alt);
+        }
         const char *alts[] = {"switch", "light"};
         for (size_t a = 0; a < sizeof(alts) / sizeof(alts[0]); a++) {
-            if (minihub_bm_format_point_id(alt, sizeof(alt), alts[a], unicast) == 0 &&
-                strcmp(alt, point_id) != 0) {
+            int n = snprintf(alt, sizeof(alt), "%s/bm_%04x", alts[a], (unsigned)unicast);
+            if (n > 0 && (size_t)n < sizeof(alt) && strcmp(alt, point_id) != 0) {
                 (void)minihub_bm_nvs_remove(alt, s_devices, &s_device_count);
                 (void)minihub_point_unregister(alt);
             }
@@ -280,8 +283,13 @@ const minihub_ble_mesh_device_t *minihub_ble_mesh_find_by_point(const char *poin
     if (!point_id) {
         return NULL;
     }
+    const char *short_id = minihub_bm_stable_suffix(point_id);
     for (size_t i = 0; i < s_device_count; i++) {
         if (strcmp(s_devices[i].point_id, point_id) == 0) {
+            return &s_devices[i];
+        }
+        const char *tshort = minihub_bm_stable_suffix(s_devices[i].point_id);
+        if (short_id && tshort && strcmp(tshort, short_id) == 0) {
             return &s_devices[i];
         }
     }

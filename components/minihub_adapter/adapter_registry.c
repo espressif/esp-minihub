@@ -7,6 +7,7 @@
 #include "minihub_adapter.h"
 #include "minihub_task.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include "esp_log.h"
@@ -75,7 +76,44 @@ static bool adapter_is_radio_host(const minihub_adapter_t *adapter)
         return true;
     }
 #endif
+#if CONFIG_MINIHUB_NET_WIFI_STA
+    if (strcmp(adapter->name, "wifi") == 0) {
+        return true;
+    }
+#endif
     return false;
+}
+
+static bool adapter_was_kept(const minihub_adapter_t *adapter)
+{
+    for (size_t k = 0; k < s_kept_radio_count; k++) {
+        if (s_kept_radio[k] == adapter) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static int radio_start_rank(const char *name)
+{
+    if (!name) {
+        return 10;
+    }
+    if (strcmp(name, "wifi") == 0) {
+        return 0;
+    }
+    if (strcmp(name, "zigbee") == 0 || strcmp(name, "thread") == 0) {
+        return 1;
+    }
+    if (strcmp(name, "ble_mesh") == 0) {
+        return 2;
+    }
+    return 3;
+}
+
+static bool adapter_name_is(const minihub_adapter_t *adapter, const char *name)
+{
+    return adapter && adapter->name && name && strcmp(adapter->name, name) == 0;
 }
 
 esp_err_t minihub_adapter_registry_init(void)
@@ -294,20 +332,71 @@ esp_err_t minihub_adapter_start_all(void)
         return ESP_ERR_TIMEOUT;
     }
 
+    bool has_wifi = false;
+    bool has_zigbee = false;
+    bool has_thread = false;
+    bool has_ble_mesh = false;
     for (size_t i = 0; i < s_active_count; i++) {
         const minihub_adapter_t *adapter = s_active[i];
+        if (adapter_name_is(adapter, "wifi")) {
+            has_wifi = true;
+        } else if (adapter_name_is(adapter, "zigbee")) {
+            has_zigbee = true;
+        } else if (adapter_name_is(adapter, "thread")) {
+            has_thread = true;
+        } else if (adapter_name_is(adapter, "ble_mesh")) {
+            has_ble_mesh = true;
+        }
+    }
+
+    bool skip_thread = false;
+    bool skip_ble_mesh = false;
+    if (has_zigbee && has_thread) {
+        skip_thread = true;
+        ESP_LOGW(TAG, "radio mutex: zigbee and thread both enabled — skipping thread");
+    }
+    if (has_wifi && (has_zigbee || has_thread) && has_ble_mesh) {
+        skip_ble_mesh = true;
+        ESP_LOGW(TAG, "radio mutex: wifi + 802.15.4 + ble_mesh — skipping ble_mesh");
+    }
+
+    const minihub_adapter_t *ordered[16];
+    size_t n = s_active_count < 16 ? s_active_count : 16;
+    for (size_t i = 0; i < n; i++) {
+        ordered[i] = s_active[i];
+    }
+    for (size_t i = 1; i < n; i++) {
+        const minihub_adapter_t *key = ordered[i];
+        size_t j = i;
+        while (j > 0 && radio_start_rank(ordered[j - 1] ? ordered[j - 1]->name : NULL) >
+                             radio_start_rank(key ? key->name : NULL)) {
+            ordered[j] = ordered[j - 1];
+            j--;
+        }
+        ordered[j] = key;
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        const minihub_adapter_t *adapter = ordered[i];
+        if (!adapter) {
+            continue;
+        }
+        bool skip = (skip_thread && adapter_name_is(adapter, "thread")) ||
+                    (skip_ble_mesh && adapter_name_is(adapter, "ble_mesh"));
+        bool was_kept = adapter_was_kept(adapter);
+        if (skip) {
+            ESP_LOGW(TAG, "adapter '%s' not started (radio mutex)",
+                     adapter->name ? adapter->name : "?");
+            if (was_kept && adapter->stop) {
+                adapter->stop();
+            }
+            continue;
+        }
         if (!adapter->start) {
             continue;
         }
         /* Only skip start for radio hosts that were actually kept running.
          * Newly enabled radio (e.g. zigbee→ble_mesh) must still call start(). */
-        bool was_kept = false;
-        for (size_t k = 0; k < s_kept_radio_count; k++) {
-            if (s_kept_radio[k] == adapter) {
-                was_kept = true;
-                break;
-            }
-        }
         if (was_kept) {
             if (adapter->handle_command) {
                 minihub_command_register_adapter(adapter->name, adapter->handle_command);

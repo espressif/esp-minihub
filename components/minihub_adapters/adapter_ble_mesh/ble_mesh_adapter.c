@@ -7,6 +7,7 @@
 #include "minihub_adapter.h"
 #include "minihub_module.h"
 #include "minihub_ble_mesh.h"
+#include "ble_mesh_map.h"
 #include "minihub_product_params.h"
 #include "ble_mesh_adapter.h"
 #include "ble_mesh_rpc.h"
@@ -17,11 +18,6 @@
 #include "esp_log.h"
 #include "minihub_core.h"
 #include "sdkconfig.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#if CONFIG_MINIHUB_ZIGBEE_SDK
-#include "minihub_zigbee.h"
-#endif
 
 static const char *TAG = "adapter_ble_mesh";
 
@@ -414,6 +410,7 @@ static esp_err_t apply_config_binds(const cJSON *config)
         }
         minihub_ble_mesh_device_t dev = {0};
         strncpy(dev.point_id, point_id->valuestring, sizeof(dev.point_id) - 1);
+        (void)minihub_bm_normalize_point_id(dev.point_id, sizeof(dev.point_id));
         strncpy(dev.type, type->valuestring, sizeof(dev.type) - 1);
         if (cJSON_IsString(uuid)) {
             strncpy(dev.uuid_hex, uuid->valuestring, sizeof(dev.uuid_hex) - 1);
@@ -463,14 +460,14 @@ static void ble_mesh_register_mapped_points(void)
 #if !CONFIG_MINIHUB_BLE_MESH_SDK
     if (n == 0) {
         minihub_ble_mesh_device_t light = {0};
-        strncpy(light.point_id, "light/ble_mesh_light", sizeof(light.point_id) - 1);
+        strncpy(light.point_id, "ble_mesh.ble_mesh_light", sizeof(light.point_id) - 1);
         strncpy(light.type, "light", sizeof(light.type) - 1);
         light.caps = MINIHUB_BM_CAP_ONOFF;
         light.elem_num = 1;
         register_point_from_dev(&light);
 
         minihub_ble_mesh_device_t sw = {0};
-        strncpy(sw.point_id, "switch/ble_mesh_plug", sizeof(sw.point_id) - 1);
+        strncpy(sw.point_id, "ble_mesh.ble_mesh_plug", sizeof(sw.point_id) - 1);
         strncpy(sw.type, "switch", sizeof(sw.type) - 1);
         sw.caps = MINIHUB_BM_CAP_ONOFF;
         sw.elem_num = 1;
@@ -486,59 +483,19 @@ static void ble_mesh_register_mapped_points(void)
     }
 }
 
-#if CONFIG_MINIHUB_BLE_MESH_SDK
-static void ble_mesh_deferred_start_task(void *arg)
-{
-    (void)arg;
-#if CONFIG_MINIHUB_ZIGBEE_SDK
-    /* Do not block adapter_start_all / HTTP bring-up while Zigbee forms. */
-    if (!minihub_zigbee_running()) {
-        ESP_LOGI(TAG, "waiting for Zigbee coordinator before BLE Mesh start...");
-        for (int i = 0; i < 60 && !minihub_zigbee_running(); i++) {
-            vTaskDelay(pdMS_TO_TICKS(500));
-        }
-        if (!minihub_zigbee_running()) {
-            ESP_LOGW(TAG, "Zigbee still not ready after 30s — starting BLE Mesh anyway");
-        } else {
-            ESP_LOGI(TAG, "Zigbee ready — starting BLE Mesh");
-        }
-    }
-#endif
-    minihub_heap_log();
-    esp_err_t err = minihub_ble_mesh_start();
-    minihub_heap_log();
-    if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
-        ESP_LOGE(TAG, "Host stack start failed: %s — permit_provision unavailable", esp_err_to_name(err));
-    }
-    ble_mesh_register_mapped_points();
-    vTaskDelete(NULL);
-}
-#endif
-
 static esp_err_t ble_mesh_adapter_start(void)
 {
     minihub_ble_mesh_set_callbacks(on_bm_device, on_bm_attr, NULL);
 
 #if CONFIG_MINIHUB_BLE_MESH_SDK
-    /* Background: Zigbee wait + NimBLE bring-up (can take ~30s). Keeps HTTP usable. */
-    BaseType_t ok = xTaskCreate(ble_mesh_deferred_start_task, "bm_deferred", 6144, NULL, 5, NULL);
-    if (ok != pdPASS) {
-        ESP_LOGW(TAG, "deferred start task failed — starting inline");
-#if CONFIG_MINIHUB_ZIGBEE_SDK
-        if (!minihub_zigbee_running()) {
-            for (int i = 0; i < 60 && !minihub_zigbee_running(); i++) {
-                vTaskDelay(pdMS_TO_TICKS(500));
-            }
-        }
-#endif
-        esp_err_t err = minihub_ble_mesh_start();
-        if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
-            ESP_LOGW(TAG, "Host stack start: %s", esp_err_to_name(err));
-        }
-        ble_mesh_register_mapped_points();
-    } else {
-        ESP_LOGI(TAG, "BLE Mesh start deferred (Zigbee/RF sequencing in background)");
+    /* Host (main) sequences Zigbee-before-BLE when both are enabled; start here immediately. */
+    minihub_heap_log();
+    esp_err_t err = minihub_ble_mesh_start();
+    minihub_heap_log();
+    if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGW(TAG, "Host stack start: %s", esp_err_to_name(err));
     }
+    ble_mesh_register_mapped_points();
 #else
     ESP_LOGI(TAG, "simulation mode (CONFIG_MINIHUB_BLE_MESH_SDK=n)");
     ble_mesh_register_mapped_points();

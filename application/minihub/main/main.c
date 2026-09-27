@@ -33,9 +33,6 @@
 #include "minihub_usb_msc.h"
 #include "minihub_rtsp_cam.h"
 #include "adapters_setup.h"
-#if CONFIG_MINIHUB_ZIGBEE_SDK
-#include "minihub_zigbee.h"
-#endif
 #if CONFIG_MINIHUB_MATTER_ADAPTER
 #include "minihub_matter.h"
 #endif
@@ -148,6 +145,12 @@ void app_main(void)
         return;
     }
 
+#if CONFIG_MINIHUB_NET_WIFI_STA
+    /* Pre-wifi-adapter LittleFS may lack adapters.wifi; STA used to start from
+     * app_main unconditionally. Create an enabled slot once so load_all finds it. */
+    (void)minihub_config_ensure_adapter_slot("wifi", false);
+#endif
+
     err = minihub_adapter_registry_init();
     if (err != ESP_OK) {
         return;
@@ -245,8 +248,7 @@ void app_main(void)
 
     sntp_init_sync();
 
-    /* Bring up HTTP as soon as config/net are ready — do not wait for radio stacks.
-     * BLE Mesh may still defer ~30s for Zigbee RF sequencing in the background. */
+    /* Bring up HTTP before radio stacks so UI stays reachable during Zigbee form. */
     err = minihub_rules_init(minihub_config_get_rules());
     if (err != ESP_OK) {
         return;
@@ -266,34 +268,6 @@ void app_main(void)
     if (err != ESP_OK) {
         return;
     }
-
-#if CONFIG_MINIHUB_ZIGBEE_SDK && CONFIG_MINIHUB_NET_WIFI_STA
-    /* Always form Zigbee before Wi-Fi when both are built in (RF coexistence). */
-    bool zigbee_enabled = true;
-    if (adapters_cfg) {
-        const cJSON *section = cJSON_GetObjectItem(adapters_cfg, "adapters");
-        const cJSON *zb = cJSON_GetObjectItem(section ? section : adapters_cfg, "zigbee");
-        const cJSON *enabled = cJSON_IsObject(zb) ? cJSON_GetObjectItem(zb, "enabled") : NULL;
-        if (cJSON_IsBool(enabled)) {
-            zigbee_enabled = cJSON_IsTrue(enabled);
-        }
-    }
-    if (zigbee_enabled) {
-        err = minihub_zigbee_wait_ready(60000);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Zigbee not ready (%s) — starting Wi-Fi anyway", esp_err_to_name(err));
-        }
-    }
-    err = minihub_net_start_wifi();
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Wi-Fi start after Zigbee: %s", esp_err_to_name(err));
-    }
-#elif CONFIG_MINIHUB_NET_WIFI_STA
-    err = minihub_net_start_wifi();
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Wi-Fi start: %s", esp_err_to_name(err));
-    }
-#endif
 
     /* L2 / hybrid main.js after adapters started (same order as hub_reload). */
     err = minihub_js_reload();

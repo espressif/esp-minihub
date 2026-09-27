@@ -28,8 +28,9 @@ Kconfig
 --------
 
 1. ``minihub_net_init()`` — netif/事件循环；启动以太网；Wi-Fi **仅注册处理** （日志含 ``wifi STA deferred``）。
-2. 需要射频/BT 堆的适配器启动（Zigbee、BLE Mesh、Matter）。
-3. ``minihub_net_start_wifi()`` — ``esp_wifi_start`` + 连接，或进入配网。
+2. ``minihub_adapter_start_all()`` — 射频互斥后按 Wi-Fi → Zigbee 或 Thread →
+   BLE Mesh → 其它适配器 start。``wifi`` 适配器调用 ``minihub_net_start_wifi()``
+   （``esp_wifi_start`` + 连接，或进入配网）。
 
 默认路由与 STA 连接
 -------------------
@@ -106,8 +107,8 @@ REST：网络配置
 
 **默认路由走以太网但 Wi-Fi 无 IP**
 
-确认 NVS 有 STA 凭据且适配器启动后执行了 ``minihub_net_start_wifi()``。
-默认路由选择不会跳过 STA 连接。
+确认 NVS 有 STA 凭据、``adapters.wifi.enabled`` 为 true，且 ``wifi`` 适配器
+已调用 ``minihub_net_start_wifi()``。默认路由选择不会跳过 STA 连接。
 
 **STA 始终不连接**
 

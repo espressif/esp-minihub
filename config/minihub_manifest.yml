@@ -36,6 +36,7 @@ profiles:
       - minihub_net
       - gen_bmgr_codes
       - adapter_mqtt
+      - adapter_wifi
       - adapter_zigbee
       - adapter_ble_mesh
       - adapter_modbus
@@ -55,6 +56,8 @@ profiles:
       adapters:
       - name: mqtt
         kconfig: MINIHUB_MQTT_ADAPTER
+      - name: wifi
+        kconfig: MINIHUB_NET_WIFI_STA
       - name: zigbee
         kconfig: MINIHUB_ZIGBEE_SDK
       - name: ble_mesh

@@ -9,6 +9,9 @@
 #if CONFIG_MINIHUB_MQTT_ADAPTER
 extern const minihub_adapter_t mqtt_adapter;
 #endif
+#if CONFIG_MINIHUB_NET_WIFI_STA
+extern const minihub_adapter_t wifi_adapter;
+#endif
 #if CONFIG_MINIHUB_ZIGBEE_SDK
 extern const minihub_adapter_t zigbee_adapter;
 #endif
@@ -34,6 +37,13 @@ esp_err_t minihub_adapters_register_all(void)
     err = minihub_adapter_register(&mqtt_adapter);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "register mqtt adapter failed: %s", esp_err_to_name(err));
+        return err;
+    }
+#endif
+#if CONFIG_MINIHUB_NET_WIFI_STA
+    err = minihub_adapter_register(&wifi_adapter);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "register wifi adapter failed: %s", esp_err_to_name(err));
         return err;
     }
 #endif

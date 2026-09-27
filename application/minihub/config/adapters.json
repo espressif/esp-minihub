@@ -1,5 +1,8 @@
 {
   "adapters": {
+    "wifi": {
+      "enabled": true
+    },
     "mqtt": {
       "enabled": false,
       "broker": "127.0.0.1",

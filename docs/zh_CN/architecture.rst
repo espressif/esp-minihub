@@ -22,8 +22,8 @@
                                   |
    +------------------------------------------------------------------+
    |  设备接入                                                        |
-   |  静态适配器 (Kconfig)   Zigbee / BLE Mesh / Matter / Thread      |
-   |                         MQTT / Modbus / ...                      |
+   |  静态适配器 (Kconfig)   Wi-Fi / Zigbee / BLE Mesh / Matter       |
+   |                         Thread / MQTT / Modbus / ...             |
    |  Store 插件             厂商云 / OEM，无需维护 Host              |
    |  Host 二次开发          更省内存，可调用 IDF / MiniHub API       |
    +------------------------------------------------------------------+
@@ -38,8 +38,8 @@
 设计原则
 --------
 
-**Core 保持协议中立。** 乐鑫维护的射频/IP 栈 (Zigbee、BLE Mesh、Matter、Thread、
-MQTT、Modbus) 可以静态链入 Host。厂商云与 OEM 差异不要写进 Core，应通过 Store
+**Core 保持协议中立。** 乐鑫维护的射频/IP 栈（Wi-Fi STA 适配器、Zigbee、BLE Mesh、
+Matter、Thread、MQTT、Modbus）可以静态链入 Host。厂商云与 OEM 差异不要写进 Core，应通过 Store
 插件或基于 Host 的二次开发交付。这样通用 Host 可以在不含第三方凭证的情况下编译。
 
 **点位是唯一的自动化 ABI。** 一台物理设备一条 point（``协议.设备``）。参数在
@@ -104,13 +104,14 @@ LittleFS 上。
 1. Flash 分发器、挂载 ``/data`` 、 ``minihub_config_init()``
 2. ``minihub_core_init()`` — 点位、事件总线、命令路由
 3. ``minihub_net_init()`` — 启动以太网；Wi-Fi **仅准备** （延迟 STA）
-4. 启动静态射频栈（Zigbee、BLE Mesh、Matter、Thread 等，视构建而定）
+4. 按构建做 Matter/Thread bootstrap（``main`` 里 CHIP / OpenThread 顺序）
 5. ``minihub_module_loader_init()`` ；从 ``/store/modules/`` 加载 Store 模块
-6. ``minihub_adapter_load_all()`` + ``minihub_adapter_start_all()``
-7. ``minihub_net_start_wifi()`` — STA 连接或配网
-8. ``minihub_web`` HTTP 服务；MCP 工具注册；日志 ``MiniHub ready``
+6. ``minihub_web`` HTTP 服务（射频 start 期间 UI 仍可访问）
+7. ``minihub_adapter_load_all()`` + ``minihub_adapter_start_all()`` — STA 连接由
+   ``wifi`` 适配器完成；若 Wi-Fi 与 Zigbee/Thread 同时开，射频互斥会跳过
+   BLE Mesh（见 :doc:`radios`）。随后 MCP / 日志 ``MiniHub ready``。
 
-日志 ``wifi STA deferred`` 表示第 7 步尚未执行，属正常现象。见 :doc:`networking`。
+日志 ``wifi STA deferred`` 表示 ``wifi`` 适配器尚未 start，属正常现象。见 :doc:`networking`。
 
 Hub 软重载
 ----------
