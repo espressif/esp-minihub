@@ -362,6 +362,18 @@ static esp_err_t api_auth(httpd_req_t *req)
         minihub_auth_clear_session_cookie(req);
         return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "unauthorized");
     }
+    /* Writes are deliberate user actions, so they count as presence; the GET
+     * polls the console runs every second deliberately do not. */
+    switch (req->method) {
+    case HTTP_POST:
+    case HTTP_PUT:
+    case HTTP_PATCH:
+    case HTTP_DELETE:
+        minihub_auth_touch(req);
+        break;
+    default:
+        break;
+    }
     return ESP_OK;
 }
 
@@ -593,6 +605,9 @@ static esp_err_t handle_root(httpd_req_t *req)
     if (minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
         return send_login_redirect(req);
     }
+    /* Document load = the user is here. Only navigations reset the idle timer;
+     * API polls and static asset GETs deliberately do not. */
+    minihub_auth_touch(req);
     return send_preinstall_index_or_fallback(req);
 #else
     httpd_resp_set_status(req, "404 Not Found");

@@ -12,7 +12,7 @@
 
 #define MINIHUB_WEB_USERNAME "admin"
 #define MINIHUB_AUTH_SESS_HEX_LEN 64
-/** Idle timeout: no authenticated request for this long → session ends. */
+/** Idle timeout: no page navigation for this long → session ends. */
 #define MINIHUB_AUTH_SESS_SEC 300
 /** Absolute cap from login (even if the SPA keeps polling). */
 #define MINIHUB_AUTH_SESS_ABS_SEC (8 * 3600)
@@ -32,10 +32,18 @@ bool minihub_auth_password_set(void);
  * Allow the request: valid ``mh_sess`` cookie, or ``Authorization: Bearer``
  * when a Hub API token is configured.
  *
- * On success, slides the **idle** timer (so an open console that polls stays
- * signed in). Absolute lifetime from login is never extended.
+ * Read-only: never extends the session. Background polling must not keep a
+ * console signed in — see minihub_auth_touch() for the navigation-based reset.
+ * Absolute lifetime from login is never extended either way.
  */
 esp_err_t minihub_auth_check(httpd_req_t *req);
+
+/**
+ * Slide the idle timer and re-issue the session cookie. Call only where a
+ * browser actually loads a page (document navigation), so an auto-refreshing
+ * tab still times out while a manual reload or a new page visit resets it.
+ */
+void minihub_auth_touch(httpd_req_t *req);
 
 esp_err_t minihub_auth_check_token(const char *token);
 

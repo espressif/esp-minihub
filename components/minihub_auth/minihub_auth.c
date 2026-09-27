@@ -204,8 +204,6 @@ esp_err_t minihub_auth_check(httpd_req_t *req)
             if (!sess_alive()) {
                 sess_clear(req);
             } else {
-                /* Any authenticated use slides idle (GET polls count as presence). */
-                sess_touch_idle(req);
                 return ESP_OK;
             }
         }
@@ -220,6 +218,14 @@ esp_err_t minihub_auth_check(httpd_req_t *req)
     return bearer_ok(req) ? ESP_OK : ESP_ERR_INVALID_STATE;
 }
 
+void minihub_auth_touch(httpd_req_t *req)
+{
+    if (!web_login_on() || !sess_alive()) {
+        return;
+    }
+    sess_touch_idle(req);
+}
+
 esp_err_t minihub_auth_check_token(const char *token)
 {
     if (!token) {
@@ -227,7 +233,6 @@ esp_err_t minihub_auth_check_token(const char *token)
     }
     if (web_login_on() && s_sess_hex[0] && strcmp(token, s_sess_hex) == 0) {
         if (sess_alive()) {
-            sess_touch_idle(NULL);
             return ESP_OK;
         }
         sess_clear(NULL);
