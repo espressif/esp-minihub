@@ -3211,7 +3211,7 @@ static esp_err_t handle_api_modules_manage(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3287,7 +3287,7 @@ static esp_err_t handle_api_packs_manage(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3462,7 +3462,7 @@ static esp_err_t handle_api_store_install(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3514,7 +3514,7 @@ static esp_err_t handle_api_store_upgrade(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3560,7 +3560,7 @@ static esp_err_t handle_api_store_uninstall(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3882,7 +3882,7 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -4134,7 +4134,7 @@ static esp_err_t handle_api_config_adapters_put(httpd_req_t *req)
     cJSON_Delete(root);
 
     if (do_reload) {
-        err = minihub_hub_reload();
+        err = minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();

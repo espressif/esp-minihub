@@ -335,11 +335,16 @@ function renderLocalUser() {
 }
 async function loadAdapters() {
     try {
-        enabledAdapters = await (await fetch('/api/adapters')).json();
+        const r = await fetch('/api/adapters');
+        if (!r.ok) return false;
+        enabledAdapters = await r.json();
         if (filter !== 'all' && !adapterEnabled(filter)) filter = 'all';
         renderToolbar();
         if (view === 'overview') renderOverview();
-    } catch (e) {}
+        return true;
+    } catch (e) {
+        return false;
+    }
 }
 async function loadMeta() {
     try {

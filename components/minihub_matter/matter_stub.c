@@ -77,6 +77,12 @@ esp_err_t minihub_matter_commission_wait(uint32_t timeout_ms)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t minihub_matter_commission_cancel(uint64_t node_id)
+{
+    (void)node_id;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 esp_err_t minihub_matter_set_pending_device(uint64_t node_id, const uint16_t *endpoints,
                                             size_t endpoint_count, bool merge_existing,
                                             bool do_reload, const char *transport)

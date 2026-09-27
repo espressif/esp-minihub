@@ -55,6 +55,14 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
 esp_err_t minihub_matter_commission_wait(uint32_t timeout_ms);
 
 /**
+ * Abort an in-flight commissioning for ``node_id``: drops the pending device
+ * record (so finalize cannot re-add a deleted row), releases the pairing slot
+ * and leaves last_error "commissioning cancelled". ESP_ERR_NOT_FOUND when that
+ * node is not being commissioned.
+ */
+esp_err_t minihub_matter_commission_cancel(uint64_t node_id);
+
+/**
  * After commission_code_ex returns ESP_OK, stash the device upsert that must
  * run only on commissioning_success. Cleared on failure or 180s watchdog.
  * Relies on weak minihub_hub_reload_async when do_reload is true.

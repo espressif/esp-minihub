@@ -362,6 +362,11 @@ esp_err_t minihub_matter_device_remove(const char *point_id)
         cJSON *item = cJSON_GetArrayItem(devices, i);
         const cJSON *pid = cJSON_GetObjectItem(item, "point_id");
         if (cJSON_IsString(pid) && strcmp(pid->valuestring, point_id) == 0) {
+            const cJSON *nid = cJSON_GetObjectItem(item, "node_id");
+            uint64_t node = cJSON_IsString(nid) ? parse_node_id(nid->valuestring, 0) : 0;
+            if (node && minihub_matter_commission_cancel(node) == ESP_OK) {
+                ESP_LOGI(TAG, "aborted in-flight commissioning for node %" PRIu64, node);
+            }
             cJSON_DeleteItemFromArray(devices, i);
             esp_err_t err = minihub_config_save_adapters(adapters_root);
             if (err == ESP_OK) {

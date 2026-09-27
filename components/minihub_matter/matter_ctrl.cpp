@@ -499,6 +499,32 @@ static bool ensure_pairing_slot_free(void)
     return true;
 }
 
+esp_err_t minihub_matter_commission_cancel(uint64_t node_id)
+{
+    bool mine = false;
+    portENTER_CRITICAL(&s_commission_mux);
+    if (s_commission_phase == COMMISSION_PHASE_WAITING) {
+        mine = s_pending_device.valid ? (s_pending_device.node_id == node_id)
+                                      : (s_commission_node_id == node_id);
+        if (mine) {
+            clear_pending_device_locked();
+            s_commission_stage = COMMISSION_STAGE_NONE;
+        }
+    }
+    portEXIT_CRITICAL(&s_commission_mux);
+    if (!mine) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    /* Dropping the pending record is what makes this stick: without it
+     * finalize would re-add the device the caller just deleted. */
+    stop_commission_watchdog();
+    (void)ensure_pairing_slot_free();
+    set_error("commissioning cancelled");
+    signal_commission_done(ESP_FAIL);
+    ESP_LOGW(TAG, "commissioning cancelled for node %" PRIu64, node_id);
+    return ESP_OK;
+}
+
 static std::string normalize_pairing_code(const char *pairing_code)
 {
     if (!pairing_code || !pairing_code[0]) {

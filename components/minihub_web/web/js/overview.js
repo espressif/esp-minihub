@@ -808,7 +808,7 @@ function cardHtml(p) {
     }
     const clickAttr = (clickFn && !commissioning) ? (' onclick="' + clickFn + '(\'' + p.point_id + '\',event)"') : '';
     const valShow = (function() {
-        if (cPhase === 'waiting' || (commissioning && cPhase !== 'failed')) return '等待配网中';
+        if (cPhase === 'waiting' || (commissioning && cPhase !== 'failed')) return matterCommissionLabel(p, cPhase) || '等待配网中';
         if (cPhase === 'failed') return '配网失败';
         if (p.type === 'button') return (p.online ? '就绪' : '离线');
         if (isCover && Number.isFinite(pct)) return pct + '%';
@@ -835,7 +835,7 @@ function cardHtml(p) {
     }
     const proto = (typeof pointProtocol === 'function') ? pointProtocol(p) : '';
     let onlineLab;
-    if (cPhase === 'waiting') onlineLab = '等待配网中' + (proto ? (' · ' + esc(proto)) : '');
+    if (cPhase === 'waiting') onlineLab = matterCommissionLabel(p, cPhase) + (proto ? (' · ' + esc(proto)) : '');
     else if (cPhase === 'failed') onlineLab = '配网失败' + (proto ? (' · ' + esc(proto)) : '');
     else onlineLab = (p.online ? '在线' : '离线') + (proto ? (' · ' + esc(proto)) : '');
     const valCls = cPhase === 'waiting' ? 'pending' : (cPhase === 'failed' ? 'off' : (on ? 'on' : 'off'));
@@ -1561,6 +1561,17 @@ function closeMatterAdd() {
 }
 
 const MATTER_STAGE_LABEL = { discovering: '设备发现中', binding: '设备绑定中', activating: '设备激活中' };
+
+/* A waiting row is only "配网中" while the Hub is actually running that node;
+ * the live stage comes from /api/matter/status, not from adapters.json. */
+function matterCommissionLabel(p, cPhase) {
+    if (cPhase !== 'waiting') return '';
+    const st = (typeof matterStatus === 'undefined') ? null : matterStatus;
+    const running = st && st.commission === 'running' && st.commission_node_id != null &&
+        String(st.commission_node_id) === String((p.props || {}).node_id);
+    if (!running) return '等待配网中';
+    return '配网中 · ' + (MATTER_STAGE_LABEL[st.commission_stage] || '进行中');
+}
 
 async function pollMatterCommissionCard(nodeId) {
     const deadline = Date.now() + 180000;
