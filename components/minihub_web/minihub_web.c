@@ -21,6 +21,7 @@
 #include "esp_check.h"
 #include "esp_crt_bundle.h"
 #include "esp_log.h"
+#include "esp_rom_crc.h"
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "cJSON.h"
@@ -143,15 +144,59 @@ static bool web_path_safe(const char *rel)
     return true;
 }
 
+/* littlefs reports no usable mtime here (st_mtime comes back 0xffffffff), so a
+ * size+mtime tag would degrade to size-only and 304 a same-length edit. Fold a
+ * CRC32 over the bytes instead; the extra read pass is cheap next to the send. */
+static bool file_etag(const char *path, off_t size, char *out, size_t out_len)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return false;
+    }
+    uint8_t buf[512];
+    uint32_t crc = 0;
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        crc = esp_rom_crc32_le(crc, buf, n);
+    }
+    fclose(f);
+    snprintf(out, out_len, "\"%lx-%lx\"", (unsigned long)size, (unsigned long)crc);
+    return true;
+}
+
 static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
 {
+    struct stat st;
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    /* Console JS/CSS is ~300 KB and no-cache means the browser revalidates every
+     * load; without an ETag that revalidation re-sends the whole body. */
+    char etag[32];
+    if (!file_etag(path, st.st_size, etag, sizeof(etag))) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    char inm[64];
+    if (httpd_req_get_hdr_value_str(req, "If-None-Match", inm, sizeof(inm)) == ESP_OK &&
+        strcmp(inm, etag) == 0) {
+        httpd_resp_set_status(req, "304 Not Modified");
+        httpd_resp_set_hdr(req, "ETag", etag);
+        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+        return httpd_resp_send(req, NULL, 0);
+    }
+
     FILE *f = fopen(path, "rb");
     if (!f) {
         return ESP_ERR_NOT_FOUND;
     }
 
-    /* 4KB PSRAM chunk: keep the console HTML off the internal heap. */
-    const size_t cap = 4096;
+    /* 16KB PSRAM chunk, and do not shrink this without re-measuring: a 4 KB
+     * chunk costs ~1 s per chunk here (4 KB splits into 3 MSS segments and each
+     * write waits on the peer's delayed ACK), so the console's ~300 KB of
+     * JS/CSS took 30 s+ to load. At 16 KB the same assets run 50-100x faster.
+     * PSRAM keeps the console HTML off the internal heap. */
+    const size_t cap = 16384;
     char *buf = heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!buf) {
         buf = malloc(cap);
@@ -163,6 +208,7 @@ static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
 
     httpd_resp_set_type(req, content_type_for_path(path));
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    httpd_resp_set_hdr(req, "ETag", etag);
     size_t n;
     bool sent_any = false;
     while ((n = fread(buf, 1, cap, f)) > 0) {
