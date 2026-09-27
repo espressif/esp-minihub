@@ -9,7 +9,7 @@
 | `variants/*.yml` | Optional HW recipes (e.g. LCD); `./tools/apply_sdkconfig_variant.sh lcd` |
 | `local.overrides` | Lab SSID (gitignored) |
 
-Shared fragments: repo-root `config/sdkconfig/`.
+Shared fragments: repo-root `configs/sdkconfig/`.
 
 ```bash
 ./tools/build_firmware.py -app minihub build              # reconcile stacks with sdkconfig
@@ -19,4 +19,4 @@ Shared fragments: repo-root `config/sdkconfig/`.
 # ./tools/apply_sdkconfig_variant.sh lcd
 ```
 
-Boot order: BLE Mesh / Zigbee adapters start before `esp_wifi_init()` (see `minihub_net_start_wifi`). Radio memory trim: `config/sdkconfig/feature/radio_coexist_memory.defaults`.
+Boot order: BLE Mesh / Zigbee adapters start before `esp_wifi_init()` (see `minihub_net_start_wifi`). Radio memory trim: `configs/sdkconfig/feature/radio_coexist_memory.defaults`.

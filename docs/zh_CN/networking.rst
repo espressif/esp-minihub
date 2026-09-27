@@ -22,7 +22,7 @@ Kconfig
 * ``CONFIG_MINIHUB_NET_WIFI_SOFTAP`` — SoftAP/STA 由 ``minihub_net`` 外管理
 * ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — 无 NVS 凭据时 SoftAP 和/或 BLE 配网
 
-片段：``config/sdkconfig/feature/wifi_sta.defaults``、``eth.defaults``。
+片段：``configs/sdkconfig/feature/wifi_sta.defaults``、``eth.defaults``。
 
 启动顺序
 --------

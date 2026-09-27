@@ -130,11 +130,11 @@ same physical device.
 Where files live
 ----------------
 
-Factory JSON at **build** time (first existing file wins; repo ``config/`` is
+Factory JSON at **build** time (first existing file wins; repo ``configs/`` is
 fallback only):
 
-1. ``application/APP/config/`` plus the file name
-2. else repo ``config/`` plus the same name (only if step 1 is missing)
+1. ``application/APP/configs/`` plus the file name
+2. else repo ``configs/`` plus the same name (only if step 1 is missing)
 
 On device after first boot the live copies are:
 

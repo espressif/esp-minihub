@@ -7,7 +7,7 @@ dependencies.lock
 # Board-manager generated codes (idf.py bmgr); per-product, not Core
 application/*/components/gen_bmgr_codes/
 
-# IDF-generated Kconfig results only (not config/sdkconfig/ source trees)
+# IDF-generated Kconfig results only (not configs/sdkconfig/ source trees)
 /sdkconfig
 /sdkconfig.old
 application/*/sdkconfig
@@ -26,7 +26,7 @@ cmake/generated/
 ci_artifacts/
 
 # Lab-only sdkconfig fragments (copy from *.example)
-**/config/sdkconfig/local.overrides
+**/configs/sdkconfig/local.overrides
 
 # Tooling / OS
 __pycache__/

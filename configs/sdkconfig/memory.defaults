@@ -4,22 +4,31 @@
 # CONFIG_MBEDTLS_HARDWARE_AES is not set
 # CONFIG_ESPTOOLPY_NO_STUB is not set
 # CONFIG_ESP_ALLOW_BSS_SEG_EXTERNAL_MEMORY is not set
-# Do not put .bss in PSRAM on S31 XIP: flash_rodata_seg and ext_ram_seg share
-# drom. CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY emits .ext_ram.dummy which
-# then rewinds the location counter past .flash.rodata_noload (ld: "cannot
-# move location counter backwards"). Keep NOINIT internal as well.
-# CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY is not set
+# EXT_RAM_BSS_ATTR tables live in PSRAM. On S31 XIP, flash_rodata_seg and
+# ext_ram_seg share drom; if .ext_ram.dummy rewinds past .flash.rodata_noload
+# the link fails with "cannot move location counter backwards".
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
 # CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY is not set
 # CONFIG_ESP_WIFI_IRAM_OPT is not set
 # CONFIG_ESP_WIFI_RX_IRAM_OPT is not set
 # CONFIG_ESP_WIFI_EXTRA_IRAM_OPT is not set
+# L3 modules (ELF_LOADER_LOAD_PSRAM) need I-fetch from PSRAM heap. XIP selects
+# SPIRAM_FETCH_INSTRUCTIONS / SPIRAM_RODATA / SPIRAM_FLASH_LOAD_TO_PSRAM.
 CONFIG_SPIRAM_XIP_FROM_PSRAM=y
+# Match the working Host sdkconfig (Kconfig default is y).
+# CONFIG_SPIRAM_PRE_CONFIGURE_MEMORY_PROTECTION is not set
 CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=0
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
 CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=16384
 CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
 CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
+# xTaskCreate stacks in PSRAM (TCB stays internal). Flash/NVS from those tasks
+# goes through esp_flash_dispatcher.
+CONFIG_FREERTOS_PLACE_TASK_STACKS_IN_EXT_RAM=y
+# Keep off: AUTO_SUSPEND + PSRAM .so entry can Instruction-fault on S31 even
+# after IBUS1 re-arm (module_dl). Default is n; pin explicitly for Host CI.
+# CONFIG_SPI_FLASH_AUTO_SUSPEND is not set
 # Wi-Fi DMA buffers must fit internal DRAM (claw_minihub/sdkconfig values).
 # Default 16/32 static/dynamic RX OOMs under XIP + Zigbee + BTDM.
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=3

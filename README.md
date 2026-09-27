@@ -67,7 +67,7 @@ a device adapter). Details: [getting started](docs/en/getting_started.rst).
 |------|------|
 | `application/` | Per-product firmware (folder name = product) |
 | `components/` | Shared Core, Host adapters, Store runtime |
-| `config/` | Shared manifest base, adapter seeds, sdkconfig fragments |
+| `configs/` | Shared manifest base, adapter seeds, sdkconfig fragments |
 | `examples/` | Standalone Store demos — one directory: [`plugins/`](examples/README.md) |
 | `tools/` | Build, pack, Store server, CI |
 | `docs/` | Programming Guide (RST / esp-docs) |

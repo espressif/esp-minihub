@@ -2,8 +2,8 @@
 # Product profiles live in application/<name>/manifest.yml and are merged at sync time:
 #   MINIHUB_APP=<name> python tools/sync_host_manifest.py
 #
-# Sdkconfig recipe = application/<app>/config/sdkconfig/app.yml
-# Shared fragments: config/sdkconfig/README.md
+# Sdkconfig recipe = application/<app>/configs/sdkconfig/app.yml
+# Shared fragments: configs/sdkconfig/README.md
 
 version: '1.0'
 profile: minihub

@@ -65,7 +65,7 @@ python3 tools/dev_sync.py --port 9000
 
 ### `apply_sdkconfig_variant.sh`
 
-把 `application/<app>/config/sdkconfig/variants/<name>.yml` 覆盖到 `app.yml`。
+把 `application/<app>/configs/sdkconfig/variants/<name>.yml` 覆盖到 `app.yml`。
 
 ```bash
 ./tools/apply_sdkconfig_variant.sh lcd
@@ -78,7 +78,7 @@ python3 tools/dev_sync.py --port 9000
 
 ### `sync_host_manifest.py`
 
-合并 `config/minihub_manifest.yml`（`_host_base`）与 `application/<app>/manifest.yml` → 组件 require / adapters 配置。
+合并 `configs/minihub_manifest.yml`（`_host_base`）与 `application/<app>/manifest.yml` → 组件 require / adapters 配置。
 
 ```bash
 python3 tools/sync_host_manifest.py --app minihub
@@ -86,7 +86,7 @@ python3 tools/sync_host_manifest.py --app minihub
 
 ### `product_assets.py`
 
-解析产品配置 JSON（先 `application/<app>/config/`，再仓库 `config/`），以及 `manifest.yml` → `store_preinstall` 的工厂 Store id。
+解析产品配置 JSON（先 `application/<app>/configs/`，再仓库 `configs/`），以及 `manifest.yml` → `store_preinstall` 的工厂 Store id。
 
 ```bash
 python3 tools/product_assets.py --app minihub resolve adapters.json

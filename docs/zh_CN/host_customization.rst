@@ -57,17 +57,17 @@ Host 二次开发
         - wifi_sta
         - dynamic_modules
 
-3. **编辑** ``application/myhub/config/sdkconfig/app.yml``
+3. **编辑** ``application/myhub/configs/sdkconfig/app.yml``
 
    ``features:`` 须与 manifest 的 ``sdkconfig_features`` 对齐（合成 sdkconfig
    以 ``app.yml`` 为准）。
 
 4. 出厂配置（可选）
 
-   * ``application/myhub/config/adapters.json``
-   * ``application/myhub/config/rules.json`` 、 ``scenes.json``
+   * ``application/myhub/configs/adapters.json``
+   * ``application/myhub/configs/rules.json`` 、 ``scenes.json``
 
-   产品目录没有该文件时，构建回退到仓库 ``config/*.json`` 。
+   产品目录没有该文件时，构建回退到仓库 ``configs/*.json`` 。
 
    类型文案与控件 **不是** 产品 JSON，而在 Host
    ``components/minihub_device_widget/model/*.csv``。新类型改那里，或在已运行
@@ -97,7 +97,7 @@ Host 二次开发
    application/myhub/
      manifest.yml
      partitions.csv
-     config/
+     configs/
        adapters.json
        rules.json
        scenes.json

@@ -155,7 +155,7 @@ Hub 软重载
 --------
 
 * **构建期：** Kconfig、 ``manifest.yml`` 、 ``sdkconfig_features``
-* **出厂配置：** ``application/APP/config/adapters.json`` 或仓库 ``config/``
+* **出厂配置：** ``application/APP/configs/adapters.json`` 或仓库 ``configs/``
 * **运行时：** Web UI、REST ``PUT /api/config/adapters`` 、
   ``PUT /api/dev/catalog/…`` 、通过 Host 虚表
   ``config_save_adapters`` 的模块 RPC
@@ -183,7 +183,7 @@ Hub 软重载
    * - 接口面
      - 章节 / 产物
    * - 产品 profile
-     - ``manifest.yml`` 、 ``partitions.csv`` 、 ``config/sdkconfig/app.yml`` —
+     - ``manifest.yml`` 、 ``partitions.csv`` 、 ``configs/sdkconfig/app.yml`` —
        :doc:`host_customization`
    * - 运行时 JSON / 类型目录
      - ``adapters.json`` 、 ``rules.json`` 、 ``scenes.json`` —

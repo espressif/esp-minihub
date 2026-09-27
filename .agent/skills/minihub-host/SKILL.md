@@ -14,8 +14,8 @@ description: Develop MiniHub Host firmware products (application folder, Kconfig
 
 - Product = `application/<app>/` (`-app` / `MINIHUB_APP`).
 - Shared Core = `components/minihub_*` and bundled adapters in `components/minihub_adapters/`. Product import: `cmake/minihub_bundle/minihub_import.cmake` + `minihub_register_kconfig()`. One-yml: `path: …/cmake/minihub_bundle`.
-- Seeds: `application/<app>/config/{adapters,rules,scenes}.json` else repo `config/`.
-- Manifest: `application/<app>/manifest.yml` extends `config/minihub_manifest.yml` `_host_base`.
+- Seeds: `application/<app>/configs/{adapters,rules,scenes}.json` else repo `configs/`.
+- Manifest: `application/<app>/manifest.yml` extends `configs/minihub_manifest.yml` `_host_base`.
 - Device UI catalog: `components/minihub_device_widget/model/*.csv` (closed widgets: toggle / slider / dropdown / text / hidden) → runtime `/data/config/devices.csv`. Core stays type-agnostic (`minihub_point_t`; one device = one point, params in `props.params`).
 
 ## Host vs Store (do not confuse)
@@ -45,7 +45,7 @@ L1/L2: no Host link step — `python3 tools/pack_store_module.py pack <id>` then
 ## Workflow
 
 1. Copy `application/minihub` → `application/<new>` only if creating a new product.
-2. Edit **app** `manifest.yml` / `config/sdkconfig/app.yml` / JSON seeds. Touch `_host_base` only for all products.
+2. Edit **app** `manifest.yml` / `configs/sdkconfig/app.yml` / JSON seeds. Touch `_host_base` only for all products.
 3. `MINIHUB_APP=<app> python3 tools/sync_host_manifest.py`
 4. Build (IDF ~6.2, `esp32s31`):
 

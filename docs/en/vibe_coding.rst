@@ -29,7 +29,7 @@ What the assistant must follow
 ------------------------------
 
 * Keep Host Core ecosystem-agnostic: no vendor cloud tokens, default adapters, or
-  vendor rules in ``components/minihub_*`` or generic ``config/``
+  vendor rules in ``components/minihub_*`` or generic ``configs/``
 * Vendor / demo plugins: ``examples/plugins/ID/`` or
   ``MINIHUB_PLUGIN_DIRS``; pack as ``.mhub``
 * Branch names use underscores, not hyphens (e.g. ``feature/modbus_tcp_client``)

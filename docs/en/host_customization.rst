@@ -58,18 +58,18 @@ Step-by-step: create ``myhub``
         - wifi_sta
         - dynamic_modules
 
-3. **Edit** ``application/myhub/config/sdkconfig/app.yml``
+3. **Edit** ``application/myhub/configs/sdkconfig/app.yml``
 
    ``features:`` must match the manifest ``sdkconfig_features`` (compose uses
    ``app.yml``).
 
 4. **Factory JSON** (optional)
 
-   * ``application/myhub/config/adapters.json``
-   * ``application/myhub/config/rules.json``, ``scenes.json``
+   * ``application/myhub/configs/adapters.json``
+   * ``application/myhub/configs/rules.json``, ``scenes.json``
 
    If a file is missing under the product, the build falls back to repo
-   ``config/*.json``.
+   ``configs/*.json``.
 
    Type labels and widgets are **not** product JSON. They live in Host
    ``components/minihub_device_widget/model/*.csv``. Add a type there, or
@@ -101,7 +101,7 @@ Product file tree (typical)
    application/myhub/
      manifest.yml
      partitions.csv
-     config/
+     configs/
        adapters.json
        rules.json
        scenes.json

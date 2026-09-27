@@ -15,7 +15,7 @@ Apps (-app / --app; folder under application/):
   minihub         Generic Host (default)
 
   Product = application/<app>/ (MINIHUB_APP), e.g. minihub.
-  Sdkconfig recipe: application/<app>/config/sdkconfig/app.yml
+  Sdkconfig recipe: application/<app>/configs/sdkconfig/app.yml
 
 Stacks (lowercase, optional):
   ble_mesh | zigbee | matter | thread
@@ -508,7 +508,7 @@ def rainmaker_build_enabled() -> bool:
     """Whether to link full esp-rainmaker (submodule when enabled).
 
     Force with MINIHUB_BUILD_RAINMAKER=1|0. Default for minihub: follow
-    application/minihub/config/sdkconfig/feature/rainmaker.defaults.
+    application/minihub/configs/sdkconfig/feature/rainmaker.defaults.
     """
     if APP_NAME != "minihub":
         return os.environ.get("MINIHUB_BUILD_RAINMAKER") == "1"
@@ -519,7 +519,7 @@ def rainmaker_build_enabled() -> bool:
         ROOT
         / "application"
         / "minihub"
-        / "config"
+        / "configs"
         / "sdkconfig"
         / "feature"
         / "rainmaker.defaults"

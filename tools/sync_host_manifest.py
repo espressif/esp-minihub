@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Sync shared + per-app manifests → idf_component.yml, CMake, adapters_setup.
 
-Shared base: config/minihub_manifest.yml (profiles._host_base, …)
+Shared base: configs/minihub_manifest.yml (profiles._host_base, …)
 Product:     application/<app>/manifest.yml
 """
 
@@ -191,7 +191,7 @@ def merge_app_manifest(
     profile_body = {k: v for k, v in raw.items() if k not in _APP_META_KEYS}
     profiles = manifest.setdefault("profiles", {})
     if not isinstance(profiles, dict):
-        raise SystemExit("config/minihub_manifest.yml: profiles must be a mapping")
+        raise SystemExit("configs/minihub_manifest.yml: profiles must be a mapping")
 
     profiles[app_name] = profile_body
     for vname, vprof in variants.items():
@@ -203,7 +203,7 @@ def merge_app_manifest(
 
 
 def sync(project_root: Path, app_name: str) -> None:
-    manifest_path = project_root / "config" / "minihub_manifest.yml"
+    manifest_path = project_root / "configs" / "minihub_manifest.yml"
     manifest = load_yaml(manifest_path)
 
     app_name = (app_name or "minihub").strip() or "minihub"
@@ -233,7 +233,7 @@ def sync(project_root: Path, app_name: str) -> None:
         if profile_name not in (manifest.get("profiles") or {}):
             raise SystemExit(
                 f"No profile for app={app_name}. Add application/{app_name}/manifest.yml "
-                f"or a profiles entry in config/minihub_manifest.yml"
+                f"or a profiles entry in configs/minihub_manifest.yml"
             )
 
     prof = resolve_profile(manifest, profile_name)

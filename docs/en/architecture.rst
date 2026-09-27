@@ -162,7 +162,7 @@ Configuration sources
 ---------------------
 
 * **Build time:** Kconfig, ``manifest.yml``, ``sdkconfig_features``
-* **Factory JSON:** ``application/APP/config/adapters.json`` or repo ``config/``
+* **Factory JSON:** ``application/APP/configs/adapters.json`` or repo ``configs/``
 * **Runtime:** Web UI, REST ``PUT /api/config/adapters``,
   ``PUT /api/dev/catalog/…``, module RPC that calls
   ``config_save_adapters`` via host vtable
@@ -190,7 +190,7 @@ Supported extension surface for OEM Host and Store plugins.
    * - Surface
      - Chapter / artifact
    * - Product profile
-     - ``manifest.yml``, ``partitions.csv``, ``config/sdkconfig/app.yml`` —
+     - ``manifest.yml``, ``partitions.csv``, ``configs/sdkconfig/app.yml`` —
        :doc:`host_customization`
    * - Runtime JSON / catalog
      - ``adapters.json``, ``rules.json``, ``scenes.json`` —

@@ -21,7 +21,7 @@ MiniHub 把 **产品** 与 **Core** 分开：
 * ``components/`` — 共享 Core、协议适配器。Store 源码在
   ``examples/plugins/`` 或 ``MINIHUB_PLUGIN_DIRS``。所有产品都链接 Core
   与适配器，不要拷进 ``application/APP/``。
-* 仓库根 ``config/`` — 共享 manifest 基座（``config/minihub_manifest.yml`` 里的
+* 仓库根 ``configs/`` — 共享 manifest 基座（``configs/minihub_manifest.yml`` 里的
   ``_host_base``）以及共享 sdkconfig 片段。
 
 选择产品：``-app APP`` 或 ``MINIHUB_APP=APP`` （默认 ``minihub``）。
@@ -36,7 +36,7 @@ MiniHub 把 **产品** 与 **Core** 分开：
      manifest.yml
      partitions.csv
      CMakeLists.txt
-     config/
+     configs/
        adapters.json
        sdkconfig/app.yml
      main/
@@ -47,11 +47,11 @@ MiniHub 把 **产品** 与 **Core** 分开：
        adapters_setup.generated.c   生成文件，勿手改
        idf_component.yml           生成文件，勿手改
 
-``rules.json`` / ``scenes.json`` 可放在产品 ``config/``，缺失时回退到仓库
-``config/``。
+``rules.json`` / ``scenes.json`` 可放在产品 ``configs/``，缺失时回退到仓库
+``configs/``。
 
 ``tools/sync_host_manifest.py`` 把产品 ``application/APP/manifest.yml``
-（``extends: _host_base``）与仓库 ``config/minihub_manifest.yml`` 里的共享基座
+（``extends: _host_base``）与仓库 ``configs/minihub_manifest.yml`` 里的共享基座
 ``_host_base`` 合并，再写出 IDF 构建要用的生成文件（勿手改）：
 
 * ``application/APP/main/idf_component.yml``
@@ -60,7 +60,7 @@ MiniHub 把 **产品** 与 **Core** 分开：
 
 ``./tools/build_firmware.py`` 编译前会自动跑这一步。
 
-``sdkconfig_features`` 须与 ``config/sdkconfig/app.yml`` 的 ``features:`` 一致。
+``sdkconfig_features`` 须与 ``configs/sdkconfig/app.yml`` 的 ``features:`` 一致。
 Compose：``tools/compose_sdkconfig.py``。协议栈列表：
 ``cmake/generated/sdkconfig_stacks.gen``。
 
@@ -75,7 +75,7 @@ Compose：``tools/compose_sdkconfig.py``。协议栈列表：
 留在 ``components/`` （或 Store 插件）的：
 
 * 共享 Hub 服务与适配器
-* 厂商云、OEM 设备目录、云 token —— 不要写进公开 ``config/`` 种子或 Core。
+* 厂商云、OEM 设备目录、云 token —— 不要写进公开 ``configs/`` 种子或 Core。
   用 ``.mhub`` 或私有产品树交付。
 
 Web 控制台来自 ``components/minihub_web/web/``，打进

@@ -3,7 +3,7 @@
 """Compose SDKCONFIG_DEFAULTS from shared + per-app sdkconfig fragments.
 
 Product = application/<app>/ folder (MINIHUB_APP), e.g. minihub.
-Each product has one recipe: application/<app>/config/sdkconfig/app.yml
+Each product has one recipe: application/<app>/configs/sdkconfig/app.yml
 Optional HW recipes: variants/*.yml (copy over app.yml when needed).
 """
 
@@ -17,8 +17,8 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore
 
-SHARED_DIR = "config/sdkconfig"
-APP_SDK_REL = "config/sdkconfig"  # under application/<app>/
+SHARED_DIR = "configs/sdkconfig"
+APP_SDK_REL = "configs/sdkconfig"  # under application/<app>/
 STACKS_GEN_REL = "cmake/generated/sdkconfig_stacks.gen"
 
 
@@ -31,7 +31,7 @@ def shared_sdk_dir(project_root: Path) -> Path:
 
 
 def load_app_recipe(project_root: Path, app_name: str) -> dict[str, Any]:
-    """Load application/<app>/config/sdkconfig/app.yml."""
+    """Load application/<app>/configs/sdkconfig/app.yml."""
     path = app_sdk_dir(project_root, app_name) / "app.yml"
     if not path.is_file():
         raise FileNotFoundError(

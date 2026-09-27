@@ -35,7 +35,7 @@ Thread 侧 dataset 见 ``GET/POST /api/thread/dataset`` ，再配网 Thread 终�
 ----------
 
 在 ``/data/config/adapters.json`` 中启用（出厂配置：
-``application/minihub/config/adapters.json``）：
+``application/minihub/configs/adapters.json``）：
 
 .. code-block:: json
 

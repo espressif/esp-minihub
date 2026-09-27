@@ -4,8 +4,8 @@
 """Product-scoped assets: config JSON resolve + store_preinstall list.
 
 Resolution for adapters.json / rules.json / scenes.json / packs / product_params:
-  1. application/<app>/config/<name>
-  2. else config/<name> (repo default)
+  1. application/<app>/configs/<name>
+  2. else configs/<name> (repo default)
 
 Factory Store modules (modstore /store/modules/<id>/) come only from
 application/<app>/manifest.yml → store_preinstall: [id, ...]
@@ -43,7 +43,7 @@ def load_app_manifest(repo: Path, app: str) -> dict[str, Any]:
 
 def resolve_config_path(repo: Path, app: str, name: str) -> Path | None:
     """Return first existing path for a config file or directory name."""
-    for base in (repo / "application" / app / "config", repo / "config"):
+    for base in (repo / "application" / app / "configs", repo / "configs"):
         candidate = base / name
         if candidate.exists():
             return candidate

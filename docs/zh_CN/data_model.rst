@@ -123,8 +123,8 @@ CID/PID/VID 与 ``uuid``；Matter Basic Information 与 ``node_id``）。品类�
 
 编译时查找出厂 JSON （产品目录有文件即停止，不再用仓库默认）：
 
-1. ``application/APP/config/`` 加文件名
-2. 否则才用仓库 ``config/`` 加同一文件名
+1. ``application/APP/configs/`` 加文件名
+2. 否则才用仓库 ``configs/`` 加同一文件名
 
 设备首次启动后的活动副本：
 

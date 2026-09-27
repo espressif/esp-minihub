@@ -15,7 +15,7 @@ L1 **只改已有 Host 适配器的配置块**，不登记点、不跑逻辑、�
 
 * BLE Mesh ``provision.uuid_filters`` / ``bind_models``
 * Modbus 寄存器映射、MQTT broker 调参等「适配器默认参数」
-* 跨产品复用的同一段 JSON，避免写进出厂 ``config/``
+* 跨产品复用的同一段 JSON，避免写进出厂 ``configs/``
 
 **不要 inject：**
 

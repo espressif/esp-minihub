@@ -29,7 +29,7 @@ If ``-app`` is another product (for example ``my_app``), the IDF build runs unde
 Default product (minihub)
 -------------------------
 
-The generic Host in ``application/minihub/`` uses ``config/sdkconfig/app.yml``:
+The generic Host in ``application/minihub/`` uses ``configs/sdkconfig/app.yml``:
 Ethernet-first uplink (Wi-Fi STA fallback), USB MSC, RTSP, Modbus, Store
 dynamic modules, and more. Reference board: ``esp32_s31_function_coreboard_1``.
 
@@ -73,13 +73,13 @@ Product model
 
    application/APP/          Product (board, manifest, factory JSON)
    components/               Shared Core + adapters
-   config/                   Shared manifest base + sdkconfig fragments
+   configs/                   Shared manifest base + sdkconfig fragments
    cmake/generated/          Sync output (gitignored)
 
 * Select product: ``-app APP`` or ``MINIHUB_APP=APP`` (default ``minihub``).
   Details: :doc:`application/index`.
 * Manifest: ``application/APP/manifest.yml`` (usually ``extends: _host_base``)
-* Sdkconfig: ``application/APP/config/sdkconfig/app.yml``
+* Sdkconfig: ``application/APP/configs/sdkconfig/app.yml``
 
 After manifest edits, run ``./tools/build_firmware.py -app APP build`` (merge
 happens automatically before compile).

@@ -27,7 +27,7 @@ Vibe coding
 ----------
 
 * Host Core 保持生态中立：不要把厂商云 token、默认适配器或厂商规则写进
-  ``components/minihub_*`` 或通用 ``config/``
+  ``components/minihub_*`` 或通用 ``configs/``
 * 厂商 / 演示插件放 ``examples/plugins/ID/`` 或 ``MINIHUB_PLUGIN_DIRS``；打成 ``.mhub``
 * 分支名用下划线、不用连字符（如 ``feature/modbus_tcp_client`` ）
 * 提交作者为人类 ``user.name`` / ``user.email`` ；不要加 AI 共著 trailer

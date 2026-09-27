@@ -11,7 +11,7 @@ Host vs plugin
 * **Via Store (``.mhub``):** ecosystem / vendor adapters as L1, L2, or L3
   (choose a tier below)
 
-Do not add vendor cloud credentials to generic Host Core ``config/``. Tokens belong
+Do not add vendor cloud credentials to generic Host Core ``configs/``. Tokens belong
 in ``/store/modules/ID/`` or module-private NVS keys.
 
 Module tiers
@@ -34,7 +34,7 @@ catalog, and install: :doc:`pack_and_catalog`.
      - **Use when:** default parameters for an existing **Host** adapter
        (BLE Mesh bind, UUID filters, Modbus maps). **Do not** inject radio
        ``devices[]`` (the Host registers one point per join). Keep vendor
-       defaults out of Host Core ``config/``.
+       defaults out of Host Core ``configs/``.
        **Do not use when:** custom logic, cloud HTTP, a new adapter, or
        vendor claim / OTA.
      - :doc:`develop_l1`

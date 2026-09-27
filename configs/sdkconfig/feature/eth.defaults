@@ -6,3 +6,5 @@ CONFIG_ETH_USE_ESP32_EMAC=y
 # PSRAM @200M locks MPLL at 400 MHz; EMAC RGMII Tx needs multiple of 125 MHz.
 # 250M uses MPLL@500 so EMAC can divide to 125 MHz.
 CONFIG_SPIRAM_SPEED_250M=y
+# EMAC DMA buffers in PSRAM; descriptors stay internal.
+CONFIG_ETH_DMA_USE_PSRAM=y

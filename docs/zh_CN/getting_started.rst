@@ -30,7 +30,7 @@ IDF 构建。
 -------------------
 
 通用 Host 位于 ``application/minihub/``，默认 sdkconfig 组合见
-``config/sdkconfig/app.yml``：以太网优先（Wi-Fi STA 回退）、USB MSC、RTSP、Modbus、
+``configs/sdkconfig/app.yml``：以太网优先（Wi-Fi STA 回退）、USB MSC、RTSP、Modbus、
 Store 动态模块等。参考板：``esp32_s31_function_coreboard_1``。
 
 烧录后预期启动顺序
@@ -73,13 +73,13 @@ Store 动态模块等。参考板：``esp32_s31_function_coreboard_1``。
 
    application/APP/          产品（板级、manifest、出厂配置）
    components/               共享 Core + 适配器
-   config/                   共享 manifest 基座 + sdkconfig 片段
+   configs/                   共享 manifest 基座 + sdkconfig 片段
    cmake/generated/          sync 输出（git 忽略）
 
 * 选择产品：``-app APP`` 或 ``MINIHUB_APP=APP`` （默认 ``minihub``）。
   详见 :doc:`application/index`。
 * Manifest：``application/APP/manifest.yml`` （通常 ``extends: _host_base`` ）
-* Sdkconfig：``application/APP/config/sdkconfig/app.yml``
+* Sdkconfig：``application/APP/configs/sdkconfig/app.yml``
 
 修改 manifest 后直接 ``./tools/build_firmware.py -app APP build`` 即可（编译前会自动合并）。
 

@@ -85,7 +85,7 @@ def collect_ui_chars() -> set[str]:
 
     chars.update(LCD_EXTRA_CHARS)
 
-    config_dir = ROOT / "config"
+    config_dir = ROOT / "configs"
     if config_dir.is_dir():
         for path in config_dir.rglob("*.json"):
             walk_json(json.loads(path.read_text(encoding="utf-8")), chars)

@@ -23,7 +23,7 @@ Kconfig
 * ``CONFIG_MINIHUB_NET_WIFI_SOFTAP`` — SoftAP/STA owned outside ``minihub_net``
 * ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — SoftAP and/or BLE provisioning when no NVS creds
 
-Fragments: ``config/sdkconfig/feature/wifi_sta.defaults``, ``eth.defaults``.
+Fragments: ``configs/sdkconfig/feature/wifi_sta.defaults``, ``eth.defaults``.
 
 Boot order
 ----------
