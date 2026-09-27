@@ -646,6 +646,8 @@ async function openDeviceLog(id, ev) {
  * Preferred: one point with props.params (sim.color_bulb).
  * Legacy: group protocol.endpoint.parameter into one card so brightness/hue
  * never become their own toggle cards and 能力点 counts devices.
+ * Unscoped ids (not <protocol>.<device>, e.g. switch/bm_000a) stay as one
+ * card. Overview files them on 全部 only — not under an adapter section.
  */
 function overviewParamsBlobNonEmpty(paramsBlob) {
     if (!paramsBlob || typeof paramsBlob !== 'object') return false;
@@ -673,9 +675,20 @@ function overviewCollapsePoints(points) {
         const pr = (pt.props && typeof pt.props === 'object') ? pt.props : null;
         const paramsBlob = pr && pr.params;
         const seg = pt.point_id.split('.');
-        if (seg.length < 2) return;
-
         const hasParams = overviewParamsBlobNonEmpty(paramsBlob);
+        const scoped = (typeof pointIdScoped === 'function')
+            ? pointIdScoped(pt.point_id)
+            : (seg.length >= 2 && !!seg[0] && seg.slice(1).some(function (s) { return !!s; }));
+
+        /* Not <protocol>.<device>: keep the row. Do not parse a protocol from '/'. */
+        if (!scoped) {
+            if (!pt.point_id) return;
+            const card = Object.assign({}, pt);
+            card.props = Object.assign({}, pr || {});
+            if (hasParams && !card.props.params) card.props.params = paramsBlob;
+            ensure(pt.point_id, card);
+            return;
+        }
 
         /* Device-level: non-empty props.params, or 2-segment id. */
         if (hasParams || seg.length === 2) {
@@ -759,7 +772,9 @@ function cardHtml(p) {
     const room = pointRoomName(p);
     const apDetail = ['fridge', 'water_purifier', 'water_heater', 'appliance'].includes(p.type);
     const plugDetail = p.type === 'switch' && switchHasDetail(p);
-    /* Catalog detail for any device with props.params — not light-only. */
+    /* Catalog detail is the default click, with or without props.params.
+     * The modal lists only params the point actually reported. Specialized
+     * panels override when they match and the point has no params blob. */
     let clickCls = '';
     let clickFn = '';
     if (hasParams) {
@@ -783,6 +798,10 @@ function cardHtml(p) {
     } else if (plugDetail) {
         clickCls = ' plug-click';
         clickFn = 'openPlugDetail';
+    }
+    if (!clickFn) {
+        clickCls = ' device-click';
+        clickFn = 'openDeviceDetail';
     }
     const clickAttr = clickFn ? (' onclick="' + clickFn + '(\'' + p.point_id + '\',event)"') : '';
     const valShow = (function() {

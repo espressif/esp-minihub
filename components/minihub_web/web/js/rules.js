@@ -516,11 +516,12 @@ function rulesDeviceInstances() {
         const params = pr && pr.params;
         const hasParams = !!(params && typeof params === 'object' &&
             (Array.isArray(params) ? params.length : Object.keys(params).length));
-        if (hasParams || segs.length === 2) {
+        if (hasParams || segs.length === 2 || segs.length < 2) {
+            const tail = String(pt.point_id).split('/').filter(Boolean);
             out.push({
                 point_id: pt.point_id,
                 type: pt.type || '',
-                endpoint: segs.length >= 2 ? segs[segs.length - 1] : pt.point_id,
+                endpoint: segs.length >= 2 ? segs[segs.length - 1] : (tail.length ? tail[tail.length - 1] : pt.point_id),
                 params: Object.create(null)
             });
         }

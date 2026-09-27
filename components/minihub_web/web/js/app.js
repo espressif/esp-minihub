@@ -199,6 +199,25 @@ function pointProtocol(p) {
     return dot > 0 ? id.slice(0, dot) : '';
 }
 
+/* <protocol>.<device> or <protocol>.<device>.<param>. Slash ids (switch/bm_000a) are not. */
+function pointIdScoped(pointId) {
+    if (typeof pointId !== 'string' || !pointId) return false;
+    const seg = pointId.split('.');
+    if (seg.length < 2 || !seg[0]) return false;
+    for (let i = 1; i < seg.length; i++) {
+        if (seg[i]) return true;
+    }
+    return false;
+}
+
+/* Adapter chip: well-formed id whose protocol prefix or adapter/owner matches.
+ * Unscoped ids never match a chip — they stay on 全部 only. */
+function pointInAdapter(p, ad) {
+    if (!ad || !p || !pointIdScoped(p.point_id)) return false;
+    if (pointGroup(p) === ad) return true;
+    return pointProtocol(p) === ad;
+}
+
 function pointDisplayName(p) {
     const n = p && p.props && p.props.name;
     if (n && String(n).trim()) return String(n).trim();
@@ -422,16 +441,23 @@ function renderOverview() {
     /* Collapse registry rows to devices before filter/stats/cards.
      * Otherwise legacy per-param points (thread.color_bulb.brightness …)
      * inflate 能力点 and render a fake toggle per parameter. */
-    let base = overviewCollapsePoints(pts.filter(p => adapterEnabled(p.adapter)));
+    /* Keep unscoped ids (switch/bm_000a) even when their adapter is off, so 全部 can list them. */
+    let base = overviewCollapsePoints(pts.filter(p => p && (adapterEnabled(p.adapter) || !pointIdScoped(p.point_id))));
     refreshOverviewFilterOptions(base);
-    let list = base.filter(p => (filter === 'all' || pointGroup(p) === filter) && pointMatchesQuery(p, q) && (!roomFilter || pointRoomName(p) === roomFilter) && (!typeFilter || p.type === typeFilter));
+    let list = base.filter(p => (filter === 'all' || pointInAdapter(p, filter)) && pointMatchesQuery(p, q) && (!roomFilter || pointRoomName(p) === roomFilter) && (!typeFilter || p.type === typeFilter));
     document.getElementById('s-total').textContent = list.length;
     document.getElementById('s-online').textContent = list.filter(p => p.online).length;
-    document.getElementById('s-adapters').textContent = new Set(list.map(pointGroup)).size;
+    document.getElementById('s-adapters').textContent = new Set(list.filter(p => pointIdScoped(p.point_id)).map(pointGroup).filter(adapterEnabled)).size;
     const groups = {};
+    const loose = [];
     list.forEach(p => {
-        const g = pointGroup(p);
-        (groups[g] = groups[g] || []).push(p)
+        /* Slash / other non-<protocol>.<device> ids: show on 全部, not inside an adapter section. */
+        if (!pointIdScoped(p.point_id)) {
+            if (filter === 'all') loose.push(p);
+            return;
+        }
+        const g = (filter === 'all') ? pointGroup(p) : filter;
+        (groups[g] = groups[g] || []).push(p);
     });
     authModules().forEach(m => {
         const ad = m.adapter;
@@ -482,9 +508,16 @@ function renderOverview() {
         return;
     }
     html += groupKeys.map(ad => {
-        const chips = adapterRoomChipsHtml(base.filter(p => pointGroup(p) === ad));
+        const sectionPts = (filter === 'all')
+            ? base.filter(p => pointIdScoped(p.point_id) && pointGroup(p) === ad)
+            : base.filter(p => pointInAdapter(p, ad));
+        const chips = adapterRoomChipsHtml(sectionPts);
         return '<div class="section">' + sectionHeader(ad, groups[ad].length) + chips + '<div class="grid">' + groups[ad].map(cardHtml).join('') + '</div></div>';
     }).join('');
+    /* No adapter header and no new chip — these ids do not name an adapter. */
+    if (filter === 'all' && loose.length) {
+        html += '<div class="section"><div class="grid">' + loose.map(cardHtml).join('') + '</div></div>';
+    }
     el.innerHTML = html;
     el.querySelectorAll('.toggle input:not(:disabled)').forEach(inp => {
         inp.onchange = () => cmd(inp.dataset.id, inp.checked ? 'turn_on' : 'turn_off');
