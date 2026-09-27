@@ -98,16 +98,24 @@ REST 接口
 discovery 取值（``discovery`` 字段）
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* ``network`` （默认）— 已在 LAN / multi-admin；允许 ``setup_pin``
-* ``ble_wifi`` / ``first_time`` — Hub BLE + 注入 **设备** Wi-Fi 凭据
-* ``ble_thread`` — BLE 配网到 Thread（需 Thread BR 构建）
-* ``ble_ethernet`` / ``ethernet`` — 以太网设备 BLE 配网
+Web 添加对话框始终使用 BLE + DNS-SD（CHIP ``DiscoveryType::kAll``）：
+
+* ``ble_thread``（关闭 Wi-Fi 开关时的默认）— BLE + 注入 Hub Thread 数据集
+* ``ble_wifi`` / ``first_time`` — BLE + 注入 **设备** Wi-Fi 凭据
+
+``POST /api/matter/commission`` 仍可接受 ``network``（仅 DNS-SD / multi-admin）和
+``ble_ethernet``；概览对话框不再提供这两项。
 
 配网并持久化设备
 ^^^^^^^^^^^^^^^^
 
-``POST /api/matter/devices`` 在提供 ``pairing_code`` 时执行配网，随后 upsert
-设备条目并可热重载 Hub。
+``POST /api/matter/devices`` 在提供 ``pairing_code`` 时**立刻 upsert** 设备并写入
+``commission_phase: "waiting"``（概览显示 **等待配网中**），再启动配网，并立即返回
+``commission: "started"``，**不会**阻塞 HTTP 处理线程。成功后清除 phase，卡片变为
+正常设备；失败或 180 秒看门狗超时则保留卡片为 ``commission_phase: "failed"``
+（可删除）。用 ``GET /api/matter/status`` 轮询 ``commission``：``idle`` |
+``running`` | ``ok`` | ``failed``。省略 ``pairing_code`` 时仍只 upsert、不配网
+（``commission: "skipped"``）。
 
 .. code-block:: json
 
@@ -115,10 +123,8 @@ discovery 取值（``discovery`` 字段）
      "pairing_code": "MT:...",
      "node_id": 2,
      "endpoints": [1],
-     "discovery": "ble_wifi",
-     "wifi_ssid": "MyHome",
-     "wifi_password": "secret",
-     "transport": "wifi",
+     "discovery": "ble_thread",
+     "transport": "thread",
      "merge": true,
      "reload": true
    }
@@ -126,10 +132,10 @@ discovery 取值（``discovery`` 字段）
 * ``node_id`` — 省略或 < 2 时自动分配下一 id
 * ``endpoints`` — 数字数组或逗号字符串 ``"1,2"``；默认 ``[1]``
 * ``merge`` — 默认 true；与现有 ``devices[]`` 合并
-* ``reload`` — 默认 true；upsert 后调用 ``minihub_hub_reload``
+* ``reload`` — 默认 true；upsert / 收尾后异步热重载 Hub
 * ``delete`` — 为 true 时按 ``point_id`` 删除（同 points/remove）
 
-**成功响应**
+**立即响应（配网已启动）**
 
 .. code-block:: json
 
@@ -140,6 +146,9 @@ discovery 取值（``discovery`` 字段）
      "reloaded": true,
      "commission": "started"
    }
+
+**成功之后**：``GET /api/matter/status`` 的 ``commission`` 变为 ``ok``，概览卡片
+去掉「等待配网中」。
 
 **删除示例**
 

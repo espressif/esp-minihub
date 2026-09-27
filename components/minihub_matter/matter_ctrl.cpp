@@ -11,7 +11,14 @@
 #include <string.h>
 #include <string>
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "minihub_provision.h"
+
+/* Linked by minihub_hub; weak so matter can build without a hard REQUIRES cycle. */
+extern "C" esp_err_t minihub_hub_reload_async(void) __attribute__((weak));
 #if CONFIG_MINIHUB_THREAD_ADAPTER
 #include "minihub_thread.h"
 #endif
@@ -59,6 +66,36 @@ static char s_last_error[128];
 static bool s_started;
 static bool s_commissioned;
 static bool s_pairing_in_progress;
+static SemaphoreHandle_t s_commission_sem;
+static portMUX_TYPE s_commission_mux = portMUX_INITIALIZER_UNLOCKED;
+static esp_err_t s_commission_result = ESP_OK;
+static constexpr uint32_t k_commission_wait_ms = 180000;
+static constexpr size_t k_pending_ep_max = 16;
+
+enum {
+    COMMISSION_PHASE_IDLE = 0,
+    COMMISSION_PHASE_WAITING = 1,
+    COMMISSION_PHASE_DONE = 2,
+};
+static int s_commission_phase = COMMISSION_PHASE_IDLE;
+static uint64_t s_commission_node_id;
+
+typedef struct {
+    bool valid;
+    uint64_t node_id;
+    uint16_t endpoints[k_pending_ep_max];
+    size_t endpoint_count;
+    bool merge_existing;
+    bool do_reload;
+    char transport[16];
+} pending_device_t;
+
+static pending_device_t s_pending_device;
+static esp_timer_handle_t s_commission_watchdog;
+static bool s_persist_busy;
+
+static bool ensure_pairing_slot_free(void);
+static void schedule_finalize(esp_err_t result);
 
 typedef struct {
     uint64_t node_id;
@@ -200,11 +237,161 @@ static void on_identity_done(uint64_t node_id,
     }
 }
 
+static void clear_pending_device_locked(void)
+{
+    s_pending_device.valid = false;
+    s_pending_device.endpoint_count = 0;
+    s_pending_device.transport[0] = '\0';
+}
+
+static void stop_commission_watchdog(void)
+{
+    if (s_commission_watchdog) {
+        (void)esp_timer_stop(s_commission_watchdog);
+    }
+}
+
+static void signal_commission_done(esp_err_t err)
+{
+    bool give = false;
+    stop_commission_watchdog();
+    portENTER_CRITICAL(&s_commission_mux);
+    if (s_commission_phase == COMMISSION_PHASE_WAITING) {
+        s_commission_phase = COMMISSION_PHASE_DONE;
+        s_commission_result = err;
+        give = true;
+        if (err != ESP_OK) {
+            clear_pending_device_locked();
+        }
+    }
+    portEXIT_CRITICAL(&s_commission_mux);
+    if (give && s_commission_sem) {
+        xSemaphoreGive(s_commission_sem);
+    }
+}
+
+static void commission_watchdog_cb(void *arg)
+{
+    (void)arg;
+    ESP_LOGW(TAG, "commission watchdog: timed out after %u ms", (unsigned)k_commission_wait_ms);
+    (void)ensure_pairing_slot_free();
+    s_pairing_in_progress = false;
+    set_error("commission timed out");
+    schedule_finalize(ESP_ERR_TIMEOUT);
+}
+
+static void arm_commission_watchdog(void)
+{
+    if (!s_commission_watchdog) {
+        const esp_timer_create_args_t args = {
+            .callback = &commission_watchdog_cb,
+            .arg = nullptr,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "matter_comm",
+            .skip_unhandled_events = true,
+        };
+        if (esp_timer_create(&args, &s_commission_watchdog) != ESP_OK) {
+            ESP_LOGW(TAG, "commission watchdog create failed");
+            s_commission_watchdog = nullptr;
+            return;
+        }
+    }
+    (void)esp_timer_stop(s_commission_watchdog);
+    if (esp_timer_start_once(s_commission_watchdog, (uint64_t)k_commission_wait_ms * 1000ULL) != ESP_OK) {
+        ESP_LOGW(TAG, "commission watchdog start failed");
+    }
+}
+
+static bool arm_commission_wait(void)
+{
+    if (!s_commission_sem) {
+        s_commission_sem = xSemaphoreCreateBinary();
+    }
+    if (!s_commission_sem) {
+        return false;
+    }
+    while (xSemaphoreTake(s_commission_sem, 0) == pdTRUE) {
+    }
+    portENTER_CRITICAL(&s_commission_mux);
+    s_commission_phase = COMMISSION_PHASE_WAITING;
+    s_commission_result = ESP_OK;
+    clear_pending_device_locked();
+    portEXIT_CRITICAL(&s_commission_mux);
+    arm_commission_watchdog();
+    return true;
+}
+
+static void read_commission_phase(int *phase_out, esp_err_t *result_out)
+{
+    portENTER_CRITICAL(&s_commission_mux);
+    if (phase_out) {
+        *phase_out = s_commission_phase;
+    }
+    if (result_out) {
+        *result_out = s_commission_result;
+    }
+    portEXIT_CRITICAL(&s_commission_mux);
+}
+
+static void finalize_commission_task(void *arg)
+{
+    const esp_err_t result = static_cast<esp_err_t>(reinterpret_cast<uintptr_t>(arg));
+    pending_device_t pending = {};
+    portENTER_CRITICAL(&s_commission_mux);
+    if (s_pending_device.valid) {
+        pending = s_pending_device;
+        clear_pending_device_locked();
+    }
+    portEXIT_CRITICAL(&s_commission_mux);
+
+    if (pending.valid) {
+        const char *phase = (result == ESP_OK) ? nullptr : "failed";
+        const char *err_msg = (result == ESP_OK) ? nullptr : minihub_matter_last_error();
+        esp_err_t perr = minihub_matter_devices_set_commission_phase(pending.node_id, phase, err_msg);
+        ESP_LOGI(TAG, "post-commission phase node=%" PRIu64 " result=%s phase_err=%s", pending.node_id,
+                 esp_err_to_name(result), esp_err_to_name(perr));
+        if (pending.do_reload && minihub_hub_reload_async) {
+            (void)minihub_hub_reload_async();
+        }
+    }
+
+    s_persist_busy = false;
+    signal_commission_done(result);
+    vTaskDelete(nullptr);
+}
+
+static void schedule_finalize(esp_err_t result)
+{
+    bool has_pending = false;
+    portENTER_CRITICAL(&s_commission_mux);
+    has_pending = s_pending_device.valid;
+    portEXIT_CRITICAL(&s_commission_mux);
+
+    if (!has_pending) {
+        signal_commission_done(result);
+        return;
+    }
+    if (s_persist_busy) {
+        signal_commission_done(ESP_ERR_INVALID_STATE);
+        return;
+    }
+    s_persist_busy = true;
+    if (xTaskCreate(finalize_commission_task, "matter_finalize", 4096,
+                    reinterpret_cast<void *>(static_cast<uintptr_t>(result)), 5, nullptr) != pdPASS) {
+        s_persist_busy = false;
+        set_error("finalize task create failed");
+        signal_commission_done(ESP_ERR_NO_MEM);
+    }
+}
+
 static void on_pairing_complete(CHIP_ERROR err)
 {
     if (err != CHIP_NO_ERROR) {
-        set_error("PASE session failed");
+        char buf[96];
+        snprintf(buf, sizeof(buf), "PASE session failed: %s", chip::ErrorStr(err));
+        set_error(buf);
         s_pairing_in_progress = false;
+        schedule_finalize(ESP_FAIL);
     }
 }
 
@@ -214,7 +401,10 @@ static void on_commissioning_success(chip::ScopedNodeId peer_id)
     s_commissioned = true;
     s_pairing_in_progress = false;
     set_error(NULL);
+    s_commission_node_id = peer_id.GetNodeId();
     (void)minihub_matter_interview_identity(peer_id.GetNodeId());
+    /* Stay in WAITING until phase clear (+ optional reload) finishes. */
+    schedule_finalize(ESP_OK);
 }
 
 static void on_commissioning_failure(chip::ScopedNodeId peer_id, CHIP_ERROR error,
@@ -228,6 +418,7 @@ static void on_commissioning_failure(chip::ScopedNodeId peer_id, CHIP_ERROR erro
     snprintf(buf, sizeof(buf), "commission failed: %s", chip::ErrorStr(error));
     set_error(buf);
     s_pairing_in_progress = false;
+    schedule_finalize(ESP_FAIL);
 }
 
 static void register_pairing_callbacks(void)
@@ -304,6 +495,53 @@ static void app_event_cb(const chip::DeviceLayer::ChipDeviceEvent *event, intptr
 
 extern "C" esp_err_t minihub_matter_wifi_bootstrap(void);
 
+#if CONFIG_ENABLE_MATTER_OVER_THREAD
+/* CHIP must own the otInstance before DeviceControllerFactory::Init runs: the
+ * controller factory initializes DNS-SD, which derives the SRP hostname from the
+ * 802.15.4 MAC and clears the SRP host — both fail with CHIP_ERROR_INCORRECT_STATE
+ * while mOTInst is null, and OpenThreadDnssdInit propagates that out as
+ * CHIP_ERROR_NOT_FOUND, aborting the whole commissioner init. esp_matter::start()
+ * skips the attach for us because CONFIG_ESP_MATTER_ENABLE_OPENTHREAD is off
+ * (MiniHub owns the Border Router), so do it here — outside the CHIP lock, since
+ * InitThreadStack takes the OpenThread lock and its state callback posts CHIP
+ * events (deadlock under PlatformMgr's lock). */
+static esp_err_t matter_thread_stack_attach(void)
+{
+    static bool s_attached;
+    if (s_attached) {
+        return ESP_OK;
+    }
+    if (!minihub_thread_ready()) {
+        ESP_LOGW(TAG, "thread attach: Thread BR not ready");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    /* openthread_init_stack() asserts s_platform_config before noticing OT is
+     * already up — seed the same platform config MiniHub used to start BR. */
+    static esp_openthread_platform_config_t s_plat = {
+        .radio_config = ESP_OPENTHREAD_DEFAULT_RADIO_CONFIG(),
+        .host_config = ESP_OPENTHREAD_DEFAULT_HOST_CONFIG(),
+        .port_config = ESP_OPENTHREAD_DEFAULT_PORT_CONFIG(),
+    };
+    esp_err_t err = set_openthread_platform_config(&s_plat);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "set_openthread_platform_config: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    CHIP_ERROR cerr = chip::DeviceLayer::ThreadStackMgr().InitThreadStack();
+    if (cerr != CHIP_NO_ERROR) {
+        ESP_LOGE(TAG, "ThreadStackMgr InitThreadStack: %" CHIP_ERROR_FORMAT, cerr.Format());
+        return ESP_FAIL;
+    }
+
+    s_attached = true;
+    ESP_LOGI(TAG, "CHIP ThreadStack attached (provisioned=%d)",
+             chip::DeviceLayer::ConnectivityMgr().IsThreadProvisioned() ? 1 : 0);
+    return ESP_OK;
+}
+#endif /* CONFIG_ENABLE_MATTER_OVER_THREAD */
+
 esp_err_t minihub_matter_init(void)
 {
     if (s_started) {
@@ -316,24 +554,46 @@ esp_err_t minihub_matter_init(void)
         ESP_LOGW(TAG, "network bootstrap: %s", esp_err_to_name(err));
     }
 
-    err = esp_matter::start(app_event_cb);
-    if (err != ESP_OK) {
-        set_error("esp_matter start failed");
-        ESP_LOGE(TAG, "esp_matter::start: %s", esp_err_to_name(err));
-        return err;
+    /* esp_matter::start() is process-once. A prior partial init (or an early
+     * bootstrap that failed after start) leaves is_started() true while our
+     * s_started is still false — treat that as continue, not fatal. */
+    if (!esp_matter::is_started()) {
+        err = esp_matter::start(app_event_cb);
+        if (err != ESP_OK) {
+            set_error("esp_matter start failed");
+            ESP_LOGE(TAG, "esp_matter::start: %s", esp_err_to_name(err));
+            return err;
+        }
+    } else {
+        ESP_LOGW(TAG, "esp_matter already started; finishing commissioner setup");
     }
+
+#if CONFIG_ENABLE_MATTER_OVER_THREAD
+    err = matter_thread_stack_attach();
+    if (err != ESP_OK) {
+        set_error("thread stack attach failed");
+        ESP_LOGW(TAG, "commissioner init will fail without CHIP ThreadStack: %s",
+                 esp_err_to_name(err));
+    }
+#endif
 
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
     auto &client = esp_matter::controller::matter_controller_client::get_instance();
-    err = client.init(k_controller_node_id, k_controller_fabric_id, k_controller_port);
-    if (err != ESP_OK) {
-        set_error("controller init failed");
-        return err;
-    }
-    err = client.setup_commissioner();
-    if (err != ESP_OK) {
-        set_error("setup_commissioner failed");
-        return err;
+    const bool commissioner_ready = (client.get_fabric_index() != chip::kUndefinedFabricIndex);
+
+    if (!commissioner_ready) {
+        err = client.init(k_controller_node_id, k_controller_fabric_id, k_controller_port);
+        if (err != ESP_OK) {
+            /* Factory may already be inited from a prior partial attempt. */
+            ESP_LOGW(TAG, "controller init: %s (continuing to setup_commissioner)",
+                     esp_err_to_name(err));
+        }
+        err = client.setup_commissioner();
+        if (err != ESP_OK) {
+            set_error("setup_commissioner failed");
+            ESP_LOGE(TAG, "setup_commissioner: %s", esp_err_to_name(err));
+            return err;
+        }
     }
 
     /* Commissioner-only builds skip Matter Server / DnssdServer::StartServer().
@@ -374,45 +634,9 @@ esp_err_t minihub_matter_attach_thread(void)
 #if !CONFIG_ENABLE_MATTER_OVER_THREAD
     return ESP_ERR_NOT_SUPPORTED;
 #else
-    static bool s_attached;
-    if (!s_started) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    /* esp_openthread_get_instance() is always non-NULL (static Instance). */
-    if (!minihub_thread_ready()) {
-        ESP_LOGW(TAG, "attach_thread: Thread BR not ready");
-        return ESP_ERR_INVALID_STATE;
-    }
-    if (s_attached && chip::DeviceLayer::ConnectivityMgr().IsThreadProvisioned()) {
-        return ESP_OK;
-    }
-
-    /* openthread_init_stack() asserts s_platform_config before noticing OT is
-     * already up — seed the same platform config MiniHub used to start BR. */
-    static esp_openthread_platform_config_t s_plat = {
-        .radio_config = ESP_OPENTHREAD_DEFAULT_RADIO_CONFIG(),
-        .host_config = ESP_OPENTHREAD_DEFAULT_HOST_CONFIG(),
-        .port_config = ESP_OPENTHREAD_DEFAULT_PORT_CONFIG(),
-    };
-    esp_err_t err = set_openthread_platform_config(&s_plat);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "set_openthread_platform_config: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    /* Do not hold CHIP stack lock here: InitThreadStack takes the OT lock and
-     * may post platform events that need the CHIP lock. */
-    CHIP_ERROR cerr = chip::DeviceLayer::ThreadStackMgr().InitThreadStack();
-    if (cerr != CHIP_NO_ERROR) {
-        ESP_LOGW(TAG, "ThreadStackMgr InitThreadStack: %" CHIP_ERROR_FORMAT, cerr.Format());
-        set_error("thread stack attach failed");
-        return ESP_FAIL;
-    }
-
-    s_attached = true;
-    bool provisioned = chip::DeviceLayer::ConnectivityMgr().IsThreadProvisioned();
-    ESP_LOGI(TAG, "CHIP ThreadStack attached (provisioned=%d)", provisioned ? 1 : 0);
-    return ESP_OK;
+    /* minihub_matter_init() already attached; this is the retry hook for a hub
+     * reload where the Border Router came up after Matter gave up. */
+    return matter_thread_stack_attach();
 #endif
 }
 
@@ -440,14 +664,42 @@ static esp_err_t pairing_code_ble_ethernet(chip::NodeId node_id, const char *pay
 
 static void ensure_dnssd_ready(void)
 {
-    CHIP_ERROR err = chip::Dnssd::Resolver::Instance().Init(chip::DeviceLayer::UDPEndPointManager());
-    ESP_LOGI(TAG, "pre-commission Dnssd Resolver::Init -> %" CHIP_ERROR_FORMAT, err.Format());
-    err = chip::Dnssd::ServiceAdvertiser::Instance().Init(chip::DeviceLayer::UDPEndPointManager());
-    ESP_LOGI(TAG, "pre-commission Advertiser inited=%d -> %" CHIP_ERROR_FORMAT,
-             chip::Dnssd::ServiceAdvertiser::Instance().IsInitialized() ? 1 : 0, err.Format());
-    err = chip::AddressResolve::Resolver::Instance().Init(&chip::DeviceLayer::SystemLayer());
-    ESP_LOGI(TAG, "pre-commission AddressResolve::Init -> %" CHIP_ERROR_FORMAT " thread_prov=%d", err.Format(),
-             chip::DeviceLayer::ConnectivityMgr().IsThreadProvisioned() ? 1 : 0);
+    /* EspDnssdInit calls mdns_init(), which fails on a second call. Do not
+     * re-Init an already-live resolver — that leaves IsInitialized() false
+     * and used to abort commissioning before PairDevice. */
+    if (chip::Dnssd::Resolver::Instance().IsInitialized()) {
+        ESP_LOGI(TAG, "pre-commission Dnssd Resolver already initialized");
+        return;
+    }
+
+    /* Init under the CHIP lock, then wait OUTSIDE the lock for the async
+     * platform callback. Holding the lock while waiting deadlocks the
+     * CHIP event loop that flips IsInitialized(). */
+    {
+        esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+        CHIP_ERROR err = chip::Dnssd::Resolver::Instance().Init(chip::DeviceLayer::UDPEndPointManager());
+        ESP_LOGI(TAG, "pre-commission Dnssd Resolver::Init -> %" CHIP_ERROR_FORMAT, err.Format());
+        err = chip::Dnssd::ServiceAdvertiser::Instance().Init(chip::DeviceLayer::UDPEndPointManager());
+        ESP_LOGI(TAG, "pre-commission Advertiser inited=%d -> %" CHIP_ERROR_FORMAT,
+                 chip::Dnssd::ServiceAdvertiser::Instance().IsInitialized() ? 1 : 0, err.Format());
+        err = chip::AddressResolve::Resolver::Instance().Init(&chip::DeviceLayer::SystemLayer());
+        ESP_LOGI(TAG, "pre-commission AddressResolve::Init -> %" CHIP_ERROR_FORMAT, err.Format());
+    }
+
+    constexpr int k_wait_ms = 3000;
+    constexpr int k_step_ms = 20;
+    int waited = 0;
+    while (!chip::Dnssd::Resolver::Instance().IsInitialized() && waited < k_wait_ms) {
+        vTaskDelay(pdMS_TO_TICKS(k_step_ms));
+        waited += k_step_ms;
+    }
+    if (chip::Dnssd::Resolver::Instance().IsInitialized()) {
+        ESP_LOGI(TAG, "pre-commission Dnssd Resolver initialized after %d ms", waited);
+    } else {
+        /* Thread SRP callback can lag, and a repeat mdns_init() never sets
+         * the flag. BLE+Thread still needs PairDevice to run. */
+        ESP_LOGW(TAG, "pre-commission Dnssd Resolver not initialized after %d ms; continuing", waited);
+    }
 }
 
 esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairing_code,
@@ -518,11 +770,28 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
 #endif
     }
 
+#if CONFIG_MINIHUB_THREAD_ADAPTER && CONFIG_ENABLE_MATTER_OVER_THREAD
+    if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
+        esp_err_t aerr = minihub_matter_attach_thread();
+        if (aerr != ESP_OK) {
+            set_error("ble_thread: CHIP ThreadStack attach failed");
+            ESP_LOGW(TAG, "attach_thread before commission: %s", esp_err_to_name(aerr));
+            return aerr;
+        }
+    }
+#endif
+
+    if (!arm_commission_wait()) {
+        set_error("commission wait alloc failed");
+        return ESP_ERR_NO_MEM;
+    }
+    s_commission_node_id = node_id;
     s_pairing_in_progress = true;
     set_error(NULL);
 
-    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
     ensure_dnssd_ready();
+
+    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
     if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
         ESP_LOGI(TAG, "commission BLE+WiFi node=%" PRIu64, node_id);
         err = esp_matter::controller::pairing_code_wifi(static_cast<chip::NodeId>(node_id), ssid, pass,
@@ -543,6 +812,11 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
     }
     if (err != ESP_OK) {
         s_pairing_in_progress = false;
+        portENTER_CRITICAL(&s_commission_mux);
+        if (s_commission_phase == COMMISSION_PHASE_WAITING) {
+            s_commission_phase = COMMISSION_PHASE_IDLE;
+        }
+        portEXIT_CRITICAL(&s_commission_mux);
         if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
             set_error("pairing_code_wifi failed");
         } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
@@ -555,6 +829,78 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
         return err;
     }
     return ESP_OK;
+}
+
+esp_err_t minihub_matter_set_pending_device(uint64_t node_id, const uint16_t *endpoints,
+                                            size_t endpoint_count, bool merge_existing,
+                                            bool do_reload, const char *transport)
+{
+    if (node_id < 2 || !endpoints || endpoint_count == 0 || endpoint_count > k_pending_ep_max) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    int phase = COMMISSION_PHASE_IDLE;
+    read_commission_phase(&phase, nullptr);
+    if (phase != COMMISSION_PHASE_WAITING) {
+        set_error("no commission in progress");
+        return ESP_ERR_INVALID_STATE;
+    }
+    portENTER_CRITICAL(&s_commission_mux);
+    s_pending_device.valid = true;
+    s_pending_device.node_id = node_id;
+    s_pending_device.endpoint_count = endpoint_count;
+    s_pending_device.merge_existing = merge_existing;
+    s_pending_device.do_reload = do_reload;
+    memcpy(s_pending_device.endpoints, endpoints, endpoint_count * sizeof(uint16_t));
+    s_pending_device.transport[0] = '\0';
+    if (transport && transport[0]) {
+        strncpy(s_pending_device.transport, transport, sizeof(s_pending_device.transport) - 1);
+        s_pending_device.transport[sizeof(s_pending_device.transport) - 1] = '\0';
+    }
+    portEXIT_CRITICAL(&s_commission_mux);
+    s_commission_node_id = node_id;
+    return ESP_OK;
+}
+
+esp_err_t minihub_matter_commission_wait(uint32_t timeout_ms)
+{
+    int phase = COMMISSION_PHASE_IDLE;
+    esp_err_t result = ESP_FAIL;
+    read_commission_phase(&phase, &result);
+    if (phase == COMMISSION_PHASE_DONE) {
+        return result;
+    }
+    if (phase != COMMISSION_PHASE_WAITING || !s_commission_sem) {
+        set_error("no commission in progress");
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (timeout_ms == 0) {
+        timeout_ms = k_commission_wait_ms;
+    }
+    ESP_LOGI(TAG, "waiting for commission result (%u ms)", (unsigned)timeout_ms);
+    if (xSemaphoreTake(s_commission_sem, pdMS_TO_TICKS(timeout_ms)) == pdTRUE) {
+        read_commission_phase(&phase, &result);
+        ESP_LOGI(TAG, "commission wait -> %s", esp_err_to_name(result));
+        return result;
+    }
+
+    read_commission_phase(&phase, &result);
+    if (phase == COMMISSION_PHASE_DONE) {
+        ESP_LOGI(TAG, "commission wait -> %s", esp_err_to_name(result));
+        return result;
+    }
+
+    /* DNS-SD timeout often never calls OnPairingComplete / OnCommissioningFailure. */
+    (void)ensure_pairing_slot_free();
+    s_pairing_in_progress = false;
+    set_error("commission timed out");
+    schedule_finalize(ESP_ERR_TIMEOUT);
+    /* Best-effort: wait briefly for finalize to mark phase + signal. */
+    if (s_commission_sem) {
+        (void)xSemaphoreTake(s_commission_sem, pdMS_TO_TICKS(2000));
+    }
+    read_commission_phase(&phase, &result);
+    ESP_LOGW(TAG, "commission wait -> %s", esp_err_to_name(result));
+    return result == ESP_OK ? ESP_ERR_TIMEOUT : result;
 }
 
 esp_err_t minihub_matter_commission_code(uint64_t node_id, const char *pairing_code)
@@ -630,10 +976,27 @@ cJSON *minihub_matter_status_json(void)
     if (!root) {
         return NULL;
     }
+    int phase = COMMISSION_PHASE_IDLE;
+    esp_err_t result = ESP_OK;
+    read_commission_phase(&phase, &result);
+    const char *commission = "idle";
+    if (phase == COMMISSION_PHASE_WAITING || s_persist_busy) {
+        commission = "running";
+    } else if (phase == COMMISSION_PHASE_DONE) {
+        commission = (result == ESP_OK) ? "ok" : "failed";
+    }
+
     cJSON_AddBoolToObject(root, "ready", s_started);
     cJSON_AddBoolToObject(root, "commissioned", s_commissioned);
     cJSON_AddBoolToObject(root, "pairing", s_pairing_in_progress);
     cJSON_AddStringToObject(root, "mode", "commissioner");
+    cJSON_AddStringToObject(root, "commission", commission);
+    if (s_commission_node_id >= 2) {
+        cJSON_AddNumberToObject(root, "commission_node_id", (double)s_commission_node_id);
+    }
+    if (phase == COMMISSION_PHASE_DONE && result != ESP_OK) {
+        cJSON_AddStringToObject(root, "commission_result", esp_err_to_name(result));
+    }
 #if CONFIG_MINIHUB_THREAD_ADAPTER
     cJSON_AddBoolToObject(root, "thread_br_ready", minihub_thread_ready());
 #else
@@ -684,6 +1047,13 @@ esp_err_t minihub_matter_interview_identity(uint64_t node_id)
     if (node_id < 2) {
         return ESP_ERR_INVALID_ARG;
     }
+    /* matter_hub (lf_core_chip_read_attribute) takes the stack lock before
+     * GetConnectedDevice. send_command() arms AddressResolve, which
+     * CancelTimer()s on this thread. SystemLayerImplFreeRTOS asserts the
+     * caller holds PlatformMgr's lock and chipDie()s otherwise.
+     * From a CHIP callback the scoped lock is ALREADY_TAKEN and does not
+     * unlock on the way out. */
+    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
     using chip::Platform::ScopedMemoryBufferWithSize;
     using chip::app::AttributePathParams;
     using chip::app::EventPathParams;

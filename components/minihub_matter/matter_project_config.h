@@ -23,4 +23,10 @@
  */
 #define CHIP_CONFIG_MDNS_RESOLVE_LOOKUP_RESULTS 5
 
+/* Already the CHIP default (1); keep explicit so Thread FindOperational can
+ * retry while the commissionee's _matter._tcp SRP entry is still publishing. */
+#ifndef CHIP_DEVICE_CONFIG_ENABLE_AUTOMATIC_CASE_RETRIES
+#define CHIP_DEVICE_CONFIG_ENABLE_AUTOMATIC_CASE_RETRIES 1
+#endif
+
 #endif

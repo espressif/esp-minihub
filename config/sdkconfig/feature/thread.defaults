@@ -34,8 +34,9 @@ CONFIG_MDNS_MULTIPLE_INSTANCE=y
 # SRP hosts even when BR logs "Host update" / "Add new service".
 # CONFIG_USE_MINIMAL_MDNS is not set
 
-# Border Router is SRP server (via OT FTD defaults), not client.
-# CONFIG_OPENTHREAD_SRP_CLIENT is not set
+# BR remains SRP server (OT FTD). Also enable SRP client so CHIP platform
+# DnssdImpl can Init/Resolve via OpenThread DNS against the local SRP DB.
+CONFIG_OPENTHREAD_SRP_CLIENT=y
 
 # OT stack lifecycle is minihub_thread, not esp_matter::start().
 # CONFIG_ESP_MATTER_ENABLE_OPENTHREAD is not set

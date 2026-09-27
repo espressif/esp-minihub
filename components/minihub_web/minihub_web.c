@@ -3802,43 +3802,63 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     }
 
     const bool want_commission = cJSON_IsString(code) && code->valuestring[0];
-    esp_err_t commission_err = ESP_OK;
     if (want_commission) {
-        commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
-                                                           ssid_s, pass_s);
+        /* Eager card: upsert as waiting, start commission, return immediately.
+         * Never block httpd on commission_wait — that stalls /api/points. */
+        size_t synced = 0;
+        esp_err_t commission_err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing,
+                                                                 &synced, transport);
+        if (commission_err == ESP_OK) {
+            commission_err = minihub_matter_devices_set_commission_phase(node_id, "waiting", NULL);
+        }
+        if (commission_err == ESP_OK && do_reload) {
+            (void)minihub_hub_reload_async();
+        }
+        if (commission_err == ESP_OK) {
+            commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
+                                                               ssid_s, pass_s);
+        }
+        if (commission_err == ESP_OK) {
+            commission_err = minihub_matter_set_pending_device(node_id, endpoints, ep_count, merge_existing,
+                                                              do_reload, transport);
+        }
         if (commission_err != ESP_OK) {
-            cJSON *resp = cJSON_CreateObject();
+            (void)minihub_matter_devices_set_commission_phase(node_id, "failed",
+                                                              minihub_matter_last_error()
+                                                                  ? minihub_matter_last_error()
+                                                                  : esp_err_to_name(commission_err));
+            if (do_reload) {
+                (void)minihub_hub_reload_async();
+            }
+        }
+        cJSON_Delete(root);
+        cJSON *resp = cJSON_CreateObject();
+        if (!resp) {
+            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+        }
+        if (commission_err != ESP_OK) {
             cJSON_AddStringToObject(resp, "result", "error");
             cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
+            cJSON_AddNumberToObject(resp, "synced", (double)synced);
             cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
             if (minihub_matter_last_error()) {
                 cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
             } else {
                 cJSON_AddStringToObject(resp, "message", esp_err_to_name(commission_err));
             }
-            cJSON_Delete(root);
-            err = send_json(req, resp);
-            cJSON_Delete(resp);
-            return err;
-        }
-    }
-    if (commission_err != ESP_OK) {
-        cJSON *resp = cJSON_CreateObject();
-        cJSON_AddStringToObject(resp, "result", "error");
-        cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
-        if (minihub_matter_last_error()) {
-            cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
         } else {
-            cJSON_AddStringToObject(resp, "message", "commission did not start");
+            cJSON_AddStringToObject(resp, "result", "ok");
+            cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
+            cJSON_AddStringToObject(resp, "commission", "started");
+            cJSON_AddBoolToObject(resp, "reloaded", do_reload);
+            cJSON_AddNumberToObject(resp, "synced", (double)synced);
         }
-        cJSON_Delete(root);
         err = send_json(req, resp);
         cJSON_Delete(resp);
         return err;
     }
 
-    /* Persist device entry only after PairDevice is armed — not on failed start.
-     * Full reachability still requires commissioning_success (CASE). */
+    /* No pairing_code: upsert only (no commission). */
     size_t synced = 0;
     err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing, &synced, transport);
     cJSON_Delete(root);
@@ -3855,7 +3875,7 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
     cJSON_AddNumberToObject(resp, "synced", (double)synced);
     cJSON_AddBoolToObject(resp, "reloaded", do_reload);
-    cJSON_AddStringToObject(resp, "commission", want_commission ? "started" : "skipped");
+    cJSON_AddStringToObject(resp, "commission", "skipped");
     err = send_json(req, resp);
     cJSON_Delete(resp);
     return err;

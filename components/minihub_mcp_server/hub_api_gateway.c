@@ -894,24 +894,57 @@ static esp_err_t dispatch_matter_devices(const char *body, cJSON **out)
         }
     }
 
-    esp_err_t commission_err = ESP_ERR_INVALID_ARG;
-    if (cJSON_IsString(code) && code->valuestring[0]) {
-        commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
-                                                           ssid_s, pass_s);
-    }
-    if (commission_err != ESP_OK) {
-        cJSON *resp = cJSON_CreateObject();
+    const bool want_commission = cJSON_IsString(code) && code->valuestring[0];
+    if (want_commission) {
+        size_t synced = 0;
+        esp_err_t commission_err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing,
+                                                                 &synced, transport);
+        if (commission_err == ESP_OK) {
+            commission_err = minihub_matter_devices_set_commission_phase(node_id, "waiting", NULL);
+        }
+        if (commission_err == ESP_OK && do_reload) {
+            (void)minihub_hub_reload_async();
+        }
+        if (commission_err == ESP_OK) {
+            commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
+                                                               ssid_s, pass_s);
+        }
+        if (commission_err == ESP_OK) {
+            commission_err = minihub_matter_set_pending_device(node_id, endpoints, ep_count, merge_existing,
+                                                              do_reload, transport);
+        }
+        if (commission_err != ESP_OK) {
+            (void)minihub_matter_devices_set_commission_phase(node_id, "failed",
+                                                              minihub_matter_last_error()
+                                                                  ? minihub_matter_last_error()
+                                                                  : esp_err_to_name(commission_err));
+            if (do_reload) {
+                (void)minihub_hub_reload_async();
+            }
+        }
         cJSON_Delete(root);
+        cJSON *resp = cJSON_CreateObject();
         if (!resp) {
             return ESP_ERR_NO_MEM;
         }
-        cJSON_AddBoolToObject(resp, "ok", false);
-        cJSON_AddStringToObject(resp, "result", "error");
-        cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
-        if (minihub_matter_last_error()) {
-            cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
+        if (commission_err != ESP_OK) {
+            cJSON_AddBoolToObject(resp, "ok", false);
+            cJSON_AddStringToObject(resp, "result", "error");
+            cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
+            cJSON_AddNumberToObject(resp, "synced", (double)synced);
+            cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
+            if (minihub_matter_last_error()) {
+                cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
+            } else {
+                cJSON_AddStringToObject(resp, "message", "commission did not start");
+            }
         } else {
-            cJSON_AddStringToObject(resp, "message", "commission did not start");
+            cJSON_AddBoolToObject(resp, "ok", true);
+            cJSON_AddStringToObject(resp, "result", "ok");
+            cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
+            cJSON_AddNumberToObject(resp, "synced", (double)synced);
+            cJSON_AddBoolToObject(resp, "reloaded", do_reload);
+            cJSON_AddStringToObject(resp, "commission", "started");
         }
         *out = resp;
         return ESP_OK;
@@ -938,7 +971,7 @@ static esp_err_t dispatch_matter_devices(const char *body, cJSON **out)
     cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
     cJSON_AddNumberToObject(resp, "synced", (double)synced);
     cJSON_AddBoolToObject(resp, "reloaded", do_reload);
-    cJSON_AddStringToObject(resp, "commission", "started");
+    cJSON_AddStringToObject(resp, "commission", "skipped");
     *out = resp;
     return ESP_OK;
 }

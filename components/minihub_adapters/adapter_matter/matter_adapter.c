@@ -28,6 +28,8 @@ typedef struct {
     char point_id[MINIHUB_POINT_ID_MAX];
     char type[MINIHUB_TYPE_MAX];
     char transport[16];
+    char commission_phase[16];
+    char commission_error[96];
     uint64_t node_id;
     uint16_t endpoint_id;
 } matter_device_t;
@@ -110,7 +112,7 @@ static void interview_unique_nodes(void)
                 break;
             }
         }
-        if (already || s_devices[i].node_id < 2) {
+        if (already || s_devices[i].node_id < 2 || s_devices[i].commission_phase[0]) {
             continue;
         }
         (void)minihub_matter_interview_identity(s_devices[i].node_id);
@@ -137,6 +139,8 @@ static esp_err_t parse_devices(const cJSON *cfg)
         const cJSON *node_id = cJSON_GetObjectItem(item, "node_id");
         const cJSON *endpoint_id = cJSON_GetObjectItem(item, "endpoint_id");
         const cJSON *transport = cJSON_GetObjectItem(item, "transport");
+        const cJSON *cphase = cJSON_GetObjectItem(item, "commission_phase");
+        const cJSON *cerr = cJSON_GetObjectItem(item, "commission_error");
 
         if (!cJSON_IsString(point_id)) {
             continue;
@@ -149,6 +153,12 @@ static esp_err_t parse_devices(const cJSON *cfg)
         }
         if (cJSON_IsString(transport) && transport->valuestring[0]) {
             strncpy(dev->transport, transport->valuestring, sizeof(dev->transport) - 1);
+        }
+        if (cJSON_IsString(cphase) && cphase->valuestring[0]) {
+            strncpy(dev->commission_phase, cphase->valuestring, sizeof(dev->commission_phase) - 1);
+        }
+        if (cJSON_IsString(cerr) && cerr->valuestring[0]) {
+            strncpy(dev->commission_error, cerr->valuestring, sizeof(dev->commission_error) - 1);
         }
         dev->node_id = cJSON_IsString(node_id) ? parse_node_id(node_id->valuestring) : 1;
         dev->endpoint_id = cJSON_IsNumber(endpoint_id) ? (uint16_t)endpoint_id->valueint : 1;
@@ -177,8 +187,9 @@ static esp_err_t matter_adapter_start(void)
         if (minihub_matter_ready()) {
             err = ESP_OK;
         } else {
-            ESP_LOGE(TAG, "Matter init failed: %s", esp_err_to_name(err));
-            return err;
+            /* Still register configured points so overview/delete stay usable. */
+            ESP_LOGE(TAG, "Matter init failed: %s (registering points anyway)",
+                     esp_err_to_name(err));
         }
     }
 
@@ -187,8 +198,10 @@ static esp_err_t matter_adapter_start(void)
         strncpy(point.point_id, s_devices[i].point_id, sizeof(point.point_id) - 1);
         strncpy(point.type, s_devices[i].type, sizeof(point.type) - 1);
         strncpy(point.adapter, "matter", sizeof(point.adapter) - 1);
-        strncpy(point.value, "off", sizeof(point.value) - 1);
-        point.online = minihub_matter_ready();
+        const bool commissioning = s_devices[i].commission_phase[0] != '\0';
+        strncpy(point.value, commissioning ? "…" : "off", sizeof(point.value) - 1);
+        /* Pending/failed commission: show as offline so controls stay disabled. */
+        point.online = commissioning ? false : minihub_matter_ready();
         cJSON *props = cJSON_CreateObject();
         if (props) {
             char name[48];
@@ -198,6 +211,14 @@ static esp_err_t matter_adapter_start(void)
             cJSON_AddStringToObject(props, "name", name);
             if (s_devices[i].transport[0]) {
                 cJSON_AddStringToObject(props, "transport", s_devices[i].transport);
+            }
+            if (commissioning) {
+                cJSON_AddTrueToObject(props, "commissioning");
+                cJSON_AddStringToObject(props, "commission_phase", s_devices[i].commission_phase);
+                if (s_devices[i].commission_error[0]) {
+                    cJSON_AddStringToObject(props, "commission_error", s_devices[i].commission_error);
+                }
+                cJSON_AddTrueToObject(props, "no_control");
             }
             point.props = props;
         }
@@ -215,6 +236,7 @@ static esp_err_t matter_adapter_start(void)
     }
     ESP_LOGI(TAG, "Matter adapter started (%u devices, commissioner=%d)",
              (unsigned)s_device_count, minihub_matter_ready() ? 1 : 0);
+    /* Adapter stays loaded even if commissioner setup failed this pass. */
     return ESP_OK;
 }
 

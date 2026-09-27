@@ -42,6 +42,27 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
                                             minihub_matter_discovery_t discovery,
                                             const char *wifi_ssid, const char *wifi_password);
 
+/**
+ * Block until the commission started by commission_code_ex reaches
+ * commissioning_success, a failure callback, or timeout.
+ * Does not write adapters.json. ESP_OK only after commissioning_success.
+ * timeout_ms 0 uses the default (180s). DNS-SD failures that never invoke
+ * the pairing callback are reported as ESP_ERR_TIMEOUT.
+ *
+ * Prefer the async path: set_pending_device + poll GET /api/matter/status.
+ * Do not call this from an httpd URI handler.
+ */
+esp_err_t minihub_matter_commission_wait(uint32_t timeout_ms);
+
+/**
+ * After commission_code_ex returns ESP_OK, stash the device upsert that must
+ * run only on commissioning_success. Cleared on failure or 180s watchdog.
+ * Relies on weak minihub_hub_reload_async when do_reload is true.
+ */
+esp_err_t minihub_matter_set_pending_device(uint64_t node_id, const uint16_t *endpoints,
+                                            size_t endpoint_count, bool merge_existing,
+                                            bool do_reload, const char *transport);
+
 /** Multi-admin: pair with manual code (MT:...) or QR payload — NETWORK discovery. */
 esp_err_t minihub_matter_commission_code(uint64_t node_id, const char *pairing_code);
 
@@ -63,6 +84,14 @@ esp_err_t minihub_matter_next_node_id(uint64_t *out_node_id);
  */
 esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoints, size_t endpoint_count,
                                         bool merge_existing, size_t *synced_count, const char *transport);
+
+/**
+ * Set commission UI phase on all matter.devices[] rows for node_id.
+ * @param phase  "waiting" | "failed" | NULL/"" to clear (device is commissioned).
+ * @param error_msg  Optional; stored when phase is "failed".
+ */
+esp_err_t minihub_matter_devices_set_commission_phase(uint64_t node_id, const char *phase,
+                                                      const char *error_msg);
 
 /** Remove a Matter point from adapters.json by point_id. */
 esp_err_t minihub_matter_device_remove(const char *point_id);

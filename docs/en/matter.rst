@@ -98,16 +98,25 @@ On error: ``status`` is an ``ESP_ERR_*`` name; optional ``message`` string.
 Discovery values (``discovery`` field)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* ``network`` (default) — multi-admin / already on LAN; ``setup_pin`` allowed
-* ``ble_wifi`` / ``first_time`` — Hub BLE + inject **device** Wi-Fi credentials
-* ``ble_thread`` — BLE commission onto Thread (needs Thread BR build)
-* ``ble_ethernet`` / ``ethernet`` — BLE commission for Ethernet device
+The Web add-device dialog always uses BLE + DNS-SD (CHIP ``DiscoveryType::kAll``):
+
+* ``ble_thread`` (default when Wi-Fi toggle is off) — BLE + inject Hub Thread dataset
+* ``ble_wifi`` / ``first_time`` — BLE + inject **device** Wi-Fi credentials
+
+``POST /api/matter/commission`` still accepts ``network`` (DNS-SD only / multi-admin)
+and ``ble_ethernet`` for API clients; they are not offered in the overview dialog.
 
 Commission + persist devices
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``POST /api/matter/devices`` commissions when ``pairing_code`` is present, then
-upserts device entries and optionally reloads the hub.
+``POST /api/matter/devices`` with ``pairing_code`` **upserts the device immediately**
+with ``commission_phase: "waiting"`` (overview shows **等待配网中**), starts
+commissioning, and returns ``commission: "started"`` without blocking the HTTP
+handler. On success the phase is cleared and the card becomes a normal device; on
+failure or a 180 s watchdog the card stays with ``commission_phase: "failed"``
+(deletable). Poll ``GET /api/matter/status`` for
+``commission``: ``idle`` | ``running`` | ``ok`` | ``failed``. Omitting
+``pairing_code`` still upserts without commissioning (``commission: "skipped"``).
 
 .. code-block:: json
 
@@ -115,10 +124,8 @@ upserts device entries and optionally reloads the hub.
      "pairing_code": "MT:...",
      "node_id": 2,
      "endpoints": [1],
-     "discovery": "ble_wifi",
-     "wifi_ssid": "MyHome",
-     "wifi_password": "secret",
-     "transport": "wifi",
+     "discovery": "ble_thread",
+     "transport": "thread",
      "merge": true,
      "reload": true
    }
@@ -126,10 +133,10 @@ upserts device entries and optionally reloads the hub.
 * ``node_id`` — omit or < 2 to auto-allocate next id
 * ``endpoints`` — array of numbers or comma string ``"1,2"``; default ``[1]``
 * ``merge`` — default true; merge with existing ``devices[]``
-* ``reload`` — default true; call ``minihub_hub_reload`` after upsert
+* ``reload`` — default true; async hub reload after upsert / finalize
 * ``delete`` — when true, remove by ``point_id`` instead (same as points/remove)
 
-**Success response**
+**Immediate response (commission started)**
 
 .. code-block:: json
 
@@ -140,6 +147,9 @@ upserts device entries and optionally reloads the hub.
      "reloaded": true,
      "commission": "started"
    }
+
+**After success**: ``GET /api/matter/status`` shows ``commission: "ok"`` and the
+overview card drops the waiting state.
 
 **Delete example**
 

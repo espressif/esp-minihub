@@ -214,11 +214,15 @@
   let webIngest = Promise.resolve();
 
   function log(msg, cls) {
+    /* Newest + batch summaries on top (summary is logged last → inserted first). */
+    if (logEl.firstChild && logEl.firstChild.nodeType === Node.TEXT_NODE) {
+      logEl.textContent = "";
+    }
     const line = document.createElement("div");
     line.className = cls || "log-info";
     line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    logEl.appendChild(line);
-    logEl.scrollTop = logEl.scrollHeight;
+    logEl.insertBefore(line, logEl.firstChild);
+    logEl.scrollTop = 0;
   }
 
   function baseUrl() {

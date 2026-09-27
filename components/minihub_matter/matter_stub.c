@@ -66,6 +66,34 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t minihub_matter_commission_wait(uint32_t timeout_ms)
+{
+    (void)timeout_ms;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_matter_set_pending_device(uint64_t node_id, const uint16_t *endpoints,
+                                            size_t endpoint_count, bool merge_existing,
+                                            bool do_reload, const char *transport)
+{
+    (void)node_id;
+    (void)endpoints;
+    (void)endpoint_count;
+    (void)merge_existing;
+    (void)do_reload;
+    (void)transport;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_matter_devices_set_commission_phase(uint64_t node_id, const char *phase,
+                                                      const char *error_msg)
+{
+    (void)node_id;
+    (void)phase;
+    (void)error_msg;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 esp_err_t minihub_matter_commission_pin(uint64_t node_id, uint32_t setup_pin)
 {
     (void)node_id;
@@ -101,6 +129,7 @@ cJSON *minihub_matter_status_json(void)
     cJSON_AddBoolToObject(root, "commissioned", false);
     cJSON_AddBoolToObject(root, "thread_br_ready", false);
     cJSON_AddStringToObject(root, "mode", "stub");
+    cJSON_AddStringToObject(root, "commission", "idle");
     cJSON *prefill = cJSON_CreateObject();
     if (prefill) {
         cJSON_AddStringToObject(prefill, "ssid", "");
