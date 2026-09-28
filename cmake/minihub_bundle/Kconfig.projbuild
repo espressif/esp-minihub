@@ -28,7 +28,7 @@ menu "MiniHub"
     rsource "../../components/minihub_usb_msc/Kconfig.minihub"
     rsource "../../components/minihub_web/Kconfig.minihub"
     rsource "../../components/minihub_zigbee/Kconfig.minihub"
-    rsource "../../components/minihub_adapters/adapter_modbus/Kconfig.minihub"
-    rsource "../../components/minihub_adapters/adapter_mqtt/Kconfig.minihub"
+    rsource "../../components/minihub_protocol_adapters/adapter_modbus/Kconfig.minihub"
+    rsource "../../components/minihub_protocol_adapters/adapter_mqtt/Kconfig.minihub"
 
 endmenu

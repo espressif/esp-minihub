@@ -175,7 +175,10 @@ static cJSON *find_device_by_endpoint(cJSON *devices, uint64_t node_id, uint16_t
 static void make_point_id(uint64_t node_id, uint16_t endpoint_id, const char *transport,
                           char *out, size_t out_len)
 {
-    const char *proto = (transport && transport[0]) ? transport : "matter";
+    /* R15: a device committed without a known transport gets the "Unknown" prefix
+     * rather than masquerading as "matter" — the user裁定 wants missing transport
+     * surfaced, not hidden. Devices that already have a transport keep it. */
+    const char *proto = (transport && transport[0]) ? transport : "Unknown";
     snprintf(out, out_len, "%s.matter_n%" PRIu64 "_ep%u", proto, node_id, (unsigned)endpoint_id);
 }
 
@@ -242,13 +245,21 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
         char point_id[64];
         make_point_id(node_id, ep, transport, point_id, sizeof(point_id));
         if (existing) {
+            /* R15: never rewrite an existing row's point_id. A transport-less resync
+             * must not rename a row that already earned a prefix (e.g. thread.), or
+             * the old id becomes a permanent orphan while the new id is created —
+             * "one bulb, two cards". Keep the id the device already has; only refresh
+             * the scalar fields. */
+            const cJSON *pid = cJSON_GetObjectItem(existing, "point_id");
+            if (cJSON_IsString(pid)) {
+                strncpy(point_id, pid->valuestring, sizeof(point_id) - 1);
+                point_id[sizeof(point_id) - 1] = '\0';
+            }
             cJSON_DeleteItemFromObject(existing, "node_id");
             cJSON_DeleteItemFromObject(existing, "endpoint_id");
             cJSON_DeleteItemFromObject(existing, "type");
-            cJSON_DeleteItemFromObject(existing, "point_id");
             char node_str[24];
             snprintf(node_str, sizeof(node_str), "%" PRIu64, node_id);
-            cJSON_AddStringToObject(existing, "point_id", point_id);
             cJSON_AddStringToObject(existing, "type", "light");
             cJSON_AddStringToObject(existing, "node_id", node_str);
             cJSON_AddNumberToObject(existing, "endpoint_id", ep);

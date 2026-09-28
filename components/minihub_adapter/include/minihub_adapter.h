@@ -39,8 +39,12 @@ typedef struct {
      *
      * @note Mirrored in docs/module_sdk/include/minihub_plugin_sdk/minihub.h —
      *       keep the two in step (tools/check_plugin_sdk.py asserts sizeof).
-     *       MINIHUB_MODULE_ABI_VERSION stays 1: no product is deployed yet, so L3
-     *       modules are rebuilt rather than version-gated.
+     *       MINIHUB_MODULE_ABI_VERSION stays 1 by deliberate choice: no product is
+     *       deployed yet, so L3 modules are rebuilt rather than version-gated.
+     *       WARNING (R2): inserting/removing/reordering a field in the MIDDLE of this
+     *       struct is an ABI break even if sizeof() is unchanged — a rebuilt L3 module
+     *       compiled against the old layout will read/write garbage. Any such
+     *       incompatibility MUST bump MINIHUB_MODULE_ABI_VERSION.
      */
     esp_err_t (*resync)(const cJSON *config);
 } minihub_adapter_t;

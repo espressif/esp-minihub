@@ -197,7 +197,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         on_got_ip("wifi", s_sta_netif);
-        esp_err_t err = esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+        /* Modem sleep stalls the console: chunked HTTP waits on the peer ACK
+         * across DTIM, so opening the page takes tens of seconds. A wall-powered
+         * hub keeps the STA awake. Thread/Matter coex used to mask this by
+         * holding the radio; with both adapters disabled the sleep is real. */
+        esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "Wi-Fi set_ps failed: %s", esp_err_to_name(err));
         }
@@ -243,9 +247,9 @@ static esp_err_t start_wifi_sta(void)
         ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "set mode");
         ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config), TAG, "set config");
         ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
-        err = esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+        err = esp_wifi_set_ps(WIFI_PS_NONE);
         if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Wi-Fi set_ps(MIN_MODEM) failed: %s", esp_err_to_name(err));
+            ESP_LOGW(TAG, "Wi-Fi set_ps(NONE) failed: %s", esp_err_to_name(err));
         }
         if (!minihub_provision_busy()) {
             esp_err_t cerr = esp_wifi_connect();

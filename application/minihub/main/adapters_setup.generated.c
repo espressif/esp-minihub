@@ -30,7 +30,7 @@ extern const minihub_adapter_t thread_adapter;
 
 static const char *TAG = "adapters_setup";
 
-esp_err_t minihub_adapters_register_all(void)
+esp_err_t minihub_protocol_adapters_register_all(void)
 {
     esp_err_t err;
 #if CONFIG_MINIHUB_MQTT_ADAPTER

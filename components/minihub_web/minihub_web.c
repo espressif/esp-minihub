@@ -3688,6 +3688,23 @@ static esp_err_t handle_api_matter_commission(httpd_req_t *req)
     const char *ssid_s = cJSON_IsString(ssid) ? ssid->valuestring : NULL;
     const char *pass_s = cJSON_IsString(wpass) ? wpass->valuestring : NULL;
 
+    /* Cancel an in-flight commission. The backend already implements
+     * minihub_matter_commission_cancel(); expose it so the web UI can show a
+     * "取消配网" button that matches BLE Mesh's "停止配网" / Zigbee's "停止入网". */
+    const cJSON *cancel = cJSON_GetObjectItem(root, "cancel");
+    if (cJSON_IsBool(cancel) && cJSON_IsTrue(cancel)) {
+        esp_err_t cerr = minihub_matter_commission_cancel(node_id);
+        cJSON *resp = cJSON_CreateObject();
+        cJSON_AddStringToObject(resp, "status", cerr == ESP_OK ? "cancelled" : esp_err_to_name(cerr));
+        if (cerr != ESP_OK && minihub_matter_last_error()) {
+            cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
+        }
+        cJSON_Delete(root);
+        err = send_json(req, resp);
+        cJSON_Delete(resp);
+        return err;
+    }
+
     if (cJSON_IsString(code)) {
         err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery, ssid_s, pass_s);
     } else if (cJSON_IsNumber(pin)) {

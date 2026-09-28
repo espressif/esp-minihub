@@ -11,6 +11,7 @@
 #include <string.h>
 #include <string>
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -71,7 +72,14 @@ static bool s_pairing_in_progress;
 static SemaphoreHandle_t s_commission_sem;
 static portMUX_TYPE s_commission_mux = portMUX_INITIALIZER_UNLOCKED;
 static esp_err_t s_commission_result = ESP_OK;
-static constexpr uint32_t k_commission_wait_ms = 180000;
+/* Commission watchdog timeout. Operational DNS-SD (resolving the joined device
+ * on the fabric) can be slow on first browse — the local OTBR record may not be
+ * visible immediately after commissioning — so this is Kconfig-tunable and
+ * defaults to 300 s rather than the old hard 180 s. See MINIHUB_MATTER_COMMISSION_WAIT_MS. */
+#ifndef CONFIG_MINIHUB_MATTER_COMMISSION_WAIT_MS
+#define CONFIG_MINIHUB_MATTER_COMMISSION_WAIT_MS 300000
+#endif
+static constexpr uint32_t k_commission_wait_ms = CONFIG_MINIHUB_MATTER_COMMISSION_WAIT_MS;
 static constexpr size_t k_pending_ep_max = 16;
 
 enum {
@@ -130,7 +138,16 @@ typedef struct {
  * invalidates it, so read_onoff must not consume it — see the Task 1 ruling. */
 static matter_read_slot_t s_last_read;
 
-#define IDENTITY_SLOT_MAX 16
+#ifndef CONFIG_MINIHUB_MATTER_MAX_NODES
+#define CONFIG_MINIHUB_MATTER_MAX_NODES 128
+#endif
+/* Capacity from Kconfig (MINIHUB_MATTER_MAX_NODES, default 128). Tables are
+ * heap-allocated from PSRAM at init; overflow is logged + rejected, never
+ * silently dropped. Allocated once, never freed -> no use-after-free surface. */
+#define IDENTITY_SLOT_MAX ((int)CONFIG_MINIHUB_MATTER_MAX_NODES)
+
+/* Forward declaration: allocate the tables once at init (idempotent). */
+static esp_err_t matter_ctrl_tables_ensure(void);
 
 typedef struct {
     uint64_t node_id;
@@ -140,7 +157,7 @@ typedef struct {
     bool in_use;
 } identity_slot_t;
 
-static identity_slot_t s_id_slots[IDENTITY_SLOT_MAX];
+static identity_slot_t *s_id_slots = NULL;
 static minihub_matter_identity_cb_t s_identity_cb;
 static void *s_identity_ctx;
 
@@ -180,18 +197,27 @@ static void on_attr_report(uint64_t node_id, const chip::app::ConcreteDataAttrib
 
 static void set_error(const char *msg)
 {
+    /* s_last_error is written here on the commissioning task and read on the
+     * httpd task (minihub_matter_last_error / status_json) — guard it. */
+    portENTER_CRITICAL(&s_commission_mux);
     if (!msg) {
         s_last_error[0] = '\0';
+        portEXIT_CRITICAL(&s_commission_mux);
         return;
     }
     strncpy(s_last_error, msg, sizeof(s_last_error) - 1);
     s_last_error[sizeof(s_last_error) - 1] = '\0';
+    portEXIT_CRITICAL(&s_commission_mux);
 }
 
 static identity_slot_t *identity_slot(uint64_t node_id, bool create)
 {
+    matter_ctrl_tables_ensure();
+    if (!s_id_slots) {
+        return NULL;
+    }
     identity_slot_t *empty = NULL;
-    for (size_t i = 0; i < IDENTITY_SLOT_MAX; i++) {
+    for (size_t i = 0; i < (size_t)IDENTITY_SLOT_MAX; i++) {
         if (s_id_slots[i].in_use && s_id_slots[i].node_id == node_id) {
             return &s_id_slots[i];
         }
@@ -200,6 +226,10 @@ static identity_slot_t *identity_slot(uint64_t node_id, bool create)
         }
     }
     if (!create || !empty) {
+        if (create && !empty) {
+            ESP_LOGE(TAG, "identity slot table full (cap %d): node%" PRIu64 " dropped",
+                     IDENTITY_SLOT_MAX, (unsigned long long)node_id);
+        }
         return NULL;
     }
     memset(empty, 0, sizeof(*empty));
@@ -573,6 +603,10 @@ esp_err_t minihub_matter_commission_cancel(uint64_t node_id)
     stop_commission_watchdog();
     (void)ensure_pairing_slot_free();
     set_error("commissioning cancelled");
+    /* Persist a failed phase so the web card stops showing "配网中" and hides
+     * the cancel button (mirrors the timeout/failure path in finalize). The
+     * delete path removes the row right after, so this write is harmless there. */
+    (void)minihub_matter_devices_set_commission_phase(node_id, "failed", "commissioning cancelled");
     signal_commission_done(ESP_FAIL);
     ESP_LOGW(TAG, "commissioning cancelled for node %" PRIu64, node_id);
     return ESP_OK;
@@ -658,6 +692,8 @@ esp_err_t minihub_matter_init(void)
     if (s_started) {
         return ESP_OK;
     }
+
+    matter_ctrl_tables_ensure();
 
     /* On WIFI_STA builds: seed credentials for CHIP. On ETH-only: no-op. */
     esp_err_t err = minihub_matter_wifi_bootstrap();
@@ -1177,11 +1213,11 @@ esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool
     return serr == ESP_OK ? ESP_ERR_NOT_FINISHED : serr;
 }
 
-#define MATTER_SUB_MAX 8
+#define MATTER_SUB_MAX ((int)CONFIG_MINIHUB_MATTER_MAX_NODES)
 #define MATTER_SUB_MIN_INTERVAL 5
 #define MATTER_SUB_MAX_INTERVAL 30
 /* One commissioning can carry up to k_pending_ep_max endpoints for a single
- * node, so the per-node endpoint list must not be smaller; MATTER_SUB_MAX (8)
+ * node, so the per-node endpoint list must not be smaller; MATTER_SUB_MAX
  * nodes is the real cap and is documented in the header. */
 static constexpr size_t k_sub_ep_max = k_pending_ep_max;
 
@@ -1199,18 +1235,62 @@ typedef struct {
     uint32_t reports;
 } matter_sub_slot_t;
 
-static matter_sub_slot_t s_subs[MATTER_SUB_MAX];
+static matter_sub_slot_t *s_subs = NULL;
 
 /* A subscription that established after its row was already dropped. drop_node()
  * cannot tear down an arm that has not reported an id yet (subscription_id == 0),
  * so if that arm later succeeds nothing tracks it and it keeps writing points.
  * Those are parked here and shut down from the next subscribe call, which runs
  * outside the CHIP event task. Guarded by s_sub_mux. */
-static struct {
+typedef struct {
     uint64_t node_id;
     uint32_t sub_id;
-} s_sub_orphans[MATTER_SUB_MAX];
+} matter_sub_orphan_t;
+static matter_sub_orphan_t *s_sub_orphans = NULL;
 static size_t s_sub_orphan_count;
+
+static portMUX_TYPE s_tables_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool s_tables_inited = false;
+
+/* Allocate the device/subscription/identity tables once from PSRAM at init.
+ * They are never freed (the commissioner lives for the process), so there is
+ * no use-after-free surface. Idempotent + double-checked so callers may call
+ * it defensively; only the first call (from minihub_matter_init, off any lock)
+ * actually allocates. */
+static esp_err_t matter_ctrl_tables_ensure(void)
+{
+    if (s_tables_inited) {
+        return ESP_OK;
+    }
+    portENTER_CRITICAL(&s_tables_mux);
+    if (s_tables_inited) {
+        portEXIT_CRITICAL(&s_tables_mux);
+        return ESP_OK;
+    }
+    const int slot_cap = IDENTITY_SLOT_MAX;
+    const int sub_cap = MATTER_SUB_MAX;
+    s_id_slots = (identity_slot_t *)heap_caps_calloc((size_t)slot_cap, sizeof(identity_slot_t),
+                        MALLOC_CAP_SPIRAM);
+    if (!s_id_slots) s_id_slots = (identity_slot_t *)calloc((size_t)slot_cap, sizeof(identity_slot_t));
+    s_subs = (matter_sub_slot_t *)heap_caps_calloc((size_t)sub_cap, sizeof(matter_sub_slot_t),
+                        MALLOC_CAP_SPIRAM);
+    if (!s_subs) s_subs = (matter_sub_slot_t *)calloc((size_t)sub_cap, sizeof(matter_sub_slot_t));
+    s_sub_orphans = (matter_sub_orphan_t *)heap_caps_calloc((size_t)sub_cap, sizeof(matter_sub_orphan_t),
+                        MALLOC_CAP_SPIRAM);
+    if (!s_sub_orphans) s_sub_orphans = (matter_sub_orphan_t *)calloc((size_t)sub_cap, sizeof(matter_sub_orphan_t));
+    if (!s_id_slots || !s_subs || !s_sub_orphans) {
+        ESP_LOGE(TAG, "matter ctrl tables alloc failed");
+        heap_caps_free(s_id_slots); s_id_slots = NULL;
+        heap_caps_free(s_subs); s_subs = NULL;
+        heap_caps_free(s_sub_orphans); s_sub_orphans = NULL;
+        s_tables_inited = true; /* do not retry under a lock */
+        portEXIT_CRITICAL(&s_tables_mux);
+        return ESP_ERR_NO_MEM;
+    }
+    s_tables_inited = true;
+    portEXIT_CRITICAL(&s_tables_mux);
+    return ESP_OK;
+}
 
 /* Readers run on the httpd task (status JSON), writers on the CHIP event task
  * (established/terminated) and on the subscribe_node caller. Same
@@ -1220,6 +1300,10 @@ static portMUX_TYPE s_sub_mux = portMUX_INITIALIZER_UNLOCKED;
 /* Caller must hold s_sub_mux. */
 static int sub_slot(uint64_t node_id, bool alloc)
 {
+    matter_ctrl_tables_ensure();
+    if (!s_subs) {
+        return -1;
+    }
     for (int i = 0; i < MATTER_SUB_MAX; i++) {
         if (s_subs[i].node_id == node_id) {
             return i;
@@ -1234,6 +1318,8 @@ static int sub_slot(uint64_t node_id, bool alloc)
             return i;
         }
     }
+    ESP_LOGE(TAG, "subscription table full (cap %d): node%" PRIu64 " not tracked",
+             MATTER_SUB_MAX, (unsigned long long)node_id);
     return -1;
 }
 
@@ -1247,6 +1333,9 @@ static int64_t s_sub_nomatch_warn_ms; /* rate-limit, CHIP event task only */
  * matches what the device reports), which is exactly what the status counter exposes. */
 static void note_sub_report(uint64_t node_id, uint16_t endpoint_id)
 {
+    if (!s_subs) {
+        return;
+    }
     bool have_row = false;
     bool matched = false;
     portENTER_CRITICAL(&s_sub_mux);
@@ -1280,6 +1369,9 @@ static void note_sub_report(uint64_t node_id, uint16_t endpoint_id)
 
 static void on_sub_established(uint64_t node_id, uint32_t subscription_id)
 {
+    if (!s_subs || !s_sub_orphans) {
+        return;
+    }
     bool tracked = false;
     portENTER_CRITICAL(&s_sub_mux);
     for (int i = 0; i < MATTER_SUB_MAX; i++) {
@@ -1319,21 +1411,27 @@ static void on_sub_established(uint64_t node_id, uint32_t subscription_id)
  * CHIP event task, so taking the stack lock here is acceptable. */
 static void reap_sub_orphans(void)
 {
-    struct {
-        uint64_t node_id;
-        uint32_t sub_id;
-    } pending[MATTER_SUB_MAX];
+    matter_sub_orphan_t *pending = (matter_sub_orphan_t *)heap_caps_calloc((size_t)MATTER_SUB_MAX,
+                                    sizeof(matter_sub_orphan_t), MALLOC_CAP_SPIRAM);
+    if (!pending) {
+        pending = (matter_sub_orphan_t *)calloc((size_t)MATTER_SUB_MAX, sizeof(matter_sub_orphan_t));
+    }
+    if (!pending) {
+        ESP_LOGE(TAG, "orphan reap alloc failed");
+        return;
+    }
     size_t n = 0;
 
     portENTER_CRITICAL(&s_sub_mux);
     n = s_sub_orphan_count;
     if (n > 0) {
-        memcpy(pending, s_sub_orphans, sizeof(pending[0]) * n);
+        memcpy(pending, s_sub_orphans, sizeof(matter_sub_orphan_t) * n);
         s_sub_orphan_count = 0;
-        memset(s_sub_orphans, 0, sizeof(s_sub_orphans));
+        memset(s_sub_orphans, 0, sizeof(matter_sub_orphan_t) * (size_t)MATTER_SUB_MAX);
     }
     portEXIT_CRITICAL(&s_sub_mux);
     if (n == 0) {
+        heap_caps_free(pending);
         return;
     }
 
@@ -1346,10 +1444,14 @@ static void reap_sub_orphans(void)
         ESP_LOGW(TAG, "reaped orphan subscription node=%" PRIu64 " id=0x%" PRIx32 ": %s",
                  pending[i].node_id, pending[i].sub_id, esp_err_to_name(err));
     }
+    heap_caps_free(pending);
 }
 
 static void on_sub_terminated(uint64_t node_id, uint32_t subscription_id)
 {
+    if (!s_subs) {
+        return;
+    }
     portENTER_CRITICAL(&s_sub_mux);
     for (int i = 0; i < MATTER_SUB_MAX; i++) {
         if (s_subs[i].node_id == node_id && s_subs[i].subscription_id == subscription_id) {
@@ -1486,6 +1588,9 @@ esp_err_t minihub_matter_drop_node(uint64_t node_id)
     if (node_id < 2) {
         return ESP_ERR_INVALID_ARG;
     }
+    if (!s_subs) {
+        return ESP_ERR_NO_MEM;
+    }
     uint32_t sub_id = 0;
     portENTER_CRITICAL(&s_sub_mux);
     for (int i = 0; i < MATTER_SUB_MAX; i++) {
@@ -1525,13 +1630,26 @@ cJSON *minihub_matter_subscriptions_json(void)
 {
     /* Snapshot under the mux, build cJSON outside it: cJSON_* allocates and
      * must not run inside a critical section. */
-    matter_sub_slot_t snap[MATTER_SUB_MAX];
+    matter_sub_slot_t *snap = (matter_sub_slot_t *)heap_caps_calloc((size_t)MATTER_SUB_MAX,
+                                sizeof(matter_sub_slot_t), MALLOC_CAP_SPIRAM);
+    if (!snap) {
+        snap = (matter_sub_slot_t *)calloc((size_t)MATTER_SUB_MAX, sizeof(matter_sub_slot_t));
+    }
+    if (!snap) {
+        ESP_LOGE(TAG, "sub snapshot alloc failed");
+        return NULL;
+    }
+    if (!s_subs) {
+        heap_caps_free(snap);
+        return NULL;
+    }
     portENTER_CRITICAL(&s_sub_mux);
-    memcpy(snap, s_subs, sizeof(snap));
+    memcpy(snap, s_subs, sizeof(matter_sub_slot_t) * (size_t)MATTER_SUB_MAX);
     portEXIT_CRITICAL(&s_sub_mux);
 
     cJSON *arr = cJSON_CreateArray();
     if (!arr) {
+        heap_caps_free(snap);
         return NULL;
     }
     for (int i = 0; i < MATTER_SUB_MAX; i++) {
@@ -1554,6 +1672,7 @@ cJSON *minihub_matter_subscriptions_json(void)
         cJSON_AddNumberToObject(item, "reports", (double)snap[i].reports);
         cJSON_AddItemToArray(arr, item);
     }
+    heap_caps_free(snap);
     return arr;
 }
 
@@ -1592,8 +1711,18 @@ cJSON *minihub_matter_status_json(void)
 #else
     cJSON_AddBoolToObject(root, "thread_br_ready", false);
 #endif
+    /* snapshot under the commission mux so we never read a half-written buffer. */
+    char le[sizeof(s_last_error)];
+    bool has_err = false;
+    portENTER_CRITICAL(&s_commission_mux);
     if (s_last_error[0]) {
-        cJSON_AddStringToObject(root, "last_error", s_last_error);
+        strncpy(le, s_last_error, sizeof(le) - 1);
+        le[sizeof(le) - 1] = '\0';
+        has_err = true;
+    }
+    portEXIT_CRITICAL(&s_commission_mux);
+    if (has_err) {
+        cJSON_AddStringToObject(root, "last_error", le);
     }
 
     cJSON *prefill = cJSON_CreateObject();
@@ -1624,7 +1753,11 @@ cJSON *minihub_matter_status_json(void)
 
 const char *minihub_matter_last_error(void)
 {
-    return s_last_error[0] ? s_last_error : NULL;
+    /* read under the commission mux so we never hand back a torn buffer. */
+    portENTER_CRITICAL(&s_commission_mux);
+    const char *p = s_last_error[0] ? s_last_error : NULL;
+    portEXIT_CRITICAL(&s_commission_mux);
+    return p;
 }
 
 esp_err_t minihub_matter_set_identity_cb(minihub_matter_identity_cb_t cb, void *ctx)

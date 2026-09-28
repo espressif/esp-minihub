@@ -36,7 +36,7 @@ Host Core 的依赖。
    │  ├─ minihub_scenes      场景召回                            │
    │  └─ minihub_store / minihub_module / minihub_pack  Store    │
    ├──────────────────────────────────────────────────────────────┤
-   │ minihub_adapters  zigbee / matter / thread / ble_mesh / …   │
+   │ minihub_protocol_adapters  zigbee / matter / thread / ble_mesh / …   │
    │ examples/plugins + MINIHUB_PLUGIN_DIRS  Store .mhub 源码       │
    └──────────────────────────────────────────────────────────────┘
                    │ 协议帧

@@ -167,7 +167,7 @@ void app_main(void)
         return;
     }
 
-    err = minihub_adapters_register_all();
+    err = minihub_protocol_adapters_register_all();
     if (err != ESP_OK) {
         return;
     }

@@ -95,7 +95,7 @@ LCD 选项
    * - ``main/Kconfig.projbuild``
      - 产品 Kconfig：Wi-Fi、配网、Web 登录、各适配器开关等。
    * - ``main/adapters_setup.h``
-     - ``minihub_adapters_register_all()`` 声明。
+     - ``minihub_protocol_adapters_register_all()`` 声明。
    * - ``main/adapters_setup.generated.c``
      - 自动生成，勿手改。
    * - ``main/idf_component.yml``

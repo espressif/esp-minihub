@@ -26,7 +26,7 @@ endif()
 
 list(APPEND EXTRA_COMPONENT_DIRS
     "${MINIHUB_IMPORT_ROOT}/components"
-    "${MINIHUB_IMPORT_ROOT}/components/minihub_adapters"
+    "${MINIHUB_IMPORT_ROOT}/components/minihub_protocol_adapters"
     "${MINIHUB_BUNDLE_DIR}"
 )
 if(NOT MINIHUB_IMPORT_STORE_MODULES_DISABLED)

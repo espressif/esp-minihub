@@ -12,7 +12,7 @@ L1 is a **Store packaging tier**, not a Host layer. It is **config only**: `modu
 | Layer | What belongs there |
 |-------|--------------------|
 | Host Core | `minihub_point_t`, rules, web, device-widget catalog |
-| Bundled Host adapters | Zigbee / BLE Mesh / Matter / MQTT / Modbus via Kconfig (`components/minihub_adapters/`) |
+| Bundled Host adapters | Zigbee / BLE Mesh / Matter / MQTT / Modbus via Kconfig (`components/minihub_protocol_adapters/`) |
 | Store (L1 / L2 / L3) | Third-party / ecosystem modules shipped as `.mhub` |
 
 L1 only **injects into an existing Host adapter**. Do not invent a new radio stack here (that is Host or L3).

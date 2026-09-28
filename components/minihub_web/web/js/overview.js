@@ -296,7 +296,10 @@ function sectionHeader(ad, count) {
     }
     if (ad === 'matter') {
         const st = matterStatus.ready ? '<span class="mod-acct">控制器就绪</span>' : (showActs ? '<span class="mod-acct off">未就绪</span>' : '');
-        const acts = showActs ? '<button class="btn-sm on" type="button" onclick="openMatterAdd()">添加</button>' : '';
+        const running = matterStatus.commission === 'running';
+        const acts = showActs ? (running
+            ? '<button class="btn-sm bad" type="button" onclick="cancelMatterCommission()">取消配网</button>'
+            : '<button class="btn-sm on" type="button" onclick="openMatterAdd()">添加</button>') : '';
         return '<div class="section-h matter-section-h"><span>' + (ADAPTER_LABEL[ad] || ad) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'zigbee') {
@@ -770,6 +773,9 @@ function cardHtml(p) {
         (!hasParams || powerVal != null || p.value === 'on' || p.value === 'off' || p.value === 'true' || p.value === 'false' || !p.value);
     const ctrl = allowToggle ? '<label class="toggle"><input type="checkbox" data-id="' + p.point_id + '"' + (on ? ' checked' : '') + dis + '>    <span class="slider"></span></label>' : '';
     const pidJs = String(p.point_id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const cancelBtn = (p.adapter === 'matter' && commissioning && cPhase !== 'failed')
+        ? '<button class="btn-sm" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();cancelMatterCommission(\'' + String((p.props && p.props.node_id) || '') + '\')">取消配网</button>'
+        : '';
     const delBtn = (p.adapter === 'matter') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteMatterDevice(\'' + pidJs + '\')">删除</button>' : (p.adapter === 'zigbee') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteZigbeeDevice(\'' + pidJs + '\')">删除</button>' : (p.adapter === 'ble_mesh') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteBleMeshDevice(\'' + pidJs + '\')">删除</button>' : '';
     const short = pointDisplayName(p);
     const room = pointRoomName(p);
@@ -840,7 +846,7 @@ function cardHtml(p) {
     else onlineLab = (p.online ? '在线' : '离线') + (proto ? (' · ' + esc(proto)) : '');
     const valCls = cPhase === 'waiting' ? 'pending' : (cPhase === 'failed' ? 'off' : (on ? 'on' : 'off'));
     const cardClickCls = commissioning ? '' : clickCls;
-    return '<div class="dcard' + cardClickCls + ((p.online || commissioning) ? '' : ' offline') + (commissioning ? ' commissioning' : '') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + valCls + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">日志</button>' : '') + delBtn + ctrl + '</div></div>';
+    return '<div class="dcard' + cardClickCls + ((p.online || commissioning) ? '' : ' offline') + (commissioning ? ' commissioning' : '') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + valCls + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">日志</button>' : '') + cancelBtn + delBtn + ctrl + '</div></div>';
 }
 
 async function storeAct(kind, id, enabled) {
@@ -1609,6 +1615,30 @@ async function pollMatterCommissionCard(nodeId) {
     }
     await loadPoints();
     toast('配网超时');
+}
+
+async function cancelMatterCommission(nodeId) {
+    const nid = (nodeId != null && nodeId !== '')
+        ? String(nodeId)
+        : (matterStatus && matterStatus.commission_node_id != null
+            ? String(matterStatus.commission_node_id) : null);
+    if (!nid) {
+        toast('当前没有进行中的配网');
+        return;
+    }
+    try {
+        const r = await fetch('/api/matter/commission', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ node_id: nid, cancel: true })
+        });
+        const j = await r.json().catch(() => ({}));
+        toast('已发送取消配网：' + (j.status || (r.ok ? 'ok' : '失败')));
+    } catch (e) {
+        toast('取消配网请求失败');
+    }
+    if (typeof loadMeta === 'function') await loadMeta();
+    if (typeof loadPoints === 'function') await loadPoints();
 }
 
 async function submitMatterAdd() {

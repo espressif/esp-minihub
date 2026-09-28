@@ -116,7 +116,7 @@ def gen_adapters_setup(adapters: list[Any]) -> str:
         "",
         'static const char *TAG = "adapters_setup";',
         "",
-        "esp_err_t minihub_adapters_register_all(void)",
+        "esp_err_t minihub_protocol_adapters_register_all(void)",
         "{",
         "    esp_err_t err;",
     ])

@@ -12,7 +12,7 @@ L3 is a **Store packaging tier**: native MHMD `.so` loaded at runtime (not stati
 | Layer | What belongs there |
 |-------|--------------------|
 | Host Core | Generic `minihub_point_t` only — **no** per-type C structs (`LightEntity`, …) |
-| Bundled Host adapters | Built-in stacks under `components/minihub_adapters/` (Kconfig) |
+| Bundled Host adapters | Built-in stacks under `components/minihub_protocol_adapters/` (Kconfig) |
 | Store L3 | Third-party / demo native adapters as `.so` + `.mhub` |
 
 ## Where sources live

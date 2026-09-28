@@ -8,4 +8,4 @@
 
 #include "esp_err.h"
 
-esp_err_t minihub_adapters_register_all(void);
+esp_err_t minihub_protocol_adapters_register_all(void);

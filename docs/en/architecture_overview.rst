@@ -38,7 +38,7 @@ bundled adapters) runs on the device; vendor/third-party behavior ships as
    │  ├─ minihub_scenes    scene recall                            │
    │  └─ minihub_store / minihub_module / minihub_pack  Store       │
    ├──────────────────────────────────────────────────────────────┤
-   │ minihub_adapters  zigbee / matter / thread / ble_mesh / …     │
+   │ minihub_protocol_adapters  zigbee / matter / thread / ble_mesh / …     │
    │ examples/plugins + MINIHUB_PLUGIN_DIRS  Store .mhub sources    │
    └──────────────────────────────────────────────────────────────┘
                    │ protocol frames

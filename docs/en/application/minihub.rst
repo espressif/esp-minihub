@@ -96,7 +96,7 @@ Directory layout
    * - ``main/Kconfig.projbuild``
      - Product Kconfig: Wi-Fi, provisioning, Web login, adapter switches.
    * - ``main/adapters_setup.h``
-     - Declares ``minihub_adapters_register_all()``.
+     - Declares ``minihub_protocol_adapters_register_all()``.
    * - ``main/adapters_setup.generated.c``
      - Auto-generated; do not hand-edit.
    * - ``main/idf_component.yml``

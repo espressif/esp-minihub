@@ -56,11 +56,11 @@ dependencies:
   minihub_product_params:
     path: ../../components/minihub_product_params
   adapter_zigbee:
-    path: ../../components/minihub_adapters/adapter_zigbee
+    path: ../../components/minihub_protocol_adapters/adapter_zigbee
   adapter_ble_mesh:
-    path: ../../components/minihub_adapters/adapter_ble_mesh
+    path: ../../components/minihub_protocol_adapters/adapter_ble_mesh
   adapter_matter:
-    path: ../../components/minihub_adapters/adapter_matter
+    path: ../../components/minihub_protocol_adapters/adapter_matter
   espressif/cjson: "^1.7.19"
   espressif/network_provisioning: "^1.1.0"
   espressif/esp_flash_dispatcher: "^1.0.2"
