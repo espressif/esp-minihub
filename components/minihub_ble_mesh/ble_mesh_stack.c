@@ -43,6 +43,9 @@ static SemaphoreHandle_t s_appkey_gate;
 static esp_timer_handle_t s_permit_timer;
 /** Return BLE Mesh coex scheme to STANDBY after a short TRAFFIC window. */
 static esp_timer_handle_t s_coex_idle_timer;
+/** Clears s_prov_busy if add_unprov never reaches LINK_CLOSE. */
+static esp_timer_handle_t s_prov_busy_timer;
+static uint8_t s_permit_busy_extends;
 #endif
 
 #if CONFIG_MINIHUB_BLE_MESH_SDK
@@ -57,6 +60,11 @@ static esp_timer_handle_t s_coex_idle_timer;
 #if CONFIG_BLE_MESH_GATT_PROXY_CLIENT
 #include "esp_ble_mesh_proxy_api.h"
 #endif
+
+/* ESP-BLE-Mesh core (not public) — used to hold LE scan during PB-GATT if the
+ * NimBLE host adapter still restarts discovery after connect. */
+extern int bt_mesh_scan_disable(void);
+extern int bt_mesh_scan_enable(void);
 
 #define CID_ESP       0x02E5
 #define PROV_OWN_ADDR 0x0001
@@ -75,6 +83,10 @@ static esp_timer_handle_t s_coex_idle_timer;
 #define CFG_PROXY_RECONNECT_DELAY_US (2500 * 1000LL)
 #define CFG_TIMEOUT_RETRIES_MAX 5
 #define CFG_PROXY_RECONNECT_MAX 6
+/** PB-GATT connect can hang without LINK_OPEN/CLOSE — escape hatch. */
+#define PROV_BUSY_WATCHDOG_US (45 * 1000000ULL)
+/** Cap "busy → extend permit" so a stuck busy cannot hold the window forever. */
+#define PERMIT_BUSY_EXTEND_MAX 1
 
 typedef struct {
     uint8_t uuid[16];
@@ -354,7 +366,7 @@ static void notify_device_ready(const node_info_t *node)
     minihub_ble_mesh_device_t dev = {0};
     const char *type = minihub_bm_classify_type(caps);
     strncpy(dev.type, type, sizeof(dev.type) - 1);
-    (void)minihub_bm_format_point_id(dev.point_id, sizeof(dev.point_id), type, node->unicast);
+    (void)minihub_bm_format_point_id(dev.point_id, sizeof(dev.point_id), node->unicast);
     (void)minihub_bm_uuid_to_hex(node->uuid, dev.uuid_hex, sizeof(dev.uuid_hex));
     dev.unicast = node->unicast;
     dev.elem_num = node->elem_num;
@@ -798,16 +810,74 @@ void ble_mesh_stack_yield_rf(void)
     (void)prov_network_set(false);
 }
 
+static void prov_queue_forget_uuid(const uint8_t uuid[16]);
+
+static void prov_busy_disarm(void)
+{
+    if (s_prov_busy_timer) {
+        (void)esp_timer_stop(s_prov_busy_timer);
+    }
+}
+
+static void prov_busy_abort(const char *why)
+{
+    ESP_LOGW(TAG, "abort stuck provision (%s)", why ? why : "?");
+    if (s_prov_uuid_valid) {
+        prov_queue_forget_uuid(s_prov_uuid);
+    }
+    s_prov_busy = false;
+    s_prov_succeeded = false;
+    s_prov_uuid_valid = false;
+    s_prov_retry_after_ms = esp_timer_get_time() / 1000 + 8000;
+    prov_busy_disarm();
+}
+
+static void prov_busy_timer_cb(void *arg)
+{
+    (void)arg;
+    if (s_prov_busy) {
+        prov_busy_abort("busy watchdog — no LINK_CLOSE");
+    }
+}
+
+static esp_err_t ensure_prov_busy_timer(void)
+{
+    if (s_prov_busy_timer) {
+        return ESP_OK;
+    }
+    const esp_timer_create_args_t args = {
+        .callback = &prov_busy_timer_cb,
+        .name = "bm_prov_busy",
+    };
+    return esp_timer_create(&args, &s_prov_busy_timer);
+}
+
+static void prov_busy_arm(void)
+{
+    if (ensure_prov_busy_timer() != ESP_OK) {
+        return;
+    }
+    (void)esp_timer_stop(s_prov_busy_timer);
+    (void)esp_timer_start_once(s_prov_busy_timer, PROV_BUSY_WATCHDOG_US);
+}
+
 static void permit_timer_cb(void *arg)
 {
     (void)arg;
     /* PB-GATT may still be in progress when the window expires. */
     if (s_prov_busy && s_permit_timer) {
-        ESP_LOGW(TAG, "permit expired but provision busy — extend 30s");
-        s_permit_until_ms = esp_timer_get_time() / 1000 + 30000;
-        (void)esp_timer_start_once(s_permit_timer, 30 * 1000000ULL);
-        return;
+        if (s_permit_busy_extends < PERMIT_BUSY_EXTEND_MAX) {
+            s_permit_busy_extends++;
+            ESP_LOGW(TAG, "permit expired but provision busy — extend 30s (%u/%u)",
+                     (unsigned)s_permit_busy_extends, (unsigned)PERMIT_BUSY_EXTEND_MAX);
+            s_permit_until_ms = esp_timer_get_time() / 1000 + 30000;
+            (void)esp_timer_start_once(s_permit_timer, 30 * 1000000ULL);
+            return;
+        }
+        ESP_LOGW(TAG, "permit expired with stuck busy — abort and close window");
+        prov_busy_abort("permit expired");
     }
+    s_permit_busy_extends = 0;
     s_permit_until_ms = 0;
     /* Close join window and free RF unless a Mesh TX window is still open. */
     if (s_coex_idle_timer) {
@@ -878,6 +948,12 @@ static void cfg_timer_cb(void *arg)
 #if CONFIG_BLE_MESH_GATT_PROXY_CLIENT
     case CFG_ACT_PROXY_CONNECT:
     case CFG_ACT_PROXY_RECONNECT:
+        /* Do not open Proxy while another PB-GATT provision holds the ACL. */
+        if (s_prov_busy) {
+            ESP_LOGW(TAG, "Proxy deferred — provision busy (cfg 0x%04x)", node->unicast);
+            schedule_cfg_timer(CFG_ACT_PROXY_RECONNECT, CFG_PROXY_RECONNECT_DELAY_US);
+            return;
+        }
         if (try_proxy_connect(node) == ESP_OK) {
             return;
         }
@@ -988,6 +1064,12 @@ static void recv_unprov_adv_pkt(uint8_t dev_uuid[16], uint8_t addr[BD_ADDR_LEN],
     if (s_prov_busy || now_ms < s_prov_retry_after_ms) {
         return;
     }
+    /* Proxy Client / AppKey bind needs the GATT ACL. Starting another PB-GATT
+     * (or even PB-ADV) during post-prov config causes slot clash (-ENOMEM) and
+     * local-host terminate (0x16 / HCI 19) on the in-flight provision. */
+    if (s_cfg_pending_unicast != 0) {
+        return;
+    }
 
     if (!uuid_matches_policy(dev_uuid)) {
         ESP_LOGI(TAG, "unprov uuid=%02x%02x%02x%02x... skipped (uuid filter)",
@@ -997,9 +1079,6 @@ static void recv_unprov_adv_pkt(uint8_t dev_uuid[16], uint8_t addr[BD_ADDR_LEN],
 
     /* Only purge ghosts when idle — never during an active provision attempt. */
     if (esp_ble_mesh_provisioner_get_node_with_uuid(dev_uuid)) {
-        if (s_cfg_pending_unicast != 0) {
-            return; /* post-prov config in flight */
-        }
         ESP_LOGW(TAG, "uuid=%02x%02x... still unprov on air — purge stale stack node",
                  dev_uuid[0], dev_uuid[1]);
         (void)esp_ble_mesh_provisioner_delete_node_with_uuid(dev_uuid);
@@ -1045,6 +1124,7 @@ static void recv_unprov_adv_pkt(uint8_t dev_uuid[16], uint8_t addr[BD_ADDR_LEN],
     s_prov_succeeded = false;
     memcpy(s_prov_uuid, dev_uuid, 16);
     s_prov_uuid_valid = true;
+    prov_busy_arm();
     coex_mesh_config();
     int err = esp_ble_mesh_provisioner_add_unprov_dev(
         &add_dev,
@@ -1053,6 +1133,7 @@ static void recv_unprov_adv_pkt(uint8_t dev_uuid[16], uint8_t addr[BD_ADDR_LEN],
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         s_prov_busy = false;
         s_prov_uuid_valid = false;
+        prov_busy_disarm();
         ESP_LOGE(TAG, "add unprov failed: %s", esp_err_to_name(err));
     }
 }
@@ -1073,24 +1154,36 @@ static void provisioning_cb(esp_ble_mesh_prov_cb_event_t event, esp_ble_mesh_pro
         s_prov_scan_on = false;
         net_gate_signal(param->provisioner_prov_disable_comp.err_code);
         break;
-    case ESP_BLE_MESH_PROVISIONER_PROV_LINK_OPEN_EVT:
+    case ESP_BLE_MESH_PROVISIONER_PROV_LINK_OPEN_EVT: {
+        bool gatt_open =
+            (param->provisioner_prov_link_open.bearer == ESP_BLE_MESH_PROV_GATT);
         s_prov_busy = true;
+        prov_busy_arm();
         coex_mesh_config();
 #if CONFIG_BLE_MESH_GATT_PROXY_CLIENT
-        s_prov_link_was_gatt =
-            (param->provisioner_prov_link_open.bearer == ESP_BLE_MESH_PROV_GATT);
+        s_prov_link_was_gatt = gatt_open;
 #endif
-        ESP_LOGI(TAG, "prov link open bearer=%s",
-                 (param->provisioner_prov_link_open.bearer == ESP_BLE_MESH_PROV_ADV)
-                     ? "PB-ADV"
-                     : "PB-GATT");
+        /* Belt-and-suspenders: keep LE scan off for the Invite→Data window.
+         * IDF NimBLE adapter also skips post-connect discovery for PB-GATT. */
+        if (gatt_open) {
+            int scan_err = bt_mesh_scan_disable();
+            if (scan_err && scan_err != -EALREADY) {
+                ESP_LOGW(TAG, "PB-GATT scan hold failed: %d", scan_err);
+            } else {
+                ESP_LOGI(TAG, "PB-GATT: mesh scan held for provisioning ACL");
+            }
+        }
+        ESP_LOGI(TAG, "prov link open bearer=%s", gatt_open ? "PB-GATT" : "PB-ADV");
         break;
+    }
     case ESP_BLE_MESH_PROVISIONER_PROV_LINK_CLOSE_EVT: {
         uint8_t reason = param->provisioner_prov_link_close.reason;
         bool gatt = (param->provisioner_prov_link_close.bearer == ESP_BLE_MESH_PROV_GATT);
-        /* PB-GATT: close_link() always disconnects locally → HCI 0x16 for both
-         * success (after PROV_COMPLETE) and failure. Mesh CLOSE_REASON 0/1/2
-         * only appear on PB-ADV. */
+        /* PB-GATT: provisioner close_link() → ble_gap_terminate(REM_USER=0x13);
+         * disconnect event then reports HCI 0x16 (local-host) to the app for
+         * BOTH success (after PROV_COMPLETE) and failure. Mesh CLOSE_REASON
+         * 0/1/2 only appear on PB-ADV. Enable Mesh logs (unset NO_LOG) to see
+         * the real BT_ERR (confirm/random/send fail) before terminate. */
         const char *why = (reason == 0x00) ? "success"
                           : (reason == 0x01) ? "timeout"
                           : (reason == 0x02) ? "failed"
@@ -1107,8 +1200,16 @@ static void provisioning_cb(esp_ble_mesh_prov_cb_event_t event, esp_ble_mesh_pro
             ESP_LOGW(TAG, "prov link close bearer=%s reason=0x%02x (%s) — device NOT provisioned",
                      gatt ? "PB-GATT" : "PB-ADV", reason, why);
         }
+        /* Resume Mesh/unprov scan after PB-GATT (IDF also resumes on disconnect). */
+        if (gatt && ble_mesh_stack_permit_provision_active()) {
+            int scan_err = bt_mesh_scan_enable();
+            if (scan_err && scan_err != -EALREADY) {
+                ESP_LOGW(TAG, "PB-GATT scan resume failed: %d", scan_err);
+            }
+        }
         s_prov_busy = false;
         s_prov_succeeded = false;
+        prov_busy_disarm();
         if (!ok) {
             /* Drop queue entry so stack auto-start on leftover ads cannot thrash
              * reconnect (0x3e) before our cooldown allows a clean retry. */
@@ -1147,10 +1248,21 @@ static void provisioning_cb(esp_ble_mesh_prov_cb_event_t event, esp_ble_mesh_pro
                             param->provisioner_recv_unprov_adv_pkt.bearer);
         break;
     case ESP_BLE_MESH_PROVISIONER_PROV_COMPLETE_EVT:
-        s_prov_busy = false;
         s_prov_succeeded = true;
         s_prov_uuid_valid = false;
         s_prov_retry_after_ms = 0;
+        /* PB-GATT: keep s_prov_busy until LINK_CLOSE so ACL teardown is not
+         * overlapped by a new PB-GATT or an early Proxy Client connect.
+         * PB-ADV frees the air immediately after complete. */
+#if CONFIG_BLE_MESH_GATT_PROXY_CLIENT
+        if (!s_prov_link_was_gatt) {
+            s_prov_busy = false;
+            prov_busy_disarm();
+        }
+#else
+        s_prov_busy = false;
+        prov_busy_disarm();
+#endif
         prov_complete(param->provisioner_prov_complete.node_idx,
                       param->provisioner_prov_complete.device_uuid,
                       param->provisioner_prov_complete.unicast_addr,
@@ -1568,6 +1680,9 @@ esp_err_t ble_mesh_stack_stop(void)
     if (s_permit_timer) {
         esp_timer_stop(s_permit_timer);
     }
+    if (s_prov_busy) {
+        prov_busy_abort("stack stop");
+    }
     if (!s_running) {
         return ESP_OK;
     }
@@ -1590,18 +1705,21 @@ esp_err_t ble_mesh_stack_permit_provision(int seconds)
         return ESP_ERR_INVALID_ARG;
     }
 
-    /* Close permit window (idempotent). Do not abort PB-GATT. */
+    /* Close permit window (idempotent). Abort a stuck busy so UI "stop join"
+     * cannot leave s_prov_busy wedged after a failed PB-GATT connect. */
     if (seconds == 0) {
         if (s_permit_timer) {
             (void)esp_timer_stop(s_permit_timer);
         }
         s_permit_until_ms = 0;
-        if (!s_prov_busy) {
-            if (s_coex_idle_timer) {
-                esp_timer_stop(s_coex_idle_timer);
-            }
-            (void)prov_network_set(false);
+        s_permit_busy_extends = 0;
+        if (s_prov_busy) {
+            prov_busy_abort("manual close");
         }
+        if (s_coex_idle_timer) {
+            esp_timer_stop(s_coex_idle_timer);
+        }
+        (void)prov_network_set(false);
         ESP_LOGI(TAG, "permit provision window closed (manual)");
         return ESP_OK;
     }
@@ -1630,6 +1748,7 @@ esp_err_t ble_mesh_stack_permit_provision(int seconds)
     coex_mesh_config();
 
     s_permit_until_ms = esp_timer_get_time() / 1000 + (int64_t)seconds * 1000;
+    s_permit_busy_extends = 0;
     (void)esp_timer_stop(s_permit_timer);
     err = esp_timer_start_once(s_permit_timer, (uint64_t)seconds * 1000000ULL);
     if (err != ESP_OK) {

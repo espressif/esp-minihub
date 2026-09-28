@@ -38,7 +38,7 @@ bundled adapters) runs on the device; vendor/third-party behavior ships as
    │  ├─ minihub_scenes    scene recall                            │
    │  └─ minihub_store / minihub_module / minihub_pack  Store       │
    ├──────────────────────────────────────────────────────────────┤
-   │ minihub_adapters  zigbee / matter / thread / ble_mesh / …     │
+   │ minihub_protocol_adapters  zigbee / matter / thread / ble_mesh / …     │
    │ examples/plugins + MINIHUB_PLUGIN_DIRS  Store .mhub sources    │
    └──────────────────────────────────────────────────────────────┘
                    │ protocol frames
@@ -61,7 +61,7 @@ End-to-end data flow
    An adapter (e.g. Zigbee, Matter, BLE Mesh) discovers a device and
    registers exactly **one** ``minihub_point_t`` per device (Matter: per
    endpoint). Point ids look like ``zigbee.zb_7d4b``,
-   ``light/matter_n2_ep1``, ``sim.color_bulb``. The Thread adapter is a
+   ``thread.matter_n2_ep1``, ``sim.color_bulb``. The Thread adapter is a
    Border Router only and does **not** register device points — see
    :doc:`thread`. Live parameters, access, visibility, and instance bounds
    live in structured JSON on that point — typically
@@ -83,7 +83,8 @@ End-to-end data flow
    embedded copy, then loads it.
 
    The catalog is **protocol-agnostic**: it carries no transport field.
-   Adapter prefixes (``zigbee.``, Matter ``light/matter_n…``, and so on) come
+   Adapter prefixes (``zigbee.``, Matter ``thread.matter_n…`` or
+   ``wifi.matter_n…``, and so on) come
    from point registration, so the same ``light`` / ``switch`` widgets render
    regardless of how the device arrived. Built-in types, widgets, and
    developer how-to: :doc:`type_catalog`.

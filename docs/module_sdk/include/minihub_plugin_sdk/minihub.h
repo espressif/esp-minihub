@@ -112,6 +112,9 @@ typedef struct {
     esp_err_t (*deinit)(void);
     esp_err_t (*handle_command)(const minihub_command_t *cmd);
     esp_err_t (*poll)(void);
+    /** Optional: republish this adapter's points from ``config`` without
+     *  stop()/start(). NULL = not supported. */
+    esp_err_t (*resync)(const cJSON *config);
 } minihub_adapter_t;
 
 /**

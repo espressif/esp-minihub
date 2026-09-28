@@ -8,7 +8,7 @@ endif()
 if(NOT _minihub_app)
     set(_minihub_app "minihub")
 endif()
-if(Python3_FOUND AND EXISTS ${MINIHUB_REPO_ROOT}/config/minihub_manifest.yml)
+if(Python3_FOUND AND EXISTS ${MINIHUB_REPO_ROOT}/configs/minihub_manifest.yml)
     execute_process(
         COMMAND ${CMAKE_COMMAND} -E env MINIHUB_APP=${_minihub_app}
                 ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/sync_host_manifest.py
@@ -29,8 +29,8 @@ else()
     set(MINIHUB_MAIN_REQUIRES
         minihub_core minihub_config minihub_adapter minihub_rules minihub_scenes
         minihub_web minihub_pack minihub_module minihub_hub minihub_auth minihub_ota
-        minihub_provision minihub_net minihub_lcd minihub_rainmaker adapter_mqtt adapter_zigbee
-        adapter_matter adapter_thread nvs_flash esp_wifi esp_netif esp_event lwip esp_system
+        minihub_provision minihub_net minihub_lcd minihub_rainmaker adapter_mqtt adapter_wifi
+        adapter_zigbee adapter_matter adapter_thread nvs_flash esp_wifi esp_netif esp_event lwip esp_system
     )
 endif()
 
@@ -67,14 +67,14 @@ include(${MINIHUB_REPO_ROOT}/cmake/minihub_product_assets.cmake)
 set(MINIHUB_FS_DIR ${CMAKE_BINARY_DIR}/littlefs_image)
 file(REMOVE_RECURSE ${MINIHUB_FS_DIR})
 file(MAKE_DIRECTORY ${MINIHUB_FS_DIR}/config)
-# Prefer application/<app>/config/*; fall back to repo config/*
+# Prefer application/<app>/configs/*; fall back to repo configs/*
 foreach(_cfg adapters.json rules.json scenes.json)
     minihub_resolve_config_asset(${_cfg} _cfg_src)
     if(_cfg_src)
         file(COPY ${_cfg_src} DESTINATION ${MINIHUB_FS_DIR}/config)
         message(STATUS "fs config: ${_cfg} ← ${_cfg_src}")
     else()
-        message(WARNING "fs config: ${_cfg} missing (app + repo config/)")
+        message(WARNING "fs config: ${_cfg} missing (app + repo configs/)")
     endif()
 endforeach()
 minihub_resolve_config_asset(packs _packs_src)

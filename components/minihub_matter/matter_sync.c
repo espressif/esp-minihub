@@ -170,9 +170,16 @@ static cJSON *find_device_by_endpoint(cJSON *devices, uint64_t node_id, uint16_t
     return NULL;
 }
 
-static void make_point_id(uint64_t node_id, uint16_t endpoint_id, char *out, size_t out_len)
+/* point_id is "<protocol>.<device>"; for Matter the radio is per device, so the
+ * commissioning transport decides the prefix (thread / wifi / ethernet). */
+static void make_point_id(uint64_t node_id, uint16_t endpoint_id, const char *transport,
+                          char *out, size_t out_len)
 {
-    snprintf(out, out_len, "light/matter_n%" PRIu64 "_ep%u", node_id, (unsigned)endpoint_id);
+    /* R15: a device committed without a known transport gets the "Unknown" prefix
+     * rather than masquerading as "matter" — the user裁定 wants missing transport
+     * surfaced, not hidden. Devices that already have a transport keep it. */
+    const char *proto = (transport && transport[0]) ? transport : "Unknown";
+    snprintf(out, out_len, "%s.matter_n%" PRIu64 "_ep%u", proto, node_id, (unsigned)endpoint_id);
 }
 
 esp_err_t minihub_matter_next_node_id(uint64_t *out_node_id)
@@ -236,21 +243,23 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
 
         cJSON *existing = merge_existing ? find_device_by_endpoint(devices, node_id, ep) : NULL;
         char point_id[64];
+        make_point_id(node_id, ep, transport, point_id, sizeof(point_id));
         if (existing) {
+            /* R15: never rewrite an existing row's point_id. A transport-less resync
+             * must not rename a row that already earned a prefix (e.g. thread.), or
+             * the old id becomes a permanent orphan while the new id is created —
+             * "one bulb, two cards". Keep the id the device already has; only refresh
+             * the scalar fields. */
             const cJSON *pid = cJSON_GetObjectItem(existing, "point_id");
             if (cJSON_IsString(pid)) {
                 strncpy(point_id, pid->valuestring, sizeof(point_id) - 1);
                 point_id[sizeof(point_id) - 1] = '\0';
-            } else {
-                make_point_id(node_id, ep, point_id, sizeof(point_id));
             }
             cJSON_DeleteItemFromObject(existing, "node_id");
             cJSON_DeleteItemFromObject(existing, "endpoint_id");
             cJSON_DeleteItemFromObject(existing, "type");
-            cJSON_DeleteItemFromObject(existing, "point_id");
             char node_str[24];
             snprintf(node_str, sizeof(node_str), "%" PRIu64, node_id);
-            cJSON_AddStringToObject(existing, "point_id", point_id);
             cJSON_AddStringToObject(existing, "type", "light");
             cJSON_AddStringToObject(existing, "node_id", node_str);
             cJSON_AddNumberToObject(existing, "endpoint_id", ep);
@@ -262,7 +271,6 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
             continue;
         }
 
-        make_point_id(node_id, ep, point_id, sizeof(point_id));
         if (find_device_entry(devices, point_id)) {
             continue;
         }
@@ -296,6 +304,54 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
     return ESP_OK;
 }
 
+esp_err_t minihub_matter_devices_set_commission_phase(uint64_t node_id, const char *phase,
+                                                      const char *error_msg)
+{
+    if (node_id < 2) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    cJSON *adapters_root = minihub_config_get_adapters();
+    if (!adapters_root) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    cJSON *devices = get_matter_devices(adapters_root, false);
+    if (!devices) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    const bool clear = !phase || !phase[0];
+    int touched = 0;
+    cJSON *item = NULL;
+    cJSON_ArrayForEach(item, devices) {
+        const cJSON *nid = cJSON_GetObjectItem(item, "node_id");
+        uint64_t n = cJSON_IsString(nid) ? parse_node_id(nid->valuestring, 0) : 0;
+        if (n != node_id) {
+            continue;
+        }
+        cJSON_DeleteItemFromObject(item, "commission_phase");
+        cJSON_DeleteItemFromObject(item, "commission_error");
+        if (!clear) {
+            cJSON_AddStringToObject(item, "commission_phase", phase);
+            if (error_msg && error_msg[0]) {
+                cJSON_AddStringToObject(item, "commission_error", error_msg);
+            }
+        }
+        touched++;
+    }
+    if (touched == 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    esp_err_t err = minihub_config_save_adapters(adapters_root);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "node %" PRIu64 " commission_phase=%s (%d row(s))", node_id,
+                 clear ? "(cleared)" : phase, touched);
+    }
+    return err;
+}
+
 esp_err_t minihub_matter_device_remove(const char *point_id)
 {
     if (!point_id || !point_id[0]) {
@@ -317,6 +373,11 @@ esp_err_t minihub_matter_device_remove(const char *point_id)
         cJSON *item = cJSON_GetArrayItem(devices, i);
         const cJSON *pid = cJSON_GetObjectItem(item, "point_id");
         if (cJSON_IsString(pid) && strcmp(pid->valuestring, point_id) == 0) {
+            const cJSON *nid = cJSON_GetObjectItem(item, "node_id");
+            uint64_t node = cJSON_IsString(nid) ? parse_node_id(nid->valuestring, 0) : 0;
+            if (node && minihub_matter_commission_cancel(node) == ESP_OK) {
+                ESP_LOGI(TAG, "aborted in-flight commissioning for node %" PRIu64, node);
+            }
             cJSON_DeleteItemFromArray(devices, i);
             esp_err_t err = minihub_config_save_adapters(adapters_root);
             if (err == ESP_OK) {

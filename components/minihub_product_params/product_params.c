@@ -452,6 +452,13 @@ static void load_quirk_obj(const cJSON *root)
             strncpy(tmp.uuid_prefix, uuid_prefix->valuestring, sizeof(tmp.uuid_prefix) - 1);
         }
     }
+    /* Skip unfinished templates (REPLACE_WITH_…) left on /data from older builds. */
+    if (strncmp(tmp.uuid_prefix, "REPLACE_", 8) == 0 ||
+        strncmp(tmp.ieee_prefix, "REPLACE_", 8) == 0) {
+        ESP_LOGW(TAG, "skip placeholder quirk %s (edit uuid/ieee prefix before use)",
+                 tmp.id[0] ? tmp.id : "?");
+        return;
+    }
     const cJSON *params = cJSON_GetObjectItem(root, "params");
     if (cJSON_IsArray(params)) {
         cJSON *item = NULL;

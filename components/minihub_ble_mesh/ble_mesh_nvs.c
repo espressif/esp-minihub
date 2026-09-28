@@ -103,6 +103,35 @@ static esp_err_t devices_from_json(const cJSON *arr, minihub_ble_mesh_device_t *
     return ESP_OK;
 }
 
+static esp_err_t nvs_save(const minihub_ble_mesh_device_t *devs, size_t count)
+{
+    cJSON *arr = devices_to_json(devs, count);
+    if (!arr) {
+        return ESP_ERR_NO_MEM;
+    }
+    char *printed = cJSON_PrintUnformatted(arr);
+    cJSON_Delete(arr);
+    if (!printed) {
+        return ESP_ERR_NO_MEM;
+    }
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) {
+        free(printed);
+        return err;
+    }
+    err = nvs_set_str(h, KEY, printed);
+    if (err == ESP_OK) {
+        err = nvs_commit(h);
+    }
+    nvs_close(h);
+    free(printed);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "save failed: %s", esp_err_to_name(err));
+    }
+    return err;
+}
+
 esp_err_t minihub_bm_nvs_load(minihub_ble_mesh_device_t *out, size_t cap, size_t *count)
 {
     if (!out || !count || cap == 0) {
@@ -145,36 +174,25 @@ esp_err_t minihub_bm_nvs_load(minihub_ble_mesh_device_t *out, size_t cap, size_t
     }
     err = devices_from_json(root, out, cap, count);
     cJSON_Delete(root);
-    return err;
-}
-
-static esp_err_t nvs_save(const minihub_ble_mesh_device_t *devs, size_t count)
-{
-    cJSON *arr = devices_to_json(devs, count);
-    if (!arr) {
-        return ESP_ERR_NO_MEM;
-    }
-    char *printed = cJSON_PrintUnformatted(arr);
-    cJSON_Delete(arr);
-    if (!printed) {
-        return ESP_ERR_NO_MEM;
-    }
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
     if (err != ESP_OK) {
-        free(printed);
         return err;
     }
-    err = nvs_set_str(h, KEY, printed);
-    if (err == ESP_OK) {
-        err = nvs_commit(h);
+    /* Migrate legacy "{type}/bm_XXXX" → "ble_mesh.bm_XXXX" so UI sees dotted ids. */
+    bool dirty = false;
+    for (size_t i = 0; i < *count; i++) {
+        if (minihub_bm_normalize_point_id(out[i].point_id, sizeof(out[i].point_id))) {
+            dirty = true;
+            ESP_LOGI(TAG, "migrated point_id → %s", out[i].point_id);
+        }
     }
-    nvs_close(h);
-    free(printed);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "save failed: %s", esp_err_to_name(err));
+    if (dirty) {
+        esp_err_t serr = nvs_save(out, *count);
+        if (serr != ESP_OK) {
+            ESP_LOGW(TAG, "NVS rewrite after migrate: %s", esp_err_to_name(serr));
+        }
     }
-    return err;
+    ESP_LOGI(TAG, "loaded %u devices from NVS", (unsigned)*count);
+    return ESP_OK;
 }
 
 esp_err_t minihub_bm_nvs_upsert(const minihub_ble_mesh_device_t *dev,
@@ -205,10 +223,9 @@ esp_err_t minihub_bm_nvs_remove(const char *point_id, minihub_ble_mesh_device_t 
     if (!point_id || !point_id[0] || !table || !count) {
         return ESP_ERR_INVALID_ARG;
     }
-    /* Exact match first; then match by trailing "bm_XXXX" so light↔switch reclass
-     * orphans (same unicast, different type prefix) can still be deleted. */
-    const char *slash = strrchr(point_id, '/');
-    const char *short_id = slash ? slash + 1 : point_id;
+    /* Exact match first; then match by stable "bm_XXXX" so legacy slash ids
+     * and dotted ids for the same unicast can still be deleted. */
+    const char *short_id = minihub_bm_stable_suffix(point_id);
     int found = -1;
     for (size_t i = 0; i < *count; i++) {
         if (strcmp(table[i].point_id, point_id) == 0) {
@@ -216,11 +233,10 @@ esp_err_t minihub_bm_nvs_remove(const char *point_id, minihub_ble_mesh_device_t 
             break;
         }
     }
-    if (found < 0 && short_id[0]) {
+    if (found < 0 && short_id && short_id[0]) {
         for (size_t i = 0; i < *count; i++) {
-            const char *ts = strrchr(table[i].point_id, '/');
-            const char *tshort = ts ? ts + 1 : table[i].point_id;
-            if (strcmp(tshort, short_id) == 0) {
+            const char *tshort = minihub_bm_stable_suffix(table[i].point_id);
+            if (tshort && strcmp(tshort, short_id) == 0) {
                 found = (int)i;
                 break;
             }

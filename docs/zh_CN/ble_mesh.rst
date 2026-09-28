@@ -93,7 +93,8 @@ Zigbee 入网或 BLE Mesh 配网是否进行中，以及表示射频关键窗口
 点位身份与厂商扩展
 ------------------
 
-每台 BLE Mesh 节点对应 **一条** Host 点（``light/bm_XXXX`` 等现有格式）。登记时
+每台 BLE Mesh 节点对应 **一条** Host 点（``ble_mesh.bm_XXXX``，与 Zigbee 相同的
+``<protocol>.<device>`` 约定）。旧版 ``{type}/bm_XXXX`` 在 NVS 加载时迁移。登记时
 适配器写入顶层身份字段（不是类型目录参数 / 设备页滑条）：
 
 * ``props.uuid`` — 节点 Device UUID 十六进制（Mesh 没有 Zigbee ``ieee``）

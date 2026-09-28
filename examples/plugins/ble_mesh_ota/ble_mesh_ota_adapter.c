@@ -3,7 +3,7 @@
  *
  * BLE Mesh OTA / cloud catalog demo (L3).
  *
- * One BLE Mesh device = one Host point (light/bm_%04x). This plugin never
+ * One BLE Mesh device = one Host point (ble_mesh.bm_%04x). This plugin never
  * point_register()s a second id. It lists adapter "ble_mesh" points, matches
  * props.manufacturer against local catalog.json, then fetches catalog_url for
  * offered version + firmware_url. Optionally streams a

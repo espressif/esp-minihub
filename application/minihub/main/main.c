@@ -13,6 +13,7 @@
 #include "freertos/event_groups.h"
 #include "nvs_flash.h"
 #include "esp_flash_dispatcher.h"
+#include "esp_private/esp_sys_event_app_init.h"
 
 #include "minihub_core.h"
 #include "minihub_config.h"
@@ -33,9 +34,6 @@
 #include "minihub_usb_msc.h"
 #include "minihub_rtsp_cam.h"
 #include "adapters_setup.h"
-#if CONFIG_MINIHUB_ZIGBEE_SDK
-#include "minihub_zigbee.h"
-#endif
 #if CONFIG_MINIHUB_MATTER_ADAPTER
 #include "minihub_matter.h"
 #endif
@@ -52,6 +50,32 @@
 
 static const char *TAG = "minihub";
 
+/*
+ * PRE_APP_MAIN priority 130: after heap (100), internal DMA reserve (110),
+ * and task WDT (120); before esp_ota_auto_confirm (200). Lower runs first.
+ * Scheduler and heap are up here; the flash driver was brought up in system
+ * init. Not idempotent — this is the only call on the boot path.
+ */
+ESP_PRE_APP_MAIN_HANDLER_REGISTER(minihub_flash_dispatcher_init, 130)
+{
+    (void)user_arg;
+    (void)ctx;
+
+    const esp_flash_dispatcher_config_t flash_disp_cfg = {
+        .task_stack_size = 4096,
+        .task_priority = 10,
+        .task_core_id = tskNO_AFFINITY,
+        .queue_size = 1,
+    };
+    esp_err_t err = esp_flash_dispatcher_init(&flash_disp_cfg);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_flash_dispatcher_init failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "esp_flash_dispatcher ready");
+    return ESP_OK;
+}
+
 static void sntp_init_sync(void)
 {
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
@@ -64,22 +88,6 @@ void app_main(void)
     esp_err_t err;
 
     ESP_LOGI(TAG, "MiniHub starting...");
-
-    /* Before NVS: flash dispatcher for PSRAM-stack callers (incl. main on some boards). */
-    {
-        const esp_flash_dispatcher_config_t flash_disp_cfg = {
-            .task_stack_size = 4096,
-            .task_priority = 10,
-            .task_core_id = tskNO_AFFINITY,
-            .queue_size = 1,
-        };
-        err = esp_flash_dispatcher_init(&flash_disp_cfg);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "esp_flash_dispatcher_init failed: %s", esp_err_to_name(err));
-            return;
-        }
-        ESP_LOGI(TAG, "esp_flash_dispatcher ready");
-    }
 
     err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -148,12 +156,18 @@ void app_main(void)
         return;
     }
 
+#if CONFIG_MINIHUB_NET_WIFI_STA
+    /* Pre-wifi-adapter LittleFS may lack adapters.wifi; STA used to start from
+     * app_main unconditionally. Create an enabled slot once so load_all finds it. */
+    (void)minihub_config_ensure_adapter_slot("wifi", false);
+#endif
+
     err = minihub_adapter_registry_init();
     if (err != ESP_OK) {
         return;
     }
 
-    err = minihub_adapters_register_all();
+    err = minihub_protocol_adapters_register_all();
     if (err != ESP_OK) {
         return;
     }
@@ -191,62 +205,21 @@ void app_main(void)
         ESP_LOGW(TAG, "net init failed: %s (continuing for local UI)", esp_err_to_name(err));
     }
 
-#if CONFIG_MINIHUB_MATTER_ADAPTER
-    /* Matter/CHIP brings up NimBLE; only start when adapters.json enables it.
-     * Otherwise Zigbee ED joining shares RF with idle BLE for no benefit.
-     * Start Matter before Thread so CHIP EspDnssdInit can call mdns_init()
-     * first (it requires ESP_OK, not ESP_ERR_INVALID_STATE). */
-    bool matter_enabled = true;
-    if (adapters_cfg) {
-        const cJSON *section = cJSON_GetObjectItem(adapters_cfg, "adapters");
-        const cJSON *matter = cJSON_GetObjectItem(section ? section : adapters_cfg, "matter");
-        const cJSON *enabled = cJSON_IsObject(matter) ? cJSON_GetObjectItem(matter, "enabled") : NULL;
-        if (cJSON_IsBool(enabled)) {
-            matter_enabled = cJSON_IsTrue(enabled);
-        }
-    }
-    if (matter_enabled) {
-        minihub_heap_log();
-        err = minihub_matter_init();
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Matter bootstrap failed: %s", esp_err_to_name(err));
-        }
-        minihub_heap_log();
-    } else {
-        ESP_LOGI(TAG, "Matter skipped (adapters.json matter.enabled=false)");
-    }
-#endif
-
 #if CONFIG_MINIHUB_THREAD_ADAPTER
     {
+        /* Start Thread BR before Matter. CHIP platform Dnssd uses OT SRP/DNS
+         * client; early Matter bootstrap + later adapter start() double-called
+         * esp_matter::start and left the commissioner forever not-ready. */
         err = minihub_thread_init();
         if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
             ESP_LOGW(TAG, "Thread BR init failed: %s", esp_err_to_name(err));
         }
-#if CONFIG_MINIHUB_MATTER_ADAPTER
-        else if (minihub_matter_ready()) {
-            err = minihub_matter_attach_thread();
-            if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
-                ESP_LOGW(TAG, "Matter Thread attach: %s", esp_err_to_name(err));
-            }
-        }
-#endif
     }
-#endif
-
-#if CONFIG_MINIHUB_LCD_UI && CONFIG_MINIHUB_MATTER_ADAPTER
-    /* BT controller needs internal DMA heap; init display after Matter/BLE when used. */
-    err = minihub_lcd_start_hw();
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "LCD HW init failed: %s", esp_err_to_name(err));
-    }
-    minihub_heap_log();
 #endif
 
     sntp_init_sync();
 
-    /* Bring up HTTP as soon as config/net are ready — do not wait for radio stacks.
-     * BLE Mesh may still defer ~30s for Zigbee RF sequencing in the background. */
+    /* Bring up HTTP before radio stacks so UI stays reachable during Zigbee form. */
     err = minihub_rules_init(minihub_config_get_rules());
     if (err != ESP_OK) {
         return;
@@ -267,32 +240,22 @@ void app_main(void)
         return;
     }
 
-#if CONFIG_MINIHUB_ZIGBEE_SDK && CONFIG_MINIHUB_NET_WIFI_STA
-    /* Always form Zigbee before Wi-Fi when both are built in (RF coexistence). */
-    bool zigbee_enabled = true;
-    if (adapters_cfg) {
-        const cJSON *section = cJSON_GetObjectItem(adapters_cfg, "adapters");
-        const cJSON *zb = cJSON_GetObjectItem(section ? section : adapters_cfg, "zigbee");
-        const cJSON *enabled = cJSON_IsObject(zb) ? cJSON_GetObjectItem(zb, "enabled") : NULL;
-        if (cJSON_IsBool(enabled)) {
-            zigbee_enabled = cJSON_IsTrue(enabled);
+#if CONFIG_MINIHUB_THREAD_ADAPTER && CONFIG_MINIHUB_MATTER_ADAPTER
+    if (minihub_matter_ready() && minihub_thread_ready()) {
+        err = minihub_matter_attach_thread();
+        if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
+            ESP_LOGW(TAG, "Matter Thread attach: %s", esp_err_to_name(err));
         }
     }
-    if (zigbee_enabled) {
-        err = minihub_zigbee_wait_ready(60000);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Zigbee not ready (%s) — starting Wi-Fi anyway", esp_err_to_name(err));
-        }
-    }
-    err = minihub_net_start_wifi();
+#endif
+
+#if CONFIG_MINIHUB_LCD_UI && CONFIG_MINIHUB_MATTER_ADAPTER
+    /* BT controller needs internal DMA heap; init display after Matter/BLE. */
+    err = minihub_lcd_start_hw();
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Wi-Fi start after Zigbee: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "LCD HW init failed: %s", esp_err_to_name(err));
     }
-#elif CONFIG_MINIHUB_NET_WIFI_STA
-    err = minihub_net_start_wifi();
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Wi-Fi start: %s", esp_err_to_name(err));
-    }
+    minihub_heap_log();
 #endif
 
     /* L2 / hybrid main.js after adapters started (same order as hub_reload). */

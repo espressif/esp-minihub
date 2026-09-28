@@ -1,0 +1,17 @@
+---
+description: Shared agent contract — handoff, plans, reviews, naming, secret boundary
+globs:
+alwaysApply: true
+---
+
+Read `.agent/private/README.md` and follow it. It is the single definition of this repo's agent
+conventions (artifact naming, append-only lifecycle, provenance labels, what is tracked,
+what is never committed) and is shared with every other agent working here — Cursor,
+CodeBuddy, Qwen, Qoder.
+
+Do not restate those rules here or in any other rule file, and do not create a second
+copy in this tool's own memory/plans directory: copies drift. This file is a pointer only.
+
+Before the final reply of any feature or bugfix, write or append the handoff per
+`.agent/private/HANDOFF.md`. Never put Wi-Fi passwords, web tokens, or bench credentials in
+tracked files.

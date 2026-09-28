@@ -22,8 +22,8 @@ Layering
                                   |
    +------------------------------------------------------------------+
    |  Device access                                                   |
-   |  Static adapters (Kconfig)  Zigbee / BLE Mesh / Matter / Thread  |
-   |                             MQTT / Modbus / ...                  |
+   |  Static adapters (Kconfig)  Wi-Fi / Zigbee / BLE Mesh / Matter   |
+   |                             Thread / MQTT / Modbus / ...         |
    |  Store plugins              vendor cloud / OEM; no Host fork     |
    |  Host-based product         less RAM; full IDF / MiniHub APIs    |
    +------------------------------------------------------------------+
@@ -39,8 +39,8 @@ Design principles
 -----------------
 
 **Core stays protocol-neutral.** Radio and IP stacks that Espressif owns
-(Zigbee, BLE Mesh, Matter, Thread, MQTT, Modbus) can link statically into the
-Host. Vendor clouds and OEM differences stay out of Core — ship them as Store
+(Wi-Fi STA adapter, Zigbee, BLE Mesh, Matter, Thread, MQTT, Modbus) can link
+statically into the Host. Vendor clouds and OEM differences stay out of Core — ship them as Store
 plugins or a Host-based product. That keeps the generic Host rebuildable without
 third-party credentials.
 
@@ -110,13 +110,15 @@ Typical order in ``main`` / bring-up:
 1. Flash dispatcher, mount ``/data``, ``minihub_config_init()``
 2. ``minihub_core_init()`` — point registry, event bus, command router
 3. ``minihub_net_init()`` — Ethernet start; Wi-Fi **prepared only** (deferred STA)
-4. Static radio stacks start (Zigbee, BLE Mesh, Matter, Thread as built)
+4. Static Matter/Thread bootstrap as built (CHIP / OpenThread order in ``main``)
 5. ``minihub_module_loader_init()``; load Store modules from ``/store/modules/``
-6. ``minihub_adapter_load_all()`` + ``minihub_adapter_start_all()``
-7. ``minihub_net_start_wifi()`` — STA connect or provisioning
-8. ``minihub_web`` HTTP server; MCP tools register; log ``MiniHub ready``
+6. ``minihub_web`` HTTP server (UI reachable while radios start)
+7. ``minihub_adapter_load_all()`` + ``minihub_adapter_start_all()`` — Wi-Fi STA
+   connect is the ``wifi`` adapter; radio mutex skips BLE Mesh if Wi-Fi +
+   Zigbee/Thread are also enabled (see :doc:`radios`). MCP / ``MiniHub ready`` follow.
 
-``wifi STA deferred`` in logs is expected until step 7. See :doc:`networking`.
+``wifi STA deferred`` in logs is expected until the ``wifi`` adapter starts.
+See :doc:`networking`.
 
 Hub soft reload
 ---------------
@@ -160,7 +162,7 @@ Configuration sources
 ---------------------
 
 * **Build time:** Kconfig, ``manifest.yml``, ``sdkconfig_features``
-* **Factory JSON:** ``application/APP/config/adapters.json`` or repo ``config/``
+* **Factory JSON:** ``application/APP/configs/adapters.json`` or repo ``configs/``
 * **Runtime:** Web UI, REST ``PUT /api/config/adapters``,
   ``PUT /api/dev/catalog/…``, module RPC that calls
   ``config_save_adapters`` via host vtable
@@ -188,7 +190,7 @@ Supported extension surface for OEM Host and Store plugins.
    * - Surface
      - Chapter / artifact
    * - Product profile
-     - ``manifest.yml``, ``partitions.csv``, ``config/sdkconfig/app.yml`` —
+     - ``manifest.yml``, ``partitions.csv``, ``configs/sdkconfig/app.yml`` —
        :doc:`host_customization`
    * - Runtime JSON / catalog
      - ``adapters.json``, ``rules.json``, ``scenes.json`` —

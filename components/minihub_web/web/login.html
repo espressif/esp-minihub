@@ -36,6 +36,11 @@ const hint = document.getElementById('hint');
 const err = document.getElementById('err');
 const title = document.getElementById('title');
 let setup = false;
+/* The console bounces here when a poll comes back 401; say why, because the
+ * single-slot session makes that happen without the user doing anything. */
+if (new URLSearchParams(location.search).get('reason') === 'expired') {
+  err.textContent = '会话已失效：其它终端登录过，或长时间未打开页面。';
+}
 fetch('/api/auth/status').then(r => r.json()).then(j => {
   if (j.login_auth === false) { location.href = '/'; return; }
   setup = !j.password_set;

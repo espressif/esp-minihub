@@ -33,7 +33,7 @@ LCD 选项
      partitions.csv
      CMakeLists.txt
      README.md
-     config/
+     configs/
        adapters.json
        sdkconfig/
          app.yml
@@ -56,10 +56,10 @@ LCD 选项
      - 作用
    * - ``manifest.yml``
      - 产品配置：板级、分区表、``sdkconfig_features``、``store_preinstall``、
-       ``variants``。编译时与仓库 ``config/minihub_manifest.yml`` 的
+       ``variants``。编译时与仓库 ``configs/minihub_manifest.yml`` 的
        ``_host_base`` 合并，并写出 ``main/idf_component.yml`` 等生成文件
        （见 :doc:`index`）。本表路径都在 ``application/minihub/`` 下，不是仓库根的
-       ``config/`` 。产品目录缺 JSON 时回退到仓库 ``config/*.json``
+       ``configs/`` 。产品目录缺 JSON 时回退到仓库 ``configs/*.json``
        （:doc:`../host_customization`）。
    * - ``partitions.csv``
      - Flash 分区表（``nvs`` / ``ota`` / ``storage`` / ``modstore`` 等）。起点而非
@@ -71,21 +71,21 @@ LCD 选项
        按环境可选 Matter / RainMaker。
    * - ``README.md``
      - 本产品实验室编译备忘（``-app minihub``、LCD 选项）。
-   * - ``config/adapters.json``
+   * - ``configs/adapters.json``
      - 出厂适配器配置，打进 LittleFS ``/data/config/``。缺失则回退仓库根
-       ``config/adapters.json``。
-   * - ``config/rules.json`` / ``scenes.json``
-     - 通用产品未放这两份文件，构建时用仓库 ``config/``。OEM 可在产品
-       ``config/`` 覆盖。
-   * - ``config/sdkconfig/app.yml``
+       ``configs/adapters.json``。
+   * - ``configs/rules.json`` / ``scenes.json``
+     - 通用产品未放这两份文件，构建时用仓库 ``configs/``。OEM 可在产品
+       ``configs/`` 覆盖。
+   * - ``configs/sdkconfig/app.yml``
      - 本产品 compose 选项（板级 + ``features``）。须与 manifest 的
        ``sdkconfig_features`` 一致。
-   * - ``config/sdkconfig/feature/*.defaults``
+   * - ``configs/sdkconfig/feature/*.defaults``
      - 仅本产品需要的 Kconfig 片段（USB MSC、RTSP、Modbus 等）。共享片段在仓库
-       ``config/sdkconfig/``。
-   * - ``config/sdkconfig/variants/``
+       ``configs/sdkconfig/``。
+   * - ``configs/sdkconfig/variants/``
      - 打开 ``CONFIG_MINIHUB_LCD_UI``。
-   * - ``config/sdkconfig/local.overrides.example``
+   * - ``configs/sdkconfig/local.overrides.example``
      - 复制为 ``local.overrides`` （git 忽略）写入实验室 Wi-Fi，勿提交。
    * - ``main/main.c``
      - ``app_main``：NVS、网络、Hub、Web。一般不用改；协议栈靠 Kconfig 与生成的
@@ -95,7 +95,7 @@ LCD 选项
    * - ``main/Kconfig.projbuild``
      - 产品 Kconfig：Wi-Fi、配网、Web 登录、各适配器开关等。
    * - ``main/adapters_setup.h``
-     - ``minihub_adapters_register_all()`` 声明。
+     - ``minihub_protocol_adapters_register_all()`` 声明。
    * - ``main/adapters_setup.generated.c``
      - 自动生成，勿手改。
    * - ``main/idf_component.yml``

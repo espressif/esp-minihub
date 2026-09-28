@@ -15,7 +15,7 @@ MiniHub Core works on **points**, not on C structs for lamps or switches:
 * **One physical device = one** ``minihub_point_t`` (Matter is **one
   endpoint** — see :doc:`matter`)
 * ``point_id`` = ``protocol.device`` (e.g. ``sim.color_bulb``,
-  ``zigbee.zb_7d4b``, ``light/matter_n2_ep1``)
+  ``zigbee.zb_7d4b``, ``thread.matter_n2_ep1``)
 * Live parameters live on that point under ``props.params.<name>``
 * ``type`` is a string (``light`` / ``switch`` / …) — **not** a closed Core enum
 * **How the UI draws** comes from the Host **type catalog** (CSV),
@@ -130,11 +130,11 @@ same physical device.
 Where files live
 ----------------
 
-Factory JSON at **build** time (first existing file wins; repo ``config/`` is
+Factory JSON at **build** time (first existing file wins; repo ``configs/`` is
 fallback only):
 
-1. ``application/APP/config/`` plus the file name
-2. else repo ``config/`` plus the same name (only if step 1 is missing)
+1. ``application/APP/configs/`` plus the file name
+2. else repo ``configs/`` plus the same name (only if step 1 is missing)
 
 On device after first boot the live copies are:
 

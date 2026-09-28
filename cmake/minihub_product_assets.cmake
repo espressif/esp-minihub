@@ -13,7 +13,7 @@ function(minihub_product_app_name out_var)
     set(${out_var} "${_app}" PARENT_SCOPE)
 endfunction()
 
-# Resolve application/<app>/config/<name> else config/<name> → absolute path in out_var.
+# Resolve application/<app>/configs/<name> else configs/<name> → absolute path in out_var.
 # Empty string if missing.
 function(minihub_resolve_config_asset name out_var)
     if(NOT Python3_EXECUTABLE)

@@ -1,8 +1,1 @@
-{
-  "mcpServers": {
-    "minihub-plugin": {
-      "command": "python3",
-      "args": ["tools/minihub_plugin_mcp.py"]
-    }
-  }
-}
+../.agent/mcp/cursor.mcp.json

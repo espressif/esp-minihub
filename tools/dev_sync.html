@@ -211,17 +211,25 @@
   const $ = (s) => document.querySelector(s);
   const logEl = $("#log");
   const webQueue = [];
+  let webIngest = Promise.resolve();
 
   function log(msg, cls) {
+    /* Newest + batch summaries on top (summary is logged last → inserted first). */
+    if (logEl.firstChild && logEl.firstChild.nodeType === Node.TEXT_NODE) {
+      logEl.textContent = "";
+    }
     const line = document.createElement("div");
     line.className = cls || "log-info";
     line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    logEl.appendChild(line);
-    logEl.scrollTop = logEl.scrollHeight;
+    logEl.insertBefore(line, logEl.firstChild);
+    logEl.scrollTop = 0;
   }
 
   function baseUrl() {
-    return ($("#base").value || "").trim().replace(/\/$/, "");
+    let v = ($("#base").value || "").trim().replace(/\/$/, "");
+    // Allow bare host/IP; proxy also normalizes, but keep requests consistent.
+    if (v && !/^https?:\/\//i.test(v)) v = "http://" + v;
+    return v;
   }
 
   async function hub(method, path, body, contentType) {
@@ -251,6 +259,104 @@
   $("#log-clear").onclick = () => { logEl.textContent = ""; };
 
   const WEB_FILE = /\.(html|css|js|svg|png|map)$/i;
+  const READ_RETRY_MS = 250;
+  const STALE_FILE_MSG = "文件在上传前被修改或无法读取，请重新选择后再传";
+
+  /* A File from <input type=file> / an earlier entry.file() becomes unreadable
+   * (NotReadableError) once the path changes on disk — typical when an editor
+   * autosaves while previous PUTs are still in flight. Re-acquire via
+   * FileSystemFileHandle.getFile() or FileSystemFileEntry.file() immediately
+   * before reading. Plain FileList entries have no handle, so those are copied
+   * into an in-memory Blob as soon as they are selected. */
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function isNotReadable(err) {
+    if (!err) return false;
+    if (err.name === "NotReadableError") return true;
+    return /could not be read/i.test(String(err.message || ""));
+  }
+
+  function staleFileError() {
+    const err = new Error(STALE_FILE_MSG);
+    err.name = "NotReadableError";
+    return err;
+  }
+
+  function fileFromEntry(entry) {
+    return new Promise((resolve, reject) => {
+      entry.file(resolve, reject);
+    });
+  }
+
+  function fileToItem(file) {
+    return {
+      name: file.name || "",
+      type: file.type || "",
+      webkitRelativePath: String(file.webkitRelativePath || ""),
+      handle: null,
+      entry: null,
+      file,
+      blob: null,
+    };
+  }
+
+  function asSyncItem(raw) {
+    if (raw instanceof File) return fileToItem(raw);
+    if (raw && typeof raw === "object" && ("handle" in raw || "entry" in raw || "blob" in raw)) return raw;
+    throw new Error("没有可读取的文件");
+  }
+
+  async function readFreshBytes(item) {
+    const pull = async () => {
+      if (item.handle && typeof item.handle.getFile === "function") {
+        const file = await item.handle.getFile();
+        return { buf: await file.arrayBuffer(), type: file.type || item.type || "" };
+      }
+      if (item.entry && typeof item.entry.file === "function") {
+        const file = await fileFromEntry(item.entry);
+        return { buf: await file.arrayBuffer(), type: file.type || item.type || "" };
+      }
+      if (item.blob) {
+        return { buf: await item.blob.arrayBuffer(), type: item.blob.type || item.type || "" };
+      }
+      if (item.file) {
+        return { buf: await item.file.arrayBuffer(), type: item.file.type || item.type || "" };
+      }
+      throw new Error("没有可读取的文件");
+    };
+    try {
+      return await pull();
+    } catch (err) {
+      if (!isNotReadable(err)) throw err;
+      await sleep(READ_RETRY_MS);
+      try {
+        return await pull();
+      } catch (err2) {
+        if (isNotReadable(err2)) throw staleFileError();
+        throw err2;
+      }
+    }
+  }
+
+  /* Copy a picker File into memory now. Handle/entry items stay lazy so upload
+   * can call getFile()/file() again and pick up edits made after selection. */
+  async function ensureReadable(item) {
+    if (item.blob || item.handle || item.entry) return item;
+    const { buf, type } = await readFreshBytes(item);
+    const mime = type || item.type || "application/octet-stream";
+    return {
+      name: item.name,
+      type: mime,
+      webkitRelativePath: item.webkitRelativePath || "",
+      handle: null,
+      entry: null,
+      file: null,
+      blob: new Blob([buf], { type: mime }),
+    };
+  }
 
   /* Folder pick: webkitRelativePath is "<chosen-dir>/js/boot.js". Drop the
    * chosen directory name so components/minihub_web/web → js/boot.js. */
@@ -298,25 +404,64 @@
   }
 
   function addWebFiles(fileList) {
+    const done = webIngest.then(() => ingestWebFiles(fileList));
+    webIngest = done.then(() => {}, () => {});
+    return done;
+  }
+
+  async function ingestWebFiles(fileList) {
+    const pending = [];
     let skipped = 0;
-    for (const f of fileList) {
-      const rel = folderRel(f);
-      const name = rel || f.name || "";
+    for (const raw of fileList) {
+      let item;
+      try {
+        item = asSyncItem(raw);
+      } catch (err) {
+        log(`无法读取文件: ${err.message || err}`, "log-err");
+        continue;
+      }
+      const rel = folderRel(item);
+      const name = rel || item.name || "";
       if (!name || name.split("/").pop().startsWith(".") || !WEB_FILE.test(name)) {
         skipped++;
         continue;
       }
-      webQueue.push(f);
+      pending.push(ensureReadable(item).then(
+        (ready) => ({ ok: true, ready }),
+        (err) => ({ ok: false, name, err })
+      ));
+    }
+    const results = await Promise.all(pending);
+    for (const result of results) {
+      if (result.ok) webQueue.push(result.ready);
+      else log(`无法读取 ${result.name}: ${result.err.message || result.err}`, "log-err");
     }
     if (skipped) log(`跳过 ${skipped} 个非网页文件`, "log-info");
     renderWebQueue();
   }
 
-  function tagFolderFile(file, relInside) {
-    try {
-      Object.defineProperty(file, "webkitRelativePath", { value: "web/" + relInside });
-    } catch (e) { /* already set by the directory picker */ }
-    return file;
+  function entryItem(entry, relInside) {
+    return {
+      name: entry.name || "",
+      type: "",
+      webkitRelativePath: relInside ? "web/" + relInside : "",
+      handle: null,
+      entry,
+      file: null,
+      blob: null,
+    };
+  }
+
+  function handleItem(handle, relInside) {
+    return {
+      name: handle.name || "",
+      type: "",
+      webkitRelativePath: relInside ? "web/" + relInside : "",
+      handle,
+      entry: null,
+      file: null,
+      blob: null,
+    };
   }
 
   function readDir(dirEntry, prefix) {
@@ -329,20 +474,17 @@
             resolve(acc);
             return;
           }
-          Promise.all(batch.map((child) => {
+          const parts = batch.map((child) => {
             if (child.isDirectory) {
               const next = prefix ? prefix + "/" + child.name : child.name;
               return readDir(child, next);
             }
             if (!child.isFile) return [];
-            return new Promise((res, rej) => {
-              child.file((file) => {
-                const rel = prefix ? prefix + "/" + file.name : file.name;
-                res([tagFolderFile(file, rel)]);
-              }, rej);
-            });
-          })).then((parts) => {
-            parts.forEach((p) => acc.push(...p));
+            const rel = prefix ? prefix + "/" + child.name : child.name;
+            return [entryItem(child, rel)];
+          });
+          Promise.all(parts).then((nested) => {
+            nested.forEach((p) => acc.push(...p));
             pump();
           }, reject);
         }, reject);
@@ -351,26 +493,60 @@
     });
   }
 
+  async function collectDirHandle(dirHandle, prefix) {
+    const acc = [];
+    for await (const [name, handle] of dirHandle.entries()) {
+      const rel = prefix ? prefix + "/" + name : name;
+      if (handle.kind === "directory") acc.push(...await collectDirHandle(handle, rel));
+      else if (handle.kind === "file") acc.push(handleItem(handle, rel));
+    }
+    return acc;
+  }
+
   function wireDrop(el, onFiles) {
     el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("over"); });
     el.addEventListener("dragleave", () => el.classList.remove("over"));
     el.addEventListener("drop", async (e) => {
       e.preventDefault();
       el.classList.remove("over");
-      const items = e.dataTransfer.items;
-      if (items && items.length && items[0].webkitGetAsEntry) {
-        const files = [];
-        for (const item of items) {
-          const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
-          if (!entry) continue;
-          if (entry.isDirectory) files.push(...await readDir(entry, ""));
+      const dtItems = [...(e.dataTransfer?.items || [])];
+      const handlePromises = dtItems.map((item) => {
+        if (typeof item.getAsFileSystemHandle !== "function") return null;
+        try { return item.getAsFileSystemHandle(); } catch (_) { return null; }
+      });
+      const entries = dtItems.map((item) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null));
+      const filesFallback = [...(e.dataTransfer?.files || [])];
+      let handles = [];
+      try {
+        handles = await Promise.all(handlePromises.map((p) => Promise.resolve(p).catch(() => null)));
+      } catch (_) {
+        handles = [];
+      }
+      const collected = [];
+      for (let i = 0; i < dtItems.length; i++) {
+        const handle = handles[i];
+        const entry = entries[i];
+        if (handle && handle.kind === "directory") {
+          collected.push(...await collectDirHandle(handle, ""));
+          continue;
         }
-        if (files.length) {
-          onFiles(files);
-          return;
+        if (handle && handle.kind === "file") {
+          collected.push(handleItem(handle, ""));
+          continue;
+        }
+        if (entry && entry.isDirectory) {
+          collected.push(...await readDir(entry, ""));
+          continue;
+        }
+        if (entry && entry.isFile) {
+          collected.push(entryItem(entry, ""));
         }
       }
-      if (e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
+      if (collected.length) {
+        await onFiles(collected);
+        return;
+      }
+      if (filesFallback.length) await onFiles(filesFallback);
     });
   }
 
@@ -380,18 +556,31 @@
   $("#web-target").onchange = renderWebQueue;
 
   $("#web-upload").onclick = async () => {
+    await webIngest;
     if (!webQueue.length) { log("没有待上传文件", "log-err"); return; }
     const mode = $("#web-target").value;
-    for (const f of [...webQueue]) {
-      const dest = mapWebPath(f, mode);
-      try {
-        const buf = await f.arrayBuffer();
-        const r = await hub("PUT", "/api/dev/web/" + dest, buf, f.type || "application/octet-stream");
-        if (!r.ok) throw new Error(`${r.status} ${r.text}`);
-        log(`上传 OK ${dest} → ${r.text}`, "log-ok");
-      } catch (e) {
-        log(`上传失败 ${dest}: ${e.message || e}`, "log-err");
+    const batch = [...webQueue];
+    let ok = 0;
+    let fail = 0;
+    const btn = $("#web-upload");
+    btn.disabled = true;
+    try {
+      for (const item of batch) {
+        const dest = mapWebPath(item, mode);
+        try {
+          const { buf, type } = await readFreshBytes(item);
+          const r = await hub("PUT", "/api/dev/web/" + dest, buf, type || "application/octet-stream");
+          if (!r.ok) throw new Error(`${r.status} ${r.text}`);
+          ok++;
+          log(`上传 OK ${dest} → ${r.text}`, "log-ok");
+        } catch (e) {
+          fail++;
+          log(`上传失败 ${dest}: ${e.message || e}`, "log-err");
+        }
       }
+      log(`应上传 ${batch.length} 个文件，成功 ${ok} 个，失败 ${fail} 个`, fail ? "log-err" : "log-ok");
+    } finally {
+      btn.disabled = false;
     }
   };
 
@@ -442,19 +631,22 @@
 
   const catFiles = { "devices.csv": null, "parameters.csv": null };
 
+  async function rememberCatFile(which, raw) {
+    if (!raw) return;
+    try {
+      const item = await ensureReadable(asSyncItem(raw));
+      catFiles[which] = item;
+      log(`已选择 ${which}: ${item.name}`, "log-info");
+    } catch (e) {
+      log(`无法读取 ${which}: ${e.message || e}`, "log-err");
+    }
+  }
+
   function wireCat(dropId, inputId, which) {
     const drop = $(dropId);
     const input = $(inputId);
-    wireDrop(drop, (files) => {
-      catFiles[which] = files[0];
-      log(`已选择 ${which}: ${files[0].name}`, "log-info");
-    });
-    input.onchange = () => {
-      if (input.files[0]) {
-        catFiles[which] = input.files[0];
-        log(`已选择 ${which}: ${input.files[0].name}`, "log-info");
-      }
-    };
+    wireDrop(drop, (files) => rememberCatFile(which, files[0]));
+    input.onchange = () => { rememberCatFile(which, input.files[0]); };
   }
   wireCat("#cat-dev-drop", "#cat-dev-file", "devices.csv");
   wireCat("#cat-par-drop", "#cat-par-file", "parameters.csv");
@@ -465,7 +657,7 @@
       const f = catFiles[which];
       if (!f) { log(`请先选择 ${which}`, "log-err"); return; }
       try {
-        const buf = await f.arrayBuffer();
+        const { buf } = await readFreshBytes(f);
         const r = await hub("PUT", "/api/dev/catalog/" + which, buf, "text/csv");
         if (!r.ok) throw new Error(`${r.status} ${r.text}`);
         log(`目录 ${which} OK: ${r.text}`, "log-ok");

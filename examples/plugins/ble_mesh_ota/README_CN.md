@@ -4,7 +4,7 @@
 
 独立 **L3 native** 演示，位于 `examples/plugins/`（不进公开 Host
 `store_preinstall`）。**不注册设备点**。Host BLE Mesh 已为每个节点占一个
-`point_id`（`light/bm_%04x`）。本插件：
+`point_id`（`ble_mesh.bm_%04x`）。本插件：
 
 1. 列出 `adapter=ble_mesh` 的 Host 点（`minihub_point_list_by_adapter`）
 2. 打包的 `catalog.json` 只含 Espressif 过滤 + `catalog_url`

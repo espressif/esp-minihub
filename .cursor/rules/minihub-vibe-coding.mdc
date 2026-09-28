@@ -6,9 +6,9 @@ alwaysApply: true
 # MiniHub vibe coding map
 
 - **Host product** = `application/<name>/` (default `minihub`). Shared Core lives in `components/`.
-- **Vendor / ecosystem logic** = Store plugin (L1/L2/L3 → `.mhub`) in a sibling repo via `MINIHUB_PLUGIN_DIRS`. Standalone demos: `examples/plugins/<id>/` — not Host `require`, not default `store_preinstall`. Do not bake cloud tokens or default vendor devices into Core or public `config/` seeds.
+- **Vendor / ecosystem logic** = Store plugin (L1/L2/L3 → `.mhub`) in a sibling repo via `MINIHUB_PLUGIN_DIRS`. Standalone demos: `examples/plugins/<id>/` — not Host `require`, not default `store_preinstall`. Do not bake cloud tokens or default vendor devices into Core or public `configs/` seeds.
 - **IDF**: ~6.2 with preview target `esp32s31`. Do not assume IDF 5.x.
 - **On-device MCP** is optional (`CONFIG_MINIHUB_MCP_SERVER`); LAN agents can use REST without it.
 - **Plugin-author IDE MCP** (`python3 tools/minihub_plugin_mcp.py`) is for Cursor/VS Code Store development, not the Hub.
-- Follow `AGENTS.md`. Before Host / L1 / L2 / L3 / docs edits, read the matching skill in `.cursor/skills/`.
+- Follow `AGENTS.md`. Before Host / L1 / L2 / L3 / docs edits, read the matching skill in `.agent/skills/`.
 - Plugin ids and git branch names: **underscores**, not hyphens.

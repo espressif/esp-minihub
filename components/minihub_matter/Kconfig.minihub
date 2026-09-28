@@ -4,4 +4,30 @@ menu "Matter"
         bool "Enable Matter adapter / commissioner"
         default n
 
+    config MINIHUB_MATTER_MAX_NODES
+        int "Max Matter nodes tracked (device / subscription / identity tables)"
+        default 128
+        range 16 1024
+        depends on MINIHUB_MATTER_ADAPTER
+        help
+            Hard safety cap for the Matter device, subscription and identity
+            tables. The tables are heap-allocated from PSRAM at init; raising
+            it costs PSRAM, lowering it rejects extra devices with a log line
+            instead of silently dropping them.
+
+    config MINIHUB_MATTER_COMMISSION_WAIT_MS
+        int "Commission watchdog timeout (ms)"
+        default 300000
+        range 60000 900000
+        depends on MINIHUB_MATTER_ADAPTER
+        help
+            How long minihub_matter_commission_wait() blocks waiting for a
+            commission to finish before the watchdog declares "commission
+            timed out". Operational DNS-SD (resolving the joined device on the
+            Thread/ethernet fabric) can be slow on first browse — the local
+            OTBR record may not be visible immediately after commissioning —
+            so give it headroom beyond the previous 180 s. Raise this if a
+            slow fabric still trips the watchdog; lower it for faster test
+            feedback.
+
 endmenu

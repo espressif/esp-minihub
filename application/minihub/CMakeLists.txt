@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-# Repo root (shared components/, config/, cmake/, tools/)
+# Repo root (shared components/, configs/, cmake/, tools/)
 get_filename_component(MINIHUB_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 
 # Shared Core + adapters. Matter SDK dirs: ESP_MATTER_PATH (opt-out MINIHUB_BUILD_MATTER=0).

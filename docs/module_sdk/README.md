@@ -18,7 +18,7 @@ python3 tools/pack_store_module.py pack my_js
 python3 tools/sync_store_catalog.py
 ```
 
-Do not copy an existing vendor plugin as a template. Agent workflow: `AGENTS.md` and `.cursor/skills/minihub-plugin-l*/`.
+Do not copy an existing vendor plugin as a template. Agent workflow: `AGENTS.md` and `.agent/skills/minihub-plugin-l*/`.
 
 ## IDE MCP (plugin authors)
 

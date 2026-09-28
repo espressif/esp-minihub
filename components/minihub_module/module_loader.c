@@ -142,6 +142,9 @@ static esp_err_t validate_module_info(const minihub_module_info_t *info)
     if (!info || info->id[0] == '\0' || info->adapter_name[0] == '\0') {
         return ESP_ERR_INVALID_ARG;
     }
+    /* ABI pinned at 1 by deliberate choice (R2): no product shipped yet, so modules
+     * are rebuilt rather than version-gated. Bump MINIHUB_MODULE_ABI_VERSION on any
+     * struct layout break (middle-insert/remove/reorder), not just a sizeof() change. */
     if (info->abi_version != MINIHUB_MODULE_ABI_VERSION) {
         ESP_LOGE(TAG, "module '%s' abi %u != host %u",
                  info->id, (unsigned)info->abi_version, MINIHUB_MODULE_ABI_VERSION);

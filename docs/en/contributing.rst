@@ -38,7 +38,7 @@ What belongs where
      - ``docs/module_sdk/``, :doc:`api/module_abi`
 
 Do **not** add vendor cloud tokens, default OEM secrets, or vendor-only rules to
-generic Host ``config/`` factory JSON.
+generic Host ``configs/`` factory JSON.
 
 Git workflow
 ------------

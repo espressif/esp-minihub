@@ -296,7 +296,10 @@ function sectionHeader(ad, count) {
     }
     if (ad === 'matter') {
         const st = matterStatus.ready ? '<span class="mod-acct">控制器就绪</span>' : (showActs ? '<span class="mod-acct off">未就绪</span>' : '');
-        const acts = showActs ? '<button class="btn-sm on" type="button" onclick="openMatterAdd()">添加</button>' : '';
+        const running = matterStatus.commission === 'running';
+        const acts = showActs ? (running
+            ? '<button class="btn-sm bad" type="button" onclick="cancelMatterCommission()">取消配网</button>'
+            : '<button class="btn-sm on" type="button" onclick="openMatterAdd()">添加</button>') : '';
         return '<div class="section-h matter-section-h"><span>' + (ADAPTER_LABEL[ad] || ad) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'zigbee') {
@@ -391,7 +394,7 @@ function propsHtml(p) {
     if (!p.props || typeof p.props !== 'object') return '';
     const meterOrder = ['power_w', 'voltage_v', 'current_a', 'energy_wh'];
     const otherOrder = ['humidity'];
-    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'illumination', 'illumination_label', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
+    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'commission_phase', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'illumination', 'illumination_label', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
     const labels = {
         power_w: '功率',
         voltage_v: '电压',
@@ -646,6 +649,8 @@ async function openDeviceLog(id, ev) {
  * Preferred: one point with props.params (sim.color_bulb).
  * Legacy: group protocol.endpoint.parameter into one card so brightness/hue
  * never become their own toggle cards and 能力点 counts devices.
+ * Unscoped ids (not <protocol>.<device>, e.g. switch/bm_000a) stay as one
+ * card. Overview files them on 全部 only — not under an adapter section.
  */
 function overviewParamsBlobNonEmpty(paramsBlob) {
     if (!paramsBlob || typeof paramsBlob !== 'object') return false;
@@ -673,9 +678,20 @@ function overviewCollapsePoints(points) {
         const pr = (pt.props && typeof pt.props === 'object') ? pt.props : null;
         const paramsBlob = pr && pr.params;
         const seg = pt.point_id.split('.');
-        if (seg.length < 2) return;
-
         const hasParams = overviewParamsBlobNonEmpty(paramsBlob);
+        const scoped = (typeof pointIdScoped === 'function')
+            ? pointIdScoped(pt.point_id)
+            : (seg.length >= 2 && !!seg[0] && seg.slice(1).some(function (s) { return !!s; }));
+
+        /* Not <protocol>.<device>: keep the row. Do not parse a protocol from '/'. */
+        if (!scoped) {
+            if (!pt.point_id) return;
+            const card = Object.assign({}, pt);
+            card.props = Object.assign({}, pr || {});
+            if (hasParams && !card.props.params) card.props.params = paramsBlob;
+            ensure(pt.point_id, card);
+            return;
+        }
 
         /* Device-level: non-empty props.params, or 2-segment id. */
         if (hasParams || seg.length === 2) {
@@ -740,26 +756,34 @@ function cardHtml(p) {
     if (p && p.props && p.props.visible === false) return '';   /* internal-use point: not rendered on the card */
     const isCover = p.type === 'cover';
     const pct = isCover ? parseInt(p.value, 10) : NaN;
+    const cPhase = (p.props && p.props.commission_phase) || '';
+    const commissioning = !!(p.props && (p.props.commissioning || cPhase === 'waiting' || cPhase === 'failed'));
     /* Power summary from props.params.power (or flat value). Never treat brightness "80" as on. */
     const powerVal = pointParamVal(p, 'power');
     const powerOn = powerVal === 'on' || powerVal === 'true' || powerVal === true ||
         p.value === 'on' || p.value === 'true' || p.value === 'open' || p.value === 'left_open' || p.value === 'online';
     const on = isCover ? (Number.isFinite(pct) && pct > 0) : (powerOn || (!(powerVal != null || p.value === 'on' || p.value === 'off' || p.value === 'true' || p.value === 'false') && (parseInt(p.value) || 0) > 0));
-    const dis = !p.online ? ' disabled' : '';
-    const noCtrl = !!(p.props && p.props.no_control);
+    const dis = (!p.online || commissioning) ? ' disabled' : '';
+    const noCtrl = !!(p.props && p.props.no_control) || commissioning;
     const readOnly = !!(p.props && p.props.access === 'R');   /* read-only param: show value, no control */
     /* Overview card toggle = power only. Extra params open generic catalog detail / Devices. */
     const hasParams = !!(p.props && p.props.params && typeof p.props.params === 'object');
     const ctrlTypes = ['switch', 'light', 'router', 'car', 'camera', 'television', 'air-conditioner', 'fridge', 'water_purifier', 'water_heater', 'appliance', 'washer', 'dishwasher', 'oven'];
-    const allowToggle = ctrlTypes.includes(p.type) && !noCtrl && !readOnly &&
+    const allowToggle = !commissioning && ctrlTypes.includes(p.type) && !noCtrl && !readOnly &&
         (!hasParams || powerVal != null || p.value === 'on' || p.value === 'off' || p.value === 'true' || p.value === 'false' || !p.value);
     const ctrl = allowToggle ? '<label class="toggle"><input type="checkbox" data-id="' + p.point_id + '"' + (on ? ' checked' : '') + dis + '>    <span class="slider"></span></label>' : '';
-    const delBtn = (p.adapter === 'matter') ? '<button class="btn-sm bad" type="button" onclick="deleteMatterDevice(\'' + p.point_id + '\')">删除</button>' : (p.adapter === 'zigbee') ? '<button class="btn-sm bad" type="button" onclick="deleteZigbeeDevice(\'' + p.point_id + '\')">删除</button>' : (p.adapter === 'ble_mesh') ? '<button class="btn-sm bad" type="button" onclick="deleteBleMeshDevice(\'' + p.point_id + '\')">删除</button>' : '';
+    const pidJs = String(p.point_id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const cancelBtn = (p.adapter === 'matter' && commissioning && cPhase !== 'failed')
+        ? '<button class="btn-sm" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();cancelMatterCommission(\'' + String((p.props && p.props.node_id) || '') + '\')">取消配网</button>'
+        : '';
+    const delBtn = (p.adapter === 'matter') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteMatterDevice(\'' + pidJs + '\')">删除</button>' : (p.adapter === 'zigbee') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteZigbeeDevice(\'' + pidJs + '\')">删除</button>' : (p.adapter === 'ble_mesh') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteBleMeshDevice(\'' + pidJs + '\')">删除</button>' : '';
     const short = pointDisplayName(p);
     const room = pointRoomName(p);
     const apDetail = ['fridge', 'water_purifier', 'water_heater', 'appliance'].includes(p.type);
     const plugDetail = p.type === 'switch' && switchHasDetail(p);
-    /* Catalog detail for any device with props.params — not light-only. */
+    /* Catalog detail is the default click, with or without props.params.
+     * The modal lists only params the point actually reported. Specialized
+     * panels override when they match and the point has no params blob. */
     let clickCls = '';
     let clickFn = '';
     if (hasParams) {
@@ -784,8 +808,14 @@ function cardHtml(p) {
         clickCls = ' plug-click';
         clickFn = 'openPlugDetail';
     }
-    const clickAttr = clickFn ? (' onclick="' + clickFn + '(\'' + p.point_id + '\',event)"') : '';
+    if (!clickFn) {
+        clickCls = ' device-click';
+        clickFn = 'openDeviceDetail';
+    }
+    const clickAttr = (clickFn && !commissioning) ? (' onclick="' + clickFn + '(\'' + p.point_id + '\',event)"') : '';
     const valShow = (function() {
+        if (cPhase === 'waiting' || (commissioning && cPhase !== 'failed')) return matterCommissionLabel(p, cPhase) || '等待配网中';
+        if (cPhase === 'failed') return '配网失败';
         if (p.type === 'button') return (p.online ? '就绪' : '离线');
         if (isCover && Number.isFinite(pct)) return pct + '%';
         if (p.value === 'detected') return '有人';
@@ -800,8 +830,8 @@ function cardHtml(p) {
         return p.value;
     })();
     /* Catalog type avatar (/img/devices/light.svg); dim with power when known. */
-    const dimByPower = powerVal != null || p.value === 'on' || p.value === 'off' ||
-        p.value === 'true' || p.value === 'false' || allowToggle;
+    const dimByPower = !commissioning && (powerVal != null || p.value === 'on' || p.value === 'off' ||
+        p.value === 'true' || p.value === 'false' || allowToggle);
     const imageUrl = (typeof dwTypeImageUrl === 'function') ? dwTypeImageUrl(p.type) : '';
     let iconHtml = '';
     if (imageUrl && typeof dwDeviceIconHtml === 'function') {
@@ -810,8 +840,13 @@ function cardHtml(p) {
         iconHtml = '<span class="dw-device-icon-fallback">' + TYPE_ICON[p.type] + '</span>';
     }
     const proto = (typeof pointProtocol === 'function') ? pointProtocol(p) : '';
-    const onlineLab = (p.online ? '在线' : '离线') + (proto ? (' · ' + esc(proto)) : '');
-    return '<div class="dcard' + clickCls + (p.online ? '' : ' offline') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + (on ? 'on' : 'off') + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">日志</button>' : '') + delBtn + ctrl + '</div></div>';
+    let onlineLab;
+    if (cPhase === 'waiting') onlineLab = matterCommissionLabel(p, cPhase) + (proto ? (' · ' + esc(proto)) : '');
+    else if (cPhase === 'failed') onlineLab = '配网失败' + (proto ? (' · ' + esc(proto)) : '');
+    else onlineLab = (p.online ? '在线' : '离线') + (proto ? (' · ' + esc(proto)) : '');
+    const valCls = cPhase === 'waiting' ? 'pending' : (cPhase === 'failed' ? 'off' : (on ? 'on' : 'off'));
+    const cardClickCls = commissioning ? '' : clickCls;
+    return '<div class="dcard' + cardClickCls + ((p.online || commissioning) ? '' : ' offline') + (commissioning ? ' commissioning' : '') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + valCls + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">日志</button>' : '') + cancelBtn + delBtn + ctrl + '</div></div>';
 }
 
 async function storeAct(kind, id, enabled) {
@@ -1473,65 +1508,46 @@ async function confirmHomePicker() {
     closeHomePicker();
     await syncModule(mid, hid);
 }
-let matterAddMode = 'joined';
-let matterFreshTransport = 'ble_thread';
+let matterWifiEnabled = false;
 
 function matterDiscoveryValue() {
-    return matterAddMode === 'joined' ? 'network' : matterFreshTransport;
+    /* Always BLE + DNS-SD (CHIP DiscoveryType::kAll). Wi-Fi toggle selects credentials. */
+    return matterWifiEnabled ? 'ble_wifi' : 'ble_thread';
 }
 
 function syncMatterDiscoveryField() {
-    document.getElementById('matter-discovery').value = matterDiscoveryValue();
+    const el = document.getElementById('matter-discovery');
+    if (el) el.value = matterDiscoveryValue();
 }
 
 function refreshMatterAddUi() {
-    const joined = matterAddMode === 'joined';
-    const showWifi = !joined && matterFreshTransport === 'ble_wifi';
-    document.getElementById('matter-pane-joined').classList.toggle('on', joined);
-    document.getElementById('matter-pane-fresh').classList.toggle('on', !joined);
-    document.getElementById('matter-pane-joined').setAttribute('aria-selected', joined ? 'true' : 'false');
-    document.getElementById('matter-pane-fresh').setAttribute('aria-selected', joined ? 'false' : 'true');
-    document.getElementById('matter-joined-desc').hidden = !joined;
-    document.getElementById('matter-fresh-block').hidden = joined;
-    document.getElementById('matter-wifi-block').hidden = !showWifi;
-    document.querySelectorAll('#matter-transport .chip').forEach(c => {
-        c.classList.toggle('active', c.dataset.disc === matterFreshTransport);
-    });
+    const showWifi = matterWifiEnabled;
+    const toggle = document.getElementById('matter-wifi-enable');
+    if (toggle) toggle.checked = matterWifiEnabled;
+    const wifiBlock = document.getElementById('matter-wifi-block');
+    if (wifiBlock) wifiBlock.hidden = !showWifi;
+    const ssidEl = document.getElementById('matter-wifi-ssid');
+    const passEl = document.getElementById('matter-wifi-pass');
+    if (ssidEl) ssidEl.disabled = !showWifi;
+    if (passEl) passEl.disabled = !showWifi;
     syncMatterDiscoveryField();
-    const d = matterDiscoveryValue();
-    const hints = {
-        ble_wifi: '将未配网 Wi-Fi 设备靠近 Hub，填写要加入的家庭 Wi-Fi。Hub 本身可用以太网。',
-        ble_thread: matterStatus && matterStatus.thread_br_ready ? '将未配网 Thread 设备靠近 Hub；使用 Hub Border Router dataset，无需 SSID。' : 'Thread BR 未就绪：请确认 adapters.thread.enabled=true 且 Border Router 已启动。',
-        ble_ethernet: '设备已接网线；BLE 配对写入证书，无需 SSID。',
-        network: ''
-    };
     const hintEl = document.getElementById('matter-add-hint');
-    const h = hints[d] || '';
-    hintEl.textContent = h;
-    hintEl.hidden = !h;
-}
-
-function setMatterAddMode(mode) {
-    matterAddMode = mode === 'fresh' ? 'fresh' : 'joined';
-    if (matterAddMode === 'fresh' && !['ble_wifi', 'ble_ethernet', 'ble_thread'].includes(matterFreshTransport)) {
-        matterFreshTransport = (matterStatus && matterStatus.thread_br_ready) ? 'ble_thread' : 'ble_wifi';
+    if (hintEl) {
+        hintEl.textContent = showWifi
+            ? '经 BLE + DNS-SD 配网，并写入设备 STA 的 SSID 与密码。'
+            : '经 BLE + DNS-SD 配网，并写入 Hub 的 Thread 网络数据集。';
+        hintEl.hidden = false;
     }
-    refreshMatterAddUi();
 }
 
-function setMatterFreshTransport(disc) {
-    matterFreshTransport = disc;
-    matterAddMode = 'fresh';
-    refreshMatterAddUi();
-}
-
-function onMatterDiscoveryChange() {
+function onMatterWifiToggle() {
+    const toggle = document.getElementById('matter-wifi-enable');
+    matterWifiEnabled = !!(toggle && toggle.checked);
     refreshMatterAddUi();
 }
 
 function openMatterAdd() {
-    matterAddMode = (matterStatus && matterStatus.thread_br_ready) ? 'fresh' : 'joined';
-    matterFreshTransport = (matterStatus && matterStatus.thread_br_ready) ? 'ble_thread' : 'ble_wifi';
+    matterWifiEnabled = false;
     document.getElementById('matter-code').value = '';
     document.getElementById('matter-node').value = '';
     document.getElementById('matter-eps').value = '1';
@@ -1539,6 +1555,8 @@ function openMatterAdd() {
     document.getElementById('matter-wifi-ssid').value = pref.ssid || '';
     document.getElementById('matter-wifi-pass').value = '';
     document.getElementById('matter-wifi-pass').placeholder = pref.has_password ? '已保存密码，可改写或留空沿用' : 'Wi-Fi 密码';
+    const submitBtn = document.getElementById('matter-add-submit');
+    if (submitBtn) submitBtn.disabled = false;
     refreshMatterAddUi();
     document.getElementById('matter-add-modal').hidden = false;
     document.getElementById('matter-code').focus();
@@ -1547,27 +1565,104 @@ function openMatterAdd() {
 function closeMatterAdd() {
     document.getElementById('matter-add-modal').hidden = true;
 }
+
+const MATTER_STAGE_LABEL = { discovering: '设备发现中', binding: '设备绑定中', activating: '设备激活中' };
+const MATTER_STAGE_STEP = { discovering: 1, binding: 2, activating: 3 };
+const MATTER_STAGE_TOTAL = 3;
+
+/* A waiting row is only "配网中" while the Hub is actually running that node;
+ * the live stage comes from /api/matter/status, not from adapters.json. */
+function matterCommissionLabel(p, cPhase) {
+    if (cPhase !== 'waiting') return '';
+    const st = (typeof matterStatus === 'undefined') ? null : matterStatus;
+    const running = st && st.commission === 'running' && st.commission_node_id != null &&
+        String(st.commission_node_id) === String((p.props || {}).node_id);
+    if (!running) return '等待配网中';
+    const step = MATTER_STAGE_STEP[st.commission_stage];
+    return '配网中 · ' + (MATTER_STAGE_LABEL[st.commission_stage] || '进行中') +
+        (step ? ('（步骤 ' + step + '/' + MATTER_STAGE_TOTAL + '）') : '');
+}
+
+async function pollMatterCommissionCard(nodeId) {
+    const deadline = Date.now() + 180000;
+    let lastStage = '';
+    while (Date.now() < deadline) {
+        await new Promise((res) => setTimeout(res, 1500));
+        try {
+            await loadPoints();
+            const sr = await fetch('/api/matter/status');
+            const st = await sr.json().catch(() => ({}));
+            const stage = st.commission_stage || '';
+            if (stage && stage !== lastStage) {
+                lastStage = stage;
+                toast((MATTER_STAGE_LABEL[stage] || stage) + '… node ' + (st.commission_node_id || nodeId));
+            }
+            if (st.commission === 'ok') {
+                await loadMeta();
+                await loadPoints();
+                toast('配网成功 node ' + (st.commission_node_id || nodeId));
+                return;
+            }
+            if (st.commission === 'failed') {
+                await loadPoints();
+                toast('配网失败' + (lastStage ? ('（' + (MATTER_STAGE_LABEL[lastStage] || lastStage) + '）') : '') +
+                    ': ' + String(st.last_error || st.commission_result || '').slice(0, 80));
+                return;
+            }
+        } catch (e) {
+            /* keep polling */
+        }
+    }
+    await loadPoints();
+    toast('配网超时');
+}
+
+async function cancelMatterCommission(nodeId) {
+    const nid = (nodeId != null && nodeId !== '')
+        ? String(nodeId)
+        : (matterStatus && matterStatus.commission_node_id != null
+            ? String(matterStatus.commission_node_id) : null);
+    if (!nid) {
+        toast('当前没有进行中的配网');
+        return;
+    }
+    try {
+        const r = await fetch('/api/matter/commission', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ node_id: nid, cancel: true })
+        });
+        const j = await r.json().catch(() => ({}));
+        toast('已发送取消配网：' + (j.status || (r.ok ? 'ok' : '失败')));
+    } catch (e) {
+        toast('取消配网请求失败');
+    }
+    if (typeof loadMeta === 'function') await loadMeta();
+    if (typeof loadPoints === 'function') await loadPoints();
+}
+
 async function submitMatterAdd() {
     const code = document.getElementById('matter-code').value.trim();
     const node = document.getElementById('matter-node').value.trim();
     const eps = document.getElementById('matter-eps').value.trim() || '1';
     const discovery = matterDiscoveryValue();
-    const ssid = document.getElementById('matter-wifi-ssid').value.trim();
-    const wpass = document.getElementById('matter-wifi-pass').value;
+    const ssidEl = document.getElementById('matter-wifi-ssid');
+    const passEl = document.getElementById('matter-wifi-pass');
+    const ssid = ssidEl && !ssidEl.disabled ? ssidEl.value.trim() : '';
+    const wpass = passEl && !passEl.disabled ? passEl.value : '';
     const hint = document.getElementById('matter-add-hint');
+    const submitBtn = document.getElementById('matter-add-submit');
     if (!code) {
+        hint.hidden = false;
         hint.textContent = '请输入 pairing_code';
         return;
     }
     if (discovery === 'ble_wifi' && !ssid) {
-        hint.textContent = 'Wi-Fi 设备请填写 SSID';
+        hint.hidden = false;
+        hint.textContent = '请填写 STA SSID';
         return;
     }
-    if (discovery === 'ble_thread' && !(matterStatus && matterStatus.thread_br_ready)) {
-        hint.textContent = 'Thread BR 未就绪，无法配 Thread 设备';
-        return;
-    }
-    toast('配网启动中…');
+    toast('正在添加…');
     const body = {
         pairing_code: code,
         endpoints: eps,
@@ -1580,9 +1675,10 @@ async function submitMatterAdd() {
         body.wifi_ssid = ssid;
         if (wpass) body.wifi_password = wpass;
         body.transport = 'wifi';
+    } else {
+        body.transport = 'thread';
     }
-    if (discovery === 'ble_thread') body.transport = 'thread';
-    if (discovery === 'ble_ethernet') body.transport = 'ethernet';
+    if (submitBtn) submitBtn.disabled = true;
     try {
         const r = await fetch('/api/matter/devices', {
             method: 'POST',
@@ -1592,18 +1688,30 @@ async function submitMatterAdd() {
             body: JSON.stringify(body)
         });
         const j = await r.json().catch(() => ({}));
+        if (r.ok && j.result === 'ok' && j.commission === 'skipped') {
+            closeMatterAdd();
+            await loadMeta();
+            await loadPoints();
+            toast('已添加 node ' + j.node_id);
+            return;
+        }
         if (r.ok && j.result === 'ok' && j.commission === 'started') {
             closeMatterAdd();
             await loadMeta();
             await loadPoints();
-            toast('配网已开始 node ' + j.node_id + '（看串口 BLE/Thread，勿拨 RainMaker 虚拟灯）');
+            toast('已添加，等待配网中…');
+            pollMatterCommissionCard(j.node_id);
             return;
         }
+        /* Start failed after eager upsert — card may show 配网失败. */
+        closeMatterAdd();
+        await loadPoints();
         const msg = j.message || j.commission || j.error || ('HTTP ' + r.status);
-        hint.textContent = String(msg);
-        toast('配网未启动: ' + String(msg).slice(0, 80));
+        toast('配网失败: ' + String(msg).slice(0, 80));
     } catch (e) {
         toast('网络错误');
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
     }
 }
 async function deleteMatterDevice(pointId) {
@@ -1621,12 +1729,17 @@ async function deleteMatterDevice(pointId) {
                 reload: true
             })
         });
-        const j = await r.json();
-        if (r.ok && j.result === 'ok') {
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && (j.result === 'ok' || j.ok === true)) {
+            /* Drop locally first — sync hub_reload used to block httpd forever. */
+            if (Array.isArray(pts)) {
+                pts = pts.filter(function (p) { return !p || p.point_id !== pointId; });
+            }
+            if (typeof renderOverview === 'function') renderOverview();
             await loadPoints();
             toast('已删除');
         } else {
-            toast('删除失败');
+            toast('删除失败: ' + String(j.message || j.error || ('HTTP ' + r.status)).slice(0, 60));
         }
     } catch (e) {
         toast('网络错误');

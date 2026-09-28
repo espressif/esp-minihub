@@ -96,7 +96,9 @@ After a node is bound, use ``POST /api/command`` with the Hub ``point_id``
 Point identity and vendor extras
 --------------------------------
 
-Each BLE Mesh node is **one** Host point (existing ``light/bm_XXXX`` ids). On
+Each BLE Mesh node is **one** Host point (``ble_mesh.bm_XXXX``, same
+``<protocol>.<device>`` convention as Zigbee). Legacy ``{type}/bm_XXXX`` ids are
+migrated on NVS load. On
 register the adapter sets top-level identity (not catalog params / Devices
 sliders):
 

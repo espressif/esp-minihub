@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * ble_mesh_ota L3 module entry. Does not register device points — Host
- * ble_mesh adapter owns light/bm_* ; this plugin only merges props.owner / ota.
+ * ble_mesh adapter owns ble_mesh.bm_* ; this plugin only merges props.owner / ota.
  */
 #ifdef MINIHUB_PLUGIN_STANDALONE
 #include "minihub_plugin_sdk.h"

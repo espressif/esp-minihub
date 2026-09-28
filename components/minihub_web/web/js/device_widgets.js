@@ -13,11 +13,14 @@
  *      device: point_id = <protocol>.<endpoint>, type = data-model type,
  *      props.params.<name> = { value, access?, visible?, min?, max?, ... }.
  *      Legacy <protocol>.<endpoint>.<parameter> points are still grouped.
+ *      Ids that are not <protocol>.<device> (switch/bm_000a) stay one card;
+ *      the slash prefix is not treated as a protocol or adapter.
  *   2. Type catalog from GET /api/device_widgets (labels, widgets, bounds,
  *      device avatar URL). Parameter controls are CSS classes in
  *      device_widgets.css — not /img/parameters mockups.
  * The UI intersects them: only registered, visible params of a live instance
- * are shown. label/widget come from the catalog keyed by (type, parameter).
+ * are shown. Unreported catalog names stay off the card and the detail.
+ * label/widget come from the catalog keyed by (type, parameter).
  * min/max/step/unit/access default from the catalog style; instance param
  * props override those fields when present (devices.json need not copy the
  * whole style blob).
@@ -146,6 +149,8 @@ function dwIngestParamsBlob(inst, paramsBlob, pointId) {
  *   (protocol may be sim / thread / zigbee / … — catalog join uses type, not prefix).
  * Legacy: <protocol>.<endpoint>.<parameter> points grouped by protocol.endpoint
  *   so thread.color_bulb.power|brightness|… → one color_bulb card.
+ * Unscoped ids (no dot, e.g. switch/bm_000a) are one instance with an empty
+ * protocol — callers must not file them under an adapter derived from '/'.
  */
 function dwBuildInstances(points) {
     const byKey = Object.create(null);
@@ -176,7 +181,34 @@ function dwBuildInstances(points) {
         const pr = (pt.props && typeof pt.props === 'object') ? pt.props : null;
         const paramsBlob = pr && pr.params;
         const seg = pt.point_id.split('.');
-        if (seg.length < 2) return;
+        const hasParams = dwParamsBlobNonEmpty(paramsBlob);
+        const scoped = (typeof pointIdScoped === 'function')
+            ? pointIdScoped(pt.point_id)
+            : (seg.length >= 2 && !!seg[0] && seg.slice(1).some(function (s) { return !!s; }));
+
+        /* Not <protocol>.<device>: one card. Protocol stays empty (slash is not an adapter). */
+        if (!scoped) {
+            if (!pt.point_id) return;
+            const tail = pt.point_id.split('/').filter(function (s) { return !!s; });
+            const endpoint = tail.length ? tail[tail.length - 1] : pt.point_id;
+            const inst = ensureInst(pt.point_id, '', endpoint, pt);
+            inst.point_id = pt.point_id;
+            if (hasParams) dwIngestParamsBlob(inst, paramsBlob, pt.point_id);
+            if (!Object.keys(inst.params).length && pt.value != null && String(pt.value) !== '') {
+                inst.params.power = {
+                    name: 'power',
+                    value: String(pt.value),
+                    visible: true,
+                    access: (pr && pr.access) ? String(pr.access) : null,
+                    min: null,
+                    max: null,
+                    step: null,
+                    unit: null,
+                    point_id: pt.point_id
+                };
+            }
+            return;
+        }
 
         /*
          * Device-level: non-empty props.params, or a 2-segment id (sim.color_bulb).
@@ -184,7 +216,6 @@ function dwBuildInstances(points) {
          * that used to create per-param cards named "power"/"brightness" with
          * no controls (Devices looked empty while Overview still listed rows).
          */
-        const hasParams = dwParamsBlobNonEmpty(paramsBlob);
         if (hasParams || seg.length === 2) {
             let endpoint;
             let protocol;
@@ -359,12 +390,13 @@ function dwInfoRowHtml(label, value, opts) {
     const cls = 'device-info-row' +
         (opts.muted ? ' is-muted' : '') +
         (opts.disabled ? ' is-disabled' : '');
-    const v = (value != null && String(value) !== '') ? String(value) : '—';
+    const empty = (opts.empty != null) ? String(opts.empty) : '未知';
+    const v = (value != null && String(value) !== '') ? String(value) : empty;
     return '<div class="' + cls + '"><span class="k">' + esc(label) +
         '</span><span class="v">' + esc(v) + '</span></div>';
 }
 
-/* Top-level identity props (not catalog params). Empty → blank row. */
+/* Top-level identity props (not catalog params). Empty renders as 未知. */
 function dwPropStr(pr, keys) {
     if (!pr || typeof pr !== 'object') return '';
     for (let i = 0; i < keys.length; i++) {
@@ -446,7 +478,7 @@ function dwInstanceInfoHtml(inst) {
             String(pid).replace(/\\/g, '\\\\').replace(/'/g, "\\'") +
             '\')">触发 OTA</button></span></div>';
     } else {
-        html += dwInfoRowHtml('OTA', '', { muted: true, disabled: true });
+        html += dwInfoRowHtml('OTA', '', { muted: true, disabled: true, empty: '—' });
     }
 
     const extraRows = Array.isArray(pr.detail_rows) ? pr.detail_rows : [];

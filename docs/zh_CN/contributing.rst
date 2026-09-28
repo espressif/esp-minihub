@@ -35,7 +35,7 @@
    * - 模块 ABI / 导出符号
      - ``docs/module_sdk/``、:doc:`api/module_abi`
 
-请勿在通用 Host 的 ``config/`` 出厂配置中写入厂商云 token、OEM 密钥或厂商专用默认规则。
+请勿在通用 Host 的 ``configs/`` 出厂配置中写入厂商云 token、OEM 密钥或厂商专用默认规则。
 
 Git 工作流
 ----------

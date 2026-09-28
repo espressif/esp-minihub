@@ -29,6 +29,24 @@ typedef struct {
     esp_err_t (*deinit)(void);
     esp_err_t (*handle_command)(const minihub_command_t *cmd);
     esp_err_t (*poll)(void);
+    /**
+     * Optional: re-read this adapter's config subtree and republish its points in
+     * place, without stop()/start(). Use for config-only changes (a device row
+     * appeared, or its status changed) — a full reload unregisters every adapter's
+     * points and they only return when start_all() finishes, which blanks the
+     * console for ~1.7 s. NULL means not supported; minihub_adapter_resync() then
+     * returns ESP_ERR_NOT_SUPPORTED and the caller falls back to a reload.
+     *
+     * @note Mirrored in docs/module_sdk/include/minihub_plugin_sdk/minihub.h —
+     *       keep the two in step (tools/check_plugin_sdk.py asserts sizeof).
+     *       MINIHUB_MODULE_ABI_VERSION stays 1 by deliberate choice: no product is
+     *       deployed yet, so L3 modules are rebuilt rather than version-gated.
+     *       WARNING (R2): inserting/removing/reordering a field in the MIDDLE of this
+     *       struct is an ABI break even if sizeof() is unchanged — a rebuilt L3 module
+     *       compiled against the old layout will read/write garbage. Any such
+     *       incompatibility MUST bump MINIHUB_MODULE_ABI_VERSION.
+     */
+    esp_err_t (*resync)(const cJSON *config);
 } minihub_adapter_t;
 
 /**
@@ -88,6 +106,23 @@ esp_err_t minihub_adapter_stop_all(void);
  * @param adapters_root  Full adapters.json root
  */
 esp_err_t minihub_adapter_soft_reload(const char *name, const cJSON *adapters_root);
+
+/**
+ * @brief Republish one running adapter's points from current config, no restart
+ *
+ * Unlike soft_reload this never calls stop()/deinit(), so the adapter's points
+ * stay in the registry the whole time — a client polling the point list cannot
+ * see the device disappear.
+ *
+ * @param name           Adapter name
+ * @param adapters_root  Full adapters.json root
+ *
+ * @return
+ *     - ESP_OK: republished
+ *     - ESP_ERR_NOT_SUPPORTED: adapter is running but has no resync()
+ *     - ESP_ERR_NOT_FOUND: adapter not running or has no config entry
+ */
+esp_err_t minihub_adapter_resync(const char *name, const cJSON *adapters_root);
 
 /**
  * @brief Stop, reload config, and restart all adapters

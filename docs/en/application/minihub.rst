@@ -33,7 +33,7 @@ Directory layout
      partitions.csv
      CMakeLists.txt
      README.md
-     config/
+     configs/
        adapters.json
        sdkconfig/
          app.yml
@@ -57,11 +57,11 @@ Directory layout
    * - ``manifest.yml``
      - Product profile: board, partition table, ``sdkconfig_features``,
        ``store_preinstall``, ``variants``. Merged with ``_host_base`` in repo
-       ``config/minihub_manifest.yml`` at compile time, which then writes
+       ``configs/minihub_manifest.yml`` at compile time, which then writes
        ``main/idf_component.yml`` and other generated files (see :doc:`index`).
        Paths in this table are under ``application/minihub/``. They are not the
-       repo-root ``config/`` tree. A missing product JSON file falls back to
-       repo ``config/*.json`` (:doc:`../host_customization`).
+       repo-root ``configs/`` tree. A missing product JSON file falls back to
+       repo ``configs/*.json`` (:doc:`../host_customization`).
    * - ``partitions.csv``
      - Flash map (``nvs`` / ``ota`` / ``storage`` / ``modstore``, …). A starting
        point, not every SKU; see :doc:`../production`.
@@ -72,21 +72,21 @@ Directory layout
        optional Matter / RainMaker from the environment.
    * - ``README.md``
      - Lab build notes for this product (``-app minihub``, LCD option).
-   * - ``config/adapters.json``
+   * - ``configs/adapters.json``
      - Factory adapters JSON copied into LittleFS ``/data/config/``. If missing,
-       the build falls back to repo ``config/adapters.json``.
-   * - ``config/rules.json`` / ``scenes.json``
-     - Not present on the generic product; the build uses repo ``config/``. An
-       OEM tree may override them under the product ``config/``.
-   * - ``config/sdkconfig/app.yml``
+       the build falls back to repo ``configs/adapters.json``.
+   * - ``configs/rules.json`` / ``scenes.json``
+     - Not present on the generic product; the build uses repo ``configs/``. An
+       OEM tree may override them under the product ``configs/``.
+   * - ``configs/sdkconfig/app.yml``
      - Compose options (board + ``features``). Must match manifest
        ``sdkconfig_features``.
-   * - ``config/sdkconfig/feature/*.defaults``
+   * - ``configs/sdkconfig/feature/*.defaults``
      - Product-local Kconfig fragments (USB MSC, RTSP, Modbus, …). Shared
-       fragments live in repo ``config/sdkconfig/``.
-   * - ``config/sdkconfig/variants/``
+       fragments live in repo ``configs/sdkconfig/``.
+   * - ``configs/sdkconfig/variants/``
      - Enable ``CONFIG_MINIHUB_LCD_UI``.
-   * - ``config/sdkconfig/local.overrides.example``
+   * - ``configs/sdkconfig/local.overrides.example``
      - Copy to ``local.overrides`` (gitignored) for lab Wi-Fi; do not commit.
    * - ``main/main.c``
      - ``app_main``: NVS, networking, Hub, Web. You usually leave it; stacks come
@@ -96,7 +96,7 @@ Directory layout
    * - ``main/Kconfig.projbuild``
      - Product Kconfig: Wi-Fi, provisioning, Web login, adapter switches.
    * - ``main/adapters_setup.h``
-     - Declares ``minihub_adapters_register_all()``.
+     - Declares ``minihub_protocol_adapters_register_all()``.
    * - ``main/adapters_setup.generated.c``
      - Auto-generated; do not hand-edit.
    * - ``main/idf_component.yml``

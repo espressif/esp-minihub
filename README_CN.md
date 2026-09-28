@@ -66,7 +66,7 @@ Modbus / Thread 边界路由器）。
 |------|------|
 | `application/` | 按产品划分的固件（目录名即产品名） |
 | `components/` | 共享 Core、Host 适配器、Store 运行时 |
-| `config/` | 共享 manifest、适配器种子、sdkconfig 片段 |
+| `configs/` | 共享 manifest、适配器种子、sdkconfig 片段 |
 | `examples/` | 独立 Store 演示 — 仅一层 [`plugins/`](examples/README_CN.md) |
 | `tools/` | 编译、打包、Store 服务、CI |
 | `docs/` | 编程指南（RST / esp-docs） |

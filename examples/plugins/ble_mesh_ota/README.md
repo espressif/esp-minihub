@@ -4,7 +4,7 @@
 
 Standalone **L3 native** demo under `examples/plugins/` (not in default Host
 `store_preinstall`). It does **not** register devices. Host BLE Mesh already
-owns one point per node (`light/bm_%04x`). This plugin:
+owns one point per node (`ble_mesh.bm_%04x`). This plugin:
 
 1. Lists Host points with `adapter=ble_mesh` (`minihub_point_list_by_adapter`)
 2. Keeps Espressif-only filter + `catalog_url` in packed `catalog.json`

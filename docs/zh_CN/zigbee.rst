@@ -25,7 +25,7 @@ Zigbee 与 Thread 共用 802.15.4，**编译期互斥**。Hub 启动与 IP 上�
 ----------
 
 在 ``/data/config/adapters.json`` 中启用（出厂配置：
-``application/minihub/config/adapters.json`` ）：
+``application/minihub/configs/adapters.json`` ）：
 
 .. code-block:: json
 

@@ -59,7 +59,7 @@ Where is adapters.json?
 -----------------------
 
 Runtime copy: ``/data/config/adapters.json`` on device. Factory JSON:
-``application/minihub/config/adapters.json`` or product-specific tree. Edit via
+``application/minihub/configs/adapters.json`` or product-specific tree. Edit via
 Web UI or ``PUT /api/config/adapters``, then ``POST /api/hub/reload`` if needed.
 Full JSON schemas: :doc:`data_model`.
 

@@ -21,6 +21,7 @@
 #include "esp_check.h"
 #include "esp_crt_bundle.h"
 #include "esp_log.h"
+#include "esp_rom_crc.h"
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "cJSON.h"
@@ -143,15 +144,59 @@ static bool web_path_safe(const char *rel)
     return true;
 }
 
+/* littlefs reports no usable mtime here (st_mtime comes back 0xffffffff), so a
+ * size+mtime tag would degrade to size-only and 304 a same-length edit. Fold a
+ * CRC32 over the bytes instead; the extra read pass is cheap next to the send. */
+static bool file_etag(const char *path, off_t size, char *out, size_t out_len)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return false;
+    }
+    uint8_t buf[512];
+    uint32_t crc = 0;
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        crc = esp_rom_crc32_le(crc, buf, n);
+    }
+    fclose(f);
+    snprintf(out, out_len, "\"%lx-%lx\"", (unsigned long)size, (unsigned long)crc);
+    return true;
+}
+
 static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
 {
+    struct stat st;
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    /* Console JS/CSS is ~300 KB and no-cache means the browser revalidates every
+     * load; without an ETag that revalidation re-sends the whole body. */
+    char etag[32];
+    if (!file_etag(path, st.st_size, etag, sizeof(etag))) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    char inm[64];
+    if (httpd_req_get_hdr_value_str(req, "If-None-Match", inm, sizeof(inm)) == ESP_OK &&
+        strcmp(inm, etag) == 0) {
+        httpd_resp_set_status(req, "304 Not Modified");
+        httpd_resp_set_hdr(req, "ETag", etag);
+        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+        return httpd_resp_send(req, NULL, 0);
+    }
+
     FILE *f = fopen(path, "rb");
     if (!f) {
         return ESP_ERR_NOT_FOUND;
     }
 
-    /* 4KB PSRAM chunk: keep the console HTML off the internal heap. */
-    const size_t cap = 4096;
+    /* 16KB PSRAM chunk, and do not shrink this without re-measuring: a 4 KB
+     * chunk costs ~1 s per chunk here (4 KB splits into 3 MSS segments and each
+     * write waits on the peer's delayed ACK), so the console's ~300 KB of
+     * JS/CSS took 30 s+ to load. At 16 KB the same assets run 50-100x faster.
+     * PSRAM keeps the console HTML off the internal heap. */
+    const size_t cap = 16384;
     char *buf = heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!buf) {
         buf = malloc(cap);
@@ -163,6 +208,7 @@ static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
 
     httpd_resp_set_type(req, content_type_for_path(path));
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    httpd_resp_set_hdr(req, "ETag", etag);
     size_t n;
     bool sent_any = false;
     while ((n = fread(buf, 1, cap, f)) > 0) {
@@ -361,6 +407,18 @@ static esp_err_t api_auth(httpd_req_t *req)
         /* Drop stale cookie so the SPA cannot keep acting on a cached UI. */
         minihub_auth_clear_session_cookie(req);
         return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "unauthorized");
+    }
+    /* Writes are deliberate user actions, so they count as presence; the GET
+     * polls the console runs every second deliberately do not. */
+    switch (req->method) {
+    case HTTP_POST:
+    case HTTP_PUT:
+    case HTTP_PATCH:
+    case HTTP_DELETE:
+        minihub_auth_touch(req);
+        break;
+    default:
+        break;
     }
     return ESP_OK;
 }
@@ -593,6 +651,9 @@ static esp_err_t handle_root(httpd_req_t *req)
     if (minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
         return send_login_redirect(req);
     }
+    /* Document load = the user is here. Only navigations reset the idle timer;
+     * API polls and static asset GETs deliberately do not. */
+    minihub_auth_touch(req);
     return send_preinstall_index_or_fallback(req);
 #else
     httpd_resp_set_status(req, "404 Not Found");
@@ -3196,7 +3257,7 @@ static esp_err_t handle_api_modules_manage(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3272,7 +3333,7 @@ static esp_err_t handle_api_packs_manage(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3447,7 +3508,7 @@ static esp_err_t handle_api_store_install(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3499,7 +3560,7 @@ static esp_err_t handle_api_store_upgrade(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3545,7 +3606,7 @@ static esp_err_t handle_api_store_uninstall(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3626,6 +3687,23 @@ static esp_err_t handle_api_matter_commission(httpd_req_t *req)
 
     const char *ssid_s = cJSON_IsString(ssid) ? ssid->valuestring : NULL;
     const char *pass_s = cJSON_IsString(wpass) ? wpass->valuestring : NULL;
+
+    /* Cancel an in-flight commission. The backend already implements
+     * minihub_matter_commission_cancel(); expose it so the web UI can show a
+     * "取消配网" button that matches BLE Mesh's "停止配网" / Zigbee's "停止入网". */
+    const cJSON *cancel = cJSON_GetObjectItem(root, "cancel");
+    if (cJSON_IsBool(cancel) && cJSON_IsTrue(cancel)) {
+        esp_err_t cerr = minihub_matter_commission_cancel(node_id);
+        cJSON *resp = cJSON_CreateObject();
+        cJSON_AddStringToObject(resp, "status", cerr == ESP_OK ? "cancelled" : esp_err_to_name(cerr));
+        if (cerr != ESP_OK && minihub_matter_last_error()) {
+            cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
+        }
+        cJSON_Delete(root);
+        err = send_json(req, resp);
+        cJSON_Delete(resp);
+        return err;
+    }
 
     if (cJSON_IsString(code)) {
         err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery, ssid_s, pass_s);
@@ -3802,43 +3880,93 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     }
 
     const bool want_commission = cJSON_IsString(code) && code->valuestring[0];
-    esp_err_t commission_err = ESP_OK;
     if (want_commission) {
-        commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
-                                                           ssid_s, pass_s);
+        /* Refuse before writing anything: commission_code_ex only reports
+         * ESP_ERR_INVALID_STATE afterwards, so upserting first would leave a
+         * permanent commission_phase:"failed" row — a card for a device that was
+         * never attempted (typical when the Thread BR is off and the commissioner
+         * cannot init). */
+        /* Refuse before writing anything: commission_code_ex only reports failure
+         * afterwards, so upserting first would leave a permanent
+         * commission_phase:"failed" row — a card for a device that was never
+         * attempted. The preflight mirrors the kickoff's own conditions (readiness
+         * alone is not enough: the commissioner stays up while the Thread BR is off). */
+        esp_err_t preflight = minihub_matter_commission_preflight(discovery, ssid_s);
+        if (preflight != ESP_OK) {
+            const char *why = minihub_matter_last_error();
+            cJSON_Delete(root);
+            cJSON *busy = cJSON_CreateObject();
+            if (!busy) {
+                return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+            }
+            cJSON_AddStringToObject(busy, "result", "error");
+            cJSON_AddNumberToObject(busy, "node_id", (double)node_id);
+            cJSON_AddStringToObject(busy, "commission", esp_err_to_name(preflight));
+            cJSON_AddStringToObject(busy, "message", why ? why : esp_err_to_name(preflight));
+            cJSON_AddBoolToObject(busy, "matter_ready", minihub_matter_ready());
+            err = send_json(req, busy);
+            cJSON_Delete(busy);
+            return err;
+        }
+        /* Eager card: upsert as waiting, start commission, return immediately.
+         * Never block httpd on commission_wait — that stalls /api/points. */
+        size_t synced = 0;
+        esp_err_t commission_err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing,
+                                                                 &synced, transport);
+        if (commission_err == ESP_OK) {
+            commission_err = minihub_matter_devices_set_commission_phase(node_id, "waiting", NULL);
+        }
+        if (commission_err == ESP_OK && do_reload) {
+            /* Republish in place. A full hub reload unregisters every adapter's
+             * points and they only come back when start_all() finishes ~1.7 s
+             * later, which reads as the card vanishing mid-commissioning. */
+            (void)minihub_hub_resync_adapter_async("matter");
+        }
+        if (commission_err == ESP_OK) {
+            commission_err = minihub_matter_commission_code_ex(node_id, code->valuestring, discovery,
+                                                               ssid_s, pass_s);
+        }
+        if (commission_err == ESP_OK) {
+            commission_err = minihub_matter_set_pending_device(node_id, endpoints, ep_count, merge_existing,
+                                                              do_reload, transport);
+        }
         if (commission_err != ESP_OK) {
-            cJSON *resp = cJSON_CreateObject();
+            (void)minihub_matter_devices_set_commission_phase(node_id, "failed",
+                                                              minihub_matter_last_error()
+                                                                  ? minihub_matter_last_error()
+                                                                  : esp_err_to_name(commission_err));
+            if (do_reload) {
+                (void)minihub_hub_resync_adapter_async("matter");
+            }
+        }
+        cJSON_Delete(root);
+        cJSON *resp = cJSON_CreateObject();
+        if (!resp) {
+            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+        }
+        if (commission_err != ESP_OK) {
             cJSON_AddStringToObject(resp, "result", "error");
             cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
+            cJSON_AddNumberToObject(resp, "synced", (double)synced);
             cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
             if (minihub_matter_last_error()) {
                 cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
             } else {
                 cJSON_AddStringToObject(resp, "message", esp_err_to_name(commission_err));
             }
-            cJSON_Delete(root);
-            err = send_json(req, resp);
-            cJSON_Delete(resp);
-            return err;
-        }
-    }
-    if (commission_err != ESP_OK) {
-        cJSON *resp = cJSON_CreateObject();
-        cJSON_AddStringToObject(resp, "result", "error");
-        cJSON_AddStringToObject(resp, "commission", esp_err_to_name(commission_err));
-        if (minihub_matter_last_error()) {
-            cJSON_AddStringToObject(resp, "message", minihub_matter_last_error());
         } else {
-            cJSON_AddStringToObject(resp, "message", "commission did not start");
+            cJSON_AddStringToObject(resp, "result", "ok");
+            cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
+            cJSON_AddStringToObject(resp, "commission", "started");
+            cJSON_AddBoolToObject(resp, "reloaded", do_reload);
+            cJSON_AddNumberToObject(resp, "synced", (double)synced);
         }
-        cJSON_Delete(root);
         err = send_json(req, resp);
         cJSON_Delete(resp);
         return err;
     }
 
-    /* Persist device entry only after PairDevice is armed — not on failed start.
-     * Full reachability still requires commissioning_success (CASE). */
+    /* No pairing_code: upsert only (no commission). */
     size_t synced = 0;
     err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing, &synced, transport);
     cJSON_Delete(root);
@@ -3847,7 +3975,7 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     }
 
     if (do_reload) {
-        minihub_hub_reload();
+        (void)minihub_hub_resync_adapter_async("matter");
     }
 
     cJSON *resp = cJSON_CreateObject();
@@ -3855,7 +3983,7 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     cJSON_AddNumberToObject(resp, "node_id", (double)node_id);
     cJSON_AddNumberToObject(resp, "synced", (double)synced);
     cJSON_AddBoolToObject(resp, "reloaded", do_reload);
-    cJSON_AddStringToObject(resp, "commission", want_commission ? "started" : "skipped");
+    cJSON_AddStringToObject(resp, "commission", "skipped");
     err = send_json(req, resp);
     cJSON_Delete(resp);
     return err;
@@ -4099,7 +4227,7 @@ static esp_err_t handle_api_config_adapters_put(httpd_req_t *req)
     cJSON_Delete(root);
 
     if (do_reload) {
-        err = minihub_hub_reload();
+        err = minihub_hub_reload_async();
     }
 
     cJSON *resp = cJSON_CreateObject();

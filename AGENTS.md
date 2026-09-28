@@ -2,7 +2,11 @@
 
 For any AI coding assistant. Prefer this file and `docs/` over IDE-only config when they conflict.
 
-Read the matching **project skill** under `.cursor/skills/` before editing Host, Store plugins, or docs.
+After every feature or bugfix, follow `.agent/private/HANDOFF.md` (new `HANDOFF_年月日_时分秒.md`, or append when that feature/bug already has one).
+
+`.agent/private/README.md` is the shared artifact contract for **every** agent working here (Cursor / CodeBuddy / Qwen / Qoder): naming, append-only lifecycle, provenance labels (实测 / 静态 / 猜测), what is tracked, and the secret boundary. Tool-private dirs hold pointers to it, never copies.
+
+`.agent/` holds exactly three dirs: `skills/` and `mcp/` are committed, `private/` is handoffs / plans / reviews / memory / scratch and is **not** committed. `.cursor/skills` and each tool's `mcp.json` are symlinks into `.agent/` — edit the `.agent/` copy, never a duplicate. Read the matching **project skill** under `.agent/skills/` before editing Host, Store plugins, or docs.
 
 ## Docs map (use what exists)
 
@@ -33,11 +37,11 @@ L1 / L2 / L3 are **Store packaging tiers** (`.mhub`), not Host Core layers. Host
 
 | User wants | Skill | Do not |
 |------------|--------|--------|
-| New/OEM Host product, Kconfig, seeds, stacks | `.cursor/skills/minihub-host/` | Bake vendor cloud tokens / demos into Core or Host `require` |
-| L1 pack (inject into an existing adapter) | `.cursor/skills/minihub-plugin-l1/` | Add a new radio stack; treat L1 as Host Core |
-| L2 JS plugin (`main.js`) | `.cursor/skills/minihub-plugin-l2/` | Call `esp_wifi_*` from JS; put demos in Host builtin |
-| L3 native `.so` | `.cursor/skills/minihub-plugin-l3/` | `#if CONFIG_*` Host options; invent per-type C structs; default-preinstall demos |
-| Programming guide RST/MD | `.cursor/skills/minihub-docs/` | Dual-write RST and old MD as two sources of truth |
+| New/OEM Host product, Kconfig, seeds, stacks | `.agent/skills/minihub-host/` | Bake vendor cloud tokens / demos into Core or Host `require` |
+| L1 pack (inject into an existing adapter) | `.agent/skills/minihub-plugin-l1/` | Add a new radio stack; treat L1 as Host Core |
+| L2 JS plugin (`main.js`) | `.agent/skills/minihub-plugin-l2/` | Call `esp_wifi_*` from JS; put demos in Host builtin |
+| L3 native `.so` | `.agent/skills/minihub-plugin-l3/` | `#if CONFIG_*` Host options; invent per-type C structs; default-preinstall demos |
+| Programming guide RST/MD | `.agent/skills/minihub-docs/` | Dual-write RST and old MD as two sources of truth |
 
 Scaffold a plugin:
 
@@ -55,12 +59,12 @@ IDE MCP for plugin authors (Cursor / VS Code, **not** the Hub on-device MCP):
 python3 tools/minihub_plugin_mcp.py
 ```
 
-Repo configs: `.cursor/mcp.json`, `.vscode/mcp.json`. Tools: `plugin_guide`, `scaffold_plugin`, `validate_plugin`, `pack_plugin`.
+Repo configs live in `.agent/mcp/` (`cursor.mcp.json`, `vscode.mcp.json`), symlinked to `.cursor/mcp.json` and `.vscode/mcp.json`. Tools: `plugin_guide`, `scaffold_plugin`, `validate_plugin`, `pack_plugin`.
 
 ## Host constraints
 
 - Product = `application/<name>/`. Default public Host: `application/minihub`.
-- Shared Core: `components/minihub_*`, bundled Hub adapters under `components/minihub_adapters/`. Store plugin sources: `examples/plugins/<id>/` (in-tree demos) or a sibling repo via `MINIHUB_PLUGIN_DIRS`. Products include `cmake/minihub_bundle/minihub_import.cmake` then `minihub_register_kconfig()`; or one yml path `cmake/minihub_bundle`. Do not put ecosystem-specific rules in Core.
+- Shared Core: `components/minihub_*`, bundled Hub adapters under `components/minihub_protocol_adapters/`. Store plugin sources: `examples/plugins/<id>/` (in-tree demos) or a sibling repo via `MINIHUB_PLUGIN_DIRS`. Products include `cmake/minihub_bundle/minihub_import.cmake` then `minihub_register_kconfig()`; or one yml path `cmake/minihub_bundle`. Do not put ecosystem-specific rules in Core.
 - Vendor / demo adapters ship as Store `.mhub`, not Host `require`. Public Host `store_preinstall` stays empty unless intentionally bundling factory modules.
 - ESP-IDF **~6.2** + target **esp32s31** (`idf.py --preview`). IDF 5.x has no S31 toolchain.
 - Optional **on-device** MCP: `CONFIG_MINIHUB_MCP_SERVER=y` + `git submodule update --init components/esp-claw`. Unrelated to the plugin-author IDE MCP above.

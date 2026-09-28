@@ -1,7 +1,7 @@
-# Product profile for application/minihub (merged with config/minihub_manifest.yml _host_base).
+# Product profile for application/minihub (merged with configs/minihub_manifest.yml _host_base).
 # Sync: MINIHUB_APP=minihub python tools/sync_host_manifest.py
 #
-# Config JSON: application/minihub/config/{adapters,rules,scenes}.json → else repo config/
+# Config JSON: application/minihub/configs/{adapters,rules,scenes}.json → else repo configs/
 # Factory Store modules: store_preinstall (ids under examples/plugins/
 # and/or any dir named in MINIHUB_PLUGIN_DIRS).
 extends: _host_base
@@ -22,7 +22,7 @@ sdkconfig_features:
 - main_task_stack
 - rainmaker
 variants:
-  # Used when application/minihub/config/sdkconfig/app.yml features include lcd
+  # Used when application/minihub/configs/sdkconfig/app.yml features include lcd
   lcd:
     extends: _host_base
     partition_table: partitions.csv
@@ -60,6 +60,7 @@ variants:
       - minihub_net
       - gen_bmgr_codes
       - adapter_mqtt
+      - adapter_wifi
       - adapter_zigbee
       - adapter_ble_mesh
       - adapter_modbus

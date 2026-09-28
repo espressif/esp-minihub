@@ -3,6 +3,7 @@ menu "Thread"
     config MINIHUB_THREAD_ADAPTER
         bool "Enable Thread radio (OpenThread Border Router)"
         default n
+        select MINIHUB_MATTER_ADAPTER
         select OPENTHREAD_ENABLED
         select ESP_COEX_SW_COEXIST_ENABLE
 

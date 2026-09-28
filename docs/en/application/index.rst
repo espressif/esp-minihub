@@ -23,8 +23,8 @@ MiniHub splits **product** from **Core**:
   live in ``examples/plugins/`` or ``MINIHUB_PLUGIN_DIRS``. Every product links
   Core and adapters; do not copy them into
   ``application/APP/``.
-* Repo ``config/`` — shared manifest base (``_host_base`` in
-  ``config/minihub_manifest.yml``) and shared sdkconfig fragments.
+* Repo ``configs/`` — shared manifest base (``_host_base`` in
+  ``configs/minihub_manifest.yml``) and shared sdkconfig fragments.
 
 Selecting a product: ``-app APP`` or ``MINIHUB_APP=APP`` (default ``minihub``).
 The wrapper applies board defaults and runs the IDF build under
@@ -38,7 +38,7 @@ The wrapper applies board defaults and runs the IDF build under
      manifest.yml
      partitions.csv
      CMakeLists.txt
-     config/
+     configs/
        adapters.json
        sdkconfig/app.yml
      main/
@@ -49,12 +49,12 @@ The wrapper applies board defaults and runs the IDF build under
        adapters_setup.generated.c   Generated; do not hand-edit
        idf_component.yml           Generated; do not hand-edit
 
-``rules.json`` / ``scenes.json`` may live under the product ``config/`` or fall
-back to repo ``config/``.
+``rules.json`` / ``scenes.json`` may live under the product ``configs/`` or fall
+back to repo ``configs/``.
 
 ``tools/sync_host_manifest.py`` merges the product
 ``application/APP/manifest.yml`` (``extends: _host_base``) with the shared
-``_host_base`` profile in repo ``config/minihub_manifest.yml``, then writes
+``_host_base`` profile in repo ``configs/minihub_manifest.yml``, then writes
 generated files the IDF build consumes (do not hand-edit):
 
 * ``application/APP/main/idf_component.yml``
@@ -63,7 +63,7 @@ generated files the IDF build consumes (do not hand-edit):
 
 ``./tools/build_firmware.py`` already runs this before compile.
 
-``sdkconfig_features`` must match ``config/sdkconfig/app.yml`` ``features:``.
+``sdkconfig_features`` must match ``configs/sdkconfig/app.yml`` ``features:``.
 Compose: ``tools/compose_sdkconfig.py``. Stack list:
 ``cmake/generated/sdkconfig_stacks.gen``.
 
@@ -79,7 +79,7 @@ Keep in ``components/`` (or Store plugins):
 
 * Shared Hub services and adapters
 * Vendor clouds, OEM device catalogs, cloud tokens — **not** in public
-  ``config/`` seeds or Core. Ship as ``.mhub`` or a private product tree.
+  ``configs/`` seeds or Core. Ship as ``.mhub`` or a private product tree.
 
 Web console files come from ``components/minihub_web/web/`` into
 ``/store/preinstall/web/``. There is no ``application/APP/web/`` overlay unless

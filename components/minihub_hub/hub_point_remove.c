@@ -89,7 +89,14 @@ static esp_err_t remove_one(const char *adapter, const char *point_id)
 #endif
 #if CONFIG_MINIHUB_MATTER_ADAPTER
     if (strcmp(adapter, "matter") == 0) {
-        return minihub_matter_device_remove(point_id);
+        esp_err_t err = minihub_matter_device_remove(point_id);
+        if (err == ESP_OK || err == ESP_ERR_NOT_FOUND) {
+            /* Drop the live point now so the card disappears even if reload is
+             * async / commissioner is broken. */
+            (void)minihub_point_unregister(point_id);
+            return ESP_OK;
+        }
+        return err;
     }
 #endif
 
@@ -198,7 +205,10 @@ esp_err_t minihub_hub_points_remove(const cJSON *req, cJSON **resp)
         }
 
         if (matter_removed && do_reload) {
-            (void)minihub_hub_reload();
+            /* The deleted point is already gone (dropped above); republish the rest
+             * in place instead of a full reload, which would blank every other
+             * adapter's devices for the ~1.7 s restart takes. */
+            (void)minihub_hub_resync_adapter_async("matter");
         }
 
         *resp = remove_ok(removed_arr, removed, NULL, matter_removed && do_reload);
@@ -230,7 +240,8 @@ esp_err_t minihub_hub_points_remove(const cJSON *req, cJSON **resp)
         matter_removed = true;
     }
     if (matter_removed && do_reload) {
-        (void)minihub_hub_reload();
+        /* Never sync-reload on the httpd task — Matter re-init blocks UI. */
+        (void)minihub_hub_reload_async();
     }
 
     ESP_LOGI(TAG, "removed %s (%s)", point_id_j->valuestring, adapter_buf);

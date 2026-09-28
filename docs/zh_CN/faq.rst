@@ -55,7 +55,7 @@ adapters.json 在哪？
 ---------------------
 
 设备运行时： ``/data/config/adapters.json`` 。出厂配置：
-``application/minihub/config/adapters.json`` 或产品专用树。可通过 Web UI 或
+``application/minihub/configs/adapters.json`` 或产品专用树。可通过 Web UI 或
 ``PUT /api/config/adapters`` 编辑，必要时 ``POST /api/hub/reload`` 。
 完整 JSON 字段： :doc:`data_model` 。
 

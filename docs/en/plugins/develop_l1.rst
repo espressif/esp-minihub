@@ -18,7 +18,7 @@ points, run logic, or call the cloud.
 * BLE Mesh ``provision.uuid_filters`` / ``bind_models``
 * Modbus register maps, MQTT broker knobs, and similar adapter defaults
 * The same JSON snippet across products, instead of baking it into factory
-  ``config/``
+  ``configs/``
 
 **Do not inject:**
 

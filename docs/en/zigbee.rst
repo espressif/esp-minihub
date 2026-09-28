@@ -26,7 +26,7 @@ Runtime configuration
 ---------------------
 
 Enable in ``/data/config/adapters.json`` (factory JSON:
-``application/minihub/config/adapters.json``):
+``application/minihub/configs/adapters.json``):
 
 .. code-block:: json
 

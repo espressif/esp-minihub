@@ -118,7 +118,7 @@ L3: build Host first so `application/minihub/build/modules/libadapter_<id>.so` /
 
 - Plugin ids and git branches: underscores, not hyphens
 - Host product = `application/<name>/`; Core = `components/` (no vendor rules in Core)
-- Public Host must not bake vendor cloud tokens or default vendor devices into `config/` seeds
+- Public Host must not bake vendor cloud tokens or default vendor devices into `configs/` seeds
 - IDF ~6.2 + preview target esp32s31; IDF 5.x has no S31 toolchain
 - On-device MCP (`CONFIG_MINIHUB_MCP_SERVER` + esp-claw) is optional and unrelated to this IDE MCP
 - REST is enough for a PC agent to talk to a running Hub

@@ -58,11 +58,11 @@ using chip::bdx::TransferControlFlags;
 using chip::Protocols::InteractionModel::Status;
 using OTAQueryStatus = chip::app::Clusters::OtaSoftwareUpdateProvider::OTAQueryStatus;
 using OTAApplyUpdateAction = chip::app::Clusters::OtaSoftwareUpdateProvider::OTAApplyUpdateAction;
-using QueryImage = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::QueryImage;
-using QueryImageResponse = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::QueryImageResponse;
-using ApplyUpdateRequest = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::ApplyUpdateRequest;
-using ApplyUpdateResponse = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::ApplyUpdateResponse;
-using NotifyUpdateApplied = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::NotifyUpdateApplied;
+namespace QueryImage = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::QueryImage;
+namespace QueryImageResponse = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::QueryImageResponse;
+namespace ApplyUpdateRequest = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::ApplyUpdateRequest;
+namespace ApplyUpdateResponse = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::ApplyUpdateResponse;
+namespace NotifyUpdateApplied = chip::app::Clusters::OtaSoftwareUpdateProvider::Commands::NotifyUpdateApplied;
 
 static constexpr char TAG[] = "matter_ota";
 static constexpr uint64_t k_controller_node_id = 0x1ULL;
@@ -182,7 +182,7 @@ static esp_err_t handle_local_image(httpd_req_t *req)
     if (!file || !token[0] || !peer_is_loopback(req)) {
         return httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden");
     }
-    const char *uri = req->uri ? req->uri : "";
+    const char *uri = req->uri;
     if (*uri == '/') {
         uri++;
     }

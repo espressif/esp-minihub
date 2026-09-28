@@ -14,7 +14,7 @@ MiniHub Core **按点位工作**，不按灯、开关等 C 结构体工作：
 * **一台物理设备对应一条** ``minihub_point_t`` （Matter 按 endpoint，
   见 :doc:`matter`）
 * ``point_id`` = ``协议.设备名`` （如 ``sim.color_bulb``、
-  ``zigbee.zb_7d4b``、``light/matter_n2_ep1``）
+  ``zigbee.zb_7d4b``、``thread.matter_n2_ep1``）
 * 实时参数都在该点的 ``props.params.<参数名>`` 里
 * ``type`` 是字符串 （``light`` / ``switch`` / …），**不是** Core 里的封闭枚举
 * **怎么画 UI** 来自 Host **类型目录** （CSV），与协议无关 —— 见
@@ -123,8 +123,8 @@ CID/PID/VID 与 ``uuid``；Matter Basic Information 与 ``node_id``）。品类�
 
 编译时查找出厂 JSON （产品目录有文件即停止，不再用仓库默认）：
 
-1. ``application/APP/config/`` 加文件名
-2. 否则才用仓库 ``config/`` 加同一文件名
+1. ``application/APP/configs/`` 加文件名
+2. 否则才用仓库 ``configs/`` 加同一文件名
 
 设备首次启动后的活动副本：
 

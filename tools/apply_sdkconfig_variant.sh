@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Apply an optional HW recipe under application/<app>/config/sdkconfig/variants/
+# Apply an optional HW recipe under application/<app>/configs/sdkconfig/variants/
 # onto app.yml (product is still MINIHUB_APP / application folder name).
 #
 # Usage:
@@ -11,7 +11,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="${MINIHUB_APP:-minihub}"
-APP_SDK="$ROOT/application/$APP_NAME/config/sdkconfig"
+APP_SDK="$ROOT/application/$APP_NAME/configs/sdkconfig"
 
 if [[ "${1:-}" == "--restore" ]]; then
   SRC="$APP_SDK/variants/default.yml"
@@ -20,7 +20,7 @@ if [[ "${1:-}" == "--restore" ]]; then
     exit 1
   fi
   cp "$SRC" "$APP_SDK/app.yml"
-  echo "Restored application/$APP_NAME/config/sdkconfig/app.yml from variants/default.yml"
+  echo "Restored application/$APP_NAME/configs/sdkconfig/app.yml from variants/default.yml"
   exit 0
 fi
 

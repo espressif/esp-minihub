@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-09-21-auth-expiry';
+window.mhWebBuild = '2026-09-27-matter-step';
 
 /* Session gone → /login. A 401 is not enough: fetch follows a 302 to /login
  * and the final status is 200, and an already-open console keeps its last
@@ -31,7 +31,7 @@ window.mhWebBuild = '2026-09-21-auth-expiry';
             return;
         }
         redirecting = true;
-        location.replace('/login');
+        location.replace('/login?reason=expired');
     }
     function responseNeedsLogin(r, url) {
         if (!r || shouldIgnore(url)) {
@@ -109,17 +109,31 @@ document.querySelectorAll('#store-tabs .chip').forEach(c => {
     };
 }); /* Adapters → modules (auth UI) → status → points. Catalog is non-blocking. */
 window.addEventListener('hashchange', applyLoginHash);
-loadAdapters().then(async () => {
-    await loadPoints();
-    loadModulesForAuth().then(() => {
-        loadMeta();
-        applyLoginHash();
+/* A failed first hop (hub reload, reboot) used to leave the stats at "-" until
+ * the 30 s adapters tick. Retry the chain, and say so in the footer — the 1 s
+ * loadPoints run overwrites that line as soon as the Hub answers again. */
+function bootConsole() {
+    loadAdapters().then(async (ok) => {
+        if (!ok) {
+            const foot = document.getElementById('foot');
+            if (foot) foot.textContent = 'Hub 正在重新加载…';
+            setTimeout(bootConsole, 2000);
+            return;
+        }
+        await loadPoints();
+        loadModulesForAuth().then(() => {
+            loadMeta();
+            applyLoginHash();
+        });
+        loadRtspCamStatusSafe();
+        loadStoreData();
     });
-    loadRtspCamStatusSafe();
-    loadStoreData();
-});
+}
+bootConsole();
 renderLocalUser();
-setInterval(loadPoints, 8000);
+/* 1 s: drives the 更新 stamp and is also the fast path for noticing a session
+ * that a newer login replaced (single-slot session → 401 → guard → /login). */
+setInterval(loadPoints, 1000);
 setInterval(loadRtspCamStatusSafe, 12000);
 setInterval(() => loadAdapters().then(async () => {
     await loadModulesForAuth();

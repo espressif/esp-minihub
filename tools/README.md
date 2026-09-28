@@ -64,7 +64,7 @@ Stacks (optional): `ble_mesh`, `zigbee`, `matter`, `thread`. `thread` and `zigbe
 
 ### `apply_sdkconfig_variant.sh`
 
-Copy `application/<app>/config/sdkconfig/variants/<name>.yml` over `app.yml`.
+Copy `application/<app>/configs/sdkconfig/variants/<name>.yml` over `app.yml`.
 
 ```bash
 ./tools/apply_sdkconfig_variant.sh lcd
@@ -77,7 +77,7 @@ Library used by the firmware build: expand `app.yml` + feature fragments into `S
 
 ### `sync_host_manifest.py`
 
-Merge `config/minihub_manifest.yml` (`_host_base`) with `application/<app>/manifest.yml` → component require / adapters setup.
+Merge `configs/minihub_manifest.yml` (`_host_base`) with `application/<app>/manifest.yml` → component require / adapters setup.
 
 ```bash
 python3 tools/sync_host_manifest.py --app minihub
@@ -85,7 +85,7 @@ python3 tools/sync_host_manifest.py --app minihub
 
 ### `product_assets.py`
 
-Resolve product config JSON (`application/<app>/config/` then repo `config/`) and factory Store ids from `manifest.yml` → `store_preinstall`.
+Resolve product config JSON (`application/<app>/configs/` then repo `configs/`) and factory Store ids from `manifest.yml` → `store_preinstall`.
 
 ```bash
 python3 tools/product_assets.py --app minihub resolve adapters.json
@@ -186,7 +186,7 @@ python3 tools/minihub_plugin_mcp.py
 python3 tools/plugin_mcp/test_plugin_mcp.py
 ```
 
-Repo wiring: `.cursor/mcp.json`, `.vscode/mcp.json`. Tools: `plugin_guide`, `scaffold_plugin`, `validate_plugin`, `pack_plugin`. Implementation: `tools/plugin_mcp/`.
+Repo wiring: `.agent/mcp/cursor.mcp.json` and `.agent/mcp/vscode.mcp.json`, symlinked to `.cursor/mcp.json` and `.vscode/mcp.json`. Tools: `plugin_guide`, `scaffold_plugin`, `validate_plugin`, `pack_plugin`. Implementation: `tools/plugin_mcp/`.
 
 ### `store_paths.py`
 

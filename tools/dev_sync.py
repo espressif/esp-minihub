@@ -32,10 +32,35 @@ PROXY_PREFIX = "/hub/"
 MAX_PROXY_BYTES = 2 * 1024 * 1024
 
 
+def _normalize_device_base(raw: str) -> tuple[str | None, str | None]:
+    """Return (base_url, error_message). Accepts bare host/IP by prepending http://."""
+    base = (raw or "").strip().rstrip("/")
+    if not base:
+        return None, "missing X-MiniHub-Base (device URL); set it in the page or MINIHUB_DEV_BASE"
+    if "://" not in base:
+        base = "http://" + base
+    if not (base.startswith("http://") or base.startswith("https://")):
+        return None, "X-MiniHub-Base must be http(s) URL"
+    return base, None
+
+
+def _default_device_base() -> str:
+    env = (os.environ.get("MINIHUB_DEV_BASE") or "").strip().rstrip("/")
+    if env:
+        base, err = _normalize_device_base(env)
+        if base:
+            return base
+    return "http://minihub.local"
+
+
 def _read_html() -> bytes:
     if not HTML_PATH.is_file():
         raise SystemExit(f"missing UI file: {HTML_PATH}")
-    return HTML_PATH.read_bytes()
+    html = HTML_PATH.read_text(encoding="utf-8")
+    # Prefill device URL from env when set (keeps page default otherwise).
+    default = _default_device_base().replace('"', "&quot;")
+    html = html.replace('value="http://minihub.local"', f'value="{default}"', 1)
+    return html.encode("utf-8")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -44,7 +69,25 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), fmt % args))
 
+    def log_request(self, code: "int | str" = "-", size: "int | str" = "-") -> None:
+        reason = getattr(self, "_log_reason", None)
+        self._log_reason = None
+        if reason:
+            self.log_message('"%s" %s %s — %s', self.requestline, str(code), str(size), reason)
+        else:
+            self.log_message('"%s" %s %s', self.requestline, str(code), str(size))
+
     def _send(self, code: int, body: bytes, content_type: str, extra: dict | None = None) -> None:
+        if (
+            code >= 400
+            and body
+            and len(body) < 240
+            and content_type.startswith("text/")
+        ):
+            try:
+                self._log_reason = body.decode("utf-8", errors="replace").strip()
+            except Exception:  # noqa: BLE001
+                self._log_reason = None
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -98,13 +141,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, b"bad proxy path", "text/plain; charset=utf-8")
             return
 
-        base = self.headers.get("X-MiniHub-Base") or os.environ.get("MINIHUB_DEV_BASE", "")
-        base = (base or "").strip().rstrip("/")
-        if not base:
-            self._send(400, b"missing X-MiniHub-Base (device URL)", "text/plain; charset=utf-8")
-            return
-        if not (base.startswith("http://") or base.startswith("https://")):
-            self._send(400, b"X-MiniHub-Base must be http(s) URL", "text/plain; charset=utf-8")
+        raw_base = self.headers.get("X-MiniHub-Base") or os.environ.get("MINIHUB_DEV_BASE", "")
+        base, base_err = _normalize_device_base(raw_base)
+        if base_err or not base:
+            self._send(400, (base_err or "bad device base").encode(), "text/plain; charset=utf-8")
             return
 
         target = f"{base}/{rel}"
@@ -162,6 +202,10 @@ def main() -> int:
     print(f"MiniHub dev sync: {url}")
     print("  Set device base URL in the page (e.g. http://192.168.x.x or http://minihub.local)")
     print("  Requests go through /hub/* → device (avoids browser CORS).")
+    print("  400 from this server usually means missing device URL (X-MiniHub-Base / MINIHUB_DEV_BASE).")
+    env_base = (os.environ.get("MINIHUB_DEV_BASE") or "").strip()
+    if env_base:
+        print(f"  MINIHUB_DEV_BASE={env_base}")
     if args.open:
         webbrowser.open(url)
     try:

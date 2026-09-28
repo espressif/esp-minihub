@@ -10,7 +10,7 @@ Host 与插件
   Matter / MQTT / Modbus
 * **Store** （ ``.mhub`` ）：生态 / 厂商适配器，分 L1、L2、L3（选型见下文）
 
-不要把厂商云凭证写进通用 Host Core ``config/``。令牌应放在 ``/store/modules/ID/``
+不要把厂商云凭证写进通用 Host Core ``configs/``。令牌应放在 ``/store/modules/ID/``
 或模块私有 NVS。
 
 模块分层
@@ -32,7 +32,7 @@ Host 与插件
        运行时合并到 ``adapters.json`` 。
      - **适用：** 已有 Host 适配器的默认参数（BLE Mesh bind、UUID 过滤、
        Modbus 映射）。**不要** inject 射频 ``devices[]`` （设备由入网登记
-       一条点）。不要写进 Host Core ``config/`` 。
+       一条点）。不要写进 Host Core ``configs/`` 。
        **不适用：** 自定义逻辑、云端 API、新适配器、厂商认领 / OTA。
      - :doc:`develop_l1`
    * - L2

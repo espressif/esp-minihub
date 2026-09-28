@@ -1,12 +1,13 @@
 # ESP-IDF build outputs (any app / depth)
 build/
+build_*/
 managed_components/
 dependencies.lock
 
 # Board-manager generated codes (idf.py bmgr); per-product, not Core
 application/*/components/gen_bmgr_codes/
 
-# IDF-generated Kconfig results only (not config/sdkconfig/ source trees)
+# IDF-generated Kconfig results only (not configs/sdkconfig/ source trees)
 /sdkconfig
 /sdkconfig.old
 application/*/sdkconfig
@@ -25,7 +26,7 @@ cmake/generated/
 ci_artifacts/
 
 # Lab-only sdkconfig fragments (copy from *.example)
-**/config/sdkconfig/local.overrides
+**/configs/sdkconfig/local.overrides
 
 # Tooling / OS
 __pycache__/
@@ -34,10 +35,14 @@ __pycache__/
 .DS_Store
 *.code-workspace
 
-# Local IDE / CodeBuddy session notes
-.codebuddy/memory/
+# Agent workspace (Cursor / CodeBuddy / Qwen / Qoder share one rule set).
+# .agent/skills/ and .agent/mcp/ are the shared, versioned artifacts;
+# .agent/private/ is process (handoffs, plans, reviews, memory, probes),
+# kept local and exported to its own system.
+.agent/private/
+.codebuddy/
+.superpowers
 .workbuddy/
-.agent/
 
 # Docs (esp-docs)
 .venv-docs/

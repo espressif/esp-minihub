@@ -23,14 +23,15 @@ Kconfig
 * ``CONFIG_MINIHUB_NET_WIFI_SOFTAP`` — SoftAP/STA owned outside ``minihub_net``
 * ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — SoftAP and/or BLE provisioning when no NVS creds
 
-Fragments: ``config/sdkconfig/feature/wifi_sta.defaults``, ``eth.defaults``.
+Fragments: ``configs/sdkconfig/feature/wifi_sta.defaults``, ``eth.defaults``.
 
 Boot order
 ----------
 
 1. ``minihub_net_init()`` — netif/event loop; start Ethernet; **prepare** Wi-Fi handlers only (log: ``wifi STA deferred``).
-2. Adapters that need radio / BT heap start (Zigbee, BLE Mesh, Matter).
-3. ``minihub_net_start_wifi()`` — ``esp_wifi_start`` + connect, or provisioning.
+2. ``minihub_adapter_start_all()`` — radio mutex, then adapters in order
+   Wi-Fi → Zigbee or Thread → BLE Mesh → others. The ``wifi`` adapter calls
+   ``minihub_net_start_wifi()`` (``esp_wifi_start`` + connect, or provisioning).
 
 Default route vs STA connect
 ----------------------------
@@ -111,8 +112,9 @@ Troubleshooting
 
 **Ethernet is the default route but Wi-Fi has no IP**
 
-Check that NVS has STA credentials and that ``minihub_net_start_wifi()`` ran after
-adapters. Default-route selection does not skip STA connect.
+Check that NVS has STA credentials, ``adapters.wifi.enabled`` is true, and
+the ``wifi`` adapter ran ``minihub_net_start_wifi()``. Default-route selection
+does not skip STA connect.
 
 **STA never connects**
 
