@@ -14,8 +14,14 @@
 extern "C" {
 #endif
 
-/** Load Wi-Fi credentials from Kconfig or NVS. */
+/** Load Wi-Fi credentials. NVS wins when it has an SSID; otherwise Kconfig. */
 esp_err_t minihub_provision_load_credentials(wifi_config_t *out_sta_cfg);
+
+/**
+ * Store STA credentials in NVS. Empty password is an open network.
+ * Does not connect; the caller applies the config on the live STA.
+ */
+esp_err_t minihub_provision_save_credentials(const char *ssid, const char *password);
 
 /**
  * Start provisioning using the Kconfig transport (SoftAP or BLE).

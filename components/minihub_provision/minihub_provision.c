@@ -58,7 +58,6 @@ static esp_err_t load_wifi_from_nvs(wifi_config_t *cfg)
     return err;
 }
 
-#if CONFIG_MINIHUB_WIFI_PROVISIONING
 static esp_err_t save_wifi_to_nvs(const wifi_config_t *cfg)
 {
     nvs_handle_t nvs;
@@ -77,7 +76,27 @@ static esp_err_t save_wifi_to_nvs(const wifi_config_t *cfg)
     return err;
 }
 
-#endif /* save_wifi_to_nvs */
+esp_err_t minihub_provision_save_credentials(const char *ssid, const char *password)
+{
+    if (!ssid || ssid[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    wifi_config_t cfg = {0};
+    size_t ssid_len = strlen(ssid);
+    size_t pass_len = password ? strlen(password) : 0;
+    if (ssid_len >= sizeof(cfg.sta.ssid) || pass_len >= sizeof(cfg.sta.password)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    memcpy(cfg.sta.ssid, ssid, ssid_len);
+    if (pass_len > 0) {
+        memcpy(cfg.sta.password, password, pass_len);
+        cfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    } else {
+        cfg.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    }
+    return save_wifi_to_nvs(&cfg);
+}
 
 #if CONFIG_MINIHUB_WIFI_PROVISIONING
 static void publish_provision_event(const char *type)
@@ -158,21 +177,28 @@ esp_err_t minihub_provision_load_credentials(wifi_config_t *out_sta_cfg)
     }
     memset(out_sta_cfg, 0, sizeof(*out_sta_cfg));
 
+    /* Web (and provisioning) write NVS. That copy wins over the compile-time
+     * default so a console change is what the STA actually joins. */
+    if (load_wifi_from_nvs(out_sta_cfg) == ESP_OK && out_sta_cfg->sta.ssid[0] != '\0') {
+        if (out_sta_cfg->sta.password[0] == '\0') {
+            out_sta_cfg->sta.threshold.authmode = WIFI_AUTH_OPEN;
+        } else {
+            out_sta_cfg->sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+        }
+        ESP_LOGD(TAG, "using NVS Wi-Fi SSID: %s", out_sta_cfg->sta.ssid);
+        return ESP_OK;
+    }
+
+    memset(out_sta_cfg, 0, sizeof(*out_sta_cfg));
     if (kconfig_wifi_configured()) {
-        strncpy((char *)out_sta_cfg->sta.ssid, CONFIG_MINIHUB_WIFI_SSID, sizeof(out_sta_cfg->sta.ssid));
-        strncpy((char *)out_sta_cfg->sta.password, CONFIG_MINIHUB_WIFI_PASS, sizeof(out_sta_cfg->sta.password));
+        strncpy((char *)out_sta_cfg->sta.ssid, CONFIG_MINIHUB_WIFI_SSID, sizeof(out_sta_cfg->sta.ssid) - 1);
+        strncpy((char *)out_sta_cfg->sta.password, CONFIG_MINIHUB_WIFI_PASS, sizeof(out_sta_cfg->sta.password) - 1);
         if (strcmp(CONFIG_MINIHUB_WIFI_PASS, "") == 0) {
             out_sta_cfg->sta.threshold.authmode = WIFI_AUTH_OPEN;
         } else {
             out_sta_cfg->sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
         }
         ESP_LOGD(TAG, "using Kconfig Wi-Fi SSID");
-        return ESP_OK;
-    }
-
-    if (load_wifi_from_nvs(out_sta_cfg) == ESP_OK && out_sta_cfg->sta.ssid[0] != '\0') {
-        out_sta_cfg->sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-        ESP_LOGD(TAG, "using NVS Wi-Fi SSID: %s", out_sta_cfg->sta.ssid);
         return ESP_OK;
     }
 

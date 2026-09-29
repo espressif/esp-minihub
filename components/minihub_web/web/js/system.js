@@ -24,10 +24,29 @@ function fmtChip(t) {
     return L[t] || String(t).toUpperCase();
 }
 
+function sysWifiOn() {
+    const st = sysSnap && sysSnap.net && sysSnap.net.wifi;
+    if (st && st.present === false) return false;
+    if (typeof adapterEnabled === 'function') return adapterEnabled('wifi');
+    return !!(st && st.present);
+}
+
+function sysSyncWifiTab() {
+    const on = sysWifiOn();
+    const btn = document.getElementById('sys-if-wifi');
+    const seg = document.getElementById('sys-if-seg');
+    if (btn) btn.hidden = !on;
+    if (seg) seg.hidden = !on;
+    if (!on && sysIface === 'wifi') sysIface = 'eth';
+    const eth = document.getElementById('sys-if-eth');
+    if (eth) eth.classList.toggle('on', sysIface === 'eth');
+    if (btn) btn.classList.toggle('on', on && sysIface === 'wifi');
+}
+
 function sysSelectIface(ifn) {
+    if (ifn === 'wifi' && !sysWifiOn()) ifn = 'eth';
     sysIface = ifn;
-    document.getElementById('sys-if-eth').classList.toggle('on', ifn === 'eth');
-    document.getElementById('sys-if-wifi').classList.toggle('on', ifn === 'wifi');
+    sysSyncWifiTab();
     sysFillNet();
 }
 
@@ -39,22 +58,41 @@ function sysToggleDhcp() {
 
 function sysFillNet() {
     if (!sysSnap || !sysSnap.net) return;
+    sysSyncWifiTab();
     const st = sysSnap.net[sysIface] || {};
+    const linked = !!(st.ip);
     const note = document.getElementById('sys-if-note');
     if (!st.present) {
         note.textContent = '此固件未启用该接口';
         note.hidden = false;
+    } else if (!linked) {
+        note.textContent = (sysIface === 'wifi' && st.ssid) ? '连接中…' : '未连接';
+        note.hidden = false;
     } else {
-        note.textContent = st.up ? (st.ip ? ('当前 ' + st.ip) : '已就绪') : '未就绪';
+        note.textContent = '当前 ' + st.ip;
         note.hidden = false;
     }
     document.getElementById('sys-dhcp').value = st.dhcp !== false ? '1' : '0';
-    document.getElementById('sys-ip').value = st.ip || '';
-    document.getElementById('sys-mask').value = st.netmask || '';
-    document.getElementById('sys-gw').value = st.gw || '';
-    const dns = st.dns || [];
+    const dns = linked ? (st.dns || []) : [];
+    document.getElementById('sys-ip').value = linked ? (st.ip || '') : '';
+    document.getElementById('sys-mask').value = linked ? (st.netmask || '') : '';
+    document.getElementById('sys-gw').value = linked ? (st.gw || '') : '';
     document.getElementById('sys-dns1').value = dns[0] || '';
     document.getElementById('sys-dns2').value = dns[1] || '';
+    const cred = document.getElementById('sys-wifi-cred');
+    if (cred) cred.hidden = sysIface !== 'wifi';
+    const ssidEl = document.getElementById('sys-wifi-ssid');
+    const passEl = document.getElementById('sys-wifi-pass');
+    if (sysIface === 'wifi' && ssidEl) ssidEl.value = st.ssid || '';
+    if (passEl && sysIface === 'wifi') {
+        passEl.value = '';
+        passEl.type = 'password';
+        const eye = passEl.parentElement && passEl.parentElement.querySelector('.secret-toggle');
+        if (eye) {
+            eye.textContent = '显示';
+            eye.setAttribute('aria-label', '显示密码');
+        }
+    }
     sysToggleDhcp();
 }
 
@@ -239,5 +277,52 @@ async function sysReboot() {
         }
     } catch (e) {
         toast('若设备已重启，请稍后重新打开页面');
+    }
+}
+
+async function sysApplyWifi() {
+    const ssid = (document.getElementById('sys-wifi-ssid').value || '').trim();
+    const password = document.getElementById('sys-wifi-pass').value || '';
+    const open = document.getElementById('sys-wifi-open').checked;
+    if (!ssid) {
+        toast('请填写 SSID');
+        return;
+    }
+    if (!window.confirm('保存后设备会重连到「' + ssid + '」。当前页面可能会断开，继续？')) {
+        return;
+    }
+    toast('正在保存 Wi-Fi…');
+    try {
+        const r = await fetch('/api/net/wifi', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ssid: ssid,
+                password: open ? '' : password,
+                open: open
+            })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.result === 'ok') {
+            toast('已保存，设备正在重连');
+            document.getElementById('sys-wifi-pass').value = '';
+            /* GOT_IP is often 3–5 s after reconnect; one early refresh stays blank. */
+            for (let i = 0; i < 12; i++) {
+                await new Promise(res => setTimeout(res, 1000));
+                await loadSystem();
+                const st = sysSnap && sysSnap.net && sysSnap.net.wifi;
+                if (st && st.ip) {
+                    toast('Wi-Fi 已连接 ' + st.ip);
+                    return;
+                }
+            }
+            toast('仍未拿到地址，可点刷新');
+        } else {
+            toast('失败' + (j.error ? ': ' + j.error : ''));
+        }
+    } catch (e) {
+        toast('网络已断开的话，请连上新的 Wi-Fi 再打开控制台');
     }
 }

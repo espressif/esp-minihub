@@ -40,7 +40,8 @@ const ADAPTER_LABEL = {
     mqtt: 'MQTT',
     zigbee: 'Zigbee',
     ble_mesh: 'BLE Mesh',
-    matter: 'Matter'
+    matter: 'Matter',
+    wifi: 'Wi-Fi'
 };
 const ADAPTER_HIDDEN = {
     thread: true
@@ -361,6 +362,7 @@ async function loadAdapters() {
         if (filter !== 'all' && !adapterEnabled(filter)) filter = 'all';
         renderToolbar();
         if (view === 'overview') renderOverview();
+        if (view === 'system' && typeof sysFillNet === 'function') sysFillNet();
         return true;
     } catch (e) {
         return false;

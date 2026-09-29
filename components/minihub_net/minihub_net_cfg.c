@@ -112,15 +112,18 @@ esp_err_t minihub_net_get_iface_status(minihub_net_iface_t iface, minihub_net_if
     if (!netif) {
         return ESP_OK;
     }
-    out->up = true;
     esp_netif_ip_info_t info = {0};
     if (esp_netif_get_ip_info(netif, &info) == ESP_OK) {
         ip4_to_str(info.ip.addr, out->ip, sizeof(out->ip));
         ip4_to_str(info.netmask.addr, out->netmask, sizeof(out->netmask));
         ip4_to_str(info.gw.addr, out->gw, sizeof(out->gw));
     }
-    fill_dns_str(netif, ESP_NETIF_DNS_MAIN, out->dns_main, sizeof(out->dns_main));
-    fill_dns_str(netif, ESP_NETIF_DNS_BACKUP, out->dns_backup, sizeof(out->dns_backup));
+    /* up = has IPv4; netif existing alone used to look "connected" with blank fields. */
+    out->up = out->ip[0] != '\0';
+    if (out->up) {
+        fill_dns_str(netif, ESP_NETIF_DNS_MAIN, out->dns_main, sizeof(out->dns_main));
+        fill_dns_str(netif, ESP_NETIF_DNS_BACKUP, out->dns_backup, sizeof(out->dns_backup));
+    }
 
     esp_netif_dhcp_status_t st = ESP_NETIF_DHCP_INIT;
     if (esp_netif_dhcpc_get_status(netif, &st) == ESP_OK) {

@@ -1,5 +1,15 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-09-29-icons';
+window.mhWebBuild = '2026-09-29-wifi-poll';
+
+function toggleSecret(btn) {
+    const field = btn && btn.closest ? btn.closest('.secret-field') : null;
+    const input = field ? field.querySelector('input') : null;
+    if (!input) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.textContent = show ? '隐藏' : '显示';
+    btn.setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
+}
 
 (function installAuthFetchGuard() {
     const orig = window.fetch.bind(window);

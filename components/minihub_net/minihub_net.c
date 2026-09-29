@@ -42,6 +42,11 @@ static esp_eth_handle_t s_eth_handle;
 #endif
 #if CONFIG_MINIHUB_NET_WIFI_STA
 static esp_netif_t *s_sta_netif;
+/* set_config is rejected while STA is connecting. Hold auto-reconnect across
+ * disconnect so the driver can leave that state before the new config. */
+static volatile bool s_wifi_hold_reconnect;
+static EventGroupHandle_t s_wifi_idle_eg;
+#define WIFI_STA_IDLE_BIT BIT0
 #endif
 
 /* Optional hooks — weak so RainMaker / web / LCD can override when linked. */
@@ -192,7 +197,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         refresh_default_netif();
-        if (!minihub_provision_busy()) {
+        if (s_wifi_hold_reconnect) {
+            if (s_wifi_idle_eg) {
+                xEventGroupSetBits(s_wifi_idle_eg, WIFI_STA_IDLE_BIT);
+            }
+        } else if (!minihub_provision_busy()) {
             esp_wifi_connect();
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
@@ -538,6 +547,9 @@ esp_netif_t *minihub_net_eth_netif(void)
 esp_netif_t *minihub_net_wifi_netif(void)
 {
 #if CONFIG_MINIHUB_NET_WIFI_STA
+    if (!s_sta_netif) {
+        s_sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    }
     return s_sta_netif;
 #else
     return NULL;
@@ -593,4 +605,117 @@ void minihub_net_dns_probe(const char *hostname)
     ESP_LOGI(TAG, "dns_probe: getaddrinfo(%s) ok -> %s (%lld ms)", hostname, addr_str,
              (long long)dt_ms);
     freeaddrinfo(res);
+}
+
+esp_err_t minihub_net_get_wifi_sta(char *ssid, size_t ssid_len, bool *has_password)
+{
+    if (!ssid || ssid_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    ssid[0] = '\0';
+    if (has_password) {
+        *has_password = false;
+    }
+#if !CONFIG_MINIHUB_NET_WIFI_STA
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    wifi_config_t cfg = {0};
+    esp_err_t err = minihub_provision_load_credentials(&cfg);
+    if (err != ESP_OK) {
+        return err;
+    }
+    strncpy(ssid, (const char *)cfg.sta.ssid, ssid_len - 1);
+    ssid[ssid_len - 1] = '\0';
+    if (has_password) {
+        *has_password = cfg.sta.password[0] != '\0';
+    }
+    return ESP_OK;
+#endif
+}
+
+esp_err_t minihub_net_set_wifi_sta(const char *ssid, const char *password, bool open_network)
+{
+#if !CONFIG_MINIHUB_NET_WIFI_STA
+    (void)ssid;
+    (void)password;
+    (void)open_network;
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    if (!ssid || ssid[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char pass_buf[sizeof(((wifi_config_t *)0)->sta.password)];
+    pass_buf[0] = '\0';
+    if (!open_network) {
+        if (password && password[0] != '\0') {
+            strncpy(pass_buf, password, sizeof(pass_buf) - 1);
+            pass_buf[sizeof(pass_buf) - 1] = '\0';
+        } else {
+            wifi_config_t cur = {0};
+            if (minihub_provision_load_credentials(&cur) == ESP_OK) {
+                strncpy(pass_buf, (const char *)cur.sta.password, sizeof(pass_buf) - 1);
+                pass_buf[sizeof(pass_buf) - 1] = '\0';
+            }
+        }
+    }
+
+    esp_err_t err = minihub_provision_save_credentials(ssid, pass_buf);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    wifi_mode_t mode = WIFI_MODE_NULL;
+    if (esp_wifi_get_mode(&mode) == ESP_ERR_WIFI_NOT_INIT || minihub_provision_busy()) {
+        ESP_LOGI(TAG, "Wi-Fi STA saved (ssid=%s); applied on next start", ssid);
+        return ESP_OK;
+    }
+
+    wifi_config_t cfg = {0};
+    strncpy((char *)cfg.sta.ssid, ssid, sizeof(cfg.sta.ssid) - 1);
+    strncpy((char *)cfg.sta.password, pass_buf, sizeof(cfg.sta.password) - 1);
+    cfg.sta.threshold.authmode = pass_buf[0] ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
+
+    if (!s_wifi_idle_eg) {
+        s_wifi_idle_eg = xEventGroupCreate();
+    }
+    s_wifi_hold_reconnect = true;
+    if (s_wifi_idle_eg) {
+        xEventGroupClearBits(s_wifi_idle_eg, WIFI_STA_IDLE_BIT);
+    }
+    esp_err_t derr = esp_wifi_disconnect();
+    if (derr == ESP_OK && s_wifi_idle_eg) {
+        (void)xEventGroupWaitBits(s_wifi_idle_eg, WIFI_STA_IDLE_BIT, pdTRUE, pdTRUE,
+                                  pdMS_TO_TICKS(2000));
+    }
+
+    err = ESP_FAIL;
+    for (int attempt = 0; attempt < 4; attempt++) {
+        err = esp_wifi_set_config(WIFI_IF_STA, &cfg);
+        if (err != ESP_ERR_WIFI_STATE) {
+            break;
+        }
+        if (s_wifi_idle_eg) {
+            xEventGroupClearBits(s_wifi_idle_eg, WIFI_STA_IDLE_BIT);
+        }
+        (void)esp_wifi_disconnect();
+        if (s_wifi_idle_eg) {
+            (void)xEventGroupWaitBits(s_wifi_idle_eg, WIFI_STA_IDLE_BIT, pdTRUE, pdTRUE,
+                                      pdMS_TO_TICKS(500));
+        }
+    }
+    s_wifi_hold_reconnect = false;
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi set_config: %s (saved for next start)", esp_err_to_name(err));
+        (void)esp_wifi_connect();
+        return ESP_OK;
+    }
+    err = esp_wifi_connect();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_CONN) {
+        ESP_LOGW(TAG, "Wi-Fi connect: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Wi-Fi STA reconnecting to %s", ssid);
+    }
+    return ESP_OK;
+#endif
 }
