@@ -1,28 +1,28 @@
 {
   "adapters": {
-    "wifi": {
+    "Wi-Fi": {
       "enabled": true
     },
-    "mqtt": {
+    "MQTT": {
       "enabled": false,
       "broker": "127.0.0.1",
       "port": 1883,
       "devices": []
     },
-    "thread": {
+    "Thread": {
       "enabled": false,
       "dataset": null,
       "channel": null
     },
-    "matter": {
+    "Matter": {
       "enabled": false,
       "devices": []
     },
-    "zigbee": {
+    "Zigbee": {
       "enabled": false,
       "devices": []
     },
-    "ble_mesh": {
+    "BLE Mesh": {
       "enabled": false,
       "provision": {
         "uuid_match_disabled": true,
@@ -47,7 +47,7 @@
       },
       "devices": []
     },
-    "modbus": {
+    "Modbus": {
       "enabled": false,
       "poll_ms": 2000,
       "gateways": []

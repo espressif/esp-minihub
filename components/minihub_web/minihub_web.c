@@ -984,7 +984,16 @@ static esp_err_t handle_api_system(httpd_req_t *req)
     cJSON *net = cJSON_CreateObject();
     if (net) {
         cJSON_AddItemToObject(net, "eth", iface_status_json(MINIHUB_NET_IF_ETH));
-        cJSON_AddItemToObject(net, "wifi", iface_status_json(MINIHUB_NET_IF_WIFI));
+        cJSON *wifi = iface_status_json(MINIHUB_NET_IF_WIFI);
+        if (wifi) {
+            char ssid[33] = {0};
+            bool has_password = false;
+            if (minihub_net_get_wifi_sta(ssid, sizeof(ssid), &has_password) == ESP_OK) {
+                cJSON_AddStringToObject(wifi, "ssid", ssid);
+                cJSON_AddBoolToObject(wifi, "has_password", has_password);
+            }
+        }
+        cJSON_AddItemToObject(net, "wifi", wifi);
         cJSON_AddItemToObject(root, "net", net);
     }
 
@@ -1111,6 +1120,68 @@ static esp_err_t handle_api_net_config(httpd_req_t *req)
     cJSON_Delete(root);
 
     err = minihub_net_set_iface_config(iface, &cfg);
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddStringToObject(resp, "result", err == ESP_OK ? "ok" : "fail");
+    if (err != ESP_OK) {
+        cJSON_AddStringToObject(resp, "error", esp_err_to_name(err));
+    }
+    esp_err_t send_err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return send_err;
+}
+
+static esp_err_t handle_api_net_wifi(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char *buf = NULL;
+    size_t buflen = 0;
+    esp_err_t body_err = read_http_body(req, &buf, &buflen, 512);
+    if (body_err == ESP_ERR_INVALID_SIZE) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body too large");
+    }
+    if (body_err != ESP_OK || !buf) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+
+    const cJSON *ssid_j = cJSON_GetObjectItem(root, "ssid");
+    if (!cJSON_IsString(ssid_j) || !ssid_j->valuestring || ssid_j->valuestring[0] == '\0' ||
+        strlen(ssid_j->valuestring) > 32) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "ssid required");
+    }
+
+    const cJSON *pass_j = cJSON_GetObjectItem(root, "password");
+    const char *password = (cJSON_IsString(pass_j) && pass_j->valuestring) ? pass_j->valuestring : "";
+    if (strlen(password) > 64) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "password too long");
+    }
+    bool open_network = cJSON_IsTrue(cJSON_GetObjectItem(root, "open"));
+
+    char ssid[33];
+    char pass_buf[65];
+    strncpy(ssid, ssid_j->valuestring, sizeof(ssid) - 1);
+    ssid[sizeof(ssid) - 1] = '\0';
+    strncpy(pass_buf, password, sizeof(pass_buf) - 1);
+    pass_buf[sizeof(pass_buf) - 1] = '\0';
+    cJSON_Delete(root);
+
+    err = minihub_net_set_wifi_sta(ssid, pass_buf, open_network);
+    memset(pass_buf, 0, sizeof(pass_buf));
+
     cJSON *resp = cJSON_CreateObject();
     if (!resp) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
@@ -4605,6 +4676,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     httpd_uri_t api_system_reboot = { .uri = "/api/system/reboot", .method = HTTP_POST,
                                       .handler = handle_api_system_reboot };
     httpd_uri_t api_net_cfg = { .uri = "/api/net/config", .method = HTTP_POST, .handler = handle_api_net_config };
+    httpd_uri_t api_net_wifi = { .uri = "/api/net/wifi", .method = HTTP_POST, .handler = handle_api_net_wifi };
     httpd_uri_t adapters_api = { .uri = "/api/adapters", .method = HTTP_GET, .handler = handle_api_adapters };
     httpd_uri_t config_adapters_get = { .uri = "/api/config/adapters", .method = HTTP_GET,
                                         .handler = handle_api_config_adapters_get };
@@ -4696,6 +4768,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system), TAG, "/api/system");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_reboot), TAG, "/api/system/reboot");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_net_cfg), TAG, "/api/net/config");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_net_wifi), TAG, "/api/net/wifi");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &adapters_api), TAG, "/api/adapters");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &config_adapters_get), TAG, "/api/config/adapters GET");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &config_adapters_put), TAG, "/api/config/adapters PUT");

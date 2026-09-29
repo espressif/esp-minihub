@@ -13,26 +13,43 @@
       <div class="sys-grid" id="sys-info-grid"></div>
       <div class="sys-net">
         <h3 style="margin-bottom:10px;font-size:1rem">网络</h3>
-        <div class="seg">
+        <div class="seg" id="sys-if-seg">
           <button type="button" id="sys-if-eth" class="on" onclick="sysSelectIface('eth')">以太网</button>
           <button type="button" id="sys-if-wifi" onclick="sysSelectIface('wifi')">Wi-Fi</button>
         </div>
         <div id="sys-if-note" class="modal-hint"></div>
-        <label>模式</label>
+        <label for="sys-dhcp">DHCP 模式</label>
         <select id="sys-dhcp" onchange="sysToggleDhcp()">
-          <option value="1">DHCP</option>
-          <option value="0">静态</option>
+          <option value="1">自动</option>
+          <option value="0">手动</option>
         </select>
         <div id="sys-static-fields">
           <div class="row2">
-            <div><label>IP</label><input id="sys-ip" placeholder="192.168.2.155" /></div>
-            <div><label>掩码</label><input id="sys-mask" placeholder="255.255.255.0" /></div>
+            <div><label for="sys-ip">IP</label><input id="sys-ip" /></div>
+            <div><label for="sys-mask">掩码</label><input id="sys-mask" /></div>
           </div>
           <div class="row2">
-            <div><label>网关</label><input id="sys-gw" placeholder="192.168.2.1" /></div>
-            <div><label>DNS 主</label><input id="sys-dns1" placeholder="192.168.2.1" /></div>
+            <div><label for="sys-gw">网关</label><input id="sys-gw" /></div>
+            <div><label for="sys-dns1">DNS 主</label><input id="sys-dns1" /></div>
           </div>
-          <label>DNS 备</label><input id="sys-dns2" placeholder="223.5.5.5" />
+          <label for="sys-dns2">DNS 备</label><input id="sys-dns2" />
+        </div>
+        <div id="sys-wifi-cred" hidden>
+          <label>SSID</label>
+          <input id="sys-wifi-ssid" maxlength="32" autocomplete="off" placeholder="热点名称" />
+          <label for="sys-wifi-pass">密码</label>
+          <div class="secret-field">
+            <input id="sys-wifi-pass" type="password" maxlength="64" autocomplete="new-password" placeholder="留空则沿用已保存密码" />
+            <button type="button" class="secret-toggle" aria-label="显示密码" onclick="toggleSecret(this)">显示</button>
+          </div>
+          <label class="sys-check" for="sys-wifi-open">
+            <input id="sys-wifi-open" type="checkbox" />
+            <span>开放网络（无密码）</span>
+          </label>
+          <div class="modal-actions" style="margin-top:8px;justify-content:flex-start">
+            <button class="btn-sm on" type="button" onclick="sysApplyWifi()">保存 Wi-Fi</button>
+          </div>
+          <div class="sys-hint">写入本机 NVS 并重连。页面只显示 SSID，不回显密码。改到别的网络后，请用新地址打开控制台。</div>
         </div>
         <div class="modal-actions" style="margin-top:14px;justify-content:flex-start">
           <button class="btn-sm on" type="button" onclick="sysApplyNet()">应用</button>
@@ -133,7 +150,10 @@
     <label for="auth-user" id="auth-user-label">账号</label>
     <input id="auth-user" autocomplete="username" />
     <label for="auth-pass" id="auth-pass-label">密码</label>
-    <input id="auth-pass" type="password" autocomplete="current-password" />
+    <div class="secret-field" id="auth-pass-field">
+      <input id="auth-pass" type="password" autocomplete="current-password" />
+      <button type="button" class="secret-toggle" aria-label="显示密码" onclick="toggleSecret(this)">显示</button>
+    </div>
     <div id="auth-apikey-block" hidden>
       <label for="auth-keyid" id="auth-keyid-label">API Key ID</label>
       <input id="auth-keyid" autocomplete="off" />
@@ -166,7 +186,7 @@
       <button class="btn-sm on" type="button" id="auth-submit" onclick="submitAuthLogin()">登录</button>
     </div>
   </div>
-</div><div class="modal-overlay" id="home-picker-modal" hidden onclick="if(event.target===this)closeHomePicker()">  <div class="modal" role="dialog" aria-labelledby="home-picker-title">    <h3 id="home-picker-title">选择家庭</h3>    <p class="modal-hint" id="home-picker-hint">同步将导入该家庭下的设备名称与房间</p>    <div class="home-list" id="home-picker-list"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeHomePicker()">取消</button>      <button class="btn-sm on" type="button" id="home-picker-confirm" onclick="confirmHomePicker()">同步此家庭</button>    </div>  </div></div><div class="modal-overlay" id="matter-add-modal" hidden onclick="if(event.target===this)closeMatterAdd()">  <div class="modal matter-wide" role="dialog" aria-labelledby="matter-add-title">    <h3 id="matter-add-title">添加 Matter 设备</h3>    <div class="modal-hint" id="matter-add-hint">默认经 BLE 发现，并同时使用 DNS-SD；不填 Wi-Fi 时写入 Hub Thread 数据集。</div>    <input type="hidden" id="matter-discovery" value="ble_thread" />    <label for="matter-code">配对码 pairing_code</label>    <input id="matter-code" placeholder="1472-121-2614 或 MT:..." autocomplete="off" />    <label for="matter-node">节点 ID（可选，留空自动分配）</label>    <input id="matter-node" placeholder="2" inputmode="numeric" />    <label for="matter-eps">Endpoint（逗号分隔，默认 1）</label>    <input id="matter-eps" placeholder="1" value="1" />    <div class="matter-wifi-row" id="matter-wifi-row">      <label class="lbl" id="matter-wifi-toggle-label" for="matter-wifi-enable">是否配置 Wi-Fi 信息</label>      <label class="toggle">        <input type="checkbox" id="matter-wifi-enable" onchange="onMatterWifiToggle()" aria-labelledby="matter-wifi-toggle-label" />        <span class="slider"></span>      </label>    </div>    <div id="matter-wifi-block" hidden>      <label for="matter-wifi-ssid">STA SSID</label>      <input id="matter-wifi-ssid" autocomplete="off" disabled />      <label for="matter-wifi-pass">Wi-Fi 密码</label>      <input id="matter-wifi-pass" type="password" autocomplete="off" placeholder="可留空沿用 Hub 已保存密码" disabled />    </div>    <div class="matter-spacer" aria-hidden="true"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeMatterAdd()">取消</button>      <button class="btn-sm on" type="button" id="matter-add-submit" onclick="submitMatterAdd()">添加</button>    </div>  </div></div><div class="toast" id="toast"></div>
+</div><div class="modal-overlay" id="home-picker-modal" hidden onclick="if(event.target===this)closeHomePicker()">  <div class="modal" role="dialog" aria-labelledby="home-picker-title">    <h3 id="home-picker-title">选择家庭</h3>    <p class="modal-hint" id="home-picker-hint">同步将导入该家庭下的设备名称与房间</p>    <div class="home-list" id="home-picker-list"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeHomePicker()">取消</button>      <button class="btn-sm on" type="button" id="home-picker-confirm" onclick="confirmHomePicker()">同步此家庭</button>    </div>  </div></div><div class="modal-overlay" id="matter-add-modal" hidden onclick="if(event.target===this)closeMatterAdd()">  <div class="modal matter-wide" role="dialog" aria-labelledby="matter-add-title">    <h3 id="matter-add-title">添加 Matter 设备</h3>    <div class="modal-hint" id="matter-add-hint">默认经 BLE 发现，并同时使用 DNS-SD；不填 Wi-Fi 时写入 Hub Thread 数据集。</div>    <input type="hidden" id="matter-discovery" value="ble_thread" />    <label for="matter-code">配对码 pairing_code</label>    <input id="matter-code" placeholder="1472-121-2614 或 MT:..." autocomplete="off" />    <label for="matter-node">节点 ID（可选，留空自动分配）</label>    <input id="matter-node" placeholder="2" inputmode="numeric" />    <label for="matter-eps">Endpoint（逗号分隔，默认 1）</label>    <input id="matter-eps" placeholder="1" value="1" />    <div class="matter-wifi-row" id="matter-wifi-row">      <label class="lbl" id="matter-wifi-toggle-label" for="matter-wifi-enable">是否配置 Wi-Fi 信息</label>      <label class="toggle">        <input type="checkbox" id="matter-wifi-enable" onchange="onMatterWifiToggle()" aria-labelledby="matter-wifi-toggle-label" />        <span class="slider"></span>      </label>    </div>    <div id="matter-wifi-block" hidden>      <label for="matter-wifi-ssid">STA SSID</label>      <input id="matter-wifi-ssid" autocomplete="off" disabled />      <label for="matter-wifi-pass">Wi-Fi 密码</label>      <div class="secret-field"><input id="matter-wifi-pass" type="password" autocomplete="off" placeholder="可留空沿用 Hub 已保存密码" disabled /><button type="button" class="secret-toggle" aria-label="显示密码" onclick="toggleSecret(this)">显示</button></div>    </div>    <div class="matter-spacer" aria-hidden="true"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeMatterAdd()">取消</button>      <button class="btn-sm on" type="button" id="matter-add-submit" onclick="submitMatterAdd()">添加</button>    </div>  </div></div><div class="toast" id="toast"></div>
 <script src="/web/js/app.js"></script>
 <script src="/web/js/system.js"></script>
 <script src="/web/js/rules.js"></script>

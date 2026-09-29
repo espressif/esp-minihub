@@ -28,6 +28,12 @@
 .modal.auth-form label{display:block;margin:12px 0 6px;font-size:.74rem;color:#9aa8c2;font-weight:600}
 .modal.auth-form label:first-of-type,.modal.auth-form h3+label,.modal.auth-form [hidden]+label{margin-top:4px}
 .modal.auth-form input{display:block;width:100%;padding:11px 13px;border-radius:10px;border:1px solid #2f3c58;background:#0d1322;color:var(--text);font-size:.9rem;outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none}
+.secret-field{position:relative}
+.secret-field>input,.modal.auth-form .secret-field>input,.modal.matter-wide .secret-field>input,.sys-net .secret-field>input{padding-right:58px}
+.secret-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);font-size:.75rem;cursor:pointer;padding:4px 2px;line-height:1}
+.secret-toggle:hover{color:var(--text)}
+.sys-net label.sys-check{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.8rem}
+.sys-net label.sys-check input{width:auto;padding:0}
 .modal.auth-form input::placeholder{color:#5f6e88}
 .modal.auth-form input:focus{border-color:rgba(129,140,248,.65);box-shadow:0 0 0 3px rgba(99,102,241,.18)}
 .modal.auth-form input:-webkit-autofill,.modal.auth-form input:-webkit-autofill:hover,.modal.auth-form input:-webkit-autofill:focus{-webkit-text-fill-color:var(--text);-webkit-box-shadow:0 0 0 1000px #0d1322 inset;caret-color:var(--text);transition:background-color 99999s ease-out}
@@ -57,6 +63,7 @@
 .sys-card .s{font-size:.75rem;color:var(--dim);margin-top:4px}
 .sys-net{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px;max-width:560px}
 .sys-net .seg{margin:0 0 12px}
+#sys-if-seg[hidden],#sys-if-wifi[hidden],#sys-wifi-cred[hidden]{display:none!important}
 .sys-net label{display:block;font-size:.72rem;color:var(--muted);margin:10px 0 4px}
 .sys-net input,.sys-net select{width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:.85rem}
 .sys-net .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}

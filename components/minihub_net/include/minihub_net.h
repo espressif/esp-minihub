@@ -104,6 +104,23 @@ esp_netif_t *minihub_net_wifi_netif(void);
  */
 EventGroupHandle_t minihub_net_event_group(void);
 
+/**
+ * @brief Copy the STA SSID the hub will join. Never returns the password.
+ *
+ * @param ssid          Output buffer
+ * @param ssid_len      Buffer size
+ * @param has_password  Set when a password is stored; may be NULL
+ */
+esp_err_t minihub_net_get_wifi_sta(char *ssid, size_t ssid_len, bool *has_password);
+
+/**
+ * @brief Save STA credentials and reconnect.
+ *
+ * An empty password keeps the stored one unless @p open_network is true.
+ * The password is not logged.
+ */
+esp_err_t minihub_net_set_wifi_sta(const char *ssid, const char *password, bool open_network);
+
 #ifdef __cplusplus
 }
 #endif

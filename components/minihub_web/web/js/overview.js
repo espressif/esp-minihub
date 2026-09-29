@@ -1056,6 +1056,7 @@ function applyAuthLoginLabels(mod, mode) {
     document.getElementById('auth-user').hidden = sessionMode;
     document.getElementById('auth-user-label').hidden = sessionMode;
     document.getElementById('auth-pass').hidden = sessionMode;
+    document.getElementById('auth-pass-field').hidden = sessionMode;
     document.getElementById('auth-pass-label').hidden = sessionMode;
     document.getElementById('auth-apikey-block').hidden = sessionMode || !isApiKeyLogin(mod);
     document.getElementById('auth-session-block').hidden = !sessionMode;
