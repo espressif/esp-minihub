@@ -34,11 +34,15 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "mbedtls/base64.h"
 #include "minihub_config.h"
 #include "minihub_core.h"
 #include "minihub_module.h"
 #include "minihub_paths.h"
+#include "minihub_task.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "minihub_js";
@@ -93,6 +97,109 @@ typedef struct {
 static js_rpc_module_t s_js_rpc_modules[MINIHUB_JS_RPC_MODULES_MAX];
 static size_t s_js_rpc_module_count;
 static char s_setup_module_id[32];
+
+/*
+ * QuickJS is single-threaded and records the C stack pointer once in
+ * JS_NewRuntime(). Every eval and call runs on this task so that snapshot
+ * matches the stack actually in use. Stack size and budget come from
+ * Kconfig (MINIHUB_JS_WORKER_STACK_*).
+ */
+#define JS_WORKER_STACK_BYTES  CONFIG_MINIHUB_JS_WORKER_STACK_SIZE
+#define JS_WORKER_STACK_BUDGET CONFIG_MINIHUB_JS_WORKER_STACK_BUDGET
+
+#if CONFIG_MINIHUB_JS_WORKER_STACK_BUDGET >= CONFIG_MINIHUB_JS_WORKER_STACK_SIZE
+#error "MINIHUB_JS_WORKER_STACK_BUDGET must be smaller than MINIHUB_JS_WORKER_STACK_SIZE"
+#endif
+
+typedef esp_err_t (*js_job_fn)(void *arg);
+
+typedef struct {
+    js_job_fn fn;
+    void *arg;
+    esp_err_t result;
+} js_job_t;
+
+static js_job_t *s_js_job;
+static SemaphoreHandle_t s_js_admit;
+static SemaphoreHandle_t s_js_done;
+static TaskHandle_t s_js_task;
+
+static void js_worker(void *arg);
+static void js_bind_stack(void);
+
+static void js_bind_stack(void)
+{
+    if (!s_rt) {
+        return;
+    }
+    JS_SetMaxStackSize(s_rt, JS_WORKER_STACK_BUDGET);
+    JS_UpdateStackTop(s_rt);
+}
+
+static esp_err_t js_ensure_task(void)
+{
+    if (s_js_task) {
+        return ESP_OK;
+    }
+    if (!s_js_admit) {
+        s_js_admit = xSemaphoreCreateMutex();
+        s_js_done = xSemaphoreCreateBinary();
+        if (!s_js_admit || !s_js_done) {
+            return ESP_ERR_NO_MEM;
+        }
+    }
+    BaseType_t ok = minihub_task_create_psram(js_worker, "js_worker", JS_WORKER_STACK_BYTES,
+                                             NULL, 4, &s_js_task);
+    if (ok != pdPASS) {
+        s_js_task = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t js_call_on_worker(js_job_fn fn, void *arg)
+{
+    if (js_ensure_task() != ESP_OK) {
+        return ESP_ERR_NO_MEM;
+    }
+    /* Host calls made from a script are already on this task. */
+    if (xTaskGetCurrentTaskHandle() == s_js_task) {
+        return fn(arg);
+    }
+    if (xSemaphoreTake(s_js_admit, pdMS_TO_TICKS(60000)) != pdTRUE) {
+        ESP_LOGW(TAG, "js worker busy");
+        return ESP_ERR_TIMEOUT;
+    }
+    js_job_t job = {
+        .fn = fn,
+        .arg = arg,
+        .result = ESP_FAIL,
+    };
+    s_js_job = &job;
+    xTaskNotifyGive(s_js_task);
+    xSemaphoreTake(s_js_done, portMAX_DELAY);
+    esp_err_t err = job.result;
+    xSemaphoreGive(s_js_admit);
+    return err;
+}
+
+static void js_worker(void *arg)
+{
+    (void)arg;
+    ESP_LOGI(TAG, "js worker ready (stack %u, budget %u)",
+             (unsigned)JS_WORKER_STACK_BYTES, (unsigned)JS_WORKER_STACK_BUDGET);
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        js_job_t *job = s_js_job;
+        if (!job || !job->fn) {
+            continue;
+        }
+        js_bind_stack();
+        job->result = job->fn(job->arg);
+        s_js_job = NULL;
+        xSemaphoreGive(s_js_done);
+    }
+}
 
 static char *read_file_alloc(const char *path, size_t max_len, size_t *out_len)
 {
@@ -257,7 +364,7 @@ static void clear_js_rpc_handlers(JSContext *ctx)
     s_setup_module_id[0] = '\0';
 }
 
-static void js_event_dispatch(const minihub_event_t *event, void *user_data)
+static void js_event_run(const minihub_event_t *event, void *user_data)
 {
     (void)user_data;
     if (!event || !s_ctx) {
@@ -301,6 +408,21 @@ static void js_event_dispatch(const minihub_event_t *event, void *user_data)
     }
 }
 
+static esp_err_t js_event_job(void *arg)
+{
+    js_event_run(arg, NULL);
+    return ESP_OK;
+}
+
+static void js_event_dispatch(const minihub_event_t *event, void *user_data)
+{
+    (void)user_data;
+    if (!event || !s_ctx) {
+        return;
+    }
+    (void)js_call_on_worker(js_event_job, (void *)event);
+}
+
 static JSValue *find_js_cmd_fn(const char *adapter)
 {
     if (!adapter || !adapter[0]) {
@@ -314,7 +436,7 @@ static JSValue *find_js_cmd_fn(const char *adapter)
     return NULL;
 }
 
-static esp_err_t js_command_dispatch(const minihub_command_t *cmd)
+static esp_err_t js_command_run(const minihub_command_t *cmd)
 {
     if (!cmd || !s_ctx) {
         return ESP_ERR_INVALID_STATE;
@@ -353,6 +475,19 @@ static esp_err_t js_command_dispatch(const minihub_command_t *cmd)
     }
     JS_FreeValue(s_ctx, ret);
     return err;
+}
+
+static esp_err_t js_command_job(void *arg)
+{
+    return js_command_run(arg);
+}
+
+static esp_err_t js_command_dispatch(const minihub_command_t *cmd)
+{
+    if (!cmd) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return js_call_on_worker(js_command_job, (void *)cmd);
 }
 
 static JSValue js_point_register(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -1147,33 +1282,48 @@ static esp_err_t js_module_rpc_dispatch_for(const char *module_id, const char *m
     return ESP_OK;
 }
 
-static esp_err_t js_rpc_tramp_0(const char *method, const cJSON *params, cJSON **out)
+typedef struct {
+    size_t idx;
+    const char *method;
+    const cJSON *params;
+    cJSON **out;
+} js_rpc_job_t;
+
+static esp_err_t js_rpc_job(void *arg)
 {
-    if (s_js_rpc_module_count < 1) {
+    const js_rpc_job_t *a = arg;
+    if (!a || a->idx >= s_js_rpc_module_count) {
         return ESP_ERR_INVALID_STATE;
     }
-    return js_module_rpc_dispatch_for(s_js_rpc_modules[0].module_id, method, params, out);
+    return js_module_rpc_dispatch_for(s_js_rpc_modules[a->idx].module_id, a->method, a->params, a->out);
+}
+
+static esp_err_t js_rpc_on_worker(size_t idx, const char *method, const cJSON *params, cJSON **out)
+{
+    js_rpc_job_t a = {
+        .idx = idx,
+        .method = method,
+        .params = params,
+        .out = out,
+    };
+    return js_call_on_worker(js_rpc_job, &a);
+}
+
+static esp_err_t js_rpc_tramp_0(const char *method, const cJSON *params, cJSON **out)
+{
+    return js_rpc_on_worker(0, method, params, out);
 }
 static esp_err_t js_rpc_tramp_1(const char *method, const cJSON *params, cJSON **out)
 {
-    if (s_js_rpc_module_count < 2) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    return js_module_rpc_dispatch_for(s_js_rpc_modules[1].module_id, method, params, out);
+    return js_rpc_on_worker(1, method, params, out);
 }
 static esp_err_t js_rpc_tramp_2(const char *method, const cJSON *params, cJSON **out)
 {
-    if (s_js_rpc_module_count < 3) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    return js_module_rpc_dispatch_for(s_js_rpc_modules[2].module_id, method, params, out);
+    return js_rpc_on_worker(2, method, params, out);
 }
 static esp_err_t js_rpc_tramp_3(const char *method, const cJSON *params, cJSON **out)
 {
-    if (s_js_rpc_module_count < 4) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    return js_module_rpc_dispatch_for(s_js_rpc_modules[3].module_id, method, params, out);
+    return js_rpc_on_worker(3, method, params, out);
 }
 
 static minihub_module_rpc_fn js_rpc_tramp_for_index(size_t idx)
@@ -1364,6 +1514,8 @@ static esp_err_t ensure_runtime(void)
         s_rt = NULL;
         return ESP_ERR_NO_MEM;
     }
+    /* JS_NewRuntime records a 1 MB budget. Re-bind to this task's real stack. */
+    js_bind_stack();
     return ESP_OK;
 }
 
@@ -1469,8 +1621,9 @@ static bool manifest_is_js_enabled(const char *path, char *id_out, size_t id_len
     return ok;
 }
 
-void minihub_js_unload_all(void)
+static esp_err_t js_unload_job(void *arg)
 {
+    (void)arg;
     if (s_ctx) {
         clear_js_cmd_handlers(s_ctx);
         clear_js_event_handlers(s_ctx);
@@ -1485,10 +1638,17 @@ void minihub_js_unload_all(void)
         JS_FreeRuntime(s_rt);
         s_rt = NULL;
     }
+    return ESP_OK;
 }
 
-esp_err_t minihub_js_reload(void)
+void minihub_js_unload_all(void)
 {
+    (void)js_call_on_worker(js_unload_job, NULL);
+}
+
+static esp_err_t js_reload_job(void *arg)
+{
+    (void)arg;
     minihub_js_unload_all();
     esp_err_t err = ensure_runtime();
     if (err != ESP_OK) {
@@ -1540,6 +1700,11 @@ esp_err_t minihub_js_reload(void)
     }
     closedir(d);
     return ESP_OK;
+}
+
+esp_err_t minihub_js_reload(void)
+{
+    return js_call_on_worker(js_reload_job, NULL);
 }
 
 #else /* !CONFIG_MINIHUB_JS_PLUGINS */
