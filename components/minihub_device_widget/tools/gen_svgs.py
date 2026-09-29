@@ -28,6 +28,15 @@ def avatar(glyph):
             f'</svg>\n')
 
 
+def circle_avatar(glyph):
+    """Same canvas, but the tile itself is a circle (wireless switch)."""
+    return (f'{XML}<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" '
+            f'viewBox="0 0 96 96">\n'
+            f'  <circle cx="48" cy="48" r="48" fill="#1C1C1E"/>\n'
+            f'{glyph}'
+            f'</svg>\n')
+
+
 # images/devices/<device>.svg - the device-class avatar.
 device_svgs = {
     "light.svg": avatar(
@@ -41,6 +50,105 @@ device_svgs = {
         '  <circle cx="40" cy="38" r="4" fill="#34C759"/>\n'
         '  <circle cx="56" cy="38" r="4" fill="#34C759"/>\n'
         '  <rect x="38" y="50" width="20" height="4" rx="2" fill="#34C759"/>\n'),
+    # Wireless switch (type button): the product itself — round puck + radio.
+    # Geometric hands kept reading as blobs; puck is the clear cue.
+    "button.svg": circle_avatar(
+        '  <path d="M18 36 Q10 48 18 60" stroke="#0A84FF" stroke-width="3.5" '
+        'fill="none" stroke-linecap="round"/>\n'
+        '  <path d="M26 40 Q20 48 26 56" stroke="#0A84FF" stroke-width="3" '
+        'fill="none" stroke-linecap="round" opacity="0.45"/>\n'
+        '  <circle cx="54" cy="48" r="26" fill="#2C2C2E" stroke="#0A84FF" '
+        'stroke-width="3.5"/>\n'
+        '  <circle cx="54" cy="48" r="16" fill="none" stroke="#0A84FF" '
+        'stroke-width="3"/>\n'
+        '  <circle cx="54" cy="48" r="7" fill="#0A84FF"/>\n'),
+    "curtain.svg": avatar(
+        '  <rect x="18" y="18" width="60" height="6" rx="3" fill="#5E5CE6"/>\n'
+        '  <path d="M22 26 h22 v38 q-11 8 -22 -2 z" fill="#5E5CE6"/>\n'
+        '  <path d="M52 26 h22 v36 q-11 10 -22 2 z" fill="#5E5CE6" '
+        'opacity="0.55"/>\n'),
+    "airer.svg": avatar(
+        '  <rect x="14" y="18" width="5" height="60" rx="2" fill="#FF9F0A"/>\n'
+        '  <rect x="77" y="18" width="5" height="60" rx="2" fill="#FF9F0A"/>\n'
+        '  <rect x="14" y="22" width="68" height="5" rx="2" fill="#FF9F0A"/>\n'
+        '  <path d="M26 22 v-5 a4 4 0 0 1 8 0 v5" fill="none" stroke="#FF9F0A" '
+        'stroke-width="2.5" stroke-linecap="round"/>\n'
+        '  <path d="M44 22 v-4 a3.5 3.5 0 0 1 7 0 v4" fill="none" '
+        'stroke="#FFD60A" stroke-width="2.5" stroke-linecap="round"/>\n'
+        '  <path d="M62 22 v-5 a4 4 0 0 1 8 0 v5" fill="none" stroke="#FF9F0A" '
+        'stroke-width="2.5" stroke-linecap="round"/>\n'
+        '  <path d="M22 40 L18 48 L25 49 L28 42 V70 H40 V42 L43 49 L50 48 L46 40 '
+        'Q34 46 22 40 Z" fill="#FF9F0A"/>\n'
+        '  <path d="M40 38 L37 44 L42 45 L44 40 V62 H54 V40 L56 45 L61 44 L58 38 '
+        'Q49 42 40 38 Z" fill="#FFD60A"/>\n'
+        '  <path d="M54 40 L50 48 L57 49 L60 42 V70 H72 V42 L75 49 L82 48 L78 40 '
+        'Q66 46 54 40 Z" fill="#FF9F0A" opacity="0.85"/>\n'),
+    "light_strip.svg": avatar(
+        '  <rect x="12" y="36" width="72" height="24" rx="12" fill="#2C2C2E" '
+        'stroke="#D1D1D6" stroke-width="3"/>\n'
+        '  <circle cx="28" cy="48" r="5" fill="#FF375F"/>\n'
+        '  <circle cx="42" cy="48" r="5" fill="#FFD60A"/>\n'
+        '  <circle cx="56" cy="48" r="5" fill="#30D158"/>\n'
+        '  <circle cx="70" cy="48" r="5" fill="#0A84FF"/>\n'),
+    "air-conditioner.svg": avatar(
+        '  <rect x="12" y="16" width="72" height="30" rx="8" fill="#2C2C2E" '
+        'stroke="#64D2FF" stroke-width="3"/>\n'
+        '  <path d="M22 28 h24" stroke="#64D2FF" stroke-width="3" '
+        'stroke-linecap="round"/>\n'
+        '  <circle cx="70" cy="28" r="3.5" fill="#64D2FF"/>\n'
+        '  <path d="M20 44 h56" stroke="#64D2FF" stroke-width="4" '
+        'stroke-linecap="round"/>\n'
+        '  <path d="M28 54 q6 5 0 10 t0 10" fill="none" stroke="#64D2FF" '
+        'stroke-width="3" stroke-linecap="round"/>\n'
+        '  <path d="M48 54 q6 5 0 10 t0 10" fill="none" stroke="#64D2FF" '
+        'stroke-width="3" stroke-linecap="round" opacity="0.75"/>\n'
+        '  <path d="M68 54 q6 5 0 10 t0 10" fill="none" stroke="#64D2FF" '
+        'stroke-width="3" stroke-linecap="round" opacity="0.5"/>\n'),
+    "fan.svg": avatar(
+        '  <g stroke="#0A84FF" stroke-width="8" stroke-linecap="round">\n'
+        '    <line x1="48" y1="46" x2="48" y2="22"/>\n'
+        '    <line x1="48" y1="46" x2="28" y2="60"/>\n'
+        '    <line x1="48" y1="46" x2="68" y2="60"/>\n'
+        '  </g>\n'
+        '  <circle cx="48" cy="46" r="7" fill="#1C1C1E" stroke="#0A84FF" '
+        'stroke-width="3"/>\n'),
+    "fan_light.svg": avatar(
+        '  <g stroke="#0A84FF" stroke-width="7" stroke-linecap="round">\n'
+        '    <line x1="48" y1="40" x2="48" y2="20"/>\n'
+        '    <line x1="48" y1="40" x2="30" y2="52"/>\n'
+        '    <line x1="48" y1="40" x2="66" y2="52"/>\n'
+        '  </g>\n'
+        '  <circle cx="48" cy="40" r="6" fill="#1C1C1E" stroke="#0A84FF" '
+        'stroke-width="3"/>\n'
+        '  <circle cx="48" cy="68" r="10" fill="#FFD60A"/>\n'
+        '  <path d="M48 58 v-6" stroke="#8E8E93" stroke-width="3" '
+        'stroke-linecap="round"/>\n'),
+    "television.svg": avatar(
+        '  <rect x="14" y="20" width="68" height="44" rx="8" fill="#2C2C2E" '
+        'stroke="#0A84FF" stroke-width="3"/>\n'
+        '  <rect x="22" y="28" width="52" height="28" rx="3" fill="#0A84FF" '
+        'opacity="0.35"/>\n'
+        '  <rect x="42" y="66" width="12" height="6" fill="#8E8E93"/>\n'
+        '  <rect x="32" y="72" width="32" height="5" rx="2" fill="#8E8E93"/>\n'),
+    "speaker.svg": avatar(
+        '  <rect x="16" y="22" width="42" height="52" rx="12" fill="#2C2C2E" '
+        'stroke="#BF5AF2" stroke-width="3"/>\n'
+        '  <circle cx="37" cy="40" r="10" fill="none" stroke="#BF5AF2" '
+        'stroke-width="3"/>\n'
+        '  <circle cx="37" cy="40" r="4" fill="#BF5AF2"/>\n'
+        '  <circle cx="37" cy="60" r="4" fill="#BF5AF2"/>\n'
+        '  <path d="M66 38 Q74 48 66 58" stroke="#BF5AF2" stroke-width="3.5" '
+        'fill="none" stroke-linecap="round"/>\n'
+        '  <path d="M74 30 Q86 48 74 66" stroke="#BF5AF2" stroke-width="3.5" '
+        'fill="none" stroke-linecap="round" opacity="0.45"/>\n'),
+    "camera.svg": avatar(
+        '  <rect x="14" y="32" width="68" height="40" rx="10" fill="#2C2C2E" '
+        'stroke="#64D2FF" stroke-width="3"/>\n'
+        '  <rect x="24" y="22" width="18" height="14" rx="4" fill="#64D2FF"/>\n'
+        '  <circle cx="42" cy="52" r="12" fill="none" stroke="#64D2FF" '
+        'stroke-width="3"/>\n'
+        '  <circle cx="42" cy="52" r="5" fill="#64D2FF"/>\n'
+        '  <circle cx="68" cy="44" r="3.5" fill="#FF453A"/>\n'),
     # Sensors: one avatar per device class (icon keyed by type — see
     # device_widgets.js dwTypeImageUrl). Keep glyphs distinct: motion =
     # walking figure + swoosh; occupancy = radar rings + person; smoke =

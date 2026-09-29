@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-09-28-sensor';
+window.mhWebBuild = '2026-09-29-icons';
 
 (function installAuthFetchGuard() {
     const orig = window.fetch.bind(window);

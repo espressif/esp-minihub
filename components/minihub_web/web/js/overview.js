@@ -474,8 +474,12 @@ function climateSummary(p) {
     return bits.length ? '<div class="card-summary">' + esc(bits.join(' · ')) + '</div>' : '';
 }
 
+function isCoverType(type) {
+    return type === 'cover' || type === 'curtain' || type === 'airer';
+}
+
 function coverSummary(p) {
-    if (p.type !== 'cover') return '';
+    if (!isCoverType(p.type)) return '';
     const pct = parseInt(p.value, 10);
     const s = Number.isFinite(pct) ? ('开合 ' + pct + '%') : '';
     return s ? '<div class="card-summary">' + esc(s) + '</div>' : '';
@@ -767,7 +771,7 @@ function overviewCollapsePoints(points) {
 
 function cardHtml(p) {
     if (p && p.props && p.props.visible === false) return '';
-    const isCover = p.type === 'cover';
+    const isCover = isCoverType(p.type);
     const pct = isCover ? parseInt(p.value, 10) : NaN;
     const cPhase = (p.props && p.props.commission_phase) || '';
     const commissioning = !!(p.props && (p.props.commissioning || cPhase === 'waiting' || cPhase === 'failed'));
@@ -781,7 +785,7 @@ function cardHtml(p) {
     const readOnly = !!(p.props && p.props.access === 'R');   /* read-only param: show value, no control */
     /* Overview card toggle = power only. Extra params open generic catalog detail / Devices. */
     const hasParams = !!(p.props && p.props.params && typeof p.props.params === 'object');
-    const ctrlTypes = ['switch', 'light', 'router', 'car', 'camera', 'television', 'air-conditioner', 'fridge', 'water_purifier', 'water_heater', 'appliance', 'washer', 'dishwasher', 'oven'];
+    const ctrlTypes = ['switch', 'light', 'light_strip', 'fan_light', 'fan', 'router', 'car', 'camera', 'television', 'air-conditioner', 'fridge', 'water_purifier', 'water_heater', 'appliance', 'washer', 'dishwasher', 'oven'];
     const allowToggle = !commissioning && ctrlTypes.includes(p.type) && !noCtrl && !readOnly &&
         (!hasParams || powerVal != null || p.value === 'on' || p.value === 'off' || p.value === 'true' || p.value === 'false' || !p.value);
     const ctrl = allowToggle ? '<label class="toggle"><input type="checkbox" data-id="' + p.point_id + '"' + (on ? ' checked' : '') + dis + '>    <span class="slider"></span></label>' : '';
@@ -805,7 +809,7 @@ function cardHtml(p) {
     } else if (p.type === 'air-conditioner') {
         clickCls = ' ac-click';
         clickFn = 'openAcDetail';
-    } else if (p.type === 'cover') {
+    } else if (isCoverType(p.type)) {
         clickCls = ' cover-click';
         clickFn = 'openCoverDetail';
     } else if (apDetail) {
@@ -2356,7 +2360,7 @@ function acSetFan(fan) {
 function openCoverDetail(id, ev) {
     if (ev && ev.target && (ev.target.closest('.toggle') || ev.target.closest('button') || ev.target.closest('input') || ev.target.closest('.card-actions'))) return;
     const p = pts.find(x => x.point_id === id);
-    if (!p || p.type !== 'cover') return;
+    if (!p || !isCoverType(p.type)) return;
     coverDetailId = id;
     document.getElementById('cover-detail-title').textContent = (TYPE_ICON.cover || '') + ' ' + (p.point_id.split('/').pop());
     document.getElementById('cover-detail-meta').textContent = p.point_id + (p.online ? ' · 在线' : ' · 离线');
