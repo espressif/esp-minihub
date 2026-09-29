@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-09-29-factory-reset';
+window.mhWebBuild = '2026-09-29-auth-send';
 
 function toggleSecret(btn) {
     const field = btn && btn.closest ? btn.closest('.secret-field') : null;

@@ -958,6 +958,35 @@ async function storeUninstall(kind, id) {
         toast('网络错误');
     }
 }
+async function storeReinstall(kind, id) {
+    if (!confirm('重新安装 ' + id + '？只更换安装包，账号和配置会保留。')) return;
+    toast('正在重新安装 ' + id + '…');
+    try {
+        const r = await fetch('/api/store/reinstall', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                kind,
+                id,
+                reload: true
+            })
+        });
+        if (r.status === 404) {
+            toast('模块未安装');
+        } else if (r.ok) {
+            toast('已重新安装');
+        } else {
+            toast('重新安装失败');
+        }
+        await loadStoreData();
+        await loadAdapters();
+        await loadPoints();
+    } catch (e) {
+        toast('网络错误');
+    }
+}
 async function storeDel(kind, id) {
     if (kind === 'module') {
         return storeUninstall('module', id);
@@ -1050,9 +1079,8 @@ function applyAuthLoginLabels(mod, mode) {
     document.getElementById('auth-ticket-label').textContent = lbl(mod, 'ticket', '验证码');
     document.getElementById('auth-ticket').placeholder = lbl(mod, 'ticket_placeholder', '验证码');
     document.getElementById('auth-captcha-label').textContent = lbl(mod, 'captcha', '图形验证码');
-    document.getElementById('auth-send-code').textContent = lbl(mod, 'send_code', '发送验证码');
     document.getElementById('auth-cancel').textContent = lbl(mod, 'cancel', '取消');
-    document.getElementById('auth-submit').textContent = sessionMode ? lbl(mod, 'session', '导入会话') : lbl(mod, 'login', '登录');
+    setAuthPrimaryAction(sessionMode ? 'session' : 'login');
     document.getElementById('auth-user').hidden = sessionMode;
     document.getElementById('auth-user-label').hidden = sessionMode;
     document.getElementById('auth-pass').hidden = sessionMode;
@@ -1061,11 +1089,38 @@ function applyAuthLoginLabels(mod, mode) {
     document.getElementById('auth-apikey-block').hidden = sessionMode || !isApiKeyLogin(mod);
     document.getElementById('auth-session-block').hidden = !sessionMode;
     document.getElementById('auth-2fa-block').hidden = true;
+    const ticketBlk = document.getElementById('auth-ticket-block');
+    if (ticketBlk) ticketBlk.hidden = true;
     document.getElementById('auth-ticket').value = '';
     document.getElementById('auth-login-hint').textContent = sessionMode ? lbl(mod, 'session_hint', '用电脑脚本拿到 token 后粘贴（见模块 references/fetch_wyze_tokens.py）') : '';
     loadAuthDraft(mod, mode);
     const uEl = document.getElementById('auth-user');
     if (uEl) uEl.placeholder = '';
+}
+
+/** Primary footer button: login | send_code (captcha stage) | verify (SMS stage) | session. */
+function setAuthPrimaryAction(mode) {
+    const btn = document.getElementById('auth-submit');
+    const ticketBlk = document.getElementById('auth-ticket-block');
+    const mod = authModById(activeAuthModule);
+    if (!btn) return;
+    if (mode === 'send_code') {
+        btn.textContent = lbl(mod, 'send_code', '发送验证码');
+        btn.onclick = function () { sendAuthVerify(); };
+        if (ticketBlk) ticketBlk.hidden = true;
+    } else if (mode === 'verify') {
+        btn.textContent = lbl(mod, 'login', '登录');
+        btn.onclick = function () { submitAuthLogin(); };
+        if (ticketBlk) ticketBlk.hidden = false;
+    } else if (mode === 'session') {
+        btn.textContent = lbl(mod, 'session', '导入会话');
+        btn.onclick = function () { submitAuthLogin(); };
+        if (ticketBlk) ticketBlk.hidden = true;
+    } else {
+        btn.textContent = lbl(mod, 'login', '登录');
+        btn.onclick = function () { submitAuthLogin(); };
+        if (ticketBlk) ticketBlk.hidden = true;
+    }
 }
 
 function openModuleLogin(id) {
@@ -1102,6 +1157,8 @@ function openAuthLogin() {
     }
     document.getElementById('auth-2fa-block').hidden = true;
     document.getElementById('auth-captcha-block').hidden = true;
+    const ticketBlk = document.getElementById('auth-ticket-block');
+    if (ticketBlk) ticketBlk.hidden = true;
     document.getElementById('auth-ticket').value = '';
     document.getElementById('auth-icode').value = '';
     document.getElementById('auth-login-modal').hidden = false;
@@ -1133,6 +1190,7 @@ function revealAuthChallenge(opts) {
     opts = opts || {};
     const two = document.getElementById('auth-2fa-block');
     two.hidden = false;
+    const needCaptcha = !!(opts.captcha_b64 || opts.showCaptcha);
     if (opts.captcha_b64) {
         showAuthCaptcha(opts.captcha_b64, opts.captcha_mime);
     } else if (opts.showCaptcha) {
@@ -1140,6 +1198,12 @@ function revealAuthChallenge(opts) {
     }
     if (opts.hideCaptcha) {
         document.getElementById('auth-captcha-block').hidden = true;
+    }
+    /* Captcha stage: only 图形码 + primary「发送验证码」. SMS field appears after send. */
+    if (needCaptcha && !opts.hideCaptcha) {
+        setAuthPrimaryAction('send_code');
+    } else if (opts.hideCaptcha || opts.focus === 'auth-ticket') {
+        setAuthPrimaryAction('verify');
     }
     const hint = document.getElementById('auth-login-hint');
     if (opts.hint != null) hint.textContent = opts.hint;
@@ -1151,7 +1215,7 @@ function revealAuthChallenge(opts) {
     } catch (e) {
         two.scrollIntoView();
     }
-    const focusId = opts.focus || (opts.captcha_b64 || opts.showCaptcha ? 'auth-icode' : 'auth-ticket');
+    const focusId = opts.focus || (needCaptcha && !opts.hideCaptcha ? 'auth-icode' : 'auth-ticket');
     const el = document.getElementById(focusId);
     if (el) try {
         el.focus();
@@ -1203,6 +1267,7 @@ async function sendAuthVerify() {
                 hint: j.hint || '短信已发送，请填写验证码后点登录',
                 focus: 'auth-ticket'
             });
+            setAuthPrimaryAction('verify');
         }
         if (!r.ok || !j || j.result !== 'ok') {
             if (!j || !j.icode_used) hint.textContent = (j && j.message) || (j && j.error) || '发送失败';
@@ -1216,8 +1281,9 @@ async function submitAuthLogin() {
     const pass = document.getElementById('auth-pass').value;
     const ticket = document.getElementById('auth-ticket').value.trim();
     const hint = document.getElementById('auth-login-hint');
-    const twoFaVisible = !document.getElementById('auth-2fa-block').hidden;
-    if (ticket && twoFaVisible) {
+    const ticketBlk = document.getElementById('auth-ticket-block');
+    const ticketVisible = ticketBlk ? !ticketBlk.hidden : !document.getElementById('auth-2fa-block').hidden;
+    if (ticket && ticketVisible) {
         toast('验证中...');
         try {
             const r = await moduleRpc(activeAuthModule, 'verify', {

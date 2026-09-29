@@ -3746,6 +3746,55 @@ static esp_err_t handle_api_store_upgrade(httpd_req_t *req)
     return err;
 }
 
+static esp_err_t handle_api_store_reinstall(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char buf[256];
+    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (received <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    buf[received] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+
+    const cJSON *kind = cJSON_GetObjectItem(root, "kind");
+    const cJSON *id = cJSON_GetObjectItem(root, "id");
+    const cJSON *reload = cJSON_GetObjectItem(root, "reload");
+    bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
+
+    if (!cJSON_IsString(kind) || !cJSON_IsString(id)) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing kind/id");
+    }
+
+    err = minihub_store_reinstall(kind->valuestring, id->valuestring);
+    cJSON_Delete(root);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, esp_err_to_name(err));
+    }
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+    }
+
+    if (do_reload) {
+        (void)minihub_hub_reload_async();
+    }
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
 static esp_err_t handle_api_store_uninstall(httpd_req_t *req)
 {
     esp_err_t err = api_auth(req);
@@ -4869,12 +4918,15 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
                                   .handler = handle_api_store_install };
     httpd_uri_t store_upgrade = { .uri = "/api/store/upgrade", .method = HTTP_POST,
                                   .handler = handle_api_store_upgrade };
+    httpd_uri_t store_reinstall = { .uri = "/api/store/reinstall", .method = HTTP_POST,
+                                    .handler = handle_api_store_reinstall };
     httpd_uri_t store_uninstall = { .uri = "/api/store/uninstall", .method = HTTP_POST,
                                     .handler = handle_api_store_uninstall };
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_catalog), TAG, "/api/store/catalog");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_refresh), TAG, "/api/store/refresh");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_install), TAG, "/api/store/install");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_upgrade), TAG, "/api/store/upgrade");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_reinstall), TAG, "/api/store/reinstall");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_uninstall), TAG, "/api/store/uninstall");
 #endif
     httpd_uri_t store_config_get = { .uri = "/api/store/config", .method = HTTP_GET,

@@ -38,7 +38,7 @@
 .modal.auth-form input:focus{border-color:rgba(129,140,248,.65);box-shadow:0 0 0 3px rgba(99,102,241,.18)}
 .modal.auth-form input:-webkit-autofill,.modal.auth-form input:-webkit-autofill:hover,.modal.auth-form input:-webkit-autofill:focus{-webkit-text-fill-color:var(--text);-webkit-box-shadow:0 0 0 1000px #0d1322 inset;caret-color:var(--text);transition:background-color 99999s ease-out}
 .modal.auth-form #auth-host-block,.modal.auth-form #auth-apikey-block,.modal.auth-form #auth-session-block,.modal.auth-form #auth-2fa-block{margin-top:2px}
-.modal.auth-form #auth-host-block[hidden],.modal.auth-form #auth-apikey-block[hidden],.modal.auth-form #auth-session-block[hidden],.modal.auth-form #auth-2fa-block[hidden],.modal.auth-form #auth-captcha-block[hidden]{display:none!important}
+.modal.auth-form #auth-host-block[hidden],.modal.auth-form #auth-apikey-block[hidden],.modal.auth-form #auth-session-block[hidden],.modal.auth-form #auth-2fa-block[hidden],.modal.auth-form #auth-captcha-block[hidden],.modal.auth-form #auth-ticket-block[hidden]{display:none!important}
 .modal.auth-form #auth-captcha-img{display:block;max-width:100%;height:auto;margin:6px 0 0;border-radius:8px;border:1px solid #2f3c58;background:#0d1322}
 .modal.auth-form .auth-2fa-actions{margin-top:10px}
 .modal.auth-form .modal-hint{min-height:1.2em;margin:12px 0 0;font-size:.75rem;color:var(--muted);line-height:1.45}
