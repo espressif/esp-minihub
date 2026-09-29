@@ -305,6 +305,15 @@ esp_err_t minihub_point_merge_params(const char *point_id, const char *value, cJ
 esp_err_t minihub_point_merge_props(const char *point_id, const char *value, cJSON *props_patch);
 
 /**
+ * @brief Remember a display name for a point
+ *
+ * Stored in /data/config/device_names.json and reapplied when the point is
+ * registered or its props are replaced. 1 to 48 bytes, no control characters.
+ * Does not itself update the live point.
+ */
+esp_err_t minihub_device_name_set(const char *point_id, const char *name);
+
+/**
  * @brief Copy current point snapshot into caller buffer
  *
  * @param point_id Target point id

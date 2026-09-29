@@ -865,7 +865,52 @@ function cardHtml(p) {
     else onlineLab = (p.online ? '在线' : '离线') + (proto ? (' · ' + esc(proto)) : '');
     const valCls = cPhase === 'waiting' ? 'pending' : (cPhase === 'failed' ? 'off' : (on ? 'on' : 'off'));
     const cardClickCls = commissioning ? '' : clickCls;
-    return '<div class="dcard' + cardClickCls + ((p.online || commissioning) ? '' : ' offline') + (commissioning ? ' commissioning' : '') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + valCls + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">日志</button>' : '') + cancelBtn + delBtn + ctrl + '</div></div>';
+    const renameBtn = '<button class="btn-sm" type="button" onclick="renameDevice(\'' + pidJs + '\',event)">重命名</button>';
+    return '<div class="dcard' + cardClickCls + ((p.online || commissioning) ? '' : ' offline') + (commissioning ? ' commissioning' : '') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + valCls + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + renameBtn + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">日志</button>' : '') + cancelBtn + delBtn + ctrl + '</div></div>';
+}
+
+async function renameDevice(pointId, ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    const p = (typeof pts !== 'undefined' && pts) ? pts.find(function (x) { return x && x.point_id === pointId; }) : null;
+    const cur = (p && typeof pointDisplayName === 'function') ? pointDisplayName(p) : pointId;
+    const entered = window.prompt('设备名称', cur || '');
+    if (entered == null) return;
+    const name = String(entered).trim();
+    if (!name) {
+        toast('名称不能为空');
+        return;
+    }
+    const nameBytes = (typeof TextEncoder === 'function') ? new TextEncoder().encode(name).length : name.length;
+    if (nameBytes > 48) {
+        toast('名称过长');
+        return;
+    }
+    try {
+        const r = await fetch('/api/points/rename', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                point_id: pointId,
+                name: name
+            })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.result === 'ok') {
+            if (p) {
+                p.props = p.props || {};
+                p.props.name = name;
+            }
+            if (typeof renderOverview === 'function') renderOverview();
+            toast('已重命名');
+            if (typeof loadPoints === 'function') loadPoints();
+        } else {
+            toast('重命名失败' + (j.error ? ': ' + j.error : ''));
+        }
+    } catch (e) {
+        toast('网络错误');
+    }
 }
 
 async function storeAct(kind, id, enabled) {

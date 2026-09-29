@@ -5,6 +5,7 @@
  */
 
 #include "minihub_core.h"
+#include "device_names.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -69,12 +70,20 @@ esp_err_t minihub_point_set(const char *point_id, const char *value, cJSON *prop
 
     bool changed = (strcmp(old_value, value) != 0);
     if (props) {
-        if (!props_equal(point->props, props)) {
+        cJSON *dup = cJSON_Duplicate(props, true);
+        if (!dup) {
+            minihub_point_registry_unlock();
+            return ESP_ERR_NO_MEM;
+        }
+        minihub_device_name_overlay(point_id, &dup);
+        if (!props_equal(point->props, dup)) {
             if (point->props) {
                 cJSON_Delete(point->props);
             }
-            point->props = cJSON_Duplicate(props, true);
+            point->props = dup;
             changed = true;
+        } else {
+            cJSON_Delete(dup);
         }
     }
 

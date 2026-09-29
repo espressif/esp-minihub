@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-09-29-auth-send';
+window.mhWebBuild = '2026-09-29-rename-label';
 
 function toggleSecret(btn) {
     const field = btn && btn.closest ? btn.closest('.secret-field') : null;
