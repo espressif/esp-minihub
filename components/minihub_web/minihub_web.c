@@ -3326,6 +3326,86 @@ static esp_err_t handle_api_points_remove(httpd_req_t *req)
     return handle_points_remove_json(req, root);
 }
 
+static esp_err_t handle_api_points_rename(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char *buf = NULL;
+    size_t buflen = 0;
+    esp_err_t body_err = read_http_body(req, &buf, &buflen, 512);
+    if (body_err == ESP_ERR_INVALID_SIZE) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body too large");
+    }
+    if (body_err != ESP_OK || !buf) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+
+    const cJSON *id_j = cJSON_GetObjectItem(root, "point_id");
+    const cJSON *name_j = cJSON_GetObjectItem(root, "name");
+    if (!cJSON_IsString(id_j) || !id_j->valuestring || id_j->valuestring[0] == '\0' ||
+        strlen(id_j->valuestring) >= MINIHUB_POINT_ID_MAX ||
+        !cJSON_IsString(name_j) || !name_j->valuestring) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "point_id and name required");
+    }
+
+    char point_id[MINIHUB_POINT_ID_MAX];
+    char name[49];
+    strncpy(point_id, id_j->valuestring, sizeof(point_id) - 1);
+    point_id[sizeof(point_id) - 1] = '\0';
+    strncpy(name, name_j->valuestring, sizeof(name) - 1);
+    name[sizeof(name) - 1] = '\0';
+    cJSON_Delete(root);
+
+    minihub_point_t snap = {0};
+    err = minihub_point_get_snapshot(point_id, &snap);
+    if (snap.props) {
+        cJSON_Delete(snap.props);
+    }
+    if (err == ESP_ERR_NOT_FOUND) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+    }
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+    }
+
+    err = minihub_device_name_set(point_id, name);
+    if (err == ESP_ERR_INVALID_ARG) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid name");
+    }
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+    }
+
+    cJSON *patch = cJSON_CreateObject();
+    if (!patch) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddStringToObject(patch, "name", name);
+    err = minihub_point_merge_props(point_id, NULL, patch);
+    cJSON_Delete(patch);
+
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddStringToObject(resp, "result", err == ESP_OK ? "ok" : "fail");
+    if (err != ESP_OK) {
+        cJSON_AddStringToObject(resp, "error", esp_err_to_name(err));
+    }
+    esp_err_t send_err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return send_err;
+}
+
 #if CONFIG_MINIHUB_ZIGBEE_SDK || CONFIG_MINIHUB_BLE_MESH_SDK
 static esp_err_t handle_legacy_adapter_devices_delete(httpd_req_t *req, const char *adapter)
 {
@@ -4776,6 +4856,8 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
                                    .handler = handle_api_points_history };
     httpd_uri_t points_remove = { .uri = "/api/points/remove", .method = HTTP_POST,
                                   .handler = handle_api_points_remove };
+    httpd_uri_t points_rename = { .uri = "/api/points/rename", .method = HTTP_POST,
+                                  .handler = handle_api_points_rename };
     httpd_uri_t command = { .uri = "/api/command", .method = HTTP_POST, .handler = handle_api_command };
     httpd_uri_t device_widgets = { .uri = "/api/device_widgets", .method = HTTP_GET, .handler = handle_api_device_widgets };
     httpd_uri_t devices_control = { .uri = "/api/devices/control", .method = HTTP_POST, .handler = handle_api_devices_control };
@@ -4865,6 +4947,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &points), TAG, "/api/points");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &points_history), TAG, "/api/points/history");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &points_remove), TAG, "/api/points/remove");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &points_rename), TAG, "/api/points/rename");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &command), TAG, "/api/command");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &device_widgets), TAG, "/api/device_widgets");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &devices_control), TAG, "/api/devices/control");

@@ -5,6 +5,7 @@
  */
 
 #include "minihub_core.h"
+#include "device_names.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -108,6 +109,7 @@ esp_err_t minihub_point_register(const minihub_point_t *point)
     int idx = find_index_locked(point->point_id);
     if (idx >= 0) {
         copy_point(&s_points[idx], point);
+        minihub_device_name_overlay(s_points[idx].point_id, &s_points[idx].props);
         xSemaphoreGive(s_mutex);
         return ESP_OK;
     }
@@ -120,6 +122,7 @@ esp_err_t minihub_point_register(const minihub_point_t *point)
 
     memset(&s_points[s_point_count], 0, sizeof(s_points[s_point_count]));
     copy_point(&s_points[s_point_count], point);
+    minihub_device_name_overlay(s_points[s_point_count].point_id, &s_points[s_point_count].props);
     s_point_count++;
     hash_rebuild();
     xSemaphoreGive(s_mutex);

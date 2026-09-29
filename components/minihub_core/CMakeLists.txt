@@ -4,6 +4,7 @@ idf_component_register(
         "core_task.c"
         "heap_monitor.c"
         "point_registry.c"
+        "device_names.c"
         "state_store.c"
         "point_history.c"
         "event_bus.c"
