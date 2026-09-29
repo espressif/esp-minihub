@@ -1,0 +1,13 @@
+menu "Hub"
+
+    config MINIHUB_HUB_RELOAD_STACK_SIZE
+        int "hub_reload task stack size (bytes, PSRAM)"
+        default 24576
+        range 8192 65536
+        help
+            FreeRTOS stack for the async hub reload task. Reload walks
+            config / packs / adapters before handing JS compile to
+            js_worker; keep enough headroom for that call chain. JS
+            evaluation itself does not run on this stack.
+
+endmenu

@@ -54,6 +54,12 @@ static portMUX_TYPE s_resync_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static void hub_reload_task(void *arg);
 
+/*
+ * Reload walks config, packs, and adapters before asking js_worker to compile
+ * scripts. Stack size is CONFIG_MINIHUB_HUB_RELOAD_STACK_SIZE (PSRAM).
+ */
+#define HUB_RELOAD_STACK_BYTES CONFIG_MINIHUB_HUB_RELOAD_STACK_SIZE
+
 static esp_err_t hub_soft_reload_locked(const char *adapter_name)
 {
     if (!adapter_name || !adapter_name[0]) {
@@ -199,7 +205,8 @@ static esp_err_t ensure_reload_task(void)
     if (s_reload_task) {
         return ESP_OK;
     }
-    BaseType_t ok = minihub_task_create_psram(hub_reload_task, "hub_reload", 8192, NULL, 4, &s_reload_task);
+    BaseType_t ok = minihub_task_create_psram(hub_reload_task, "hub_reload", HUB_RELOAD_STACK_BYTES,
+                                             NULL, 4, &s_reload_task);
     if (ok != pdPASS) {
         s_reload_task = NULL;
         return ESP_ERR_NO_MEM;
@@ -222,6 +229,8 @@ static void hub_reload_task(void *arg)
                 s_resync_name[0] = '\0';
                 portEXIT_CRITICAL(&s_resync_mux);
                 esp_err_t err = minihub_hub_reload();
+                ESP_LOGI(TAG, "hub reload stack free %u bytes",
+                         (unsigned)uxTaskGetStackHighWaterMark(NULL));
                 if (err != ESP_OK) {
                     ESP_LOGW(TAG, "async hub reload failed: %s", esp_err_to_name(err));
                 }
@@ -265,6 +274,8 @@ static void hub_reload_task(void *arg)
                         ESP_LOGI(TAG, "resync '%s' unavailable (%s), reloading", name,
                                  esp_err_to_name(err));
                         err = minihub_hub_reload();
+                        ESP_LOGI(TAG, "hub reload stack free %u bytes",
+                                 (unsigned)uxTaskGetStackHighWaterMark(NULL));
                     }
                     if (err != ESP_OK) {
                         ESP_LOGW(TAG, "async resync '%s' failed: %s", name, esp_err_to_name(err));

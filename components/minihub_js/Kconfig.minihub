@@ -5,4 +5,27 @@ menu "JS plugins"
         depends on MINIHUB_DYNAMIC_MODULES
         default y
 
+    config MINIHUB_JS_WORKER_STACK_SIZE
+        int "js_worker task stack size (bytes, PSRAM)"
+        default 32768
+        range 16384 131072
+        depends on MINIHUB_JS_PLUGINS
+        help
+            FreeRTOS stack for the dedicated QuickJS worker. All JS_Eval /
+            JS_Call run on this task so the runtime stack limit matches a
+            single known stack. Raise if a large L2 script overflows during
+            compile; lower only if PSRAM is scarce.
+
+    config MINIHUB_JS_WORKER_STACK_BUDGET
+        int "QuickJS C-stack budget on js_worker (bytes)"
+        default 24576
+        range 8192 126976
+        depends on MINIHUB_JS_PLUGINS
+        help
+            Passed to JS_SetMaxStackSize after JS_UpdateStackTop on
+            js_worker. Must stay below MINIHUB_JS_WORKER_STACK_SIZE so a
+            deep script throws "Maximum call stack size exceeded" instead
+            of a hardware stack-protection fault. A value greater than or
+            equal to the task stack fails the build.
+
 endmenu
