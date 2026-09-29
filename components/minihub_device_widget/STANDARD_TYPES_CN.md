@@ -38,7 +38,7 @@
 |------|-----|----------|------|------------------|---------|------|
 | 名称 | name | String | Read, Write | 1, 32, – | text | 设备名称 |
 | 电源 | power | Bool | Read, Write | N/A | ui.toggle | 开关 |
-| 亮度 | brightness | Int | Read, Write | 0, 100, 1 | ui.slider | 亮度 % |
+| 亮度 | brightness | Int | Read, Write | 1, 100, 1 | ui.slider | 亮度 % |
 | 色温 | cct | Int | Read, Write | 2700, 6500, 100 | ui.slider | 相关色温（K） |
 | 颜色 | hue | Int | Read, Write | 0, 360, 1 | ui.slider | 颜色（度；id 仍为 `hue`） |
 | 饱和度 | saturation | Int | Read, Write | 0, 100, 1 | ui.slider | 饱和度 % |

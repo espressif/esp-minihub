@@ -83,8 +83,19 @@ if(_packs_src)
 endif()
 minihub_resolve_config_asset(product_params _pp_src)
 if(_pp_src)
-    file(MAKE_DIRECTORY ${MINIHUB_FS_DIR}/config/product_params)
-    file(COPY ${_pp_src}/ DESTINATION ${MINIHUB_FS_DIR}/config/product_params)
+    # Repo config/product_params/example_*.json are templates, not factory seeds.
+    file(GLOB _pp_json "${_pp_src}/*.json")
+    set(_pp_keep "")
+    foreach(_f ${_pp_json})
+        get_filename_component(_n ${_f} NAME)
+        if(NOT _n MATCHES "^example_")
+            list(APPEND _pp_keep ${_f})
+        endif()
+    endforeach()
+    if(_pp_keep)
+        file(MAKE_DIRECTORY ${MINIHUB_FS_DIR}/config/product_params)
+        file(COPY ${_pp_keep} DESTINATION ${MINIHUB_FS_DIR}/config/product_params)
+    endif()
 endif()
 # Device control icons → /data/images (label storage). The Web console resolves
 # the icon for a control from its attributes at render time, so the images must
@@ -125,8 +136,45 @@ if(CONFIG_MINIHUB_LCD_UI AND EXISTS ${MINIHUB_REPO_ROOT}/components/minihub_lcd/
     )
     set(_minihub_ui_dep ${MINIHUB_FS_DIR}/ui/.stamp)
 endif()
+
+# Host Web console → /data/web/ (source dir from CONFIG_MINIHUB_WEB_STATIC_SRC).
+# Minify at build time so edits under components/minihub_web/web rebuild storage.bin.
+set(_minihub_web_dep)
+if(CONFIG_MINIHUB_WEB_UI)
+    set(_MINIHUB_WEB_REL "${CONFIG_MINIHUB_WEB_STATIC_SRC}")
+    if(NOT _MINIHUB_WEB_REL)
+        set(_MINIHUB_WEB_REL "components/minihub_web/web")
+    endif()
+    if(IS_ABSOLUTE "${_MINIHUB_WEB_REL}")
+        set(_MINIHUB_WEB_SRC "${_MINIHUB_WEB_REL}")
+    else()
+        set(_MINIHUB_WEB_SRC "${MINIHUB_REPO_ROOT}/${_MINIHUB_WEB_REL}")
+    endif()
+    get_filename_component(_MINIHUB_WEB_SRC "${_MINIHUB_WEB_SRC}" ABSOLUTE)
+    if(NOT EXISTS "${_MINIHUB_WEB_SRC}/index.html")
+        message(FATAL_ERROR
+            "CONFIG_MINIHUB_WEB_STATIC_SRC='${_MINIHUB_WEB_REL}': missing index.html at ${_MINIHUB_WEB_SRC}. "
+            "Set a repo-relative or absolute path that contains the Host Web console.")
+    endif()
+    file(GLOB_RECURSE _minihub_web_src CONFIGURE_DEPENDS ${_MINIHUB_WEB_SRC}/*)
+    add_custom_command(
+        OUTPUT ${MINIHUB_FS_DIR}/web/.stamp
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${MINIHUB_FS_DIR}/web
+        COMMAND ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/minify_web_assets.py
+                --src ${_MINIHUB_WEB_SRC}
+                --dst ${MINIHUB_FS_DIR}/web
+                -q
+        COMMAND ${CMAKE_COMMAND} -E touch ${MINIHUB_FS_DIR}/web/.stamp
+        DEPENDS ${_minihub_web_src} ${MINIHUB_REPO_ROOT}/tools/minify_web_assets.py
+        COMMENT "Minify Host Web console into littlefs storage image"
+        VERBATIM
+    )
+    set(_minihub_web_dep ${MINIHUB_FS_DIR}/web/.stamp)
+    message(STATUS "storage: Host Web UI from ${_MINIHUB_WEB_SRC} → web/ (minified at build)")
+endif()
+
 littlefs_create_partition_image(storage ${MINIHUB_FS_DIR} FLASH_IN_PROJECT
-    DEPENDS ${_minihub_ui_dep} ${_minihub_img_dep})
+    DEPENDS ${_minihub_ui_dep} ${_minihub_img_dep} ${_minihub_web_dep})
 
 set(MINIHUB_MODSTORE_DIR ${CMAKE_BINARY_DIR}/modstore_image)
 file(REMOVE_RECURSE ${MINIHUB_MODSTORE_DIR})
@@ -305,32 +353,21 @@ else()
     message(WARNING "modstore: catalog.json missing under ${_MINIHUB_PLUGINS_DEPLOY_DIR}")
 endif()
 
-# Host Web console → /store/preinstall/web/ (source dir from CONFIG_MINIHUB_WEB_STATIC_SRC)
-if(CONFIG_MINIHUB_WEB_UI)
-    set(_MINIHUB_WEB_REL "${CONFIG_MINIHUB_WEB_STATIC_SRC}")
-    if(NOT _MINIHUB_WEB_REL)
-        set(_MINIHUB_WEB_REL "components/minihub_web/web")
-    endif()
-    if(IS_ABSOLUTE "${_MINIHUB_WEB_REL}")
-        set(_MINIHUB_WEB_SRC "${_MINIHUB_WEB_REL}")
-    else()
-        set(_MINIHUB_WEB_SRC "${MINIHUB_REPO_ROOT}/${_MINIHUB_WEB_REL}")
-    endif()
-    get_filename_component(_MINIHUB_WEB_SRC "${_MINIHUB_WEB_SRC}" ABSOLUTE)
-    if(NOT EXISTS "${_MINIHUB_WEB_SRC}/index.html")
-        message(FATAL_ERROR
-            "CONFIG_MINIHUB_WEB_STATIC_SRC='${_MINIHUB_WEB_REL}': missing index.html at ${_MINIHUB_WEB_SRC}. "
-            "Set a repo-relative or absolute path that contains the Host Web console.")
-    endif()
-    file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/preinstall/web)
-    file(COPY ${_MINIHUB_WEB_SRC}/ DESTINATION ${MINIHUB_MODSTORE_DIR}/preinstall/web)
-    message(STATUS "modstore: staged Host Web UI from ${_MINIHUB_WEB_SRC} → preinstall/web/")
-endif()
 minihub_resolve_config_asset(product_params _pp_modstore)
 if(_pp_modstore)
-    file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/preinstall/product_params)
-    file(COPY ${_pp_modstore}/ DESTINATION ${MINIHUB_MODSTORE_DIR}/preinstall/product_params)
-    message(STATUS "modstore: staged product_params quirks ← ${_pp_modstore}")
+    file(GLOB _pp_mjson "${_pp_modstore}/*.json")
+    set(_pp_mkeep "")
+    foreach(_f ${_pp_mjson})
+        get_filename_component(_n ${_f} NAME)
+        if(NOT _n MATCHES "^example_")
+            list(APPEND _pp_mkeep ${_f})
+        endif()
+    endforeach()
+    if(_pp_mkeep)
+        file(MAKE_DIRECTORY ${MINIHUB_MODSTORE_DIR}/preinstall/product_params)
+        file(COPY ${_pp_mkeep} DESTINATION ${MINIHUB_MODSTORE_DIR}/preinstall/product_params)
+        message(STATUS "modstore: staged product_params quirks ← ${_pp_modstore}")
+    endif()
 endif()
 
 littlefs_create_partition_image(modstore ${MINIHUB_MODSTORE_DIR} FLASH_IN_PROJECT)

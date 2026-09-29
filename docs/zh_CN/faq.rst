@@ -71,8 +71,8 @@ adapters.json 在哪？
 如何替换 Web 控制台？
 ------------------------
 
-改 ``components/minihub_web/web/`` 后 ``modstore-flash`` ，或在已运行的 Hub 上
-``PUT /api/dev/web/`` 。``app-flash`` 不会更新 ``/store`` 。见 :doc:`web_console` 。
+改 ``components/minihub_web/web/`` 后 ``storage-flash`` ，或在已运行的 Hub 上
+``PUT /api/dev/web/`` 。``app-flash`` 不会更新 ``/data/web`` 。见 :doc:`web_console` 。
 
 如何烧工厂镜像 / 做 OTA？
 --------------------------

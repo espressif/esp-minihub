@@ -1,10 +1,8 @@
-/* MiniHub web — rules page */
 let rulesCfg = {
     rules: []
 };
 let rulesSel = null;
-let rulesEditMode = null; /* null|new|id */
-
+let rulesEditMode = null;
 
 const RULES_AI_LS = 'minihub_rules_ai_v1';
 let rulesAiDraft = null;
@@ -454,7 +452,6 @@ async function loadRules() {
     }
 }
 
-
 const RULE_CMDS = ['turn_on', 'turn_off', 'toggle', 'set', 'set_brightness'];
 const RULE_OPS = [
     { op: 'lt', label: '<' },
@@ -464,14 +461,13 @@ const RULE_OPS = [
     { op: 'ge', label: '≧' }
 ];
 
-/* Type catalog from GET /api/device_widgets — labels / widget / bounds / options. */
 let dwRuleCatalog = null;
 
 async function dwRuleLoadCatalog() {
     try {
         const r = await fetch('/api/device_widgets');
         if (r.ok) dwRuleCatalog = await r.json();
-    } catch (e) { /* non-fatal */ }
+    } catch (e) {  }
 }
 
 function rulesParseStyle(raw) {
@@ -503,7 +499,6 @@ function rulesCatalogParam(type, parameter) {
     return null;
 }
 
-/** One card = one device point (props.params or 2-seg id). Prefer dwBuildInstances. */
 function rulesDeviceInstances() {
     if (typeof dwBuildInstances === 'function') {
         return dwBuildInstances(pts || []);
@@ -586,7 +581,6 @@ function rulesLiveParams(pointId) {
     return out;
 }
 
-/** Visible params = live props.params ∩ catalog (catalog optional). */
 function rulesVisibleParams(pointId) {
     const pt = rulesFindPoint(pointId);
     const type = (pt && pt.type) || '';
@@ -754,7 +748,7 @@ function rulesCollectPointCond(prefix) {
         op: op,
         value: value
     };
-    /* Keep legacy equals mirror for older tooling / display. */
+
     if (op === 'eq') out.equals = value;
     return out;
 }
@@ -907,7 +901,7 @@ function rulesEditRender(rule) {
             cmd: 'turn_on'
         }
     };
-    /* Hidden id keeps snapshot/save working without showing the field. */
+
     edit.innerHTML = '<div class="rule-ed">' +
         '<button class="btn-sm" type="button" onclick="rulesEditCancel()">← 取消</button>' +
         '<h3 style="margin-top:12px">' + (isNew ? '添加规则' : '编辑规则') + '</h3>' +

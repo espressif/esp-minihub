@@ -1,4 +1,3 @@
-/* MiniHub web — overview / devices */
 async function moduleRpc(id, method, params) {
     const r = await fetch('/api/modules/' + id + '/rpc', {
         method: 'POST',
@@ -269,7 +268,7 @@ function sectionModuleUpgradeHtml(ad) {
 
 function sectionHeader(ad, count) {
     const ver = adapterVersion(ad);
-    const verTag = ver ? '<span class="mod-acct">v' + esc(ver) + '</span>' : ''; /* Show actions on overview and filtered view — not only when filter===ad. */
+    const verTag = ver ? '<span class="mod-acct">v' + esc(ver) + '</span>' : '';
     const showActs = (filter === 'all' || filter === ad);
     const upg = sectionModuleUpgradeHtml(ad);
     const mod = authModuleFor(ad);
@@ -277,6 +276,7 @@ function sectionHeader(ad, count) {
         const mid = mod.id;
         const st = authStatus(ad);
         const acct = st.logged_in ? '<span class="mod-acct">' + esc(st.user_id || '-') + (st.region ? ' · ' + esc(st.region) : '') + '</span>' : (showActs ? '<span class="mod-acct off">' + esc(lbl(mod, 'logged_out', '未登录')) + '</span>' : '');
+        const syncBadge = st.syncing ? '<span class="mod-acct busy">同步中…</span>' : '';
         let acts = '';
         if (showActs) {
             if (st.logged_in) {
@@ -292,7 +292,7 @@ function sectionHeader(ad, count) {
                 }
             }
         }
-        return '<div class="section-h auth-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + acct + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
+        return '<div class="section-h auth-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + acct + syncBadge + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'matter') {
         const st = matterStatus.ready ? '<span class="mod-acct">控制器就绪</span>' : (showActs ? '<span class="mod-acct off">未就绪</span>' : '');
@@ -322,7 +322,26 @@ function sectionHeader(ad, count) {
 }
 let pointsLoading = false,
     lastPtsSig = '',
+    lastOverviewHtml = '',
     rtspStatusLoading = false;
+
+function pointsUiSig(list) {
+    if (!Array.isArray(list)) return '';
+    try {
+        return JSON.stringify(list.map(function (p) {
+            if (!p || typeof p !== 'object') return p;
+            const o = {};
+            for (const k in p) {
+                if (!Object.prototype.hasOwnProperty.call(p, k)) continue;
+                if (k === 'updated_ms') continue;
+                o[k] = p[k];
+            }
+            return o;
+        }));
+    } catch (e) {
+        return JSON.stringify(list);
+    }
+}
 function renderRules() {
     const list = document.getElementById('rules-list');
     const detail = document.getElementById('rules-detail');
@@ -394,7 +413,7 @@ function propsHtml(p) {
     if (!p.props || typeof p.props !== 'object') return '';
     const meterOrder = ['power_w', 'voltage_v', 'current_a', 'energy_wh'];
     const otherOrder = ['humidity'];
-    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'commission_phase', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'illumination', 'illumination_label', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
+    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'commission_phase', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
     const labels = {
         power_w: '功率',
         voltage_v: '电压',
@@ -455,8 +474,12 @@ function climateSummary(p) {
     return bits.length ? '<div class="card-summary">' + esc(bits.join(' · ')) + '</div>' : '';
 }
 
+function isCoverType(type) {
+    return type === 'cover' || type === 'curtain' || type === 'airer';
+}
+
 function coverSummary(p) {
-    if (p.type !== 'cover') return '';
+    if (!isCoverType(p.type)) return '';
     const pct = parseInt(p.value, 10);
     const s = Number.isFinite(pct) ? ('开合 ' + pct + '%') : '';
     return s ? '<div class="card-summary">' + esc(s) + '</div>' : '';
@@ -468,11 +491,8 @@ function batterySummaryBit(p) {
 }
 
 function magnetSummary(p) {
-    if (p.type !== 'binary_sensor' && p.type !== 'button') return '';
-    const pr = p.props || {};
+    if (p.type !== 'binary_sensor' && p.type !== 'sensor_contact' && p.type !== 'button') return '';
     const bits = [];
-    const lab = pr.illumination_label || (pr.illumination == 1 ? '弱光' : (pr.illumination == 2 ? '强光' : (typeof pr.illumination === 'number' && pr.illumination > 2.5 ? (Math.round(pr.illumination) + ' lx') : '')));
-    if (lab) bits.push('光强 ' + lab);
     const bat = batterySummaryBit(p);
     if (bat) bits.push(bat);
     return bits.length ? '<div class="card-summary">' + esc(bits.join(' · ')) + '</div>' : '';
@@ -522,7 +542,7 @@ function deviceLogLabel(p, newv, oldv, cloudLabel) {
 function fmtDeviceLogTime(ts) {
     const n = Number(ts);
     if (!Number.isFinite(n) || n <= 0) return '—';
-    /* Wall clock ms (>= year 2020) vs Hub uptime ms */
+
     if (n >= 1577836800000) {
         const d = new Date(n);
         const p = x => String(x).padStart(2, '0');
@@ -693,7 +713,6 @@ function overviewCollapsePoints(points) {
             return;
         }
 
-        /* Device-level: non-empty props.params, or 2-segment id. */
         if (hasParams || seg.length === 2) {
             const card = Object.assign({}, pt);
             card.props = Object.assign({}, pr || {});
@@ -702,8 +721,6 @@ function overviewCollapsePoints(points) {
             return;
         }
 
-        /* Legacy per-param: thread.color_bulb.power → one device card.
-         * Empty props.params on a 3-seg id must NOT take the device-level path. */
         if (seg.length >= 3) {
             const parameter = seg[seg.length - 1];
             const endpoint = seg[seg.length - 2];
@@ -735,7 +752,7 @@ function overviewCollapsePoints(points) {
             if (pr && pr.access != null) ent.access = String(pr.access);
             if (pr && pr.visible === false) ent.visible = false;
             card.props.params[parameter] = ent;
-            /* Prefer power point_id for toggle/cmd on old adapters. */
+
             if (parameter === 'power') {
                 card.point_id = pt.point_id;
                 card.value = pt.value;
@@ -753,8 +770,8 @@ function overviewCollapsePoints(points) {
 }
 
 function cardHtml(p) {
-    if (p && p.props && p.props.visible === false) return '';   /* internal-use point: not rendered on the card */
-    const isCover = p.type === 'cover';
+    if (p && p.props && p.props.visible === false) return '';
+    const isCover = isCoverType(p.type);
     const pct = isCover ? parseInt(p.value, 10) : NaN;
     const cPhase = (p.props && p.props.commission_phase) || '';
     const commissioning = !!(p.props && (p.props.commissioning || cPhase === 'waiting' || cPhase === 'failed'));
@@ -768,7 +785,7 @@ function cardHtml(p) {
     const readOnly = !!(p.props && p.props.access === 'R');   /* read-only param: show value, no control */
     /* Overview card toggle = power only. Extra params open generic catalog detail / Devices. */
     const hasParams = !!(p.props && p.props.params && typeof p.props.params === 'object');
-    const ctrlTypes = ['switch', 'light', 'router', 'car', 'camera', 'television', 'air-conditioner', 'fridge', 'water_purifier', 'water_heater', 'appliance', 'washer', 'dishwasher', 'oven'];
+    const ctrlTypes = ['switch', 'light', 'light_strip', 'fan_light', 'fan', 'router', 'car', 'camera', 'television', 'air-conditioner', 'fridge', 'water_purifier', 'water_heater', 'appliance', 'washer', 'dishwasher', 'oven'];
     const allowToggle = !commissioning && ctrlTypes.includes(p.type) && !noCtrl && !readOnly &&
         (!hasParams || powerVal != null || p.value === 'on' || p.value === 'off' || p.value === 'true' || p.value === 'false' || !p.value);
     const ctrl = allowToggle ? '<label class="toggle"><input type="checkbox" data-id="' + p.point_id + '"' + (on ? ' checked' : '') + dis + '>    <span class="slider"></span></label>' : '';
@@ -792,7 +809,7 @@ function cardHtml(p) {
     } else if (p.type === 'air-conditioner') {
         clickCls = ' ac-click';
         clickFn = 'openAcDetail';
-    } else if (p.type === 'cover') {
+    } else if (isCoverType(p.type)) {
         clickCls = ' cover-click';
         clickFn = 'openCoverDetail';
     } else if (apDetail) {
@@ -829,10 +846,12 @@ function cardHtml(p) {
         if (p.value === 'unknown' || p.value === 'idle') return p.online ? '—' : '离线';
         return p.value;
     })();
-    /* Catalog type avatar (/img/devices/light.svg); dim with power when known. */
+    /* Catalog type avatar, or a plugin props.icon override; dim with power when known. */
     const dimByPower = !commissioning && (powerVal != null || p.value === 'on' || p.value === 'off' ||
         p.value === 'true' || p.value === 'false' || allowToggle);
-    const imageUrl = (typeof dwTypeImageUrl === 'function') ? dwTypeImageUrl(p.type) : '';
+    const imageUrl = ((typeof dwIconUrl === 'function') &&
+        p.props && p.props.icon && dwIconUrl(p.props.icon)) ||
+        ((typeof dwTypeImageUrl === 'function') ? dwTypeImageUrl(p.type) : '');
     let iconHtml = '';
     if (imageUrl && typeof dwDeviceIconHtml === 'function') {
         iconHtml = dwDeviceIconHtml(imageUrl, dimByPower ? !!on : null);
@@ -1209,12 +1228,32 @@ async function submitAuthLogin() {
                 loadMeta();
                 let m = '登录成功';
                 if (j.sync === 'pending') {
+                    pollAuthSyncWhileBusy();
                     toast(m + ' · 正在同步设备…');
-                    setTimeout(() => {
-                        loadMeta();
-                        loadPoints();
-                        if (view === 'overview') renderOverview();
-                    }, 4000);
+                    const deadline = Date.now() + 120000;
+                    while (Date.now() < deadline) {
+                        await new Promise(res => setTimeout(res, 1500));
+                        const st = await moduleRpc(activeAuthModule, 'status');
+                        const sj = st.json || {};
+                        if (!sj.syncing) {
+                            await loadMeta();
+                            await loadPoints();
+                            if (view === 'overview') renderOverview();
+                            if (sj.sync === 'need_home') {
+                                toast(m + ' · 请选择家庭');
+                                openHomePicker(activeAuthModule);
+                            } else if (sj.sync === 'ok') {
+                                let sm = m + ' · 已同步 ' + (sj.synced || 0) + ' 台';
+                                if (sj.lan_tokens > 0) sm += ' · ' + sj.lan_tokens + ' 个可局域网控制';
+                                toast(sm);
+                            }
+                            return;
+                        }
+                    }
+                    await loadMeta();
+                    await loadPoints();
+                    if (view === 'overview') renderOverview();
+                    toast(m + ' · 同步仍在进行');
                     return;
                 }
                 await loadPoints();
@@ -1259,6 +1298,7 @@ async function submitAuthLogin() {
             if (r.ok && j && j.result === 'ok') {
                 closeAuthLogin();
                 await loadMeta();
+                pollAuthSyncWhileBusy();
                 await loadPoints();
                 let m = '会话已导入';
                 if (j.sync === 'need_home') {
@@ -1310,6 +1350,7 @@ async function submitAuthLogin() {
         if (r.ok && j && j.result === 'ok') {
             closeAuthLogin();
             await loadMeta();
+            pollAuthSyncWhileBusy();
             await loadPoints();
             let m = '登录成功';
             if (j.sync === 'need_home') {
@@ -1379,6 +1420,7 @@ async function logoutModule(id) {
 }
 async function syncModule(id, homeId) {
     const mid = id || activeAuthModule;
+    pollAuthSyncWhileBusy();
     toast(homeId ? '切换家庭中…' : '同步中...');
     try {
         const params = {
@@ -1391,6 +1433,40 @@ async function syncModule(id, homeId) {
         if (r.ok && j && j.result === 'need_home') {
             toast('请选择家庭');
             openHomePicker(mid);
+            return;
+        }
+        if (r.ok && j && (j.result === 'pending' || j.syncing)) {
+            toast(j.message || (homeId ? '正在切换家庭…' : '正在同步设备…'));
+            const deadline = Date.now() + 120000;
+            let last = j;
+            while (Date.now() < deadline) {
+                await new Promise(res => setTimeout(res, 1500));
+                const st = await moduleRpc(mid, 'status');
+                const sj = st.json || {};
+                last = sj;
+                if (!sj.syncing) break;
+            }
+            await loadMeta();
+            await loadPoints();
+            await loadAdapters();
+            if (view === 'overview') renderOverview();
+            if (last && last.sync === 'need_home') {
+                toast('请选择家庭');
+                openHomePicker(mid);
+                return;
+            }
+            if (last && last.sync === 'ok') {
+                let m = (last.sync_home_name ? ('已切换到 ' + last.sync_home_name + ' · ') : '已同步 ') +
+                    (last.synced || 0) + ' 台';
+                if (last.lan_tokens > 0) m += ' · ' + last.lan_tokens + ' 个可局域网控制';
+                toast(m);
+                return;
+            }
+            if (last && last.syncing) {
+                toast('同步仍在进行，请稍候刷新');
+                return;
+            }
+            toast((last && last.sync_error) || (last && last.message) || '同步失败');
             return;
         }
         if (r.ok && j && j.result === 'ok') {
@@ -1795,7 +1871,7 @@ async function deleteBleMeshDevice(pointId) {
         toast('网络错误');
     }
 }
-/* Read props.params.<name>.value (or flat legacy props.<name>). Type-agnostic. */
+
 function pointParamVal(p, name) {
     const pr = (p && p.props && typeof p.props === 'object') ? p.props : {};
     if (pr.params && typeof pr.params === 'object' && !Array.isArray(pr.params)) {
@@ -2092,7 +2168,6 @@ function bindHaParityControls() {
     }
 }
 
-
 let applianceDetailId = null;
 
 function closeApplianceDetail() {
@@ -2285,7 +2360,7 @@ function acSetFan(fan) {
 function openCoverDetail(id, ev) {
     if (ev && ev.target && (ev.target.closest('.toggle') || ev.target.closest('button') || ev.target.closest('input') || ev.target.closest('.card-actions'))) return;
     const p = pts.find(x => x.point_id === id);
-    if (!p || p.type !== 'cover') return;
+    if (!p || !isCoverType(p.type)) return;
     coverDetailId = id;
     document.getElementById('cover-detail-title').textContent = (TYPE_ICON.cover || '') + ' ' + (p.point_id.split('/').pop());
     document.getElementById('cover-detail-meta').textContent = p.point_id + (p.online ? ' · 在线' : ' · 离线');

@@ -25,6 +25,9 @@ OEM 发布路径：工厂镜像、现场 OTA、与 Host ABI 配套的 Store 包�
    # 仅 Store 分区
    ./tools/build_firmware.py -app minihub -p PORT modstore-flash
 
+   # 仅 Host storage（配置 + /data/web 控制台）
+   ./tools/build_firmware.py -app minihub -p PORT storage-flash
+
    # 先编固件，再合成单文件（成功 build 后也会自动 pack .mhub）
    ./tools/build_firmware.py -app minihub build merge
 
@@ -42,10 +45,11 @@ OEM 发布路径：工厂镜像、现场 OTA、与 Host ABI 配套的 Store 包�
 * ``nvs`` — Wi-Fi 凭据、Store URL、鉴权、OTA 元数据
 * ``otadata`` / ``phy_init`` — OTA 状态与射频校准
 * ``ota_0`` / ``ota_1`` — 双 app 槽（各 5 MiB）
-* ``fctry`` / ``zb_storage`` / ``zb_fct`` — RainMaker / Zigbee 相关
-* ``storage`` — LittleFS ``/data`` （ ``adapters.json`` 、规则、场景）
-* ``modstore`` — LittleFS ``/store`` （已装 ``.mhub`` ；Web 控制台在
-  ``/store/preinstall/web/`` ）。替换这些文件见 :doc:`web_console` 。
+* ``fctry`` — RainMaker claim / 工厂 NVS；Zigbee 栈 NVRAM 共用此分区（40 KiB）。
+  改分区表须整片烧录。
+* ``storage`` — LittleFS ``/data`` （ ``adapters.json`` 、规则、场景；Host Web
+  控制台在 ``/data/web/`` ）。替换 Web 见 :doc:`web_console` 。
+* ``modstore`` — LittleFS ``/store`` （已装 ``.mhub`` 、工厂 preinstall 覆盖）。
 
 Matter 构建需要大 app 槽。链接报装不下时放大 ``ota_0`` / ``ota_1`` ，不要先缩小
 ``modstore`` 。
@@ -72,7 +76,7 @@ Matter 构建需要大 app 槽。链接报装不下时放大 ``ota_0`` / ``ota_1
    python3 tools/pack_store_module.py pack all
    ./tools/build_firmware.py -app minihub -p PORT flash
 
-或工装烧 ``minihub_merged.bin`` / ``modstore-flash`` 。
+或工装烧 ``minihub_merged.bin`` / ``storage-flash`` / ``modstore-flash`` 。
 
 规模化配网
 ----------

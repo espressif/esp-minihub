@@ -29,7 +29,7 @@ Enter the device URL (e.g. `http://minihub.local`) and optional Bearer. Needs fi
 
 | Resource | Device API | Device path |
 |----------|------------|-------------|
-| Web | `PUT /api/dev/web/<rel>`; read `GET /web/<rel>` | `/store/preinstall/web/` |
+| Web | `PUT /api/dev/web/<rel>`; read `GET /web/<rel>` | `/data/web/` |
 | adapters | `GET/PUT /api/config/adapters` | `/data/config/adapters.json` |
 | Type catalog | `GET/PUT /api/dev/catalog/{devices,parameters}.csv` | `/data/config/model/` → flat `/data/config/devices.csv` + reload |
 | Icons | (panel notes: coming soon) | `/data/images/…` |

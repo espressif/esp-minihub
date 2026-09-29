@@ -39,7 +39,7 @@ Reference in `model/services.csv` — not part of the widget registry.
 |-----------|-----|-----------|------------|----------------|------------|-------------|
 | Name | name | String | Read, Write | 1, 32, – | text | Device name |
 | Power | power | Bool | Read, Write | N/A | ui.toggle | On/off |
-| Brightness | brightness | Int | Read, Write | 0, 100, 1 | ui.slider | Brightness % |
+| Brightness | brightness | Int | Read, Write | 1, 100, 1 | ui.slider | Brightness % |
 | Color Temperature | cct | Int | Read, Write | 2700, 6500, 100 | ui.slider | CCT (K) |
 | Hue / 颜色 | hue | Int | Read, Write | 0, 360, 1 | ui.slider | Color (deg); label 颜色 |
 | Saturation | saturation | Int | Read, Write | 0, 100, 1 | ui.slider | Saturation % |

@@ -119,13 +119,15 @@ Partitions
 ----------
 
 The generic Host ``partitions.csv`` is a starting point. Plan your own table
-when a product has extra needs — for example Zigbee ``zb_storage`` / ``zb_fct``,
-RainMaker ``fctry``, OTA slot size, ``storage`` / ``modstore``.
+when a product has extra needs — for example RainMaker / Zigbee ``fctry`` NVS
+size, OTA slot size, ``storage`` / ``modstore``. Zigbee stack NVRAM uses the
+``fctry`` NVS partition (via ``storage_partition_name``); there is no separate
+``zb_storage`` / ``zb_fct`` on the generic Host.
 
 Web console
 -----------
 
-The console HTML is staged on ``modstore`` as ``/store/preinstall/web/``.
+The console HTML is staged on ``storage`` as ``/data/web/``.
 To skin ``index.html`` / ``login.html`` or push files with curl:
 :doc:`web_console`. The generic ``CMakeLists.txt`` copies
 ``components/minihub_web/web/`` only (no ``application/APP/web/`` overlay).

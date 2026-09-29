@@ -37,16 +37,15 @@
  */
 
 let dwCatalog = null;
-/* Live device instances built from /api/points (one card each). */
+
 let dwInstances = [];
-/* Overview (or Devices) expanded device — refresh from /api/points by id. */
+
 let deviceDetailId = null;
-/* Detail modal body: control widgets vs generic metadata (厂商/版本/OTA…). */
-let deviceDetailPanel = 'controls'; /* 'controls' | 'info' */
-/* Devices-page cards expanded to show non-power params (keys = inst.key). */
+
+let deviceDetailPanel = 'controls';
+
 let dwExpandedKeys = Object.create(null);
 
-/* Collapsed Devices card shows this param only; other visible params need expand. */
 const DW_PRIMARY_PARAM = 'power';
 
 function dwParseStyle(style) {
@@ -57,8 +56,6 @@ function dwParseStyle(style) {
     }
 }
 
-/* Skip rows whose parameter id looks like a shifted/corrupt CSV parse.
- * Do not drop rows for label/style quirks — style.widget / min/max still matter. */
 function dwIsCorruptParam(p) {
     if (!p) return true;
     const id = String(p.parameter || '');
@@ -82,8 +79,7 @@ function dwWidget(p) {
         const s = dwParseStyle(p && p.style);
         w = s.widget ? String(s.widget) : '';
     }
-    /* Closed set: toggle | slider | dropdown | text | hidden.
-     * Legacy hue_* / hyphen forms collapse to slider (tone from param name). */
+
     if (w === 'hue-slider' || w === 'hue_slider' || w === 'hue-circle' ||
         w === 'hue_circle') {
         w = 'slider';
@@ -91,7 +87,27 @@ function dwWidget(p) {
     return w;
 }
 
-/* type -> { image, params: { name -> catalog entry } } */
+function dwUiToWidget(ui) {
+    const s = String(ui || '').trim();
+    if (!s) return '';
+    return s.indexOf('ui.') === 0 ? s.slice(3).replace(/-/g, '_') : s;
+}
+
+function dwIconUrl(icon) {
+    const s = String(icon || '').trim();
+    if (!s) return '';
+    if (s.indexOf('./images/') === 0) return '/img/' + s.slice('./images/'.length);
+    return s;
+}
+
+function dwCssClass(css) {
+    const s = String(css || '').trim();
+    if (!s) return '';
+    return s.split(/\s+/).filter(function (c) {
+        return /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(c);
+    }).join(' ');
+}
+
 function dwCatalogIndex() {
     const map = Object.create(null);
     if (!dwCatalog || !Array.isArray(dwCatalog.devices)) return map;
@@ -119,11 +135,15 @@ function dwLiveFromParamObj(name, ent, pointId) {
         step: (pr.step != null) ? pr.step : null,
         unit: (pr.unit != null && pr.unit !== '') ? String(pr.unit) : null,
         requires: dwNormalizeRequires(pr.requires),
+
+        icon: (pr.icon != null && pr.icon !== '') ? String(pr.icon) : null,
+        css: (pr.css != null && pr.css !== '') ? String(pr.css) : null,
+        ui_element: (pr.ui_element != null && pr.ui_element !== '')
+            ? String(pr.ui_element) : null,
         point_id: pointId
     };
 }
 
-/* True when props.params carries at least one parameter entry. */
 function dwParamsBlobNonEmpty(paramsBlob) {
     if (!paramsBlob || typeof paramsBlob !== 'object') return false;
     if (Array.isArray(paramsBlob)) return paramsBlob.length > 0;
@@ -225,7 +245,7 @@ function dwBuildInstances(points) {
                 endpoint = seg[1];
                 key = pt.point_id;
             } else if (hasParams) {
-                /* Unusual: 3+ seg id that already carries props.params — keep full id. */
+
                 endpoint = seg[seg.length - 1];
                 protocol = seg.slice(0, -1).join('.');
                 key = pt.point_id;
@@ -236,7 +256,7 @@ function dwBuildInstances(points) {
                 const inst = ensureInst(key, protocol, endpoint, pt);
                 inst.point_id = pt.point_id;
                 if (hasParams) dwIngestParamsBlob(inst, paramsBlob, pt.point_id);
-                /* Bare device point with only a summary value → expose as power. */
+
                 if (!Object.keys(inst.params).length && pt.value != null && String(pt.value) !== '') {
                     inst.params.power = {
                         name: 'power',
@@ -254,14 +274,13 @@ function dwBuildInstances(points) {
             }
         }
 
-        /* Legacy per-param: thread.color_bulb.power → group under thread.color_bulb. */
         if (seg.length < 3) return;
         const parameter = seg[seg.length - 1];
         const endpoint = seg[seg.length - 2];
         const protocol = seg.slice(0, -2).join('.');
         const key = protocol + '.' + endpoint;
         const inst = ensureInst(key, protocol, endpoint, pt);
-        /* Prefer power row as the instance point_id (overview toggle / detail). */
+
         if (parameter === 'power') {
             inst.point_id = pt.point_id;
             inst._has_power = true;
@@ -307,7 +326,7 @@ async function loadDeviceWidgets() {
             const next = await pr.json();
             if (Array.isArray(next)) points = next;
         }
-        /* Prefer fresh /api/points; fall back to overview's pts if this fetch is empty. */
+
         if (!points.length && typeof pts !== 'undefined' && Array.isArray(pts) && pts.length) {
             points = pts;
         }
@@ -319,7 +338,6 @@ async function loadDeviceWidgets() {
     renderDeviceWidgets();
 }
 
-/* Resolve device instance for a card / point id (device or legacy param id). */
 function dwFindInstance(pointId, points) {
     if (!pointId) return null;
     const list = dwBuildInstances(points != null ? points : (typeof pts !== 'undefined' ? pts : []));
@@ -343,7 +361,7 @@ function dwInstanceParamsHtml(inst) {
     if (!built.visibleCount) {
         return '<div class="modal-hint">该设备无可显示参数。</div>';
     }
-    /* Detail modal: all visible params (no Devices-page collapse). */
+
     return '<div class="dw-params">' + built.primary + built.extra + '</div>';
 }
 
@@ -367,7 +385,6 @@ function toggleDeviceDetailInfo() {
     refreshDeviceDetail();
 }
 
-/* Match Store/module entry for this device (adapter id, else endpoint / module id). */
 function dwFindModuleForInst(inst) {
     const list = (typeof modules !== 'undefined' && Array.isArray(modules)) ? modules : [];
     if (!inst || !list.length) return null;
@@ -428,7 +445,6 @@ async function dwTriggerDeviceOta(pointId) {
     }
 }
 
-/* Generic metadata panel — not light-specific; uses point + /api/modules fields. */
 function dwInstanceInfoHtml(inst) {
     if (!inst) return '<div class="modal-hint">找不到该设备点。</div>';
     const points = (typeof pts !== 'undefined' && Array.isArray(pts)) ? pts : [];
@@ -469,7 +485,6 @@ function dwInstanceInfoHtml(inst) {
     html += dwInfoRowHtml('软件版本', swVer);
     html += dwInfoRowHtml('硬件版本', hwVer);
 
-    /* End-device OTA — only when a plugin set props.ota.available. */
     if (otaAvail) {
         const hint = otaVer ? ('目标 ' + otaVer) : '';
         html += '<div class="device-info-row"><span class="k">OTA</span><span class="v">' +
@@ -525,8 +540,6 @@ function dwPatchDetailReadonly(inst) {
     }
 }
 
-/* Re-render open detail from current pts (catalog widgets).
- * While editing a control, only patch read-only metering rows so they keep live. */
 function refreshDeviceDetail() {
     if (!deviceDetailId) return;
     const modal = document.getElementById('device-detail-modal');
@@ -539,9 +552,7 @@ function refreshDeviceDetail() {
         const row = ae.closest('.dw-param');
         if (row) focusedParam = row.getAttribute('data-param') || '';
     }
-    /* Dragging a slider should not rebuild the modal. Changing a parameter
-     * named by another row's `requires` (including `not`) must, so dependents
-     * enable or disable. */
+
     const editing = deviceDetailPanel !== 'info' && ae && body && body.contains(ae) &&
         (ae.tagName === 'INPUT' || ae.tagName === 'SELECT' || ae.tagName === 'TEXTAREA') &&
         !dwParamIsPrerequisite(focusedParam, inst);
@@ -560,7 +571,7 @@ function refreshDeviceDetail() {
     const title = document.getElementById('device-detail-title');
     const meta = document.getElementById('device-detail-meta');
     const name = (typeof pointDisplayName === 'function')
-        ? pointDisplayName({ point_id: inst.point_id, props: { name: inst.endpoint } })
+        ? pointDisplayName({ point_id: inst.point_id, props: inst.props })
         : (inst.endpoint || inst.point_id);
     if (title) {
         const icon = (typeof TYPE_ICON !== 'undefined' && TYPE_ICON[inst.type]) ? TYPE_ICON[inst.type] + ' ' : '';
@@ -592,7 +603,7 @@ async function openDeviceDetail(id, ev) {
         toast('设备目录加载失败');
         return;
     }
-    /* Fresh /api/points so detail is not a stale one-shot snapshot. */
+
     if (typeof loadPoints === 'function') {
         try {
             await loadPoints();
@@ -605,24 +616,21 @@ async function openDeviceDetail(id, ev) {
     }
     deviceDetailId = inst.key || inst.point_id;
     deviceDetailPanel = 'controls';
-    /* Must unhide before refreshDeviceDetail — it no-ops while modal.hidden. */
+
     const modal = document.getElementById('device-detail-modal');
     if (modal) modal.hidden = false;
     refreshDeviceDetail();
 }
 
-/* Device-class icon (avatar) from catalog (`/img/devices/<type>.svg`).
- * powerOn: true/false dims/brightens; omit/null = no power styling. */
 function dwDeviceIconHtml(imageUrl, powerOn) {
     if (!imageUrl) return '';
     let cls = 'dw-device-icon';
     if (powerOn === true) cls += ' is-on';
     else if (powerOn === false) cls += ' is-off';
     return '<img class="' + cls + '" src="' + escAttr(imageUrl) +
-        '" alt="" loading="lazy" decoding="async">';
+        '" alt="" decoding="async" draggable="false">';
 }
 
-/* Resolve type avatar URL from loaded catalog, else /img/devices/<type>.svg. */
 function dwTypeImageUrl(type) {
     if (!type) return '';
     const cat = dwCatalogForType(dwCatalogIndex(), type);
@@ -631,7 +639,6 @@ function dwTypeImageUrl(type) {
     return safe ? ('/img/devices/' + safe + '.svg') : '';
 }
 
-/* Catalog lookup by data-model type (protocol-agnostic: sim/thread/… share "light"). */
 function dwCatalogForType(byType, type) {
     if (!type) return null;
     if (byType[type]) return byType[type];
@@ -640,19 +647,10 @@ function dwCatalogForType(byType, type) {
     return null;
 }
 
-/* Synthetic catalog row when type is missing from /api/device_widgets.
- * `_fallback` flags the row so the card can surface a “类型未登记” hint:
- * without it a missing type silently degrades to a bare toggle labelled with
- * the raw parameter name, which looks like a corrupt/column-shifted catalog. */
 function dwFallbackCatalogParam(pname) {
     return { parameter: pname, label: pname, widget: '', style: '{}', _fallback: true };
 }
 
-/*
- * Label-first rows: omit catalog SVG thumbnails so power + sliders align.
- * Slider / hue / stepper get .dw-param-tile for the refined bar control.
- */
-/* true = on, false = explicit off, null = missing or not a boolean value. */
 function dwLiveIsOn(live) {
     if (!live) return null;
     const v = live.value;
@@ -664,10 +662,6 @@ function dwLiveIsOn(live) {
     return null;
 }
 
-/* `requires` is a parameter name (same as {all:[name]}), {all:[]}, {any:[]},
- * and/or {not:[]}. all = every name must be on. any = at least one must be on.
- * not = none of these may be on. not may sit beside all or any, not both.
- * Returns {op, names, not} or null. op is null when only `not` is set. */
 function dwRequireNameList(raw) {
     if (!Array.isArray(raw)) return null;
     const names = [];
@@ -728,7 +722,6 @@ function dwNormalizeRequires(requires) {
     return out;
 }
 
-/* Instance devices.json overrides the catalog when it sets requires. */
 function dwRequiresSpec(p, live) {
     if (live && live.requires != null) {
         const spec = dwRequireSpec(live.requires);
@@ -772,8 +765,6 @@ function dwSpecMentions(spec, want) {
     return spec.names.indexOf(want) >= 0 || spec.not.indexOf(want) >= 0;
 }
 
-/* True when some catalog or live row names this parameter in `requires`, so
- * toggling it must rebuild dependent controls (enable / disable). */
 function dwParamIsPrerequisite(name, inst) {
     if (!name) return false;
     const want = String(name);
@@ -796,7 +787,8 @@ function dwParamIsPrerequisite(name, inst) {
 
 function dwParamRowHtml(type, p, live, opts) {
     opts = opts || {};
-    let widget = dwWidget(p);
+
+    let widget = (live && live.ui_element) ? dwUiToWidget(live.ui_element) : dwWidget(p);
     if (widget === 'hidden') return '';
     const s = dwMergedStyle(p, live);
     const access = (live && live.access) ? String(live.access)
@@ -808,17 +800,22 @@ function dwParamRowHtml(type, p, live, opts) {
     }
     const isBar = !readOnly && (widget === 'slider' || widget === 'stepper');
     const gated = dwControlGated(p, opts.inst, readOnly);
+    const extraCss = dwCssClass(live && live.css);
+    const paramIcon = dwIconUrl(live && live.icon);
     return '<div class="dw-param' + (isBar ? ' dw-param-tile' : '') +
         (gated ? ' is-gated' : '') +
+        (extraCss ? ' ' + escAttr(extraCss) : '') +
         '" data-param="' + escAttr(p.parameter || '') + '">' +
         '<div class="dw-param-label">' +
+        (paramIcon
+            ? '<img class="dw-param-icon" src="' + escAttr(paramIcon) + '" alt="">'
+            : '') +
         '<span class="k">' + esc(dwLabel(p)) + '</span></div>' +
         '<div class="dw-ctl">' +
         dwParamControl(type || '', p, live, gated) +
         '</div></div>';
 }
 
-/* Build primary (power) + extra visible param rows from catalog ∩ live. */
 function dwInstanceCardBody(inst, cat) {
     let visibleCount = 0;
     let fallbackCount = 0;
@@ -827,8 +824,6 @@ function dwInstanceCardBody(inst, cat) {
     const order = cat && cat.params ? Object.keys(cat.params) : Object.keys(inst.params || {});
     const seen = Object.create(null);
 
-    /* Logged once per card: a type with no catalog row is a DATA gap (model CSV
-     * / devices.csv), not a rendering bug - keep the two distinguishable. */
     if (!cat) {
         console.warn('[device_widgets] type not in catalog:',
             (inst.type || '(empty type)'), (inst.point_id || inst.key || ''));
@@ -837,7 +832,7 @@ function dwInstanceCardBody(inst, cat) {
     function addRow(pname, p) {
         const live = inst.params[pname];
         if (!live || !live.visible) return;
-        /* Type-level ui.hidden: never render (distinct from instance visible:false). */
+
         if (dwWidget(p) === 'hidden') return;
         seen[pname] = true;
         const row = dwParamRowHtml(inst.type || '', p, live, { inst: inst });
@@ -852,7 +847,7 @@ function dwInstanceCardBody(inst, cat) {
         const p = (cat && cat.params && cat.params[pname]) || dwFallbackCatalogParam(pname);
         addRow(pname, p);
     });
-    /* Live params not listed in catalog (still show controls). */
+
     Object.keys(inst.params || {}).forEach(function (pname) {
         if (seen[pname]) return;
         addRow(pname, dwFallbackCatalogParam(pname));
@@ -910,11 +905,13 @@ function renderDeviceWidgets() {
         const built = dwInstanceCardBody(inst, cat);
         if (!built.visibleCount) return;
         shown++;
+        /* Device icon: plugin override (props.icon) > catalog > /img/devices/<type>.svg. */
+        const devIcon = dwIconUrl(inst.props && inst.props.icon);
         const key = inst.key || inst.point_id || inst.endpoint || '';
         const expanded = !!dwExpandedKeys[key];
         const hasExtra = !!built.extra;
         const offline = inst.online ? '' : ' offline';
-        const image = cat ? cat.image : '';
+        const image = devIcon || (cat ? cat.image : '');
         /* Type not in the catalog: rows are built from raw parameter names.
          * Say so on the card rather than looking like a corrupt catalog. */
         const missBadge = built.fallbackCount
@@ -931,13 +928,16 @@ function renderDeviceWidgets() {
             (hasExtra ? ' onclick="dwToggleCardExpand(\'' + escAttr(key) + '\', event)"' : '') +
             '><div class="card-top">' +
             dwDeviceIconHtml(image) +
-            '<div class="card-name">' + esc(inst.endpoint) + '</div>' +
+            '<div class="card-name">' +
+            esc((typeof pointDisplayName === 'function')
+                ? pointDisplayName({ point_id: inst.point_id, props: inst.props })
+                : (inst.endpoint || inst.key)) + '</div>' +
             '<span class="badge">' + esc(inst.type || inst.protocol || 'device') +
             ' · ' + built.visibleCount + '</span>' +
             missBadge +
             expandBtn +
             '</div>';
-        /* Collapsed: power only. No power → header only until expand. */
+
         if (built.primary) {
             html += '<div class="dw-params dw-params-primary">' + built.primary + '</div>';
         }
@@ -955,10 +955,6 @@ function renderDeviceWidgets() {
     el.innerHTML = html;
 }
 
-/*
- * Catalog style = defaults; instance live props override min/max/step/unit
- * (and access) when those keys were set in devices.json.
- */
 function dwMergedStyle(p, live) {
     const s = Object.assign({}, dwParseStyle(p && p.style));
     if (!live) return s;
@@ -969,7 +965,6 @@ function dwMergedStyle(p, live) {
     return s;
 }
 
-/* Soft-fill / spectrum accent family for bar sliders (param name → CSS tone). */
 function dwSliderTone(parameter) {
     const n = String(parameter || '').toLowerCase();
     if (n === 'hue' || n.indexOf('hue') >= 0) return 'tone-hue';
@@ -982,7 +977,6 @@ function dwSliderTone(parameter) {
     return 'tone-default';
 }
 
-/* Full-track meaning (hue / sat / CCT) — thumb marks value, no solid fill. */
 function dwSliderIsSpectrum(tone, isHue) {
     if (isHue) return true;
     return tone === 'tone-sat' || tone === 'tone-cct' || tone === 'tone-hue';
@@ -999,10 +993,6 @@ function dwRangePct(min, max, val) {
     return pct;
 }
 
-/*
- * Mid-weight bar: soft fill (brightness) or spectrum track (hue/sat/CCT).
- * Native <input type=range>; drag anywhere; POST on change.
- */
 function dwDisabledAttr(gated) {
     return gated ? ' disabled' : '';
 }
@@ -1041,15 +1031,13 @@ function dwParamControl(type, p, live, gated) {
     const s = dwMergedStyle(p, live);
     let widget = dwWidget(p);
     const valStr = (live && live.value != null) ? String(live.value) : '';
-    /* Instance access wins; else catalog style.access from properties Read(/Write). */
+
     const access = (live && live.access) ? String(live.access)
         : (s.access ? String(s.access) : 'RW');
     const readOnly = String(access).toUpperCase() === 'R';
     const pointId = (live && live.point_id) ? String(live.point_id) : '';
     const pidArg = ',\'' + escAttr(pointId) + '\'';
 
-    /* Catalog may omit top-level widget; style / instance bounds still imply a range.
-     * Do not invent a slider for read-only sensors (metering, etc.). */
     if (!widget && !readOnly && (s.min != null || s.max != null || s.step != null ||
         (live && (live.min != null || live.max != null || live.step != null)))) {
         widget = 'slider';
@@ -1057,7 +1045,6 @@ function dwParamControl(type, p, live, gated) {
 
     if (widget === 'hidden') return '';
 
-    /* Sensors / access:R — show value only (no control), for any widget type. */
     if (readOnly) {
         const unit = s.unit || '';
         let display = valStr;
@@ -1134,7 +1121,7 @@ function dwParamControl(type, p, live, gated) {
             escAttr(p.parameter) + '\', this.checked' + pidArg +
             ')"><span class="slider"></span></label>';
     }
-    /* Unknown widget: show as text, never as a toggle. */
+
     return '<input type="text" class="dw-text" value="' + escAttr(valStr) +
         '" aria-label="' + escAttr(dwLabel(p)) + '"' +
         dwDisabledAttr(gated) +
@@ -1142,10 +1129,6 @@ function dwParamControl(type, p, live, gated) {
         escAttr(p.parameter) + '\', this.value' + pidArg + ')">';
 }
 
-/* Control values: send a real number for numeric option values ("1", "50",
- * "0.5"), otherwise the raw string. Forcing Number() on a non-numeric option
- * ("cool", "auto") yielded NaN -> null in the JSON body, so the control
- * silently did nothing. */
 function dwSendValue(v) {
     const s = String(v);
     if (s !== '' && /^-?\d+(\.\d+)?$/.test(s)) return Number(s);

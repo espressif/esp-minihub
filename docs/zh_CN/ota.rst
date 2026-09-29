@@ -10,7 +10,7 @@ Hub 固件升级
 
 NVS 恢复出厂（按住配置的 GPIO）**不会** 清空 LittleFS ``/data`` 与 ``/store`` 。
 工装需要干净文件系统时请整机 ``flash`` 。App OTA 同样 **不会** 替换
-``/store/preinstall/web/`` 上的控制台，见 :doc:`web_console` 。
+``/data/web/`` 上的控制台，见 :doc:`web_console` 。
 
 槽位与镜像大小
 --------------

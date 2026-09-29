@@ -56,6 +56,37 @@ Do not call native Wi-Fi / radio APIs from JS.
 
 Devices-page light demo: `examples/plugins/color_bulb_js/`.
 
+## Range scaling (Hub % ↔ device raw)
+
+When a parameter maps the Hub's **1–100** percentage UI onto a device-native
+range with a different max (e.g. Yeelight brightness `1–65535`, read from the
+spec `value-range` or `profiles.json` as `bright_max`), the scaling MUST follow
+this rule:
+
+- **Pin the endpoints**: `1% → device minimum (1)`, `100% → device maximum
+  (bright_max)`. The extremes are **NOT** scaled.
+- **Spread the middle**: `2%–99%` are distributed evenly across the remaining
+  `[1, maxv]` range (linear interpolation with both ends pinned).
+
+Formulas — identical in the C adapter and the JS plugin, keep them in sync:
+
+```text
+raw = 1 + round((pct - 1) * (maxv - 1) / 99)     # pct→raw, clamp [1, maxv]
+pct = 1 + round((raw - 1) * 99 / (maxv - 1))      # raw→pct, clamp [1, 100]
+```
+
+Only scale when `maxv > 100`; for `maxv <= 100` (e.g. the c500ch camera,
+`bright_max=100`) pass the value through unchanged.
+
+This rule applies to **every** parameter that needs percentage→native scaling
+(not just brightness), and to **both** L2 JS plugins (`miot_js/main.js`
+`coerceValue` / `toHubValue` `bright` branches) and L3 native/C adapters
+(`miot/miot_adapter.c` `bright_pct_to_raw` / `bright_raw_to_pct`). The two
+implementations must stay bit-for-bit equivalent.
+
+Reference + regression test: `miot/tools/check_bright_scale.py`
+(run `python3 miot/tools/check_bright_scale.py`, no host deps).
+
 ## Env
 
 | Variable | Default | Meaning |

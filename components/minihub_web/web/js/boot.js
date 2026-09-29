@@ -1,9 +1,6 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-09-29-reboot';
+window.mhWebBuild = '2026-09-29-icons';
 
-/* Session gone → /login. A 401 is not enough: fetch follows a 302 to /login
- * and the final status is 200, and an already-open console keeps its last
- * paint until something notices logged_in is false. */
 (function installAuthFetchGuard() {
     const orig = window.fetch.bind(window);
     let redirecting = false;
@@ -40,7 +37,7 @@ window.mhWebBuild = '2026-09-29-reboot';
         if (r.status === 401) {
             return true;
         }
-        /* 302 /login followed by fetch: document stays on the console. */
+
         if (r.redirected && isLoginPath(r.url)) {
             return true;
         }
@@ -107,7 +104,7 @@ document.querySelectorAll('#store-tabs .chip').forEach(c => {
         storeTab = c.dataset.tab;
         renderStore();
     };
-}); /* Adapters → modules (auth UI) → status → points. Catalog is non-blocking. */
+});
 window.addEventListener('hashchange', applyLoginHash);
 /* A failed first hop (hub reload, reboot) used to leave the stats at "-" until
  * the 30 s adapters tick. Retry the chain, and say so in the footer — the 1 s
@@ -119,6 +116,9 @@ function bootConsole() {
             if (foot) foot.textContent = 'Hub 正在重新加载…';
             setTimeout(bootConsole, 2000);
             return;
+        }
+        if (typeof ensureDwCatalog === 'function') {
+            try { await ensureDwCatalog(); } catch (e) {}
         }
         await loadPoints();
         loadModulesForAuth().then(() => {
@@ -144,7 +144,6 @@ setInterval(() => {
     refreshRadioProv();
 }, 5000);
 
-/* Push path: coalesce point.updated bursts (soft reload registers many points). */
 (function connectEventsWs() {
     let ws;
     let retryMs = 2000;

@@ -96,7 +96,7 @@ Default writable root: ``/data`` (LittleFS on generic ``minihub`` product).
      model/             Optional uploaded devices.csv + parameters.csv
    /data/config/packs/  Optional L1 pack staging (product-dependent)
    /store/modules/ID/   Installed Store modules (module.json, .so, main.js, …)
-   /store/preinstall/web/  Host Web console (index.html, login.html, …)
+   /data/web/           Host Web console (index.html, login.html, …)
    /data/tmp/           MHMD extract / scratch (module loader)
 
 NVS holds Wi-Fi credentials, Store URL overrides, OTA metadata — not the full

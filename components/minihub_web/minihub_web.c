@@ -166,6 +166,32 @@ static bool file_etag(const char *path, off_t size, char *out, size_t out_len)
     return true;
 }
 
+#if CONFIG_MINIHUB_WEB_UI
+/** Prefer /data/web; fall back to legacy /store/preinstall/web for unflashed storage. */
+static bool resolve_host_web_file(const char *rel_or_null, char *out, size_t out_len, struct stat *st)
+{
+    static const char *const roots[] = {
+        MINIHUB_WEB_DIR,
+        MINIHUB_PREINSTALL_WEB_DIR,
+    };
+    for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); i++) {
+        int n;
+        if (rel_or_null && rel_or_null[0]) {
+            n = snprintf(out, out_len, "%s/%s", roots[i], rel_or_null);
+        } else {
+            n = snprintf(out, out_len, "%s", roots[i]);
+        }
+        if (n < 0 || (size_t)n >= out_len) {
+            continue;
+        }
+        if (stat(out, st) == 0 && S_ISREG(st->st_mode)) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
 {
     struct stat st;
@@ -239,6 +265,7 @@ static bool http_want_zh(httpd_req_t *req)
 static esp_err_t send_preinstall_index_or_fallback(httpd_req_t *req)
 {
     const char *index_paths[] = {
+        MINIHUB_WEB_INDEX,
         MINIHUB_PREINSTALL_WEB_INDEX,
         s_index_override,
     };
@@ -259,8 +286,8 @@ static esp_err_t send_preinstall_index_or_fallback(httpd_req_t *req)
                  esp_err_to_name(err), index_paths[i], (long)st.st_size);
         return err;
     }
-    ESP_LOGW(TAG, "missing %s%s%s — serving ROM fallback",
-             MINIHUB_PREINSTALL_WEB_INDEX,
+    ESP_LOGW(TAG, "missing %s (legacy %s)%s%s — serving ROM fallback",
+             MINIHUB_WEB_INDEX, MINIHUB_PREINSTALL_WEB_INDEX,
              s_index_override ? " and " : "",
              s_index_override ? s_index_override : "");
     const char *html = http_want_zh(req) ? MINIHUB_INDEX_HTML_FALLBACK_ZH : MINIHUB_INDEX_HTML_FALLBACK_EN;
@@ -283,10 +310,11 @@ static esp_err_t handle_login_page(httpd_req_t *req)
 {
 #if CONFIG_MINIHUB_WEB_UI
     struct stat st;
-    if (stat(MINIHUB_PREINSTALL_WEB_LOGIN, &st) == 0 && S_ISREG(st.st_mode)) {
-        return send_file_chunked(req, MINIHUB_PREINSTALL_WEB_LOGIN);
+    char path[MINIHUB_PATH_MAX];
+    if (resolve_host_web_file("login.html", path, sizeof(path), &st)) {
+        return send_file_chunked(req, path);
     }
-    ESP_LOGW(TAG, "missing %s", MINIHUB_PREINSTALL_WEB_LOGIN);
+    ESP_LOGW(TAG, "missing %s (legacy %s)", MINIHUB_WEB_LOGIN, MINIHUB_PREINSTALL_WEB_LOGIN);
     httpd_resp_set_status(req, "404 Not Found");
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
     return httpd_resp_send(req,
@@ -678,12 +706,8 @@ static esp_err_t handle_web_asset(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path");
     }
     char path[MINIHUB_PATH_MAX];
-    if (snprintf(path, sizeof(path), "%s/%s", MINIHUB_PREINSTALL_WEB_DIR, rel) >=
-        (int)sizeof(path)) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "path too long");
-    }
     struct stat st;
-    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+    if (!resolve_host_web_file(rel, path, sizeof(path), &st)) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
     }
     esp_err_t err = send_file_chunked(req, path);
@@ -4328,10 +4352,10 @@ static esp_err_t handle_api_dev_fs_put(httpd_req_t *req)
 #endif
 
 #if CONFIG_MINIHUB_WEB_UI
-/* Host console HTML/CSS/JS under /store/preinstall/web/ — curl without reflashing modstore. */
+/* Host console HTML/CSS/JS under /data/web/ — curl without reflashing storage. */
 #define DEV_WEB_UPLOAD_MAX_BYTES (512 * 1024)
 
-static esp_err_t mkdir_store_web_parents(const char *full_path)
+static esp_err_t mkdir_web_parents(const char *full_path)
 {
     char dir[MINIHUB_PATH_MAX];
     size_t n = strnlen(full_path, sizeof(dir) - 1);
@@ -4385,7 +4409,7 @@ static esp_err_t handle_api_dev_web_put(httpd_req_t *req)
     }
 
     char path[MINIHUB_PATH_MAX];
-    if (snprintf(path, sizeof(path), "%s/%s", MINIHUB_PREINSTALL_WEB_DIR, rel) >= (int)sizeof(path)) {
+    if (snprintf(path, sizeof(path), "%s/%s", MINIHUB_WEB_DIR, rel) >= (int)sizeof(path)) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "path too long");
     }
 
@@ -4396,7 +4420,7 @@ static esp_err_t handle_api_dev_web_put(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid body");
     }
 
-    err = mkdir_store_web_parents(path);
+    err = mkdir_web_parents(path);
     if (err != ESP_OK) {
         free(body);
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "mkdir failed");
@@ -4790,8 +4814,10 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
 #if defined(CONFIG_MINIHUB_WEB_UI) && CONFIG_MINIHUB_WEB_UI
         struct stat st;
         web_ui_state = "on";
-        if (stat(MINIHUB_PREINSTALL_WEB_INDEX, &st) == 0 && S_ISREG(st.st_mode)) {
-            index_state = "preinstall";
+        if (stat(MINIHUB_WEB_INDEX, &st) == 0 && S_ISREG(st.st_mode)) {
+            index_state = "storage";
+        } else if (stat(MINIHUB_PREINSTALL_WEB_INDEX, &st) == 0 && S_ISREG(st.st_mode)) {
+            index_state = "legacy";
         } else if (s_index_override &&
                    stat(s_index_override, &st) == 0 && S_ISREG(st.st_mode)) {
             index_state = "override";

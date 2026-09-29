@@ -159,3 +159,6 @@
 .device-log-time{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .device-log-label{color:var(--text);flex:1}
 .device-log-src{font-size:.68rem;color:var(--dim);margin-left:6px}
+.mod-acct.busy{color:var(--accent2);display:inline-flex;align-items:center;gap:5px}
+.mod-acct.busy:before{content:'';width:7px;height:7px;border-radius:50%;background:var(--accent2);animation:miotsync 1s infinite ease-in-out}
+@keyframes miotsync{0%,100%{opacity:.3;transform:scale(.7)}50%{opacity:1;transform:scale(1)}}

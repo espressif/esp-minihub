@@ -26,6 +26,9 @@ From the repository root:
    # Store partition only
    ./tools/build_firmware.py -app minihub -p PORT modstore-flash
 
+   # Host storage only (config + Web console under /data/web)
+   ./tools/build_firmware.py -app minihub -p PORT storage-flash
+
    # Build then merge a single file (successful build also packs .mhub)
    ./tools/build_firmware.py -app minihub build merge
 
@@ -43,10 +46,19 @@ The current generic table includes:
 * ``nvs`` — Wi-Fi creds, Store URL, auth, OTA metadata
 * ``otadata`` / ``phy_init`` — OTA state and RF calibration
 * ``ota_0`` / ``ota_1`` — dual app slots (5 MiB each)
-* ``fctry`` / ``zb_storage`` / ``zb_fct`` — RainMaker / Zigbee
-* ``storage`` — LittleFS ``/data`` (``adapters.json``, rules, scenes)
-* ``modstore`` — LittleFS ``/store`` (installed ``.mhub``; Web console under
-  ``/store/preinstall/web/``). Replacing those files: :doc:`web_console`.
+* ``fctry`` — RainMaker claim / factory NVS; Zigbee stack NVRAM shares this
+  partition (40 KiB). Changing the partition table requires a full flash.
+* ``storage`` — LittleFS ``/data`` (``adapters.json``, rules, scenes; Host Web
+  console under ``/data/web/``). Replacing Web files: :doc:`web_console`.
+* ``modstore`` — LittleFS ``/store`` (installed ``.mhub``, factory preinstall
+  quirks).
+
+The generic Host does **not** ship ``zb_storage`` or ``zb_fct``. ESP Zigbee SDK
+2.x stores NVRAM in NVS via ``storage_partition_name`` (MiniHub points it at
+``fctry``). ``zb_fct`` (1 KiB FAT) was only for optional mfg-tool production
+config on end devices; the coordinator Host does not use it. OEMs that need
+Zigbee mfg production data must add their own FAT partition or use the Zigbee
+secur / descriptor APIs.
 
 Matter builds need large app slots. If the linker says the app does not fit,
 grow ``ota_0`` / ``ota_1`` — do not shrink ``modstore`` first.
@@ -73,7 +85,7 @@ In-tree L3 needs ``CONFIG_MINIHUB_DYNAMIC_MODULES`` and ``build`` (emits the
    python3 tools/pack_store_module.py pack all
    ./tools/build_firmware.py -app minihub -p PORT flash
 
-Or flash ``minihub_merged.bin`` / ``modstore-flash`` on the jig.
+Or flash ``minihub_merged.bin`` / ``storage-flash`` / ``modstore-flash`` on the jig.
 
 Provisioning at scale
 ---------------------
