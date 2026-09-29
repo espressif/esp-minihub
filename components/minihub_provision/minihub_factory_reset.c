@@ -6,17 +6,43 @@
 #include "minihub_provision.h"
 
 #include "sdkconfig.h"
-
-#if CONFIG_MINIHUB_FACTORY_RESET_BUTTON
-
-#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
+#if CONFIG_MINIHUB_FACTORY_RESET_BUTTON
+#include "driver/gpio.h"
+#endif
+
 static const char *TAG = "minihub_factory";
+
+void minihub_factory_reset_execute(void)
+{
+    ESP_LOGW(TAG, "factory reset: erasing NVS then restart");
+    esp_err_t err = nvs_flash_erase();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs_flash_erase failed: %s", esp_err_to_name(err));
+    }
+    vTaskDelay(pdMS_TO_TICKS(200));
+    esp_restart();
+}
+
+static void factory_reset_deferred(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(500));
+    minihub_factory_reset_execute();
+}
+
+esp_err_t minihub_factory_reset_schedule(void)
+{
+    BaseType_t ok = xTaskCreate(factory_reset_deferred, "factory_web", 3072, NULL, 5, NULL);
+    return (ok == pdPASS) ? ESP_OK : ESP_ERR_NO_MEM;
+}
+
+#if CONFIG_MINIHUB_FACTORY_RESET_BUTTON
 
 #define POLL_MS 50
 
@@ -52,13 +78,7 @@ static void factory_reset_task(void *arg)
                 ESP_LOGI(TAG, "factory-reset hold %d/%d ms", held_ms, hold_ms);
             }
             if (held_ms >= hold_ms) {
-                ESP_LOGW(TAG, "factory reset: erasing NVS then restart");
-                esp_err_t err = nvs_flash_erase();
-                if (err != ESP_OK) {
-                    ESP_LOGE(TAG, "nvs_flash_erase failed: %s", esp_err_to_name(err));
-                }
-                vTaskDelay(pdMS_TO_TICKS(200));
-                esp_restart();
+                minihub_factory_reset_execute();
             }
         } else {
             held_ms = 0;

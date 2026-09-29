@@ -280,6 +280,32 @@ async function sysReboot() {
     }
 }
 
+async function sysFactoryReset() {
+    if (!window.confirm('恢复出厂会清除 NVS（Wi-Fi、登录密码）并重启。storage 上的设备数据会保留。继续？')) {
+        return;
+    }
+    toast('正在恢复出厂…');
+    try {
+        const r = await fetch('/api/system/reset', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                confirm: true
+            })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.result === 'ok') {
+            toast('设备即将重启，请稍后重新登录');
+        } else {
+            toast('失败' + (j.error ? ': ' + j.error : ''));
+        }
+    } catch (e) {
+        toast('若设备已重启，请稍后重新打开页面');
+    }
+}
+
 async function sysApplyWifi() {
     const ssid = (document.getElementById('sys-wifi-ssid').value || '').trim();
     const password = document.getElementById('sys-wifi-pass').value || '';

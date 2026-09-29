@@ -48,6 +48,15 @@ const char *minihub_provision_ble_device_name(void);
 const char *minihub_provision_pop(void);
 
 /**
+ * Erase NVS and restart. Does not format the storage filesystem.
+ * Does not return.
+ */
+void minihub_factory_reset_execute(void);
+
+/** Reply to the caller first, then erase NVS and restart. */
+esp_err_t minihub_factory_reset_schedule(void);
+
+/**
  * Start BOOT-button factory reset monitor (long-press → nvs_flash_erase + restart).
  * No-op when CONFIG_MINIHUB_FACTORY_RESET_BUTTON is disabled.
  */
