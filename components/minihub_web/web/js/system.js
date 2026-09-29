@@ -216,3 +216,29 @@ async function sysApplyNet() {
         toast('网络错误（若已改 IP，请用新地址打开）');
     }
 }
+
+async function sysReboot() {
+    if (!window.confirm('重启 MiniHub？配置和设备数据都会保留。')) {
+        return;
+    }
+    toast('正在重启…');
+    try {
+        const r = await fetch('/api/system/reboot', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                confirm: true
+            })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.result === 'ok') {
+            toast('设备即将重启');
+        } else {
+            toast('失败' + (j.error ? ': ' + j.error : ''));
+        }
+    } catch (e) {
+        toast('若设备已重启，请稍后重新打开页面');
+    }
+}

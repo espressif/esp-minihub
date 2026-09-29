@@ -59,6 +59,13 @@
         </div>
         <div class="sys-hint">RainMaker 云升级请用 RainMaker APP 推送；与本地升级互斥。成功后设备将自动重启。</div>
       </div>
+      <div class="sys-net" style="margin-top:16px" id="sys-reboot">
+        <h3 style="margin-bottom:10px;font-size:1rem">重启</h3>
+        <div class="modal-actions" style="justify-content:flex-start">
+          <button class="btn-sm" type="button" onclick="sysReboot()">重启</button>
+        </div>
+        <div class="sys-hint">重启 MiniHub。不清除 Wi-Fi、登录密码或设备数据。</div>
+      </div>
 
     </div>
 <div id="view-map" class="view" hidden>      <div class="map-info" id="map-info">正在通过 IP 定位...</div>      <div id="map-leaflet" class="map-leaflet"></div>      <p style="margin-top:12px;font-size:.78rem;color:var(--dim)">        位置来自公网 IP 地理库（城市级精度），设备标记为示意分布</p>    </div>    <div id="view-rules" class="view" hidden>
