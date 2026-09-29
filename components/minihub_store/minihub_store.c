@@ -176,6 +176,13 @@ esp_err_t minihub_store_upgrade(const char *kind, const char *id)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t minihub_store_reinstall(const char *kind, const char *id)
+{
+    (void)kind;
+    (void)id;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 cJSON *minihub_store_catalog_merged(void)
 {
     return cJSON_CreateArray();
@@ -1520,7 +1527,7 @@ static esp_err_t install_module(const cJSON *item, bool upgrade)
 
 #endif /* CONFIG_MINIHUB_DYNAMIC_MODULES */
 
-static esp_err_t install_pack(const cJSON *item, bool upgrade)
+static esp_err_t install_pack(const cJSON *item, bool upgrade, bool force)
 {
     const cJSON *id_j = cJSON_GetObjectItem(item, "id");
     const cJSON *url_j = cJSON_GetObjectItem(item, "url");
@@ -1538,7 +1545,7 @@ static esp_err_t install_pack(const cJSON *item, bool upgrade)
         return ESP_ERR_NOT_FOUND;
     }
 
-    if (upgrade && cJSON_IsString(version_j)) {
+    if (upgrade && !force && cJSON_IsString(version_j)) {
         char cur[32];
         if (installed_pack_version(id_j->valuestring, cur, sizeof(cur)) &&
             version_compare(version_j->valuestring, cur) <= 0) {
@@ -1604,7 +1611,7 @@ static esp_err_t install_pack(const cJSON *item, bool upgrade)
     return ESP_OK;
 }
 
-static esp_err_t store_install_item(const cJSON *item, const char *kind, bool upgrade)
+static esp_err_t store_install_item(const cJSON *item, const char *kind, bool upgrade, bool force)
 {
     const cJSON *url_j = cJSON_GetObjectItem(item, "url");
     bool mhub_url = false;
@@ -1625,7 +1632,7 @@ static esp_err_t store_install_item(const cJSON *item, const char *kind, bool up
 
     /* Legacy bare JSON pack URL (pre-unified catalog) */
     if (catalog_item_config_only(item) || strcmp(kind, "pack") == 0) {
-        return install_pack(item, upgrade);
+        return install_pack(item, upgrade, force);
     }
     if (strcmp(kind, "module") == 0) {
 #if CONFIG_MINIHUB_DYNAMIC_MODULES
@@ -1637,7 +1644,7 @@ static esp_err_t store_install_item(const cJSON *item, const char *kind, bool up
     return ESP_ERR_INVALID_ARG;
 }
 
-static esp_err_t store_install_from_catalog(const char *kind, const char *id, bool upgrade)
+static esp_err_t store_install_from_catalog(const char *kind, const char *id, bool upgrade, bool force)
 {
     if (!kind || !id) {
         return ESP_ERR_INVALID_ARG;
@@ -1654,7 +1661,7 @@ static esp_err_t store_install_from_catalog(const char *kind, const char *id, bo
         return ESP_ERR_NOT_FOUND;
     }
 
-    if (upgrade) {
+    if (upgrade && !force) {
         const cJSON *version_j = cJSON_GetObjectItem(item, "version");
         char cur[32];
         bool have_cur = false;
@@ -1700,19 +1707,27 @@ static esp_err_t store_install_from_catalog(const char *kind, const char *id, bo
         }
     }
 
-    esp_err_t err = store_install_item(item, kind, upgrade);
+    esp_err_t err = store_install_item(item, kind, upgrade, force);
     cJSON_Delete(catalog);
     return err;
 }
 
 esp_err_t minihub_store_install(const char *kind, const char *id)
 {
-    return store_install_from_catalog(kind, id, false);
+    return store_install_from_catalog(kind, id, false, false);
 }
 
 esp_err_t minihub_store_upgrade(const char *kind, const char *id)
 {
-    return store_install_from_catalog(kind, id, true);
+    return store_install_from_catalog(kind, id, true, false);
+}
+
+esp_err_t minihub_store_reinstall(const char *kind, const char *id)
+{
+    /* Same preserve path as upgrade (adapters.json slot and module.json
+     * enabled stay). Unlike upgrade, the catalog version may be unchanged.
+     * Unlike uninstall, the adapter slot — account and config — is not removed. */
+    return store_install_from_catalog(kind, id, true, true);
 }
 
 esp_err_t minihub_store_uninstall(const char *kind, const char *id)

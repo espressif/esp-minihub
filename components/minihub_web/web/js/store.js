@@ -124,7 +124,8 @@ function renderStore() {
         if (upgradeAvailable) {
             html += '<button class="btn-sm on" onclick="storeUpgrade(\'' + kind + '\',\'' + e + '\')">升级</button>';
         }
-        html += '<button class="btn-sm bad" onclick="storeDel(\'' + apiKind + '\',\'' + e + '\')">删除</button>';
+        html += '<button class="btn-sm bad" onclick="storeUninstall(\'' + apiKind + '\',\'' + e + '\')">卸载</button>';
+        html += '<button class="btn-sm" onclick="storeReinstall(\'' + apiKind + '\',\'' + e + '\')">重新安装</button>';
         return html + '</div>';
     };
     const itemDesc = it => {

@@ -28,7 +28,8 @@ esp_err_t minihub_store_refresh_catalog(void);
  */
 esp_err_t minihub_store_install(const char *kind, const char *id);
 
-/** Remove installed module binary + manifest, or pack file from modstore/config. */
+/** Remove installed module binary + manifest, or pack file from modstore/config.
+ * Also drops the adapters.json slot (account and device config). */
 esp_err_t minihub_store_uninstall(const char *kind, const char *id);
 
 /**
@@ -36,6 +37,12 @@ esp_err_t minihub_store_uninstall(const char *kind, const char *id);
  * Fails with ESP_ERR_INVALID_STATE if not installed or already latest.
  */
 esp_err_t minihub_store_upgrade(const char *kind, const char *id);
+
+/**
+ * Replace the installed package from the catalog even when the version matches.
+ * Keeps the adapters.json slot (account, devices, enabled). Does not uninstall.
+ */
+esp_err_t minihub_store_reinstall(const char *kind, const char *id);
 
 /** Merge remote catalog with locally installed items (caller cJSON_Delete). */
 cJSON *minihub_store_catalog_merged(void);

@@ -181,10 +181,9 @@
         <img id="auth-captcha-img" alt="captcha" />
         <input id="auth-icode" placeholder="3-8位字母或数字" autocomplete="off" maxlength="8" autocapitalize="off" spellcheck="false" />
       </div>
-      <label for="auth-ticket" id="auth-ticket-label">短信验证码</label>
-      <input id="auth-ticket" placeholder="验证码" autocomplete="one-time-code" />
-      <div class="auth-2fa-actions">
-        <button class="btn-sm" type="button" id="auth-send-code" onclick="sendAuthVerify()">发送验证码</button>
+      <div id="auth-ticket-block" hidden>
+        <label for="auth-ticket" id="auth-ticket-label">短信验证码</label>
+        <input id="auth-ticket" placeholder="验证码" autocomplete="one-time-code" />
       </div>
     </div>
     <div class="modal-hint" id="auth-login-hint"></div>
