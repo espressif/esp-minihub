@@ -10,6 +10,7 @@ set(_REQUIRES
     minihub_core minihub_config minihub_rules minihub_hub minihub_pack minihub_module minihub_store
     minihub_scenes minihub_auth minihub_ota
     minihub_net
+    minihub_provision
     minihub_matter
     minihub_thread
     minihub_device_widget
