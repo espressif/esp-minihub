@@ -26,6 +26,8 @@
 #include "esp_timer.h"
 #include "cJSON.h"
 #include "minihub_net.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "minihub_net_cfg.h"
 #include "minihub_core.h"
 #include "minihub_http_worker.h"
@@ -964,6 +966,48 @@ static esp_err_t handle_api_system(httpd_req_t *req)
 
     err = send_json(req, root);
     cJSON_Delete(root);
+    return err;
+}
+
+static void reboot_deferred(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+}
+
+static esp_err_t handle_api_system_reboot(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char *buf = NULL;
+    size_t buflen = 0;
+    esp_err_t body_err = read_http_body(req, &buf, &buflen, 128);
+    if (body_err != ESP_OK || !buf) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "confirm required");
+    }
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (!root || !cJSON_IsTrue(cJSON_GetObjectItem(root, "confirm"))) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "confirm required");
+    }
+    cJSON_Delete(root);
+
+    if (xTaskCreate(reboot_deferred, "web_reboot", 2048, NULL, 5, NULL) != pdPASS) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+    }
+
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddStringToObject(resp, "result", "ok");
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
     return err;
 }
 
@@ -4534,6 +4578,8 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     httpd_uri_t api_auth_logout = { .uri = "/api/auth/logout", .method = HTTP_POST,
                                     .handler = handle_api_auth_logout };
     httpd_uri_t api_system = { .uri = "/api/system", .method = HTTP_GET, .handler = handle_api_system };
+    httpd_uri_t api_system_reboot = { .uri = "/api/system/reboot", .method = HTTP_POST,
+                                      .handler = handle_api_system_reboot };
     httpd_uri_t api_net_cfg = { .uri = "/api/net/config", .method = HTTP_POST, .handler = handle_api_net_config };
     httpd_uri_t adapters_api = { .uri = "/api/adapters", .method = HTTP_GET, .handler = handle_api_adapters };
     httpd_uri_t config_adapters_get = { .uri = "/api/config/adapters", .method = HTTP_GET,
@@ -4624,6 +4670,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_auth_login), TAG, "/api/auth/login");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_auth_logout), TAG, "/api/auth/logout");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system), TAG, "/api/system");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_reboot), TAG, "/api/system/reboot");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_net_cfg), TAG, "/api/net/config");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &adapters_api), TAG, "/api/adapters");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &config_adapters_get), TAG, "/api/config/adapters GET");

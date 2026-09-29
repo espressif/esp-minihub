@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-09-27-matter-step';
+window.mhWebBuild = '2026-09-29-reboot';
 
 /* Session gone → /login. A 401 is not enough: fetch follows a 302 to /login
  * and the final status is 200, and an already-open console keeps its last
