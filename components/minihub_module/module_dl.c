@@ -5,6 +5,7 @@
  */
 
 #include "minihub_module.h"
+#include "minihub_core.h"
 #include "minihub_config.h"
 #include "minihub_paths.h"
 #include "minihub_task.h"
@@ -84,6 +85,9 @@ typedef struct {
     bool invoke_entry;
     esp_err_t err;
     SemaphoreHandle_t done;
+    /* Owning module id; applied as the event-subscription owner while entry runs
+     * (in this worker task) so the module's callbacks can be reaped on unload. */
+    const char *owner;
 } module_dl_job_t;
 
 static esp_err_t module_dl_load_on_task(const char *binary_path,
@@ -325,13 +329,19 @@ static void module_mhub_tmp_paths(unsigned stamp, char *rel, size_t rel_len,
     snprintf(rel, rel_len, "tmp/mod_%u.so", stamp);
 }
 
+/* Monotonic extract counter -> unique tmp .so name per extraction, so a rapid
+ * install/uninstall cycle (which triggers a full reload loading several modules
+ * back-to-back) can never collide on a mod_<stamp>.so name and overwrite an
+ * in-use binary. The old stamp was esp_log_timestamp()&0xFFFF (~65s wrap). */
+static unsigned s_dl_extract_seq = 0;
+
 static esp_err_t resolve_load_path(const char *binary_path, char *rel_out, size_t rel_len,
                                    char *abs_out, size_t abs_len)
 {
     if (path_ends_with(binary_path, ".mhub") || path_ends_with(binary_path, ".so")) {
         /* Drop leftovers from previous boots / failed loads before allocating space. */
         purge_orphan_module_tmp();
-        unsigned stamp = (unsigned)(esp_log_timestamp() & 0xFFFF);
+        unsigned stamp = ++s_dl_extract_seq;
         module_mhub_tmp_paths(stamp, rel_out, rel_len, abs_out, abs_len);
         return extract_mhub_payload(binary_path, abs_out, abs_len);
     }
@@ -397,7 +407,8 @@ esp_err_t minihub_module_dl_load_and_enter(const char *binary_path,
                                            const cJSON *config,
                                            const minihub_adapter_t **out_adapter,
                                            minihub_module_rpc_fn *out_rpc,
-                                           void **out_handle)
+                                           void **out_handle,
+                                           const char *owner)
 {
     if (!binary_path || !host || !out_adapter) {
         return ESP_ERR_INVALID_ARG;
@@ -425,6 +436,7 @@ esp_err_t minihub_module_dl_load_and_enter(const char *binary_path,
         .config = config,
         .out_adapter = out_adapter,
         .invoke_entry = true,
+        .owner = owner,
     };
     return module_dl_run_job(&job);
 #endif
@@ -529,8 +541,12 @@ static esp_err_t module_dl_load_on_task(const char *binary_path,
 static void module_dl_worker(void *arg)
 {
     module_dl_job_t *job = (module_dl_job_t *)arg;
+    if (job->owner) {
+        minihub_event_bus_set_current_owner(job->owner);
+    }
     job->err = module_dl_load_on_task(job->binary_path, job->out_entry, job->out_rpc, job->out_handle,
                                       job->host, job->config, job->out_adapter, job->invoke_entry);
+    minihub_event_bus_set_current_owner("");
     xSemaphoreGive(job->done);
     vTaskDelete(NULL);
 }
@@ -541,6 +557,7 @@ void minihub_module_dl_unload_all(void)
 #if CONFIG_MINIHUB_DYNAMIC_MODULES && defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) && CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
     for (size_t i = 0; i < s_dl_count; i++) {
         if (s_dl_slots[i].handle) {
+            ESP_LOGI(TAG, "dlclose module '%s' handle=%p", s_dl_slots[i].path, (void *)s_dl_slots[i].handle);
             dlclose(s_dl_slots[i].handle);
             s_dl_slots[i].handle = NULL;
         }

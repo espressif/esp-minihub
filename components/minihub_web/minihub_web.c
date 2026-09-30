@@ -4862,11 +4862,23 @@ static esp_err_t handle_api_config_adapters_get(httpd_req_t *req)
         return err;
     }
 
-    cJSON *cfg = minihub_config_get_adapters();
+    /* minihub_config_reload() (run under this same lock during hub_reload)
+     * frees and replaces s_adapters_cfg. Snapshot a private copy under the lock
+     * so a concurrent reload cannot free the tree while we serialize it. */
+    cJSON *cfg = NULL;
+    if (minihub_adapter_lifecycle_lock(1000) == ESP_OK) {
+        cJSON *live = minihub_config_get_adapters();
+        if (live) {
+            cfg = cJSON_Duplicate(live, 1);
+        }
+        minihub_adapter_lifecycle_unlock();
+    }
     if (!cfg) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no config");
     }
-    return send_json(req, cfg);
+    esp_err_t r = send_json(req, cfg);
+    cJSON_Delete(cfg);
+    return r;
 }
 
 static esp_err_t handle_api_config_adapters_put(httpd_req_t *req)

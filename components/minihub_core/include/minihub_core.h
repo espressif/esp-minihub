@@ -386,6 +386,26 @@ esp_err_t minihub_event_bus_subscribe(const char *event_type, minihub_event_hand
 esp_err_t minihub_event_bus_unsubscribe(const char *event_type, minihub_event_handler_t handler);
 
 /**
+ * @brief Drop every subscription owned by a module (used before dlclose to avoid
+ *        invoking callbacks that live in the freed .so).
+ *
+ * @param owner Module id (adapter name); matches the tag set via
+ *              minihub_event_bus_set_current_owner during the module's entry/start.
+ */
+esp_err_t minihub_event_bus_unsubscribe_owner(const char *owner);
+
+/**
+ * @brief Tag the next subscription(s) with an owning module id.
+ *
+ * @note Set this while a module's entry/start runs so its event callbacks are
+ *       reaped on unload. Pass NULL/"" to clear (core/JS subscribers).
+ */
+void minihub_event_bus_set_current_owner(const char *owner);
+
+/** @brief Current owner tag applied to new subscriptions ("" if none). */
+const char *minihub_event_bus_current_owner(void);
+
+/**
  * @brief Publish an event; ownership of data transfers to Host
  *
  * @note Do not run lengthy work in event handlers; defer to a lower-priority task.
@@ -442,6 +462,17 @@ esp_err_t minihub_command_clear_handlers(void);
  *     - ESP_ERR_NOT_FOUND: point or handler missing
  */
 esp_err_t minihub_command_invoke(const minihub_command_t *cmd);
+
+/**
+ * @brief Inject the adapter lifecycle lock used to serialize command dispatch
+ *        with the module reload path (prevents use-after-free into a dlclosed
+ *        module). Provided by the adapter component at init so core does not
+ *        depend on adapter headers; core only stores the callbacks.
+ *
+ * @param take  acquires the (recursive) lifecycle lock
+ * @param give  releases it
+ */
+void minihub_command_set_lifecycle_lock(void (*take)(void), void (*give)(void));
 
 /**
  * @brief Initialize Core subsystems

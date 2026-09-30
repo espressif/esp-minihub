@@ -144,7 +144,8 @@ esp_err_t minihub_module_dl_load_and_enter(const char *binary_path,
                                            const cJSON *config,
                                            const minihub_adapter_t **out_adapter,
                                            minihub_module_rpc_fn *out_rpc,
-                                           void **out_handle);
+                                           void **out_handle,
+                                           const char *owner);
 
 /** Unload all dynamically loaded module handles */
 void minihub_module_dl_unload_all(void);
