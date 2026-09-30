@@ -553,12 +553,92 @@ function renderOverview() {
     if (filter === 'all' && loose.length) {
         html += '<div class="section"><div class="grid">' + loose.map(cardHtml).join('') + '</div></div>';
     }
+    /* Structure signature: the pre-section CTAs (auth/rtsp) plus the ordered set
+     * of device point_ids. When this is unchanged we only patch cards in place
+     * (keeping icon <img> elements alive); otherwise a full rebuild is required. */
+    const ctaPart = html.split('<div class="section"')[0];
+    const structSig = ctaPart + '' + list.map(p => p.point_id).join('');
+    if (structSig !== lastOverviewSig) {
+        lastOverviewSig = structSig;
+        lastOverviewHtml = html;
+        el.innerHTML = html;
+        rebuildCardEls(el);
+        bindOverviewToggles(el);
+        return;
+    }
     if (html === lastOverviewHtml) return;
+    /* Same card set/order: update in place to avoid re-fetching icons.
+     * Force a full rebuild if any card newly appeared/disappeared (e.g. visibility
+     * toggled) or a cached node is detached (e.g. view switch). */
+    let needsFull = (Object.keys(cardEls).length === 0);
+    if (!needsFull) {
+        list.forEach(function (p) {
+            const ex = cardEls[p.point_id];
+            const tmp = document.createElement('div');
+            tmp.innerHTML = cardHtml(p);
+            const willRender = !!tmp.firstElementChild;
+            if (!ex || !ex.isConnected || willRender !== !!ex) needsFull = true;
+        });
+    }
+    if (needsFull) {
+        lastOverviewSig = structSig;
+        lastOverviewHtml = html;
+        el.innerHTML = html;
+        rebuildCardEls(el);
+        bindOverviewToggles(el);
+        return;
+    }
     lastOverviewHtml = html;
-    el.innerHTML = html;
-    el.querySelectorAll('.toggle input:not(:disabled)').forEach(inp => {
-        inp.onchange = () => cmd(inp.dataset.id, inp.checked ? 'turn_on' : 'turn_off');
+    list.forEach(function (p) {
+        const ex = cardEls[p.point_id];
+        if (ex) updateCardEl(ex, p);
     });
+}
+
+/* Keyed card update: keep the device icon <img> element alive across state
+ * updates so it is never recreated/re-fetched (prevents overview icon flicker).
+ * cardEls maps point_id -> the live .dcard element; lastOverviewSig captures the
+ * card set/order (+ pre-section CTAs) so we only do a full rebuild when the
+ * structure changes and otherwise patch cards in place. */
+let cardEls = {};
+let lastOverviewSig = '';
+
+function rebuildCardEls(root) {
+    cardEls = {};
+    root.querySelectorAll('.dcard').forEach(function (d) {
+        const pid = d.getAttribute('data-pid');
+        if (pid) cardEls[pid] = d;
+    });
+}
+
+function bindOverviewToggles(root) {
+    root.querySelectorAll('.toggle input:not(:disabled)').forEach(function (inp) {
+        inp.onchange = function () { cmd(inp.dataset.id, inp.checked ? 'turn_on' : 'turn_off'); };
+    });
+}
+
+function updateCardEl(existing, p) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = cardHtml(p);
+    const newCard = tmp.firstElementChild;
+    if (!newCard) {            /* device hidden (visible:false) */
+        existing.remove();
+        delete cardEls[p.point_id];
+        return;
+    }
+    const oldImg = existing.querySelector('img.dw-device-icon');
+    const newImg = newCard.querySelector('img.dw-device-icon');
+    /* Reuse the existing <img> when its src is unchanged so the browser keeps
+     * the decoded image instead of re-requesting it (the flicker source). */
+    if (oldImg && newImg && oldImg.getAttribute('src') === newImg.getAttribute('src')) {
+        newImg.parentNode.replaceChild(oldImg, newImg);
+    }
+    existing.replaceWith(newCard);
+    cardEls[p.point_id] = newCard;
+    const inp = newCard.querySelector('.toggle input:not(:disabled)');
+    if (inp) {
+        inp.onchange = function () { cmd(inp.dataset.id, inp.checked ? 'turn_on' : 'turn_off'); };
+    }
 }
 
 let authDrafts = {};
