@@ -47,6 +47,8 @@ esp_err_t minihub_config_remove_adapter_device(const char *adapter_name, const c
 esp_err_t minihub_config_save_rules(cJSON *rules_root);
 /** Write scenes.json to LittleFS and refresh cache */
 esp_err_t minihub_config_save_scenes(cJSON *scenes_root);
+/** Factory reset: delete user config files (rules / scenes / adapters). */
+void minihub_config_factory_reset(void);
 /**
  * Write a file under MINIHUB_VFS_MOUNT (e.g. rel_path "ui/screens/store.json").
  * Parent directories are created as needed. Rejects ".." in path.

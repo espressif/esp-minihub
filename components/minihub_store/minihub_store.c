@@ -1803,6 +1803,28 @@ esp_err_t minihub_store_uninstall(const char *kind, const char *id)
     return ESP_ERR_INVALID_ARG;
 }
 
+esp_err_t minihub_store_factory_reset(void)
+{
+    /* Remove every Store-installed module and pack. Factory preinstall
+     * (/store/preinstall) and the Web console (/data/web) live elsewhere and
+     * are intentionally preserved. */
+    (void)minihub_hub_remove_tree(MINIHUB_MODULES_DIR);
+    (void)minihub_hub_remove_tree(MINIHUB_PACKS_DIR);
+    (void)minihub_hub_remove_tree(MINIHUB_STORE_PACKS_DIR);
+    esp_err_t err = ESP_OK;
+    if (ensure_dir(MINIHUB_MODULES_DIR) != ESP_OK) {
+        err = ESP_FAIL;
+    }
+    if (ensure_dir(MINIHUB_PACKS_DIR) != ESP_OK) {
+        err = ESP_FAIL;
+    }
+    if (ensure_dir(MINIHUB_STORE_PACKS_DIR) != ESP_OK) {
+        err = ESP_FAIL;
+    }
+    ESP_LOGI(TAG, "factory reset cleared store modules and packs");
+    return err;
+}
+
 cJSON *minihub_store_catalog_merged(void)
 {
     cJSON *merged = cJSON_CreateArray();

@@ -577,6 +577,19 @@ esp_err_t minihub_config_save_scenes(cJSON *scenes_root)
     return ESP_OK;
 }
 
+/** Factory reset: drop user config files (rules / scenes / adapter slots).
+ *  The live caches are not touched — a reboot re-reads from disk and falls
+ *  back to defaults. Factory preinstall and the Web console are untouched. */
+void minihub_config_factory_reset(void)
+{
+    const char *user_files[] = { s_rules_path, s_scenes_path, s_adapters_path };
+    for (size_t i = 0; i < sizeof(user_files) / sizeof(user_files[0]); i++) {
+        if (remove(user_files[i]) == 0) {
+            ESP_LOGI(TAG, "factory reset removed %s", user_files[i]);
+        }
+    }
+}
+
 static bool rel_path_is_safe(const char *rel_path)
 {
     if (rel_path == NULL || rel_path[0] == '\0' || rel_path[0] == '/') {
