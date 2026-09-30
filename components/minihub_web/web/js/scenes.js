@@ -13,15 +13,15 @@ async function loadScenes() {
         };
         if (view === 'scenes') renderScenes();
     } catch (e) {
-        toast('场景加载失败');
+        toast(t('scenes.load_failed'));
         const el = document.getElementById('scenes-list');
-        if (el) el.innerHTML = '<div class="empty">加载失败</div>';
+        if (el) el.innerHTML = '<div class="empty">' + t('scenes.load_error') + '</div>';
     }
 }
 
 function sceneCmdSummary(cmds) {
     const arr = Array.isArray(cmds) ? cmds : [];
-    if (!arr.length) return '无指令';
+    if (!arr.length) return t('scenes.no_cmds');
     return arr.slice(0, 3).map(function(c) {
         return (c.cmd || '?') + ' → ' + (c.point_id || '?');
     }).join(' · ') + (arr.length > 3 ? ' …' : '');
@@ -55,13 +55,13 @@ function renderScenes() {
         }
         const cmds = Array.isArray(sc.commands) ? sc.commands : [];
         const steps = cmds.map(function(c, i) {
-            return '<div class="rule-step"><div class="rule-step-label">步骤 ' + (i + 1) + '</div><div class="rule-step-title">' + esc(c.cmd || '?') + '</div><div class="rule-step-body">目标 <b>' + esc(c.point_id || '?') + '</b>' + (c.delay_ms ? (' · 延时 ' + esc(String(c.delay_ms)) + ' ms') : '') + '</div></div>';
+            return '<div class="rule-step"><div class="rule-step-label">' + t('scenes.step', { n: i + 1 }) + '</div><div class="rule-step-title">' + esc(c.cmd || '?') + '</div><div class="rule-step-body">' + t('scenes.target', { pid: esc(c.point_id || '?') }) + (c.delay_ms ? t('scenes.delay', { n: esc(String(c.delay_ms)) }) : '') + '</div></div>';
         }).join('<div class="rule-arrow">↓</div>');
-        detail.innerHTML = '<button class="btn-sm" type="button" onclick="scenesBack()">← 返回列表</button>' +
-            '<button class="btn-sm on" type="button" style="margin-left:8px" onclick="scenesEditOpen(\'' + escAttr(sc.id) + '\')">编辑</button>' +
-            '<button class="btn-sm on" type="button" style="margin-left:8px" onclick="scenesInvoke(\'' + escAttr(sc.id) + '\')">执行</button>' +
-            '<div class="dcard" style="margin-top:12px"><div class="card-top"><div class="card-name">' + esc(sc.name || sc.id || '场景') + '</div><span class="badge sensor">' + cmds.length + ' 步</span></div>' +
-            '<div class="card-meta"><span>' + esc(sc.id || '') + '</span></div><div class="rule-flow">' + (steps || '<div class="empty">无指令</div>') + '</div></div>';
+        detail.innerHTML = '<button class="btn-sm" type="button" onclick="scenesBack()">' + t('scenes.back') + '</button>' +
+            '<button class="btn-sm on" type="button" style="margin-left:8px" onclick="scenesEditOpen(\'' + escAttr(sc.id) + '\')">' + t('scenes.edit') + '</button>' +
+            '<button class="btn-sm on" type="button" style="margin-left:8px" onclick="scenesInvoke(\'' + escAttr(sc.id) + '\')">' + t('scenes.run') + '</button>' +
+            '<div class="dcard" style="margin-top:12px"><div class="card-top"><div class="card-name">' + esc(sc.name || sc.id || t('scenes.scene')) + '</div><span class="badge sensor">' + t('scenes.step_count', { n: cmds.length }) + '</span></div>' +
+            '<div class="card-meta"><span>' + esc(sc.id || '') + '</span></div><div class="rule-flow">' + (steps || '<div class="empty">' + t('scenes.no_cmds') + '</div>') + '</div></div>';
         return;
     }
     detail.hidden = true;
@@ -69,16 +69,16 @@ function renderScenes() {
     const arr = scenesCfg.scenes || [];
     if (!arr.length) {
         list.className = '';
-        list.innerHTML = '<div class="empty">暂无场景 — 点击「添加场景」创建跨适配器一键指令</div>';
+        list.innerHTML = '<div class="empty">' + t('scenes.empty') + '</div>';
         return;
     }
     list.className = 'grid';
     list.innerHTML = arr.map(function(s) {
         const n = (Array.isArray(s.commands) ? s.commands : []).length;
         return '<div class="dcard" style="cursor:pointer" data-scene-id="' + escAttr(s.id || '') + '">' +
-            '<div class="card-top"><div class="card-name">' + esc(s.name || s.id || '(unnamed)') + '</div><span class="badge sensor">' + n + ' 步</span></div>' +
+            '<div class="card-top"><div class="card-name">' + esc(s.name || s.id || '(unnamed)') + '</div><span class="badge sensor">' + t('scenes.step_count', { n: n }) + '</span></div>' +
             '<div class="card-meta"><span>' + esc(sceneCmdSummary(s.commands)) + '</span></div>' +
-            '<div class="card-actions" style="margin-top:10px"><button class="btn-sm on" type="button" data-invoke="' + escAttr(s.id || '') + '">执行</button></div></div>';
+            '<div class="card-actions" style="margin-top:10px"><button class="btn-sm on" type="button" data-invoke="' + escAttr(s.id || '') + '">' + t('scenes.run') + '</button></div></div>';
     }).join('');
     list.onclick = function(ev) {
         const inv = ev.target.closest('[data-invoke]');
@@ -101,7 +101,7 @@ function scenesBack() {
 }
 async function scenesInvoke(id) {
     if (!id) return;
-    toast('执行中…');
+    toast(t('scenes.running'));
     try {
         const r = await fetch('/api/scenes/invoke', {
             method: 'POST',
@@ -112,9 +112,9 @@ async function scenesInvoke(id) {
                 scene_id: id
             })
         });
-        if (r.ok) toast('场景已执行');
+        if (r.ok) toast(t('scenes.invoked'));
         else {
-            let m = '失败';
+            let m = t('scenes.failed');
             try {
                 const j = await r.json();
                 m = j.error || j.message || m;
@@ -122,7 +122,7 @@ async function scenesInvoke(id) {
             toast(String(m).slice(0, 80));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('scenes.net_error'));
     }
 }
 async function scenesEditNew() {
@@ -145,7 +145,7 @@ async function scenesEditOpen(id) {
         return x.id === id;
     });
     if (!sc) {
-        toast('场景不存在');
+        toast(t('scenes.not_found'));
         return;
     }
     scenesEditMode = id;
@@ -159,10 +159,10 @@ function scenesEditCancel() {
 
 function scenesEditCmdRow(c, idx) {
     c = c || {};
-    return '<div class="scenes-cmd-row" data-idx="' + idx + '"><div><label>point_id</label>' + rulesSelectHtml('sc-pid-' + idx, rulesPointOptions(c.point_id || '')) + '</div>' +
+    return '<div class="scenes-cmd-row" data-idx="' + idx + '"><div><label>point_id</label>' + rulesSelectHtml('sc-pid-' + idx, rulesDeviceOptionsHtml(c.point_id || '')) + '</div>' +
         '<div><label>cmd</label><input type="text" id="sc-cmd-' + idx + '" value="' + escAttr(c.cmd || 'turn_off') + '" placeholder="turn_on / turn_off" /></div>' +
         '<div><label>delay_ms</label><input type="number" id="sc-delay-' + idx + '" min="0" step="100" value="' + (c.delay_ms != null ? escAttr(String(c.delay_ms)) : '0') + '" /></div>' +
-        '<button class="btn-sm bad" type="button" onclick="scenesEditRmCmd(' + idx + ')" title="删除">×</button></div>';
+        '<button class="btn-sm bad" type="button" onclick="scenesEditRmCmd(' + idx + ')" title="' + t('scenes.delete') + '">×</button></div>';
 }
 
 function scenesEditRender(sc) {
@@ -182,14 +182,14 @@ function scenesEditRender(sc) {
         delay_ms: 0
     }];
     window._scenesEditCmds = cmds;
-    edit.innerHTML = '<button class="btn-sm" type="button" onclick="scenesEditCancel()">← 取消</button>' +
-        '<div class="dcard" style="margin-top:12px"><div class="card-name">' + (isNew ? '新建场景' : '编辑场景') + '</div>' +
+    edit.innerHTML = '<button class="btn-sm" type="button" onclick="scenesEditCancel()">' + t('scenes.cancel_back') + '</button>' +
+        '<div class="dcard" style="margin-top:12px"><div class="card-name">' + (isNew ? t('scenes.new') : t('scenes.edit_title')) + '</div>' +
         '<label>id</label><input id="sc-id" ' + (isNew ? '' : 'readonly ') + 'value="' + escAttr(id) + '" />' +
-        '<label>名称</label><input id="sc-name" value="' + escAttr(name) + '" placeholder="如：晚安" />' +
-        '<div style="margin-top:12px"><div class="card-name" style="font-size:.85rem">指令序列</div><div id="sc-cmds"></div>' +
-        '<button class="btn-sm" type="button" onclick="scenesEditAddCmd()">+ 添加指令</button></div>' +
-        '<div class="modal-actions" style="margin-top:14px"><button class="btn-sm on" type="button" onclick="scenesEditSave()">保存</button>' +
-        (isNew ? '' : '<button class="btn-sm bad" type="button" onclick="scenesEditDelete()">删除</button>') + '</div></div>';
+        '<label>' + t('scenes.field_name') + '</label><input id="sc-name" value="' + escAttr(name) + '" placeholder="' + t('scenes.name_ph') + '" />' +
+        '<div style="margin-top:12px"><div class="card-name" style="font-size:.85rem">' + t('scenes.commands') + '</div><div id="sc-cmds"></div>' +
+        '<button class="btn-sm" type="button" onclick="scenesEditAddCmd()">' + t('scenes.add_cmd') + '</button></div>' +
+        '<div class="modal-actions" style="margin-top:14px"><button class="btn-sm on" type="button" onclick="scenesEditSave()">' + t('scenes.save') + '</button>' +
+        (isNew ? '' : '<button class="btn-sm bad" type="button" onclick="scenesEditDelete()">' + t('scenes.delete') + '</button>') + '</div></div>';
     scenesEditPaintCmds();
 }
 
@@ -245,12 +245,12 @@ async function scenesEditSave() {
     const id = (document.getElementById('sc-id').value || '').trim();
     const name = (document.getElementById('sc-name').value || '').trim() || id;
     if (!id) {
-        toast('请填写 id');
+        toast(t('scenes.err_id'));
         return;
     }
     const commands = scenesEditCollectCmds();
     if (!commands.length) {
-        toast('至少一条指令');
+        toast(t('scenes.err_cmds'));
         return;
     }
     const next = (scenesCfg.scenes || []).slice();
@@ -264,7 +264,7 @@ async function scenesEditSave() {
     });
     if (scenesEditMode === 'new') {
         if (ix >= 0) {
-            toast('id 已存在');
+            toast(t('scenes.err_id_exists'));
             return;
         }
         next.push(item);
@@ -283,20 +283,20 @@ async function scenesEditSave() {
             })
         });
         if (!r.ok) {
-            toast('保存失败');
+            toast(t('scenes.save_failed'));
             return;
         }
         scenesEditMode = null;
         scenesSel = id;
         await loadScenes();
-        toast('已保存');
+        toast(t('scenes.saved'));
     } catch (e) {
-        toast('网络错误');
+        toast(t('scenes.net_error'));
     }
 }
 async function scenesEditDelete() {
     const id = (document.getElementById('sc-id').value || '').trim();
-    if (!id || !confirm('删除场景 ' + id + '？')) return;
+    if (!id || !confirm(t('scenes.confirm_delete', { id: id }))) return;
     const next = (scenesCfg.scenes || []).filter(function(x) {
         return x.id !== id;
     });
@@ -311,14 +311,14 @@ async function scenesEditDelete() {
             })
         });
         if (!r.ok) {
-            toast('删除失败');
+            toast(t('scenes.delete_failed'));
             return;
         }
         scenesEditMode = null;
         scenesSel = null;
         await loadScenes();
-        toast('已删除');
+        toast(t('scenes.deleted'));
     } catch (e) {
-        toast('网络错误');
+        toast(t('scenes.net_error'));
     }
 }

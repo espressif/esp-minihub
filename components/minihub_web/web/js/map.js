@@ -16,7 +16,7 @@ function paintMapDevices(hub) {
             fillColor: col,
             fillOpacity: .9
         });
-        m.bindPopup('<b>' + esc(p.point_id.split('/').pop()) + '</b><br>' + esc(p.value) + (p.online ? '' : ' （离线）'));
+        m.bindPopup('<b>' + esc(p.point_id.split('/').pop()) + '</b><br>' + esc(p.value) + (p.online ? '' : t('map.offline')));
         deviceLayer.addLayer(m);
         if (p.online && (p.type === 'switch' || p.type === 'light')) {
             m.on('click', () => cmd(p.point_id, on ? 'turn_off' : 'turn_on'));
@@ -57,12 +57,12 @@ function ensureLeaflet() {
 async function renderMap() {
     if (!window.L) {
         const info = document.getElementById('map-info');
-        if (info) info.textContent = '正在加载地图库…';
+        if (info) info.textContent = t('map.loading_library');
         return;
     }
     const info = document.getElementById('map-info');
     if (typeof L === 'undefined') {
-        info.textContent = '地图库未加载';
+        info.textContent = t('map.library_not_loaded');
         return;
     }
     const fallback = {
@@ -71,12 +71,12 @@ async function renderMap() {
         lat: 31.2304,
         lon: 121.4737,
         city: '',
-        address: '定位中…',
+        address: t('map.locating'),
         map_provider: 'amap'
     };
     let geo = geoLoc && geoLoc.lat ? geoLoc : null;
     if (!geo) {
-        info.textContent = '正在定位…（设备已显示）';
+        info.textContent = t('map.locating_devices_shown');
         try {
             geo = await loadGeo(false);
         } catch (e) {
@@ -84,8 +84,8 @@ async function renderMap() {
         }
     }
     if (!geo || !geo.lat) geo = fallback;
-    const src = geo.source === 'browser' ? '浏览器 IP' : (geo.source === 'default' ? '默认中心' : 'Hub 公网 IP');
-    info.innerHTML = (geo.source === 'default' ? '定位中…' : '大概位置：<b>' + esc(geo.address || geo.city || '-') + '</b>') + ' · ' + src + (geo.public_ip ? ' · 公网 ' + esc(geo.public_ip) : '') + (geo.local_ip ? ' · 局域网 ' + esc(geo.local_ip) : '');
+    const src = geo.source === 'browser' ? t('map.source_browser_ip') : (geo.source === 'default' ? t('map.source_default_center') : t('map.source_hub_public_ip'));
+    info.innerHTML = (geo.source === 'default' ? t('map.locating') : t('map.approx_location') + '<b>' + esc(geo.address || geo.city || '-') + '</b>') + ' · ' + src + (geo.public_ip ? ' · ' + t('map.public_ip') + ' ' + esc(geo.public_ip) : '') + (geo.local_ip ? ' · ' + t('map.lan_ip') + ' ' + esc(geo.local_ip) : '');
     const cn = geo.map_provider === 'amap' || inChina(geo) || geo.source === 'default';
     const hub = cn ? wgs84togcj02(geo.lat, geo.lon) : [geo.lat, geo.lon];
     const el = document.getElementById('map-leaflet');

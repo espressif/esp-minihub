@@ -16,7 +16,7 @@ Upstream: https://docs.rainmaker.espressif.com/docs/dev/firmware/fw_usage_guides
 
 | Device ID | RainMaker Type | Parameters | Primary | Mandatory |
 |-----------|----------------|------------|---------|-----------|
-| light | esp.device.lightbulb | power, brightness, cct, hue, saturation, intensity, light-mode | power | power |
+| light | esp.device.lightbulb | power, brightness, cct, hue, saturation, intensity | power | power |
 | switch | esp.device.switch | power, voltage_v, current_a, power_w, energy_wh | power | power |
 
 `esp.device.light` = `esp.device.lightbulb`. `name` is metadata only (not listed
@@ -44,7 +44,6 @@ Reference in `model/services.csv` — not part of the widget registry.
 | Hue / 颜色 | hue | Int | Read, Write | 0, 360, 1 | ui.slider | Color (deg); label 颜色 |
 | Saturation | saturation | Int | Read, Write | 0, 100, 1 | ui.slider | Saturation % |
 | Intensity | intensity | Int | Read, Write | 0, 100, 1 | ui.slider | Intensity % |
-| Light Mode | light-mode | Int | Read, Write | 0, 2, 1 | ui.dropdown | 0 HSV+CCT, 1 HSV, 2 CCT |
 | Voltage | voltage_v | Float | Read | 0, 250, 0.1 | ui.text | Line voltage (V); read-only metering |
 | Current | current_a | Float | Read | 0, 16, 0.01 | ui.text | Current (A); read-only metering |
 | Active power | power_w | Float | Read | 0, 4000, 1 | ui.text | Power (W); not on/off `power`; read-only |
@@ -54,7 +53,7 @@ Reference in `model/services.csv` — not part of the widget registry.
 |-----------|---------|
 | name | — (metadata) |
 | power | light, switch |
-| brightness, cct, hue, saturation, intensity, light-mode | light |
+| brightness, cct, hue, saturation, intensity | light |
 | voltage_v, current_a, power_w, energy_wh | switch |
 
 Icons: device avatars under `images/devices/`; optional control icons under
@@ -66,6 +65,6 @@ Icons: device avatars under `images/devices/`; optional control icons under
 |------------|------------|----------|
 | ui.toggle | toggle | Bool (`power`) |
 | ui.slider | slider | Bounded setpoints; `hue` rainbow via CSS tone |
-| ui.dropdown | dropdown | Fixed set (`light-mode`) |
+| ui.dropdown | dropdown | Fixed option set (none in the stock catalog; see `options` in parameters.csv) |
 | ui.text | text | String (`name`) or metering readouts; read-only when `access:R` |
 | ui.hidden | hidden | Type-level never render (≠ instance `visible:false`) |

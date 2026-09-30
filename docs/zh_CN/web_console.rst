@@ -127,9 +127,24 @@ Kconfig 与登录
 语言目录
 --------
 
-当前控制台是 **一份** ``index.html`` / ``login.html`` （通用 Host 为中文 UI）。
-HTTP **不会** 按 ``web/en/login.html`` 与 ``web/zh_CN/login.html`` 切换。只把这些
-目录放到 LittleFS 上不会换语言，除非固件按 ``Accept-Language`` 去映射。
+控制台是 **一份** ``index.html`` / ``login.html``，外加每种语言一份文案文件
+（``web/i18n/zh_CN.json``、``web/i18n/en.json``）。语言在浏览器里决定，不由服务端决定：
+
+``localStorage['minihub.lang']`` → 浏览器语言（``zh*`` → ``zh_CN``，否则 ``en``）→ ``en``。
+
+用户手动选过的语言因此优先于浏览器默认值。``localStorage`` 按 origin 隔离，每台
+Hub 各自记住自己的选择。切换时写入该 key 并重新加载页面；设备目录会带
+``?lang=`` 重新拉取，设备与参数显示名跟随同一个选择。
+
+页面在文案文件加载完成前是隐藏的，所以英文用户不会看到中文首帧。
+``/web/i18n/`` 与 ``/web/js/i18n.js`` 是 **不需要** 会话就能取到的两个路径，
+因为登录页是用户看到的第一个页面，必须能自己翻译；两者只含界面文案。
+
+这就是 HTTP 服务 **不再** 把 ``Accept-Language`` 映射到 ``web/en/`` 与
+``web/zh_CN/`` 目录的原因 —— 根本没有按语言分开的页面树可选。只有 ROM 兜底页
+（Web 资源还没挂载时）仍按 ``Accept-Language`` 选中英。
+
+Store 模块自带的 ``web/`` UI 目前还不在这套机制覆盖范围内。
 
 模块 UI
 --------

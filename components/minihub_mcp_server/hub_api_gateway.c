@@ -1023,17 +1023,16 @@ static esp_err_t dispatch_ble_mesh_permit(const char *body, cJSON **out)
     cJSON_AddBoolToObject(root, "ok", bm_err == ESP_OK);
     cJSON_AddStringToObject(root, "result", bm_err == ESP_OK ? "ok" : "fail");
     if (bm_err != ESP_OK) {
-        if (bm_err == ESP_ERR_INVALID_STATE && minihub_ble_mesh_provisioning_busy()) {
-            cJSON_AddStringToObject(root, "error", "BLE Mesh 正在配网，请勿重复开启");
-        } else if (bm_err == ESP_ERR_INVALID_STATE && !minihub_ble_mesh_running()) {
-            cJSON_AddStringToObject(root, "error", "BLE Mesh 栈未就绪（启动失败或仍在初始化）");
 #if CONFIG_MINIHUB_ZIGBEE_SDK
-        } else if (bm_err == ESP_ERR_INVALID_STATE && minihub_zigbee_permit_join_active()) {
-            cJSON_AddStringToObject(root, "error", "Zigbee 正在入网，无法同时开启 BLE Mesh 配网");
+        const bool zigbee_joining = minihub_zigbee_permit_join_active();
+#else
+        const bool zigbee_joining = false;
 #endif
-        } else {
-            cJSON_AddStringToObject(root, "error", esp_err_to_name(bm_err));
-        }
+        /* Always English: the MCP caller is a tool, and the reason text is not
+         * something the console language can reach from here. */
+        const char *why = minihub_ble_mesh_permit_text(
+            minihub_ble_mesh_permit_classify(bm_err, zigbee_joining), false);
+        cJSON_AddStringToObject(root, "error", why ? why : esp_err_to_name(bm_err));
     }
     cJSON_AddBoolToObject(root, "ready", minihub_ble_mesh_running());
     cJSON_AddBoolToObject(root, "permit_provision", minihub_ble_mesh_permit_provision_active());

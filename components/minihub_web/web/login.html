@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MiniHub 登录</title>
+<title>MiniHub</title>
 <style>
 body{font-family:system-ui,sans-serif;background:#0b0f1a;color:#eef2ff;
 display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px}
@@ -21,54 +21,89 @@ button.secret-toggle{position:absolute;right:6px;top:50%;transform:translateY(-5
 margin:0;width:auto;padding:4px 6px;border:0;border-radius:6px;background:transparent;
 color:#8b9bb4;font-weight:500;font-size:.75rem;cursor:pointer}
 .err{color:#f87171;font-size:.8rem;min-height:1.2em}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+select{width:auto;margin:0;padding:4px 8px;border-radius:8px;border:1px solid #243049;
+background:#0b0f1a;color:#8b9bb4;font-size:.72rem;font-weight:600;cursor:pointer}
+body.i18n-pending{visibility:hidden}
 </style>
 </head>
-<body>
+<body class="i18n-pending">
 <div class="box">
-  <h1 id="title">MiniHub</h1>
-  <p id="hint">首次访问请为管理员 admin 设置密码（写入 NVS）。之后用该密码登录。</p>
+  <div class="top">
+    <h1 id="title">MiniHub</h1>
+    <select id="lang-sel" onchange="setLang(this.value)" aria-label="Language">
+      <option value="zh_CN">中文</option>
+      <option value="en">EN</option>
+    </select>
+  </div>
+  <p id="hint"></p>
   <form id="f">
-    <label>用户名</label>
+    <label data-i18n="login.user">用户名</label>
     <input id="user" value="admin" readonly>
-    <label>密码</label>
+    <label data-i18n="login.password">密码</label>
     <div class="secret-field">
       <input id="pw" type="password" minlength="6" maxlength="64" autocomplete="current-password">
-      <button type="button" class="secret-toggle" aria-label="显示密码" onclick="toggleSecret(this)">显示</button>
+      <button type="button" class="secret-toggle" id="eye" onclick="toggleSecret(this)"></button>
     </div>
     <div class="err" id="err"></div>
-    <button type="submit" id="go">确定</button>
+    <button type="submit" id="go" data-i18n="login.submit">确定</button>
   </form>
 </div>
+<script src="/web/js/i18n.js"></script>
 <script>
+/* The login page is the first thing anyone sees, so it localises itself: /web/i18n/*
+ * and this script's own path are the two deliberate exceptions to the session gate
+ * in handle_web_asset(). */
+let setup = false;
+let expired = false;
+
+function paintSecret() {
+  const btn = document.getElementById('eye');
+  const show = document.getElementById('pw').type === 'password';
+  btn.textContent = t(show ? 'login.show' : 'login.hide');
+  btn.setAttribute('aria-label', t(show ? 'login.aria.show' : 'login.aria.hide'));
+}
+
+function paint() {
+  document.getElementById('title').textContent = t(setup ? 'login.title.setup' : 'login.title.signin');
+  document.getElementById('hint').textContent =
+    t(setup ? 'login.hint.setup' : 'login.hint.signin');
+  document.getElementById('go').textContent = t('login.submit');
+  paintSecret();
+  if (expired) {
+    document.getElementById('err').textContent = t('login.err.expired');
+  }
+}
+
 function toggleSecret(btn) {
   const input = btn.parentElement.querySelector('input');
   if (!input) return;
-  const show = input.type === 'password';
-  input.type = show ? 'text' : 'password';
-  btn.textContent = show ? '隐藏' : '显示';
-  btn.setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
+  input.type = input.type === 'password' ? 'text' : 'password';
+  paintSecret();
 }
-const hint = document.getElementById('hint');
-const err = document.getElementById('err');
-const title = document.getElementById('title');
-let setup = false;
+
 /* The console bounces here when a poll comes back 401; say why, because the
  * single-slot session makes that happen without the user doing anything. */
 if (new URLSearchParams(location.search).get('reason') === 'expired') {
-  err.textContent = '会话已失效：其它终端登录过，或长时间未打开页面。';
+  expired = true;
 }
-fetch('/api/auth/status').then(r => r.json()).then(j => {
-  if (j.login_auth === false) { location.href = '/'; return; }
-  setup = !j.password_set;
-  title.textContent = setup ? '设置密码' : '登录';
-  hint.textContent = setup
-    ? '用户名固定为 admin，请设置至少 6 位密码。'
-    : '输入 admin 密码进入控制台。';
-  if (j.logged_in) location.href = '/';
-}).catch(() => {});
+
+/* Reveal is i18n.js's job on every page (it removes the pending class both when the
+ * dictionary settles and when it times out); doing it here too just moves the guard
+ * behind statements that can throw. */
+window.i18nReady.catch(function () {}).then(function () {
+  paint();
+  return fetch('/api/auth/status').then(r => r.json()).then(j => {
+    if (j.login_auth === false) { location.href = '/'; return; }
+    setup = !j.password_set;
+    paint();
+    if (j.logged_in) location.href = '/';
+  }).catch(() => {});
+});
+
 document.getElementById('f').onsubmit = async (e) => {
   e.preventDefault();
-  err.textContent = '';
+  document.getElementById('err').textContent = '';
   const body = JSON.stringify({
     username: document.getElementById('user').value,
     password: document.getElementById('pw').value
@@ -77,11 +112,10 @@ document.getElementById('f').onsubmit = async (e) => {
   try {
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
     if (r.ok) { location.href = '/'; return; }
-    err.textContent = setup
-      ? '设置失败（密码至少 6 位，且只能设置一次）'
-      : '用户名或密码错误';
+    document.getElementById('err').textContent =
+      t(setup ? 'login.err.setup' : 'login.err.creds');
   } catch (e) {
-    err.textContent = '网络错误';
+    document.getElementById('err').textContent = t('login.err.net');
   }
 };
 </script>

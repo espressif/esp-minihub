@@ -155,6 +155,52 @@ bool minihub_ble_mesh_provisioning_busy(void)
     return ble_mesh_stack_rf_critical();
 }
 
+minihub_ble_mesh_permit_t minihub_ble_mesh_permit_classify(esp_err_t err, bool zigbee_joining)
+{
+    if (err == ESP_OK) {
+        return MINIHUB_BLE_MESH_PERMIT_OK;
+    }
+    if (err == ESP_ERR_INVALID_ARG) {
+        return MINIHUB_BLE_MESH_PERMIT_BAD_ARG;
+    }
+    if (err == ESP_ERR_INVALID_STATE) {
+        /* Order matters: a busy window also reports the stack as running, and a
+         * dead stack cannot be "blocked by Zigbee". */
+        if (minihub_ble_mesh_provisioning_busy()) {
+            return MINIHUB_BLE_MESH_PERMIT_BUSY;
+        }
+        if (!minihub_ble_mesh_running()) {
+            return MINIHUB_BLE_MESH_PERMIT_STACK_OFF;
+        }
+        if (zigbee_joining) {
+            return MINIHUB_BLE_MESH_PERMIT_ZIGBEE_ACTIVE;
+        }
+    }
+    return MINIHUB_BLE_MESH_PERMIT_FAILED;
+}
+
+const char *minihub_ble_mesh_permit_text(minihub_ble_mesh_permit_t reason, bool zh)
+{
+    switch (reason) {
+    case MINIHUB_BLE_MESH_PERMIT_BUSY:
+        return zh ? "BLE Mesh 正在配网，请勿重复开启"
+                  : "BLE Mesh provisioning is already running";
+    case MINIHUB_BLE_MESH_PERMIT_STACK_OFF:
+        return zh ? "BLE Mesh 栈未就绪（启动失败或仍在初始化）"
+                  : "BLE Mesh stack is not ready (failed to start or still initializing)";
+    case MINIHUB_BLE_MESH_PERMIT_ZIGBEE_ACTIVE:
+        return zh ? "Zigbee 正在入网，无法同时开启 BLE Mesh 配网"
+                  : "Zigbee joining is active; BLE Mesh provisioning cannot start at the same time";
+    case MINIHUB_BLE_MESH_PERMIT_BAD_ARG:
+        return zh ? "seconds 无效（须 >= 0；0 关闭窗口）"
+                  : "invalid seconds (must be >= 0; 0 closes the window)";
+    case MINIHUB_BLE_MESH_PERMIT_OK:
+        return zh ? "配网窗口已开启" : "provisioning window opened";
+    default:
+        return NULL;   /* caller shows esp_err_to_name() */
+    }
+}
+
 esp_err_t minihub_ble_mesh_onoff(uint16_t unicast, minihub_ble_mesh_onoff_cmd_t cmd)
 {
     return ble_mesh_stack_onoff(unicast, cmd);

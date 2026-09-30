@@ -12,7 +12,7 @@ async function loadStoreData() {
     } catch (e) {
         storeCatalogOk = false;
         storeCatalog = [];
-        if (view === 'store') document.getElementById('store-content').innerHTML = '<div class="empty">加载失败</div>';
+        if (view === 'store') document.getElementById('store-content').innerHTML = '<div class="empty">' + t('store.load_failed') + '</div>';
     }
 }
 async function loadStoreConfig() {
@@ -25,7 +25,7 @@ async function loadStoreConfig() {
         const h = document.getElementById('store-default-hint');
         if (u) u.value = j.custom_url || '';
         if (d) d.checked = !!j.disable_default;
-        if (h) h.textContent = j.default_url ? ('默认: ' + j.default_url) : '';
+        if (h) h.textContent = j.default_url ? t('store.default_url', { url: j.default_url }) : '';
     } catch (e) {
         console.warn('store config', e);
     }
@@ -47,21 +47,21 @@ async function saveStoreConfig() {
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         await loadStoreConfig();
-        toast('Store URL 已保存');
+        toast(t('store.url_saved'));
     } catch (e) {
-        toast('保存失败: ' + (e.message || e));
+        toast(t('store.save_failed', { error: (e.message || e) }));
     }
 }
 async function refreshStoreCatalog() {
     const btn = document.getElementById('store-refresh');
     if (btn) btn.disabled = true;
-    toast('正在从商店服务器刷新目录...');
+    toast(t('store.refreshing'));
     try {
         const r = await fetch('/api/store/refresh', {
             method: 'POST'
         });
         if (!r.ok) {
-            toast('无法从商店服务器刷新目录');
+            toast(t('store.refresh_server_failed'));
             return;
         }
         storeCatalog = await r.json();
@@ -69,10 +69,10 @@ async function refreshStoreCatalog() {
         const [p, m] = await Promise.all([fetch('/api/packs'), fetch('/api/modules')].map(x => x.catch(() => null)));
         packs = p && p.ok ? await p.json() : packs;
         modules = m && m.ok ? await m.json() : modules;
-        toast('目录已更新（' + storeCatalog.length + ' 项）');
+        toast(t('store.catalog_updated', { count: storeCatalog.length }));
         if (view === 'store') renderStore();
     } catch (e) {
-        toast('刷新失败');
+        toast(t('store.refresh_failed'));
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -114,18 +114,18 @@ function renderStore() {
             config_only: !!c.config_only
         } : it;
     }).sort((a, b) => (a.name || a.id || '').localeCompare(b.name || b.id || ''));
-    const kindLbl = (k, co) => co ? '配置模块' : (k === 'module' ? '模块' : '配置模块');
+    const kindLbl = (k, co) => co ? t('store.kind_config_module') : (k === 'module' ? t('store.kind_module') : t('store.kind_config_module'));
     const actBtns = (kind, id, enabled, managed, upgradeAvailable, configOnly) => {
-        if (managed === false) return '<span style="color:var(--dim);font-size:.72rem">内置</span>';
+        if (managed === false) return '<span style="color:var(--dim);font-size:.72rem">' + t('store.builtin') + '</span>';
         const e = esc(id);
         const apiKind = configOnly ? 'pack' : kind;
-        const en = enabled ? '<button class="btn-sm" onclick="storeAct(\'' + apiKind + '\',\'' + e + '\',false)">禁用</button>' : '<button class="btn-sm on" onclick="storeAct(\'' + apiKind + '\',\'' + e + '\',true)">启用</button>';
+        const en = enabled ? '<button class="btn-sm" onclick="storeAct(\'' + apiKind + '\',\'' + e + '\',false)">' + t('store.disable') + '</button>' : '<button class="btn-sm on" onclick="storeAct(\'' + apiKind + '\',\'' + e + '\',true)">' + t('store.enable') + '</button>';
         let html = '<div class="store-actions">' + en;
         if (upgradeAvailable) {
-            html += '<button class="btn-sm on" onclick="storeUpgrade(\'' + kind + '\',\'' + e + '\')">升级</button>';
+            html += '<button class="btn-sm on" onclick="storeUpgrade(\'' + kind + '\',\'' + e + '\')">' + t('store.upgrade') + '</button>';
         }
-        html += '<button class="btn-sm bad" onclick="storeUninstall(\'' + apiKind + '\',\'' + e + '\')">卸载</button>';
-        html += '<button class="btn-sm" onclick="storeReinstall(\'' + apiKind + '\',\'' + e + '\')">重新安装</button>';
+        html += '<button class="btn-sm bad" onclick="storeUninstall(\'' + apiKind + '\',\'' + e + '\')">' + t('store.uninstall') + '</button>';
+        html += '<button class="btn-sm" onclick="storeReinstall(\'' + apiKind + '\',\'' + e + '\')">' + t('store.reinstall') + '</button>';
         return html + '</div>';
     };
     const itemDesc = it => {
@@ -136,7 +136,7 @@ function renderStore() {
         let s = esc(it.version || '?');
         if (it.adapter_version) s += ' · ' + esc(it.adapter_version);
         else if (it.adapter_version_expected) s += ' · expect ' + esc(it.adapter_version_expected);
-        if (it.binary_stale) s += ' · 需升级';
+        if (it.binary_stale) s += ' · ' + t('store.needs_upgrade');
         if (it.upgrade_available && it.catalog_version) s += ' → ' + esc(it.catalog_version);
         return s;
     };
@@ -145,24 +145,24 @@ function renderStore() {
     };
     let html = '';
     if (storeTab === 'avail') {
-        html += '<div class="section"><div class="section-h">可用 <span>' + avail.length + '</span></div>';
+        html += '<div class="section"><div class="section-h">' + t('store.available') + ' <span>' + avail.length + '</span></div>';
         if (!avail.length) {
-            html += '<div class="empty" style="padding:24px">暂无可安装项（均已安装或未预置）</div>';
+            html += '<div class="empty" style="padding:24px">' + t('store.no_install_items') + '</div>';
         } else {
-            html += '<div class="store-list"><div class="store-row store-hdr"><div>名称</div><div>版本</div><div>描述</div>        <div>类型</div><div>适配器</div><div></div><div>操作</div></div>';
+            html += '<div class="store-list"><div class="store-row store-hdr"><div>' + t('store.name') + '</div><div>' + t('store.version') + '</div><div>' + t('store.description') + '</div>        <div>' + t('store.type') + '</div><div>' + t('store.adapter') + '</div><div></div><div>' + t('store.actions') + '</div></div>';
             avail.forEach(it => {
-                html += itemRow(it, '<div></div><div class="store-actions">        <button class="btn-sm on" onclick="storeInstall(\'' + esc(it.kind) + '\',\'' + esc(it.id) + '\')">安装</button>        </div>');
+                html += itemRow(it, '<div></div><div class="store-actions">        <button class="btn-sm on" onclick="storeInstall(\'' + esc(it.kind) + '\',\'' + esc(it.id) + '\')">' + t('store.install') + '</button>        </div>');
             });
             html += '</div>';
         }
         html += '</div>';
     } else {
-        html += '<div class="section"><div class="section-h">已安装 <span>' + installed.length + '</span></div>';
-        html += '<div class="store-list"><div class="store-row store-hdr"><div>名称</div><div>版本</div><div>描述</div>      <div>类型</div><div>适配器</div><div>状态</div><div>操作</div></div>';
+        html += '<div class="section"><div class="section-h">' + t('store.installed') + ' <span>' + installed.length + '</span></div>';
+        html += '<div class="store-list"><div class="store-row store-hdr"><div>' + t('store.name') + '</div><div>' + t('store.version') + '</div><div>' + t('store.description') + '</div>      <div>' + t('store.type') + '</div><div>' + t('store.adapter') + '</div><div>' + t('store.status') + '</div><div>' + t('store.actions') + '</div></div>';
         installed.forEach(it => {
-            html += itemRow(it, '<div class="' + (it.enabled ? 'tag-on' : 'tag-off') + '">' + (it.enabled ? '已启用' : '未启用') + '</div>' + actBtns(it.kind, it.id, it.enabled, it.managed !== false, it.upgrade_available, it.config_only));
+            html += itemRow(it, '<div class="' + (it.enabled ? 'tag-on' : 'tag-off') + '">' + (it.enabled ? t('store.enabled') : t('store.disabled')) + '</div>' + actBtns(it.kind, it.id, it.enabled, it.managed !== false, it.upgrade_available, it.config_only));
         });
-        if (!installed.length) html += '<div class="empty" style="padding:24px">暂无已安装项</div>';
+        if (!installed.length) html += '<div class="empty" style="padding:24px">' + t('store.no_installed_items') + '</div>';
         html += '</div></div>';
     }
     document.getElementById('store-content').innerHTML = html;

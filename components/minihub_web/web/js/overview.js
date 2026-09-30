@@ -60,57 +60,57 @@ function renderRtspCamCard() {
     const file = st.current_file ? String(st.current_file).split('/').pop() : '';
     const bytes = fmtRtspBytes(st.bytes_written);
     const err = st.last_error ? ('<div class="modal-hint" style="margin-top:8px;color:var(--bad)">' + esc(String(st.last_error)) + '</div>') : '';
-    const status = esc((usb ? 'USB 已挂载' : 'USB 未挂载') + ' · ' + (rec ? '录制中' : '已停止') + (file ? ' · ' + file : '') + ((rec || st.bytes_written) ? ' · ' + bytes : ''));
-    const preview = '<div id="rtsp-cam-preview" style="aspect-ratio:16/9;max-width:28rem;margin:0 auto 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.85rem">暂无预览</div>';
+    const status = esc((usb ? t('ov.usb_mounted') : t('ov.usb_not_mounted')) + ' · ' + (rec ? t('ov.recording') : t('ov.stopped')) + (file ? ' · ' + file : '') + ((rec || st.bytes_written) ? ' · ' + bytes : ''));
+    const preview = '<div id="rtsp-cam-preview" style="aspect-ratio:16/9;max-width:28rem;margin:0 auto 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.85rem">' + t('ov.no_preview') + '</div>';
     let acts = '';
     if (!rec) {
-        acts += '<button class="btn-primary" type="button" ' + (usb ? '' : 'disabled ') + 'onclick="rtspCamStart()">开始</button>';
+        acts += '<button class="btn-primary" type="button" ' + (usb ? '' : 'disabled ') + 'onclick="rtspCamStart()">' + t('ov.start') + '</button>';
     } else {
-        acts += '<button class="btn-sm bad" type="button" onclick="rtspCamStop()">停止</button>';
+        acts += '<button class="btn-sm bad" type="button" onclick="rtspCamStop()">' + t('ov.stop') + '</button>';
     }
-    acts += '<a class="btn-sm" style="text-decoration:none;display:inline-block" href="/modules/rtsp_cam/web/">详情</a>';
-    return '<div class="cta" id="rtsp-cam-card"><div style="font-weight:700">摄像头录像</div><p style="color:var(--muted);margin:12px 0">' + status + '</p>' + preview + '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center">' + acts + '</div>' + err + '</div>';
+    acts += '<a class="btn-sm" style="text-decoration:none;display:inline-block" href="/modules/rtsp_cam/web/">' + t('ov.details') + '</a>';
+    return '<div class="cta" id="rtsp-cam-card"><div style="font-weight:700">' + t('ov.camera_recording') + '</div><p style="color:var(--muted);margin:12px 0">' + status + '</p>' + preview + '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center">' + acts + '</div>' + err + '</div>';
 }
 async function rtspCamStart() {
-    toast('开始录制…');
+    toast(t('ov.starting_recording'));
     try {
         await moduleRpc('rtsp_cam', 'start');
         for (let i = 0; i < 25; i++) {
             await loadRtspCamStatus();
             if (rtspCamStatus && rtspCamStatus.recording) {
-                toast('已开始');
+                toast(t('ov.started'));
                 if (view === 'overview') renderOverview();
                 return;
             }
             await new Promise(res => setTimeout(res, 200));
             if (view === 'overview') renderOverview();
         }
-        toast((rtspCamStatus && rtspCamStatus.last_error) || '开始失败');
+        toast((rtspCamStatus && rtspCamStatus.last_error) || t('ov.start_failed'));
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
         await loadRtspCamStatus();
     }
     if (view === 'overview') renderOverview();
 }
 async function rtspCamStop() {
-    toast('停止录制…');
+    toast(t('ov.stopping_recording'));
     try {
         const r = await moduleRpc('rtsp_cam', 'stop');
         if (!(r.ok && r.json && r.json.result === 'ok')) {
-            toast((r.json && (r.json.error || r.json.last_error)) || '停止失败');
+            toast((r.json && (r.json.error || r.json.last_error)) || t('ov.stop_failed'));
         } else {
             for (let i = 0; i < 20; i++) {
                 await loadRtspCamStatus();
                 if (!(rtspCamStatus && rtspCamStatus.recording)) {
-                    toast('已停止');
+                    toast(t('ov.stopped'));
                     break;
                 }
                 await new Promise(res => setTimeout(res, 200));
             }
-            if (rtspCamStatus && rtspCamStatus.recording) toast('仍在录制，请重试');
+            if (rtspCamStatus && rtspCamStatus.recording) toast(t('ov.still_recording'));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
     await loadRtspCamStatus();
     if (view === 'overview') renderOverview();
@@ -176,7 +176,7 @@ function addMapBasemap(map, g) {
     const amap = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
         subdomains: '1234',
         maxZoom: 18,
-        attribution: '© 高德地图'
+        attribution: t('ov.map_attribution')
     });
     amap.addTo(map);
     let fb = false;
@@ -234,7 +234,7 @@ function bindChips() {
 }
 
 function renderToolbar() {
-    let h = '<button class="chip' + (filter === 'all' ? ' active' : '') + '" data-f="all">全部</button>';
+    let h = '<button class="chip' + (filter === 'all' ? ' active' : '') + '" data-f="all">' + t('ov.all') + '</button>';
     Object.keys(enabledAdapters).filter(adapterEnabled).sort().forEach(ad => {
         h += '<button class="chip' + (filter === ad ? ' active' : '') + '" data-f="' + ad + '">' + esc(adapterLabel(ad)) + '</button>';
     });
@@ -244,7 +244,7 @@ function renderToolbar() {
 }
 
 function localName() {
-    return localStorage.getItem('minihub_display_name') || '用户';
+    return localStorage.getItem('minihub_display_name') || t('ov.user');
 }
 
 /* Compact Store upgrade control after group title+version+count — only when update exists. */
@@ -260,9 +260,9 @@ function sectionModuleUpgradeHtml(ad) {
     const up = !!(cat && cat.upgrade_available) || !!mod.binary_stale;
     if (!up) return '';
     const kind = (cat && cat.kind === 'pack') ? 'pack' : 'module';
-    let label = '升级';
+    let label = t('ov.upgrade');
     if (cat && cat.version) label += ' ' + cat.version;
-    return '<button class="btn-sm on section-mod-upg" type="button" title="模块升级（MiniHub Store）" onclick="storeUpgrade(\'' +
+    return '<button class="btn-sm on section-mod-upg" type="button" title="' + t('ov.module_upgrade_title') + '" onclick="storeUpgrade(\'' +
         kind + '\',\'' + esc(mod.id) + '\')">' + esc(label) + '</button>';
 }
 
@@ -275,38 +275,38 @@ function sectionHeader(ad, count) {
     if (mod) {
         const mid = mod.id;
         const st = authStatus(ad);
-        const acct = st.logged_in ? '<span class="mod-acct">' + esc(st.user_id || '-') + (st.region ? ' · ' + esc(st.region) : '') + '</span>' : (showActs ? '<span class="mod-acct off">' + esc(lbl(mod, 'logged_out', '未登录')) + '</span>' : '');
-        const syncBadge = st.syncing ? '<span class="mod-acct busy">同步中…</span>' : '';
+        const acct = st.logged_in ? '<span class="mod-acct">' + esc(st.user_id || '-') + (st.region ? ' · ' + esc(st.region) : '') + '</span>' : (showActs ? '<span class="mod-acct off">' + esc(lbl(mod, 'logged_out', t('ov.logged_out'))) + '</span>' : '');
+        const syncBadge = st.syncing ? '<span class="mod-acct busy">' + t('ov.syncing') + '</span>' : '';
         let acts = '';
         if (showActs) {
             if (st.logged_in) {
-                if (hasModAction(mod, 'sync')) acts += '<button class="btn-sm on" type="button" onclick="syncModule(\'' + mid + '\')">' + esc(lbl(mod, 'sync', '同步')) + '</button>';
-                if (hasModAction(mod, 'homes')) acts += '<button class="btn-sm on" type="button" onclick="openHomePicker(\'' + mid + '\')">' + esc(lbl(mod, 'change_home', (st.home_name ? '切换家庭' : '选择家庭'))) + '</button>';
-                if (hasModAction(mod, 'logout')) acts += '<button class="btn-sm bad" type="button" onclick="logoutModule(\'' + mid + '\')">' + esc(lbl(mod, 'logout', '退出')) + '</button>';
+                if (hasModAction(mod, 'sync')) acts += '<button class="btn-sm on" type="button" onclick="syncModule(\'' + mid + '\')">' + esc(lbl(mod, 'sync', t('ov.sync'))) + '</button>';
+                if (hasModAction(mod, 'homes')) acts += '<button class="btn-sm on" type="button" onclick="openHomePicker(\'' + mid + '\')">' + esc(lbl(mod, 'change_home', (st.home_name ? t('ov.switch_home') : t('ov.choose_home')))) + '</button>';
+                if (hasModAction(mod, 'logout')) acts += '<button class="btn-sm bad" type="button" onclick="logoutModule(\'' + mid + '\')">' + esc(lbl(mod, 'logout', t('ov.sign_out'))) + '</button>';
             } else {
                 if (hasModAction(mod, 'login') && hasCredLogin(mod)) {
-                    acts += '<button class="btn-sm on" type="button" onclick="openModuleLogin(\'' + mid + '\')">' + esc(lbl(mod, 'login', '登录')) + '</button>';
+                    acts += '<button class="btn-sm on" type="button" onclick="openModuleLogin(\'' + mid + '\')">' + esc(lbl(mod, 'login', t('ov.login'))) + '</button>';
                 }
                 if (hasModAction(mod, 'session')) {
-                    acts += '<button class="btn-sm" type="button" onclick="openModuleSession(\'' + mid + '\')">' + esc(lbl(mod, 'session', '导入会话')) + '</button>';
+                    acts += '<button class="btn-sm" type="button" onclick="openModuleSession(\'' + mid + '\')">' + esc(lbl(mod, 'session', t('ov.import_session'))) + '</button>';
                 }
             }
         }
         return '<div class="section-h auth-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + acct + syncBadge + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'matter') {
-        const st = matterStatus.ready ? '<span class="mod-acct">控制器就绪</span>' : (showActs ? '<span class="mod-acct off">未就绪</span>' : '');
+        const st = matterStatus.ready ? '<span class="mod-acct">' + t('ov.matter_controller_ready') + '</span>' : (showActs ? '<span class="mod-acct off">' + t('ov.not_ready') + '</span>' : '');
         const running = matterStatus.commission === 'running';
         const acts = showActs ? (running
-            ? '<button class="btn-sm bad" type="button" onclick="cancelMatterCommission()">取消配网</button>'
-            : '<button class="btn-sm on" type="button" onclick="openMatterAdd()">添加</button>') : '';
-        return '<div class="section-h matter-section-h"><span>' + (ADAPTER_LABEL[ad] || ad) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
+            ? '<button class="btn-sm bad" type="button" onclick="cancelMatterCommission()">' + t('ov.cancel_commission') + '</button>'
+            : '<button class="btn-sm on" type="button" onclick="openMatterAdd()">' + t('ov.add') + '</button>') : '';
+        return '<div class="section-h matter-section-h"><span>' + mhAdapterLabel(ad) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'zigbee') {
         const zbOn = !!radioProv.zigbee_permit_join;
         const bmBusy = !!(radioProv.ble_mesh_provisioning || radioProv.ble_mesh_permit_provision);
-        const st = zbOn ? '<span class="mod-acct">正在入网</span>' : (bmBusy ? '<span class="mod-acct off">BLE Mesh 配网中</span>' : '');
-        const acts = showActs ? (zbOn ? '<button class="btn-sm" type="button" onclick="stopZigbeeJoin()">停止入网</button>' : (bmBusy ? '<button class="btn-sm on" type="button" disabled title="BLE Mesh 配网中">允许入网</button>' : '<button class="btn-sm on" type="button" onclick="permitZigbeeJoin()">允许入网</button>')) : '';
+        const st = zbOn ? '<span class="mod-acct">' + t('ov.joining') + '</span>' : (bmBusy ? '<span class="mod-acct off">' + t('ov.ble_mesh_provisioning') + '</span>' : '');
+        const acts = showActs ? (zbOn ? '<button class="btn-sm" type="button" onclick="stopZigbeeJoin()">' + t('ov.stop_join') + '</button>' : (bmBusy ? '<button class="btn-sm on" type="button" disabled title="' + t('ov.ble_mesh_provisioning') + '">' + t('ov.allow_join') + '</button>' : '<button class="btn-sm on" type="button" onclick="permitZigbeeJoin()">' + t('ov.allow_join') + '</button>')) : '';
         return '<div class="section-h radio-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'ble_mesh') {
@@ -314,8 +314,8 @@ function sectionHeader(ad, count) {
         const bmProv = !!radioProv.ble_mesh_provisioning;
         const bmOn = bmPermit || bmProv;
         const zbBusy = !!radioProv.zigbee_permit_join;
-        const st = bmOn ? '<span class="mod-acct">正在配网</span>' : (zbBusy ? '<span class="mod-acct off">Zigbee 入网中</span>' : '');
-        const acts = showActs ? (bmPermit ? '<button class="btn-sm" type="button" onclick="stopBleMeshProvision()">停止配网</button>' : (bmProv ? '<button class="btn-sm on" type="button" disabled>正在配网</button>' : (zbBusy ? '<button class="btn-sm on" type="button" disabled title="Zigbee 入网中">允许配网</button>' : '<button class="btn-sm on" type="button" onclick="permitBleMeshProvision()">允许配网</button>'))) : '';
+        const st = bmOn ? '<span class="mod-acct">' + t('ov.provisioning') + '</span>' : (zbBusy ? '<span class="mod-acct off">' + t('ov.zigbee_joining') + '</span>' : '');
+        const acts = showActs ? (bmPermit ? '<button class="btn-sm" type="button" onclick="stopBleMeshProvision()">' + t('ov.stop_provisioning') + '</button>' : (bmProv ? '<button class="btn-sm on" type="button" disabled>' + t('ov.provisioning') + '</button>' : (zbBusy ? '<button class="btn-sm on" type="button" disabled title="' + t('ov.zigbee_joining') + '">' + t('ov.allow_provisioning') + '</button>' : '<button class="btn-sm on" type="button" onclick="permitBleMeshProvision()">' + t('ov.allow_provisioning') + '</button>'))) : '';
         return '<div class="section-h radio-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     return '<div class="section-h">' + esc(adapterLabel(ad)) + verTag + '<span>' + count + '</span>' + upg + '</div>';
@@ -373,13 +373,13 @@ function renderRules() {
         const w = whenPlain(rule.when);
         const i = ifPlain(iff);
         const th = thenPlain(rule.then);
-        detail.innerHTML = '<button class="btn-sm" type="button" onclick="rulesBack()">← 返回列表</button>' +
-            '<button class="btn-sm on" type="button" style="margin-left:8px" onclick="rulesEditOpen(\'' + escAttr(rule.id) + '\')">编辑</button>' +
+        detail.innerHTML = '<button class="btn-sm" type="button" onclick="rulesBack()">' + t('ov.back_to_list') + '</button>' +
+            '<button class="btn-sm on" type="button" style="margin-left:8px" onclick="rulesEditOpen(\'' + escAttr(rule.id) + '\')">' + t('ov.edit') + '</button>' +
             '<div class="dcard" style="margin-top:12px">' +
-            '<div class="card-top"><div class="card-name">' + esc(rule.name || rule.id || '规则') + '</div>' + (dis ? '' : '<span class="badge sensor">启用</span>') + '</div>' +
-            (dis ? '<div class="card-meta"><span>已禁用</span></div>' : '') +
-            '<div class="rule-flow">' + ruleStepHtml('当 · 触发', w) + '<div class="rule-arrow">↓</div>' + ruleStepHtml('且 · 条件', i) + '<div class="rule-arrow">↓</div>' + ruleStepHtml('则 · 动作', th) + '</div>' +
-            '<details class="rule-tech"><summary>技术详情（JSON）</summary>' +
+            '<div class="card-top"><div class="card-name">' + esc(rule.name || rule.id || t('ov.rule')) + '</div>' + (dis ? '' : '<span class="badge sensor">' + t('ov.enabled_badge') + '</span>') + '</div>' +
+            (dis ? '<div class="card-meta"><span>' + t('ov.disabled') + '</span></div>' : '') +
+            '<div class="rule-flow">' + ruleStepHtml(t('ov.rule_when'), w) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('ov.rule_if'), i) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('ov.rule_then'), th) + '</div>' +
+            '<details class="rule-tech"><summary>' + t('ov.rule_tech_details') + '</summary>' +
             '<h4 class="rule-sec">when</h4><pre class="rule-pre">' + esc(JSON.stringify(rule.when || {}, null, 2)) + '</pre>' +
             '<h4 class="rule-sec">if</h4><pre class="rule-pre">' + esc(JSON.stringify(iff, null, 2)) + '</pre>' +
             '<h4 class="rule-sec">then</h4><pre class="rule-pre">' + esc(JSON.stringify(rule.then || {}, null, 2)) + '</pre>' +
@@ -391,15 +391,15 @@ function renderRules() {
     const arr = rulesCfg.rules || [];
     if (!arr.length) {
         list.className = '';
-        list.innerHTML = '<div class="empty">暂无规则 — 点击「添加规则」用选框创建，或 URL 导入</div>';
+        list.innerHTML = '<div class="empty">' + t('ov.no_rules') + '</div>';
         return;
     }
     list.className = 'grid';
     list.innerHTML = arr.map(function(r) {
         const dis = r.enabled === false;
         return '<div class="dcard" style="cursor:pointer" data-rule-id="' + escAttr(r.id || '') + '">' +
-            '<div class="card-top"><div class="card-name">' + esc(r.name || r.id || '(unnamed)') + '</div>' + (dis ? '' : '<span class="badge sensor">启用</span>') + '</div>' +
-            '<div class="card-meta"><span>' + esc(whenSummary(r.when)) + ' → ' + esc(thenSummary(r.then)) + '</span>' + (dis ? '<span>禁用</span>' : '') + '</div></div>';
+            '<div class="card-top"><div class="card-name">' + esc(r.name || r.id || '(unnamed)') + '</div>' + (dis ? '' : '<span class="badge sensor">' + t('ov.enabled_badge') + '</span>') + '</div>' +
+            '<div class="card-meta"><span>' + esc(whenSummary(r.when)) + ' → ' + esc(thenSummary(r.then)) + '</span>' + (dis ? '<span>' + t('ov.disabled_short') + '</span>' : '') + '</div></div>';
     }).join('');
     list.onclick = function(ev) {
         const card = ev.target.closest('[data-rule-id]');
@@ -415,13 +415,13 @@ function propsHtml(p) {
     const otherOrder = ['humidity'];
     const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'commission_phase', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
     const labels = {
-        power_w: '功率',
-        voltage_v: '电压',
-        current_a: '电流',
-        energy_wh: '电量',
-        humidity: '湿度',
-        app_version: '应用版本',
-        hw_version: '硬件版本'
+        power_w: t('ov.prop_power'),
+        voltage_v: t('ov.prop_voltage'),
+        current_a: t('ov.prop_current'),
+        energy_wh: t('ov.prop_energy'),
+        humidity: t('ov.prop_humidity'),
+        app_version: t('ov.prop_app_version'),
+        hw_version: t('ov.prop_hw_version')
     };
     const units = {
         power_w: ' W',
@@ -447,7 +447,7 @@ function propsHtml(p) {
             else if (Number.isInteger(x)) n = String(x);
             else n = x.toFixed(2);
         } else if (typeof v === 'boolean') {
-            n = v ? '是' : '否';
+            n = v ? t('ov.yes') : t('ov.no');
         }
         return '<span>' + esc(labels[k] || k) + ' ' + esc(String(n)) + (units[k] || '') + '</span>';
     }).join('') + '</div>';
@@ -459,17 +459,17 @@ function climateSummary(p) {
     const bits = [];
     if (p.type === 'air-conditioner') {
         if (pr.mode_label) bits.push(pr.mode_label);
-        if (pr.target_temp != null) bits.push('设定 ' + pr.target_temp + '°C');
+        if (pr.target_temp != null) bits.push(t('ov.set_temp', { v: pr.target_temp }));
         if (pr.fan_label) bits.push(pr.fan_label);
-        if (pr.temperature != null) bits.push('室内 ' + pr.temperature + '°C');
+        if (pr.temperature != null) bits.push(t('ov.indoor_temp', { v: pr.temperature }));
     } else if (p.type === 'fridge') {
-        if (pr.cold_temp != null) bits.push('冷藏 ' + pr.cold_temp + '°C');
-        if (pr.freeze_temp != null) bits.push('冷冻 ' + pr.freeze_temp + '°C');
+        if (pr.cold_temp != null) bits.push(t('ov.fridge_cold_temp', { v: pr.cold_temp }));
+        if (pr.freeze_temp != null) bits.push(t('ov.fridge_freeze_temp', { v: pr.freeze_temp }));
     } else if (p.type === 'water_purifier') {
-        if (pr.out_tds != null) bits.push('出水水质 TDS ' + pr.out_tds);
-        if (pr.filter_ro_life != null) bits.push('RO滤芯约剩' + pr.filter_ro_life + '个月');
+        if (pr.out_tds != null) bits.push(t('ov.out_tds', { v: pr.out_tds }));
+        if (pr.filter_ro_life != null) bits.push(t('ov.ro_filter_months', { v: pr.filter_ro_life }));
     } else if (p.type === 'water_heater') {
-        if (pr.temperature != null) bits.push('当前水温 ' + pr.temperature + '°C');
+        if (pr.temperature != null) bits.push(t('ov.water_temp', { v: pr.temperature }));
     }
     return bits.length ? '<div class="card-summary">' + esc(bits.join(' · ')) + '</div>' : '';
 }
@@ -481,13 +481,13 @@ function isCoverType(type) {
 function coverSummary(p) {
     if (!isCoverType(p.type)) return '';
     const pct = parseInt(p.value, 10);
-    const s = Number.isFinite(pct) ? ('开合 ' + pct + '%') : '';
+    const s = Number.isFinite(pct) ? t('ov.cover_open_pct', { v: pct }) : '';
     return s ? '<div class="card-summary">' + esc(s) + '</div>' : '';
 }
 
 function batterySummaryBit(p) {
     const b = (p.props || {}).battery;
-    return (b != null && b !== '') ? ('电量 ' + b + '%') : '';
+    return (b != null && b !== '') ? t('ov.battery_pct', { v: b }) : '';
 }
 
 function magnetSummary(p) {
@@ -501,9 +501,9 @@ function magnetSummary(p) {
 function cameraStreamText(p) {
     const pr = (p && p.props) || {};
     const bits = [];
-    if (pr.stream_video_codec != null) bits.push('视频编码 ' + pr.stream_video_codec);
-    if (pr.stream_audio_codec != null) bits.push('音频编码 ' + pr.stream_audio_codec);
-    return bits.length ? ('码流 · ' + bits.join(' · ')) : '';
+    if (pr.stream_video_codec != null) bits.push(t('ov.video_codec', { v: pr.stream_video_codec }));
+    if (pr.stream_audio_codec != null) bits.push(t('ov.audio_codec', { v: pr.stream_audio_codec }));
+    return bits.length ? (t('ov.stream_prefix') + bits.join(' · ')) : '';
 }
 
 function meterSummary(p) {
@@ -515,7 +515,7 @@ function meterSummary(p) {
     if (pr.power != null) bits.push(Number(pr.power) + 'W');
     if (pr.energy != null) bits.push(Number(pr.energy) + 'kWh');
     if (pr.temperature != null) bits.push(Number(pr.temperature) + '°');
-    if (pr.fault != null && Number(pr.fault) !== 0) bits.push('故障' + pr.fault);
+    if (pr.fault != null && Number(pr.fault) !== 0) bits.push(t('ov.fault_code', { v: pr.fault }));
     return bits.length ? '<div class="card-summary">' + esc(bits.join(' · ')) + '</div>' : '';
 }
 
@@ -530,13 +530,13 @@ function showDeviceLogBtn(p) {
 function deviceLogLabel(p, newv, oldv, cloudLabel) {
     if (cloudLabel) return cloudLabel;
     const v = newv != null ? newv : (p && p.value);
-    if (v === 'detected') return '有人移动';
-    if (v === 'clear') return '无人';
-    if (v === 'open' || v === 'left_open') return '打开';
-    if (v === 'closed') return '关闭';
-    if (p && p.type === 'button') return (newv && newv !== 'idle') ? String(newv) : '按键';
+    if (v === 'detected') return t('ov.motion_detected');
+    if (v === 'clear') return t('ov.no_motion');
+    if (v === 'open' || v === 'left_open') return t('ov.open');
+    if (v === 'closed') return t('ov.closed');
+    if (p && p.type === 'button') return (newv && newv !== 'idle') ? String(newv) : t('ov.button_press');
     if (oldv != null && newv != null) return esc(String(oldv)) + ' → ' + esc(String(newv));
-    return esc(String(v || '事件'));
+    return esc(String(v || t('ov.event')));
 }
 
 function fmtDeviceLogTime(ts) {
@@ -553,7 +553,7 @@ function fmtDeviceLogTime(ts) {
         m = Math.floor((sec % 3600) / 60),
         s = sec % 60;
     const p = x => String(x).padStart(2, '0');
-    return '运行 ' + h + ':' + p(m) + ':' + p(s);
+    return t('ov.uptime', { h: h, m: p(m), s: p(s) });
 }
 
 function closeDeviceLog() {
@@ -566,12 +566,12 @@ function renderDeviceLogRows(rows) {
     const list = document.getElementById('device-log-list');
     if (!list) return;
     if (!rows || !rows.length) {
-        list.innerHTML = '<div class="modal-hint">暂无记录（本地仅在 Hub 在线期间的状态变化；云端需模块上报历史）</div>';
+        list.innerHTML = '<div class="modal-hint">' + t('ov.no_log_records') + '</div>';
         return;
     }
     list.innerHTML = rows.map(r => {
         const lab = esc(r.label || '');
-        const src = r.source === 'cloud' ? '云端' : (r.source === 'local' ? '本地' : '');
+        const src = r.source === 'cloud' ? t('ov.cloud') : (r.source === 'local' ? t('ov.local') : '');
         return '<div class="device-log-row"><div class="device-log-label">' + lab + (src ? '<span class="device-log-src">' + src + '</span>' : '') + '</div><div class="device-log-time">' + esc(fmtDeviceLogTime(r.ts_ms)) + '</div></div>';
     }).join('');
 }
@@ -587,7 +587,7 @@ function mergeDeviceLog(localItems, cloudItems, p) {
         });
     });
     (cloudItems || []).forEach(it => {
-        const lab = it.label || '事件';
+        const lab = it.label || t('ov.event');
         const k = String(it.ts_ms) + '|' + lab;
         const near = rows.some(r => Math.abs(Number(r.ts_ms) - Number(it.ts_ms)) < 2000 && r.label === lab);
         if (near) return;
@@ -613,7 +613,7 @@ async function openDeviceLog(id, ev) {
     const meta = document.getElementById('device-log-meta');
     const hint = document.getElementById('device-log-cloud-hint');
     const modal = document.getElementById('device-log-modal');
-    if (title) title.textContent = (pointDisplayName(p) || id) + ' · 事件记录';
+    if (title) title.textContent = (pointDisplayName(p) || id) + ' · ' + t('ov.event_log');
     if (meta) meta.textContent = id;
     if (hint) hint.textContent = '';
     const list = document.getElementById('device-log-list');
@@ -631,7 +631,7 @@ async function openDeviceLog(id, ev) {
     try {
         const ad = (p && p.adapter) || '';
         if (!ad) {
-            if (hint) hint.textContent = '无适配器，仅显示本地记录';
+            if (hint) hint.textContent = t('ov.no_adapter_local_only');
             return;
         }
         const r2 = await fetch('/api/modules/' + encodeURIComponent(ad) + '/rpc', {
@@ -652,15 +652,15 @@ async function openDeviceLog(id, ev) {
             const cloud = j2.items || [];
             renderDeviceLogRows(mergeDeviceLog(localItems, cloud, p));
             if (hint) {
-                if (j2.cloud_error) hint.textContent = '云端：' + j2.cloud_error + (j2.message ? (' · ' + j2.message) : '');
-                else if (!cloud.length) hint.textContent = '云端暂无补充记录';
+                if (j2.cloud_error) hint.textContent = t('ov.cloud_prefix') + j2.cloud_error + (j2.message ? (' · ' + j2.message) : '');
+                else if (!cloud.length) hint.textContent = t('ov.no_cloud_records');
                 else hint.textContent = '';
             }
         } else if (hint) {
-            hint.textContent = '云端日志请求失败';
+            hint.textContent = t('ov.cloud_log_failed');
         }
     } catch (e) {
-        if (hint) hint.textContent = '云端日志不可用';
+        if (hint) hint.textContent = t('ov.cloud_log_unavailable');
     }
 }
 
@@ -791,9 +791,9 @@ function cardHtml(p) {
     const ctrl = allowToggle ? '<label class="toggle"><input type="checkbox" data-id="' + p.point_id + '"' + (on ? ' checked' : '') + dis + '>    <span class="slider"></span></label>' : '';
     const pidJs = String(p.point_id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const cancelBtn = (p.adapter === 'matter' && commissioning && cPhase !== 'failed')
-        ? '<button class="btn-sm" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();cancelMatterCommission(\'' + String((p.props && p.props.node_id) || '') + '\')">取消配网</button>'
+        ? '<button class="btn-sm" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();cancelMatterCommission(\'' + String((p.props && p.props.node_id) || '') + '\')">' + t('ov.cancel_commission') + '</button>'
         : '';
-    const delBtn = (p.adapter === 'matter') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteMatterDevice(\'' + pidJs + '\')">删除</button>' : (p.adapter === 'zigbee') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteZigbeeDevice(\'' + pidJs + '\')">删除</button>' : (p.adapter === 'ble_mesh') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteBleMeshDevice(\'' + pidJs + '\')">删除</button>' : '';
+    const delBtn = (p.adapter === 'matter') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteMatterDevice(\'' + pidJs + '\')">' + t('ov.delete') + '</button>' : (p.adapter === 'zigbee') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteZigbeeDevice(\'' + pidJs + '\')">' + t('ov.delete') + '</button>' : (p.adapter === 'ble_mesh') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteBleMeshDevice(\'' + pidJs + '\')">' + t('ov.delete') + '</button>' : '';
     const short = pointDisplayName(p);
     const room = pointRoomName(p);
     const apDetail = ['fridge', 'water_purifier', 'water_heater', 'appliance'].includes(p.type);
@@ -831,19 +831,19 @@ function cardHtml(p) {
     }
     const clickAttr = (clickFn && !commissioning) ? (' onclick="' + clickFn + '(\'' + p.point_id + '\',event)"') : '';
     const valShow = (function() {
-        if (cPhase === 'waiting' || (commissioning && cPhase !== 'failed')) return matterCommissionLabel(p, cPhase) || '等待配网中';
-        if (cPhase === 'failed') return '配网失败';
-        if (p.type === 'button') return (p.online ? '就绪' : '离线');
+        if (cPhase === 'waiting' || (commissioning && cPhase !== 'failed')) return matterCommissionLabel(p, cPhase) || t('ov.waiting_commission');
+        if (cPhase === 'failed') return t('ov.commission_failed');
+        if (p.type === 'button') return (p.online ? t('ov.ready') : t('ov.offline'));
         if (isCover && Number.isFinite(pct)) return pct + '%';
-        if (p.value === 'detected') return '有人';
-        if (p.value === 'clear') return '无人';
-        if (p.value === 'closed') return '关闭';
-        if (p.value === 'open' && p.type === 'binary_sensor') return '打开';
-        if (p.value === 'online' || p.value === 'offline') return p.value === 'online' ? '在线' : '离线';
-        if (noCtrl && (p.value === 'on' || p.value === 'off' || powerVal === 'on' || powerVal === 'off')) return on ? '合闸' : '分闸';
-        if (p.value === 'on' || p.value === 'off' || powerVal === 'on' || powerVal === 'off') return on ? '开' : '关';
-        if (hasParams && (powerVal != null || p.value === 'on' || p.value === 'off')) return on ? '开' : '关';
-        if (p.value === 'unknown' || p.value === 'idle') return p.online ? '—' : '离线';
+        if (p.value === 'detected') return t('ov.detected');
+        if (p.value === 'clear') return t('ov.no_motion');
+        if (p.value === 'closed') return t('ov.closed');
+        if (p.value === 'open' && p.type === 'binary_sensor') return t('ov.open');
+        if (p.value === 'online' || p.value === 'offline') return p.value === 'online' ? t('ov.online') : t('ov.offline');
+        if (noCtrl && (p.value === 'on' || p.value === 'off' || powerVal === 'on' || powerVal === 'off')) return on ? t('ov.breaker_on') : t('ov.breaker_off');
+        if (p.value === 'on' || p.value === 'off' || powerVal === 'on' || powerVal === 'off') return on ? t('ov.on') : t('ov.off');
+        if (hasParams && (powerVal != null || p.value === 'on' || p.value === 'off')) return on ? t('ov.on') : t('ov.off');
+        if (p.value === 'unknown' || p.value === 'idle') return p.online ? '—' : t('ov.offline');
         return p.value;
     })();
     /* Catalog type avatar, or a plugin props.icon override; dim with power when known. */
@@ -861,28 +861,28 @@ function cardHtml(p) {
     const proto = (typeof pointProtocol === 'function') ? pointProtocol(p) : '';
     let onlineLab;
     if (cPhase === 'waiting') onlineLab = matterCommissionLabel(p, cPhase) + (proto ? (' · ' + esc(proto)) : '');
-    else if (cPhase === 'failed') onlineLab = '配网失败' + (proto ? (' · ' + esc(proto)) : '');
-    else onlineLab = (p.online ? '在线' : '离线') + (proto ? (' · ' + esc(proto)) : '');
+    else if (cPhase === 'failed') onlineLab = t('ov.commission_failed') + (proto ? (' · ' + esc(proto)) : '');
+    else onlineLab = (p.online ? t('ov.online') : t('ov.offline')) + (proto ? (' · ' + esc(proto)) : '');
     const valCls = cPhase === 'waiting' ? 'pending' : (cPhase === 'failed' ? 'off' : (on ? 'on' : 'off'));
     const cardClickCls = commissioning ? '' : clickCls;
-    const renameBtn = '<button class="btn-sm" type="button" onclick="renameDevice(\'' + pidJs + '\',event)">重命名</button>';
-    return '<div class="dcard' + cardClickCls + ((p.online || commissioning) ? '' : ' offline') + (commissioning ? ' commissioning' : '') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + valCls + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + renameBtn + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">日志</button>' : '') + cancelBtn + delBtn + ctrl + '</div></div>';
+    const renameBtn = '<button class="btn-sm" type="button" onclick="renameDevice(\'' + pidJs + '\',event)">' + t('ov.rename') + '</button>';
+    return '<div class="dcard' + cardClickCls + ((p.online || commissioning) ? '' : ' offline') + (commissioning ? ' commissioning' : '') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : mhTypeLabel(p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + valCls + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + renameBtn + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">' + esc(t('ov.log')) + '</button>' : '') + cancelBtn + delBtn + ctrl + '</div></div>';
 }
 
 async function renameDevice(pointId, ev) {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     const p = (typeof pts !== 'undefined' && pts) ? pts.find(function (x) { return x && x.point_id === pointId; }) : null;
     const cur = (p && typeof pointDisplayName === 'function') ? pointDisplayName(p) : pointId;
-    const entered = window.prompt('设备名称', cur || '');
+    const entered = window.prompt(t('ov.device_name'), cur || '');
     if (entered == null) return;
     const name = String(entered).trim();
     if (!name) {
-        toast('名称不能为空');
+        toast(t('ov.name_empty'));
         return;
     }
     const nameBytes = (typeof TextEncoder === 'function') ? new TextEncoder().encode(name).length : name.length;
     if (nameBytes > 48) {
-        toast('名称过长');
+        toast(t('ov.name_too_long'));
         return;
     }
     try {
@@ -903,19 +903,19 @@ async function renameDevice(pointId, ev) {
                 p.props.name = name;
             }
             if (typeof renderOverview === 'function') renderOverview();
-            toast('已重命名');
+            toast(t('ov.renamed'));
             if (typeof loadPoints === 'function') loadPoints();
         } else {
-            toast('重命名失败' + (j.error ? ': ' + j.error : ''));
+            toast(t('ov.rename_failed') + (j.error ? ': ' + j.error : ''));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 
 async function storeAct(kind, id, enabled) {
     const url = kind === 'module' ? '/api/modules' : '/api/packs';
-    toast(enabled ? '启用中...' : '禁用中...');
+    toast(enabled ? t('ov.enabling') : t('ov.disabling'));
     try {
         const r = await fetch(url, {
             method: 'POST',
@@ -928,16 +928,16 @@ async function storeAct(kind, id, enabled) {
                 reload: true
             })
         });
-        toast(r.ok ? (enabled ? '已启用' : '已禁用') : '失败');
+        toast(r.ok ? (enabled ? t('ov.enabled_toast') : t('ov.disabled')) : t('ov.failed'));
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function storeInstall(kind, id) {
-    toast('下载安装 ' + id + '...');
+    toast(t('ov.downloading_install', { id: id }));
     try {
         const r = await fetch('/api/store/install', {
             method: 'POST',
@@ -950,16 +950,16 @@ async function storeInstall(kind, id) {
                 reload: true
             })
         });
-        toast(r.ok ? '安装成功' : (r.status === 409 ? '已安装' : '安装失败'));
+        toast(r.ok ? t('ov.install_ok') : (r.status === 409 ? t('ov.already_installed') : t('ov.install_failed')));
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function storeUpgrade(kind, id) {
-    toast('升级 ' + id + '...');
+    toast(t('ov.upgrading', { id: id }));
     try {
         const r = await fetch('/api/store/upgrade', {
             method: 'POST',
@@ -972,17 +972,17 @@ async function storeUpgrade(kind, id) {
                 reload: true
             })
         });
-        toast(r.ok ? '升级成功' : (r.status === 409 ? '已是最新' : '升级失败'));
+        toast(r.ok ? t('ov.upgrade_ok') : (r.status === 409 ? t('ov.up_to_date') : t('ov.upgrade_failed')));
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function storeUninstall(kind, id) {
-    if (!confirm('确定卸载 ' + id + '？')) return;
-    toast('卸载中...');
+    if (!confirm(t('ov.uninstall_confirm', { id: id }))) return;
+    toast(t('ov.uninstalling'));
     try {
         const r = await fetch('/api/store/uninstall', {
             method: 'POST',
@@ -995,17 +995,17 @@ async function storeUninstall(kind, id) {
                 reload: true
             })
         });
-        toast(r.ok ? '已卸载' : '失败');
+        toast(r.ok ? t('ov.uninstalled') : t('ov.failed'));
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function storeReinstall(kind, id) {
-    if (!confirm('重新安装 ' + id + '？只更换安装包，账号和配置会保留。')) return;
-    toast('正在重新安装 ' + id + '…');
+    if (!confirm(t('ov.reinstall_confirm', { id: id }))) return;
+    toast(t('ov.reinstalling', { id: id }));
     try {
         const r = await fetch('/api/store/reinstall', {
             method: 'POST',
@@ -1019,25 +1019,25 @@ async function storeReinstall(kind, id) {
             })
         });
         if (r.status === 404) {
-            toast('模块未安装');
+            toast(t('ov.module_not_installed'));
         } else if (r.ok) {
-            toast('已重新安装');
+            toast(t('ov.reinstalled'));
         } else {
-            toast('重新安装失败');
+            toast(t('ov.reinstall_failed'));
         }
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function storeDel(kind, id) {
     if (kind === 'module') {
         return storeUninstall('module', id);
     }
-    if (!confirm('确定删除 ' + id + '？')) return;
-    toast('删除中...');
+    if (!confirm(t('ov.delete_confirm', { id: id }))) return;
+    toast(t('ov.deleting'));
     try {
         const r = await fetch('/api/packs', {
             method: 'POST',
@@ -1050,12 +1050,12 @@ async function storeDel(kind, id) {
                 reload: true
             })
         });
-        toast(r.ok ? '已删除' : '失败');
+        toast(r.ok ? t('ov.deleted') : t('ov.failed'));
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 let activeAuthModule = '';
@@ -1106,14 +1106,14 @@ function loadAuthDraft(mod, mode) {
 
 function applyAuthLoginLabels(mod, mode) {
     const sessionMode = mode === 'session';
-    document.getElementById('auth-login-title').textContent = sessionMode ? lbl(mod, 'session', '导入会话') : lbl(mod, 'login_title', lbl(mod, 'login', '登录'));
-    document.getElementById('auth-user-label').textContent = lbl(mod, 'username', '账号');
-    document.getElementById('auth-pass-label').textContent = lbl(mod, 'password', '密码');
+    document.getElementById('auth-login-title').textContent = sessionMode ? lbl(mod, 'session', t('ov.import_session')) : lbl(mod, 'login_title', lbl(mod, 'login', t('ov.login')));
+    document.getElementById('auth-user-label').textContent = lbl(mod, 'username', t('ov.username'));
+    document.getElementById('auth-pass-label').textContent = lbl(mod, 'password', t('ov.password'));
     const hostBlk = document.getElementById('auth-host-block');
     if (hostBlk) {
         const showHost = !sessionMode && isHostLogin(mod);
         hostBlk.hidden = !showHost;
-        document.getElementById('auth-host-label').textContent = lbl(mod, 'host', '主机');
+        document.getElementById('auth-host-label').textContent = lbl(mod, 'host', t('ov.host'));
         const hi = document.getElementById('auth-host');
         if (hi) {
             hi.placeholder = lbl(mod, 'host_placeholder', '192.168.3.1');
@@ -1121,10 +1121,10 @@ function applyAuthLoginLabels(mod, mode) {
     }
     document.getElementById('auth-keyid-label').textContent = lbl(mod, 'key_id', 'API Key ID');
     document.getElementById('auth-apikey-label').textContent = lbl(mod, 'api_key', 'API Key');
-    document.getElementById('auth-ticket-label').textContent = lbl(mod, 'ticket', '验证码');
-    document.getElementById('auth-ticket').placeholder = lbl(mod, 'ticket_placeholder', '验证码');
-    document.getElementById('auth-captcha-label').textContent = lbl(mod, 'captcha', '图形验证码');
-    document.getElementById('auth-cancel').textContent = lbl(mod, 'cancel', '取消');
+    document.getElementById('auth-ticket-label').textContent = lbl(mod, 'ticket', t('ov.ticket_code'));
+    document.getElementById('auth-ticket').placeholder = lbl(mod, 'ticket_placeholder', t('ov.ticket_code'));
+    document.getElementById('auth-captcha-label').textContent = lbl(mod, 'captcha', t('ov.captcha'));
+    document.getElementById('auth-cancel').textContent = lbl(mod, 'cancel', t('ov.cancel'));
     setAuthPrimaryAction(sessionMode ? 'session' : 'login');
     document.getElementById('auth-user').hidden = sessionMode;
     document.getElementById('auth-user-label').hidden = sessionMode;
@@ -1137,7 +1137,7 @@ function applyAuthLoginLabels(mod, mode) {
     const ticketBlk = document.getElementById('auth-ticket-block');
     if (ticketBlk) ticketBlk.hidden = true;
     document.getElementById('auth-ticket').value = '';
-    document.getElementById('auth-login-hint').textContent = sessionMode ? lbl(mod, 'session_hint', '用电脑脚本拿到 token 后粘贴（见模块 references/fetch_wyze_tokens.py）') : '';
+    document.getElementById('auth-login-hint').textContent = sessionMode ? lbl(mod, 'session_hint', t('ov.session_hint')) : '';
     loadAuthDraft(mod, mode);
     const uEl = document.getElementById('auth-user');
     if (uEl) uEl.placeholder = '';
@@ -1150,19 +1150,19 @@ function setAuthPrimaryAction(mode) {
     const mod = authModById(activeAuthModule);
     if (!btn) return;
     if (mode === 'send_code') {
-        btn.textContent = lbl(mod, 'send_code', '发送验证码');
+        btn.textContent = lbl(mod, 'send_code', t('ov.send_code'));
         btn.onclick = function () { sendAuthVerify(); };
         if (ticketBlk) ticketBlk.hidden = true;
     } else if (mode === 'verify') {
-        btn.textContent = lbl(mod, 'login', '登录');
+        btn.textContent = lbl(mod, 'login', t('ov.login'));
         btn.onclick = function () { submitAuthLogin(); };
         if (ticketBlk) ticketBlk.hidden = false;
     } else if (mode === 'session') {
-        btn.textContent = lbl(mod, 'session', '导入会话');
+        btn.textContent = lbl(mod, 'session', t('ov.import_session'));
         btn.onclick = function () { submitAuthLogin(); };
         if (ticketBlk) ticketBlk.hidden = true;
     } else {
-        btn.textContent = lbl(mod, 'login', '登录');
+        btn.textContent = lbl(mod, 'login', t('ov.login'));
         btn.onclick = function () { submitAuthLogin(); };
         if (ticketBlk) ticketBlk.hidden = true;
     }
@@ -1171,7 +1171,7 @@ function setAuthPrimaryAction(mode) {
 function openModuleLogin(id) {
     const mod = authModById(id);
     if (!mod || !hasCredLogin(mod)) {
-        toast('该模块无登录表单');
+        toast(t('ov.no_login_form'));
         return;
     }
     if (activeAuthModule && activeAuthModule !== mod.id) {
@@ -1185,7 +1185,7 @@ function openModuleLogin(id) {
 function openModuleSession(id) {
     const mod = authModById(id);
     if (!mod || !hasModAction(mod, 'session')) {
-        toast('该模块无会话导入');
+        toast(t('ov.no_session_import'));
         return;
     }
     if (activeAuthModule) {
@@ -1267,12 +1267,12 @@ function revealAuthChallenge(opts) {
     } catch (e) {}
 }
 async function sendAuthVerify() {
-    toast('发送验证码...');
+    toast(t('ov.sending_code'));
     const hint = document.getElementById('auth-login-hint');
     const icodeRaw = document.getElementById('auth-icode').value.trim().replace(/[^0-9A-Za-z]/g, '');
     document.getElementById('auth-icode').value = icodeRaw;
     if (icodeRaw) {
-        hint.textContent = '提交图形码: ' + icodeRaw;
+        hint.textContent = t('ov.submitting_icode', { v: icodeRaw });
     }
     try {
         const r = await moduleRpc(activeAuthModule, 'verify_send', icodeRaw ? {
@@ -1280,45 +1280,45 @@ async function sendAuthVerify() {
         } : {});
         const j = r.json;
         if (j && j.icode_used) {
-            hint.textContent = 'Hub收到图形码: ' + j.icode_used + (j.result === 'ok' ? '，短信已发送' : '');
+            hint.textContent = t('ov.hub_received_icode', { v: j.icode_used }) + (j.result === 'ok' ? t('ov.sms_sent_suffix') : '');
         }
         if (j && j.result === 'captcha' && j.captcha_b64) {
             revealAuthChallenge({
                 captcha_b64: j.captcha_b64,
                 captcha_mime: j.captcha_mime,
-                hint: (j.icode_used ? '图形码 "' + j.icode_used + '" 错误，' : '') + (j.message || j.hint || '请按新图输入后再次发送'),
+                hint: (j.icode_used ? t('ov.icode_wrong', { v: j.icode_used }) : '') + (j.message || j.hint || t('ov.icode_retry')),
                 focus: 'auth-icode'
             });
             document.getElementById('auth-icode').value = '';
-            toast('需要图形验证码');
+            toast(t('ov.captcha_required'));
             return;
         }
         if (j && j.captcha_b64) {
             revealAuthChallenge({
                 captcha_b64: j.captcha_b64,
                 captcha_mime: j.captcha_mime,
-                hint: j.hint || j.message || '请输入图形验证码后再次发送',
+                hint: j.hint || j.message || t('ov.captcha_enter_retry'),
                 focus: 'auth-icode'
             });
             document.getElementById('auth-icode').value = '';
-            toast('需要图形验证码');
+            toast(t('ov.captcha_required'));
             return;
         }
-        toast(r.ok && j && j.result === 'ok' ? '验证码已发送' : '发送失败');
+        toast(r.ok && j && j.result === 'ok' ? t('ov.code_sent') : t('ov.send_failed'));
         if (r.ok && j && j.result === 'ok') {
             document.getElementById('auth-captcha-block').hidden = true;
             revealAuthChallenge({
                 hideCaptcha: true,
-                hint: j.hint || '短信已发送，请填写验证码后点登录',
+                hint: j.hint || t('ov.sms_sent_fill'),
                 focus: 'auth-ticket'
             });
             setAuthPrimaryAction('verify');
         }
         if (!r.ok || !j || j.result !== 'ok') {
-            if (!j || !j.icode_used) hint.textContent = (j && j.message) || (j && j.error) || '发送失败';
+            if (!j || !j.icode_used) hint.textContent = (j && j.message) || (j && j.error) || t('ov.send_failed');
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function submitAuthLogin() {
@@ -1329,7 +1329,7 @@ async function submitAuthLogin() {
     const ticketBlk = document.getElementById('auth-ticket-block');
     const ticketVisible = ticketBlk ? !ticketBlk.hidden : !document.getElementById('auth-2fa-block').hidden;
     if (ticket && ticketVisible) {
-        toast('验证中...');
+        toast(t('ov.verifying'));
         try {
             const r = await moduleRpc(activeAuthModule, 'verify', {
                 ticket
@@ -1338,10 +1338,10 @@ async function submitAuthLogin() {
             if (r.ok && j && j.result === 'ok') {
                 closeAuthLogin();
                 loadMeta();
-                let m = '登录成功';
+                let m = t('ov.login_ok');
                 if (j.sync === 'pending') {
                     pollAuthSyncWhileBusy();
-                    toast(m + ' · 正在同步设备…');
+                    toast(m + ' · ' + t('ov.syncing_devices'));
                     const deadline = Date.now() + 120000;
                     while (Date.now() < deadline) {
                         await new Promise(res => setTimeout(res, 1500));
@@ -1352,11 +1352,11 @@ async function submitAuthLogin() {
                             await loadPoints();
                             if (view === 'overview') renderOverview();
                             if (sj.sync === 'need_home') {
-                                toast(m + ' · 请选择家庭');
+                                toast(m + ' · ' + t('ov.choose_home_first'));
                                 openHomePicker(activeAuthModule);
                             } else if (sj.sync === 'ok') {
-                                let sm = m + ' · 已同步 ' + (sj.synced || 0) + ' 台';
-                                if (sj.lan_tokens > 0) sm += ' · ' + sj.lan_tokens + ' 个可局域网控制';
+                                let sm = m + ' · ' + t('ov.synced_devices', { n: (sj.synced || 0) });
+                                if (sj.lan_tokens > 0) sm += ' · ' + t('ov.lan_devices', { n: sj.lan_tokens });
                                 toast(sm);
                             }
                             return;
@@ -1365,27 +1365,27 @@ async function submitAuthLogin() {
                     await loadMeta();
                     await loadPoints();
                     if (view === 'overview') renderOverview();
-                    toast(m + ' · 同步仍在进行');
+                    toast(m + ' · ' + t('ov.sync_still_running'));
                     return;
                 }
                 await loadPoints();
                 if (j.sync === 'need_home') {
-                    toast(m + ' · 请选择家庭');
+                    toast(m + ' · ' + t('ov.choose_home_first'));
                     openHomePicker(activeAuthModule);
                     return;
                 }
                 if (j.sync === 'ok' && j.synced != null) {
-                    m += ' · 已同步 ' + j.synced + ' 台';
-                    if (j.lan_tokens > 0) m += ' · ' + j.lan_tokens + ' 个可局域网控制';
+                    m += ' · ' + t('ov.synced_devices', { n: j.synced });
+                    if (j.lan_tokens > 0) m += ' · ' + t('ov.lan_devices', { n: j.lan_tokens });
                 }
                 toast(m);
                 return;
             }
-            hint.textContent = j.message || j.error || '验证失败';
-            toast('验证失败');
+            hint.textContent = j.message || j.error || t('ov.verify_failed');
+            toast(t('ov.verify_failed'));
             return;
         } catch (e) {
-            toast('网络错误');
+            toast(t('ov.network_error'));
             return;
         }
     }
@@ -1395,10 +1395,10 @@ async function submitAuthLogin() {
         const refresh = document.getElementById('auth-refresh').value.trim();
         const phoneId = document.getElementById('auth-phoneid').value.trim();
         if (!access || !refresh) {
-            hint.textContent = '请输入 access_token 与 refresh_token';
+            hint.textContent = t('ov.tokens_required');
             return;
         }
-        toast('导入会话...');
+        toast(t('ov.importing_session'));
         try {
             const body = {
                 access_token: access,
@@ -1412,35 +1412,35 @@ async function submitAuthLogin() {
                 await loadMeta();
                 pollAuthSyncWhileBusy();
                 await loadPoints();
-                let m = '会话已导入';
+                let m = t('ov.session_imported');
                 if (j.sync === 'need_home') {
-                    toast(m + ' · 请选择家庭');
+                    toast(m + ' · ' + t('ov.choose_home_first'));
                     openHomePicker(activeAuthModule);
                     return;
                 }
-                if (j.sync === 'ok' && j.synced != null) m += ' · 已同步 ' + j.synced + ' 台';
+                if (j.sync === 'ok' && j.synced != null) m += ' · ' + t('ov.synced_devices', { n: j.synced });
                 toast(m);
                 return;
             }
-            hint.textContent = (j && j.message) || (j && j.error) || '导入失败';
-            toast('导入失败');
+            hint.textContent = (j && j.message) || (j && j.error) || t('ov.import_failed');
+            toast(t('ov.import_failed'));
         } catch (e) {
-            toast('网络错误');
+            toast(t('ov.network_error'));
         }
         return;
     }
     if (!user || !pass) {
-        hint.textContent = '请输入账号和密码';
+        hint.textContent = t('ov.credentials_required');
         return;
     }
     const keyId = document.getElementById('auth-keyid').value.trim();
     const apiKey = document.getElementById('auth-apikey').value.trim();
     const mod = authModById(activeAuthModule);
     if (isApiKeyLogin(mod) && (!keyId || !apiKey)) {
-        hint.textContent = '请填写 API Key ID 与 API Key';
+        hint.textContent = t('ov.apikey_required');
         return;
     }
-    toast('登录中...');
+    toast(t('ov.signing_in'));
     try {
         const body = {
             username: user,
@@ -1464,15 +1464,15 @@ async function submitAuthLogin() {
             await loadMeta();
             pollAuthSyncWhileBusy();
             await loadPoints();
-            let m = '登录成功';
+            let m = t('ov.login_ok');
             if (j.sync === 'need_home') {
-                toast(m + ' · 请选择家庭');
+                toast(m + ' · ' + t('ov.choose_home_first'));
                 openHomePicker(activeAuthModule);
                 return;
             }
             if (j.sync === 'ok' && j.synced != null) {
-                m += ' · 已同步 ' + j.synced + ' 台';
-                if (j.lan_tokens > 0) m += ' · ' + j.lan_tokens + ' 个可局域网控制';
+                m += ' · ' + t('ov.synced_devices', { n: j.synced });
+                if (j.lan_tokens > 0) m += ' · ' + t('ov.lan_devices', { n: j.lan_tokens });
             }
             toast(m);
             return;
@@ -1482,58 +1482,58 @@ async function submitAuthLogin() {
                 captcha_b64: j.captcha_b64,
                 captcha_mime: j.captcha_mime,
                 showCaptcha: !j.captcha_b64,
-                hint: j.hint || j.message || '请输入图形验证码后点击发送验证码',
+                hint: j.hint || j.message || t('ov.captcha_then_send'),
                 focus: 'auth-icode'
             });
-            toast('需要图形验证码');
+            toast(t('ov.captcha_required'));
             return;
         }
         if (j && (j.result === 'verify' || j.error === 'ESP_ERR_INVALID_STATE')) {
             if (j.code_sent) {
                 revealAuthChallenge({
                     hideCaptcha: true,
-                    hint: j.hint || '短信已发送，请填写验证码后点登录',
+                    hint: j.hint || t('ov.sms_sent_fill'),
                     focus: 'auth-ticket'
                 });
-                toast('验证码已发送');
+                toast(t('ov.code_sent'));
                 return;
             }
             revealAuthChallenge({
                 hideCaptcha: true,
-                hint: '正在发送验证码…',
+                hint: t('ov.sending_code_busy'),
                 focus: 'auth-ticket'
             });
-            toast('需要二次验证');
+            toast(t('ov.two_factor_required'));
             await sendAuthVerify();
             return;
         }
-        hint.textContent = (j && j.message) || (j && j.error) || '登录失败';
-        toast('登录失败');
+        hint.textContent = (j && j.message) || (j && j.error) || t('ov.login_failed');
+        toast(t('ov.login_failed'));
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function logoutModule(id) {
-    if (!confirm('确定退出云账号？')) return;
-    toast('退出中...');
+    if (!confirm(t('ov.signout_confirm'))) return;
+    toast(t('ov.signing_out'));
     try {
         const r = await moduleRpc(id || activeAuthModule, 'logout');
         const j = r.json;
         if (r.ok && j && j.result === 'ok') {
             await loadMeta();
             await loadPoints();
-            toast('已退出');
+            toast(t('ov.signed_out'));
         } else {
-            toast('退出失败');
+            toast(t('ov.signout_failed'));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function syncModule(id, homeId) {
     const mid = id || activeAuthModule;
     pollAuthSyncWhileBusy();
-    toast(homeId ? '切换家庭中…' : '同步中...');
+    toast(homeId ? t('ov.switching_home') : t('ov.syncing_now'));
     try {
         const params = {
             merge: true,
@@ -1543,12 +1543,12 @@ async function syncModule(id, homeId) {
         const r = await moduleRpc(mid, 'sync', params);
         const j = r.json;
         if (r.ok && j && j.result === 'need_home') {
-            toast('请选择家庭');
+            toast(t('ov.choose_home_first'));
             openHomePicker(mid);
             return;
         }
         if (r.ok && j && (j.result === 'pending' || j.syncing)) {
-            toast(j.message || (homeId ? '正在切换家庭…' : '正在同步设备…'));
+            toast(j.message || (homeId ? t('ov.switching_home_now') : t('ov.syncing_devices')));
             const deadline = Date.now() + 120000;
             let last = j;
             while (Date.now() < deadline) {
@@ -1563,35 +1563,38 @@ async function syncModule(id, homeId) {
             await loadAdapters();
             if (view === 'overview') renderOverview();
             if (last && last.sync === 'need_home') {
-                toast('请选择家庭');
+                toast(t('ov.choose_home_first'));
                 openHomePicker(mid);
                 return;
             }
             if (last && last.sync === 'ok') {
-                let m = (last.sync_home_name ? ('已切换到 ' + last.sync_home_name + ' · ') : '已同步 ') +
-                    (last.synced || 0) + ' 台';
-                if (last.lan_tokens > 0) m += ' · ' + last.lan_tokens + ' 个可局域网控制';
+                let m = last.sync_home_name
+                    ? t('ov.switched_home_devices', { name: last.sync_home_name, n: (last.synced || 0) })
+                    : t('ov.synced_devices', { n: (last.synced || 0) });
+                if (last.lan_tokens > 0) m += ' · ' + t('ov.lan_devices', { n: last.lan_tokens });
                 toast(m);
                 return;
             }
             if (last && last.syncing) {
-                toast('同步仍在进行，请稍候刷新');
+                toast(t('ov.sync_still_running_hint'));
                 return;
             }
-            toast((last && last.sync_error) || (last && last.message) || '同步失败');
+            toast((last && last.sync_error) || (last && last.message) || t('ov.sync_failed'));
             return;
         }
         if (r.ok && j && j.result === 'ok') {
-            let m = (j.home_name ? ('已切换到 ' + j.home_name + ' · ') : '已同步 ') + (j.synced || 0) + ' 台';
-            if (j.lan_tokens > 0) m += ' · ' + j.lan_tokens + ' 个可局域网控制';
+            let m = j.home_name
+                ? t('ov.switched_home_devices', { name: j.home_name, n: (j.synced || 0) })
+                : t('ov.synced_devices', { n: (j.synced || 0) });
+            if (j.lan_tokens > 0) m += ' · ' + t('ov.lan_devices', { n: j.lan_tokens });
             toast(m);
-        } else toast(j && j.message || j && j.error || '同步失败');
+        } else toast(j && j.message || j && j.error || t('ov.sync_failed'));
         await loadMeta();
         await loadPoints();
         await loadAdapters();
         if (view === 'overview') renderOverview();
     } catch (e) {
-        toast('失败');
+        toast(t('ov.failed'));
     }
 }
 
@@ -1601,7 +1604,7 @@ function closeHomePicker() {
 }
 async function openHomePicker(id) {
     if (!id) {
-        toast('未指定模块');
+        toast(t('ov.module_unspecified'));
         return;
     }
     homePickerModule = id;
@@ -1609,26 +1612,31 @@ async function openHomePicker(id) {
     const mod = authModById(homePickerModule) || modules.find(x => x.id === homePickerModule);
     const title = document.getElementById('home-picker-title');
     const hint = document.getElementById('home-picker-hint');
-    if (title) title.textContent = lbl(mod, 'home_picker_title', '选择家庭');
-    if (hint) hint.textContent = lbl(mod, 'home_picker_hint', '点选家庭后点下方按钮，或直接点「切换到此家庭」');
+    if (title) title.textContent = lbl(mod, 'home_picker_title', t('ov.choose_home'));
+    if (hint) hint.textContent = lbl(mod, 'home_picker_hint', t('ov.home_picker_hint'));
     const conf = document.getElementById('home-picker-confirm');
     if (conf) {
-        conf.textContent = lbl(mod, 'home_picker_confirm', '同步此家庭');
+        conf.textContent = lbl(mod, 'home_picker_confirm', t('ov.sync_this_home'));
         conf.disabled = true;
     }
     const listEl = document.getElementById('home-picker-list');
-    if (listEl) listEl.innerHTML = '<div class="modal-hint">加载中…</div>';
+    if (listEl) listEl.innerHTML = '<div class="modal-hint">' + t('ov.loading') + '</div>';
     document.getElementById('home-picker-modal').hidden = false;
-    toast('加载家庭…');
+    toast(t('ov.loading_homes'));
     try {
         const r = await moduleRpc(homePickerModule, 'homes');
         const j = r.json;
         const homes = (j && j.homes) || [];
         if (!r.ok || !j || j.result !== 'ok') {
-            const msg = esc((j && j.message) || (j && j.error) || '加载失败');
-            const needLogin = !!(j && j.need_login) || /过期|未登录/.test((j && j.message) || '');
+            const msg = esc((j && j.message) || (j && j.error) || t('ov.load_failed'));
+            /* need_login is the contract; the text match is only a fallback for a
+             * module that predates it, and must stay language-agnostic because the
+             * message arrives in whatever language that module speaks. */
+            const needLogin = !!(j && j.need_login) ||
+                /过期|未登录|expired|unauthori[sz]ed|not logged|login required|session/i
+                    .test((j && j.message) || '');
             if (listEl) listEl.innerHTML = '<div class="modal-hint">' + msg +
-                (needLogin ? '<div style="margin-top:12px"><button class="btn-sm on" type="button" id="home-picker-relogin">重新登录</button></div>' : '') +
+                (needLogin ? '<div style="margin-top:12px"><button class="btn-sm on" type="button" id="home-picker-relogin">' + t('ov.relogin') + '</button></div>' : '') +
                 '</div>';
             if (needLogin) {
                 const btn = document.getElementById('home-picker-relogin');
@@ -1637,11 +1645,11 @@ async function openHomePicker(id) {
                     openModuleLogin(homePickerModule);
                 };
             }
-            toast(needLogin ? '登录已过期' : '加载家庭失败');
+            toast(needLogin ? t('ov.session_expired') : t('ov.load_homes_failed'));
             return;
         }
         if (!homes.length) {
-            if (listEl) listEl.innerHTML = '<div class="modal-hint">没有可用家庭</div>';
+            if (listEl) listEl.innerHTML = '<div class="modal-hint">' + t('ov.no_homes') + '</div>';
             return;
         }
         const curHome = String((authStatus(homePickerModule).home_id) || '');
@@ -1652,10 +1660,10 @@ async function openHomePicker(id) {
                 const id = String(h.id);
                 const on = id === curHome;
                 return '<div class="home-item' + (on ? ' on' : '') + '" data-home-id="' + escAttr(id) + '" role="button" tabindex="0">' +
-                    '<div style="flex:1"><div style="font-weight:600">' + esc(h.name || id) + (on ? ' · 当前' : '') + '</div>' +
-                    '<div class="meta">' + (h.room_count || 0) + ' 个房间 · ' + (h.device_count || 0) + ' 台设备</div></div>' +
+                    '<div style="flex:1"><div style="font-weight:600">' + esc(h.name || id) + (on ? ' · ' + t('ov.current') : '') + '</div>' +
+                    '<div class="meta">' + t('ov.rooms_devices', { rooms: (h.room_count || 0), devices: (h.device_count || 0) }) + '</div></div>' +
                     '<button type="button" class="btn-sm' + (on ? '' : ' on') + '" data-home-switch="' + escAttr(id) + '">' +
-                    (on ? '重新同步' : '切换到此家庭') + '</button></div>';
+                    (on ? t('ov.resync') : t('ov.switch_to_home')) + '</button></div>';
             }).join('');
             listEl.onclick = function(ev) {
                 const sw = ev.target.closest('[data-home-switch]');
@@ -1677,20 +1685,20 @@ async function openHomePicker(id) {
             };
         }
     } catch (e) {
-        if (listEl) listEl.innerHTML = '<div class="modal-hint">网络错误</div>';
-        toast('网络错误');
+        if (listEl) listEl.innerHTML = '<div class="modal-hint">' + t('ov.network_error') + '</div>';
+        toast(t('ov.network_error'));
     }
 }
 async function confirmHomePicker() {
     const checked = document.querySelector('#home-picker-list .home-item.on');
     const hid = (checked && checked.getAttribute('data-home-id')) || homePickerSelected;
     if (!hid) {
-        toast('请选择一个家庭');
+        toast(t('ov.pick_one_home'));
         return;
     }
     const mid = homePickerModule;
     if (!mid) {
-        toast('未指定模块');
+        toast(t('ov.module_unspecified'));
         return;
     }
     closeHomePicker();
@@ -1722,8 +1730,8 @@ function refreshMatterAddUi() {
     const hintEl = document.getElementById('matter-add-hint');
     if (hintEl) {
         hintEl.textContent = showWifi
-            ? '经 BLE + DNS-SD 配网，并写入设备 STA 的 SSID 与密码。'
-            : '经 BLE + DNS-SD 配网，并写入 Hub 的 Thread 网络数据集。';
+            ? t('ov.matter_hint_wifi')
+            : t('ov.matter_hint_thread');
         hintEl.hidden = false;
     }
 }
@@ -1742,7 +1750,7 @@ function openMatterAdd() {
     const pref = (matterStatus && matterStatus.wifi_prefill) || {};
     document.getElementById('matter-wifi-ssid').value = pref.ssid || '';
     document.getElementById('matter-wifi-pass').value = '';
-    document.getElementById('matter-wifi-pass').placeholder = pref.has_password ? '已保存密码，可改写或留空沿用' : 'Wi-Fi 密码';
+    document.getElementById('matter-wifi-pass').placeholder = pref.has_password ? t('ov.saved_password_hint') : t('ov.wifi_password');
     const submitBtn = document.getElementById('matter-add-submit');
     if (submitBtn) submitBtn.disabled = false;
     refreshMatterAddUi();
@@ -1754,7 +1762,14 @@ function closeMatterAdd() {
     document.getElementById('matter-add-modal').hidden = true;
 }
 
-const MATTER_STAGE_LABEL = { discovering: '设备发现中', binding: '设备绑定中', activating: '设备激活中' };
+/* Stage names are catalog strings, resolved at render time: the dictionary is
+ * not loaded yet while this file is being evaluated, so no lookup at parse time. */
+function matterStageLabel(stage) {
+    if (stage === 'discovering') return t('ov.stage_discovering');
+    if (stage === 'binding') return t('ov.stage_binding');
+    if (stage === 'activating') return t('ov.stage_activating');
+    return '';
+}
 const MATTER_STAGE_STEP = { discovering: 1, binding: 2, activating: 3 };
 const MATTER_STAGE_TOTAL = 3;
 
@@ -1765,10 +1780,10 @@ function matterCommissionLabel(p, cPhase) {
     const st = (typeof matterStatus === 'undefined') ? null : matterStatus;
     const running = st && st.commission === 'running' && st.commission_node_id != null &&
         String(st.commission_node_id) === String((p.props || {}).node_id);
-    if (!running) return '等待配网中';
+    if (!running) return t('ov.waiting_commission');
     const step = MATTER_STAGE_STEP[st.commission_stage];
-    return '配网中 · ' + (MATTER_STAGE_LABEL[st.commission_stage] || '进行中') +
-        (step ? ('（步骤 ' + step + '/' + MATTER_STAGE_TOTAL + '）') : '');
+    return t('ov.commissioning_stage', { stage: matterStageLabel(st.commission_stage) || t('ov.in_progress') }) +
+        (step ? t('ov.stage_step', { step: step, total: MATTER_STAGE_TOTAL }) : '');
 }
 
 async function pollMatterCommissionCard(nodeId) {
@@ -1783,17 +1798,17 @@ async function pollMatterCommissionCard(nodeId) {
             const stage = st.commission_stage || '';
             if (stage && stage !== lastStage) {
                 lastStage = stage;
-                toast((MATTER_STAGE_LABEL[stage] || stage) + '… node ' + (st.commission_node_id || nodeId));
+                toast((matterStageLabel(stage) || stage) + '… node ' + (st.commission_node_id || nodeId));
             }
             if (st.commission === 'ok') {
                 await loadMeta();
                 await loadPoints();
-                toast('配网成功 node ' + (st.commission_node_id || nodeId));
+                toast(t('ov.commission_ok', { node: (st.commission_node_id || nodeId) }));
                 return;
             }
             if (st.commission === 'failed') {
                 await loadPoints();
-                toast('配网失败' + (lastStage ? ('（' + (MATTER_STAGE_LABEL[lastStage] || lastStage) + '）') : '') +
+                toast(t('ov.commission_failed') + (lastStage ? t('ov.paren_value', { v: (matterStageLabel(lastStage) || lastStage) }) : '') +
                     ': ' + String(st.last_error || st.commission_result || '').slice(0, 80));
                 return;
             }
@@ -1802,7 +1817,7 @@ async function pollMatterCommissionCard(nodeId) {
         }
     }
     await loadPoints();
-    toast('配网超时');
+    toast(t('ov.commission_timeout'));
 }
 
 async function cancelMatterCommission(nodeId) {
@@ -1811,7 +1826,7 @@ async function cancelMatterCommission(nodeId) {
         : (matterStatus && matterStatus.commission_node_id != null
             ? String(matterStatus.commission_node_id) : null);
     if (!nid) {
-        toast('当前没有进行中的配网');
+        toast(t('ov.no_active_commission'));
         return;
     }
     try {
@@ -1821,9 +1836,9 @@ async function cancelMatterCommission(nodeId) {
             body: JSON.stringify({ node_id: nid, cancel: true })
         });
         const j = await r.json().catch(() => ({}));
-        toast('已发送取消配网：' + (j.status || (r.ok ? 'ok' : '失败')));
+        toast(t('ov.cancel_sent_prefix') + (j.status || (r.ok ? 'ok' : t('ov.failed'))));
     } catch (e) {
-        toast('取消配网请求失败');
+        toast(t('ov.cancel_commission_failed'));
     }
     if (typeof loadMeta === 'function') await loadMeta();
     if (typeof loadPoints === 'function') await loadPoints();
@@ -1842,15 +1857,15 @@ async function submitMatterAdd() {
     const submitBtn = document.getElementById('matter-add-submit');
     if (!code) {
         hint.hidden = false;
-        hint.textContent = '请输入 pairing_code';
+        hint.textContent = t('ov.pairing_code_required');
         return;
     }
     if (discovery === 'ble_wifi' && !ssid) {
         hint.hidden = false;
-        hint.textContent = '请填写 STA SSID';
+        hint.textContent = t('ov.ssid_required');
         return;
     }
-    toast('正在添加…');
+    toast(t('ov.adding'));
     const body = {
         pairing_code: code,
         endpoints: eps,
@@ -1880,14 +1895,14 @@ async function submitMatterAdd() {
             closeMatterAdd();
             await loadMeta();
             await loadPoints();
-            toast('已添加 node ' + j.node_id);
+            toast(t('ov.added_node', { node: j.node_id }));
             return;
         }
         if (r.ok && j.result === 'ok' && j.commission === 'started') {
             closeMatterAdd();
             await loadMeta();
             await loadPoints();
-            toast('已添加，等待配网中…');
+            toast(t('ov.added_waiting'));
             pollMatterCommissionCard(j.node_id);
             return;
         }
@@ -1895,16 +1910,16 @@ async function submitMatterAdd() {
         closeMatterAdd();
         await loadPoints();
         const msg = j.message || j.commission || j.error || ('HTTP ' + r.status);
-        toast('配网失败: ' + String(msg).slice(0, 80));
+        toast(t('ov.commission_failed') + ': ' + String(msg).slice(0, 80));
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     } finally {
         if (submitBtn) submitBtn.disabled = false;
     }
 }
 async function deleteMatterDevice(pointId) {
-    if (!confirm('确定删除 ' + pointId + '？')) return;
-    toast('删除中...');
+    if (!confirm(t('ov.delete_confirm', { id: pointId }))) return;
+    toast(t('ov.deleting'));
     try {
         const r = await fetch('/api/matter/devices', {
             method: 'POST',
@@ -1925,17 +1940,17 @@ async function deleteMatterDevice(pointId) {
             }
             if (typeof renderOverview === 'function') renderOverview();
             await loadPoints();
-            toast('已删除');
+            toast(t('ov.deleted'));
         } else {
-            toast('删除失败: ' + String(j.message || j.error || ('HTTP ' + r.status)).slice(0, 60));
+            toast(t('ov.delete_failed') + ': ' + String(j.message || j.error || ('HTTP ' + r.status)).slice(0, 60));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function deleteZigbeeDevice(pointId) {
-    if (!confirm('确定删除 ' + pointId + '？\n（Hub 侧移除；设备需自行离网/长按 BOOT）')) return;
-    toast('删除中...');
+    if (!confirm(t('ov.delete_zigbee_confirm', { id: pointId }))) return;
+    toast(t('ov.deleting'));
     try {
         const r = await fetch('/api/zigbee/devices', {
             method: 'POST',
@@ -1950,17 +1965,17 @@ async function deleteZigbeeDevice(pointId) {
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.result === 'ok') {
             await loadPoints();
-            toast('已删除');
+            toast(t('ov.deleted'));
         } else {
-            toast('删除失败');
+            toast(t('ov.delete_failed'));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function deleteBleMeshDevice(pointId) {
-    if (!confirm('确定删除 ' + pointId + '？')) return;
-    toast('删除中...');
+    if (!confirm(t('ov.delete_confirm', { id: pointId }))) return;
+    toast(t('ov.deleting'));
     try {
         const r = await fetch('/api/ble_mesh/devices', {
             method: 'POST',
@@ -1975,12 +1990,12 @@ async function deleteBleMeshDevice(pointId) {
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.result === 'ok') {
             await loadPoints();
-            toast('已删除');
+            toast(t('ov.deleted'));
         } else {
-            toast('删除失败');
+            toast(t('ov.delete_failed'));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 
@@ -2005,14 +2020,17 @@ function switchHasDetail(p) {
     const ex = pr.extras;
     return Array.isArray(ex) && ex.length > 0;
 }
-const EXTRA_LABEL = {
-    indicator: '指示灯',
-    motion_detection: '移动侦测',
-    human_tracking: '人形联动追踪',
-    time_watermark: '时间水印',
-    wdr: '宽动态',
-    dnd: '勿扰'
-};
+/* Looked up at render time (like matterStageLabel) so the dictionary is already
+ * loaded; unknown keys fall back to the raw extras key at the call site. */
+function extraLabel(key) {
+    if (key === 'indicator') return t('ov.extra_indicator');
+    if (key === 'motion_detection') return t('ov.extra_motion_detection');
+    if (key === 'human_tracking') return t('ov.extra_human_tracking');
+    if (key === 'time_watermark') return t('ov.extra_time_watermark');
+    if (key === 'wdr') return t('ov.extra_wdr');
+    if (key === 'dnd') return t('ov.extra_dnd');
+    return '';
+}
 
 function extraSwitchOn(pr, key) {
     const v = (pr || {})[key];
@@ -2053,7 +2071,7 @@ function renderExtraToggles(boxId, p, idFn) {
     const list = extrasSwitches(p);
     const dis = !p.online ? ' disabled' : '';
     box.innerHTML = list.map(e => {
-        const lab = EXTRA_LABEL[e.key] || e.key;
+        const lab = extraLabel(e.key) || e.key;
         const on = extraSwitchOn(pr, e.key);
         const sid = e.siid || 0,
             pid = e.piid || 0;
@@ -2077,14 +2095,22 @@ function renderExtraToggles(boxId, p, idFn) {
     });
 }
 
-function plugMeterText(p) {
+/* One source of truth for "this plug reports metering": the caller hides the row
+ * from this, not from the rendered text (an em-dash check broke the moment the
+ * placeholder became a translatable string). */
+function plugMeterBits(p) {
     const pr = (p && p.props) || {};
     const w = pr.power_w != null ? pr.power_w : pr.power;
     const wh = pr.energy_wh != null ? pr.energy_wh : pr.energy;
     const bits = [];
-    if (w != null && w !== '') bits.push('功率 ' + Number(w) + ' W');
-    if (wh != null && wh !== '') bits.push('电量 ' + Number(wh) + (pr.energy_wh != null ? ' Wh' : ' kWh'));
-    return bits.length ? bits.join(' · ') : '功率 — · 电量 —';
+    if (w != null && w !== '') bits.push(t('ov.plug_power', { v: Number(w) }));
+    if (wh != null && wh !== '') bits.push(t('ov.plug_energy', { v: Number(wh), unit: (pr.energy_wh != null ? ' Wh' : ' kWh') }));
+    return bits;
+}
+
+function plugMeterText(p) {
+    const bits = plugMeterBits(p);
+    return bits.length ? bits.join(' · ') : t('ov.meter_empty');
 }
 
 function speakerVolVal(p) {
@@ -2114,7 +2140,7 @@ function openPlugDetail(id, ev) {
     if (!p || p.type !== 'switch') return;
     plugDetailId = id;
     document.getElementById('plug-detail-title').textContent = (TYPE_ICON.switch || '') + ' ' + (p.point_id.split('/').pop());
-    document.getElementById('plug-detail-meta').textContent = p.point_id + (p.online ? ' · 在线' : ' · 离线');
+    document.getElementById('plug-detail-meta').textContent = p.point_id + (p.online ? ' · ' + t('ov.online') : ' · ' + t('ov.offline'));
     const noCtrl = !!(p.props && p.props.no_control);
     const prow = document.getElementById('plug-power-row');
     prow.hidden = !!noCtrl;
@@ -2131,7 +2157,7 @@ function openPlugDetail(id, ev) {
     const meter = document.getElementById('plug-meter');
     const mt = plugMeterText(p);
     meter.textContent = mt;
-    meter.hidden = mt.indexOf('—') >= 0 && (p.props || {}).power_w == null && (p.props || {}).energy_wh == null && (p.props || {}).power == null && (p.props || {}).energy == null;
+    meter.hidden = plugMeterBits(p).length === 0;
     renderExtraToggles('plug-extras', p, () => plugDetailId);
     document.getElementById('plug-detail-modal').hidden = false;
 }
@@ -2151,14 +2177,14 @@ function refreshCameraPreview() {
     if (!ad) {
         if (ph) {
             ph.hidden = false;
-            ph.innerHTML = '无法预览<div class="cam-preview-sub">缺少模块适配器</div>';
+            ph.innerHTML = t('ov.cannot_preview') + '<div class="cam-preview-sub">' + t('ov.no_module_adapter') + '</div>';
         }
         if (img) img.hidden = true;
         return;
     }
     if (ph) {
         ph.hidden = false;
-        ph.innerHTML = '加载预览…<div class="cam-preview-sub">最近抓拍（非实时）</div>';
+        ph.innerHTML = t('ov.loading_preview') + '<div class="cam-preview-sub">' + t('ov.last_snapshot') + '</div>';
     }
     if (!img) return;
     img.hidden = true;
@@ -2170,7 +2196,7 @@ function refreshCameraPreview() {
         img.hidden = true;
         if (ph) {
             ph.hidden = false;
-            ph.innerHTML = '暂无抓拍<div class="cam-preview-sub">模块无可用画面</div>';
+            ph.innerHTML = t('ov.no_snapshot') + '<div class="cam-preview-sub">' + t('ov.no_frame') + '</div>';
         }
     };
     img.src = '/api/modules/' + encodeURIComponent(ad) + '/preview?point_id=' + encodeURIComponent(cameraDetailId) + '&t=' + Date.now();
@@ -2182,7 +2208,7 @@ function openCameraDetail(id, ev) {
     if (!p || p.type !== 'camera') return;
     cameraDetailId = id;
     document.getElementById('camera-detail-title').textContent = (TYPE_ICON.camera || '') + ' ' + (p.point_id.split('/').pop());
-    document.getElementById('camera-detail-meta').textContent = p.point_id + (p.online ? ' · 在线' : ' · 离线');
+    document.getElementById('camera-detail-meta').textContent = p.point_id + (p.online ? ' · ' + t('ov.online') : ' · ' + t('ov.offline'));
     const noCtrl = !!(p.props && p.props.no_control);
     const prow = document.getElementById('camera-power-row');
     prow.hidden = !!noCtrl;
@@ -2222,7 +2248,7 @@ function openSpeakerDetail(id, ev) {
     if (!p || p.type !== 'speaker') return;
     speakerDetailId = id;
     document.getElementById('speaker-detail-title').textContent = (TYPE_ICON.speaker || '') + ' ' + (p.point_id.split('/').pop());
-    document.getElementById('speaker-detail-meta').textContent = p.point_id + (p.online ? ' · 在线' : ' · 离线');
+    document.getElementById('speaker-detail-meta').textContent = p.point_id + (p.online ? ' · ' + t('ov.online') : ' · ' + t('ov.offline'));
     const vol = speakerVolVal(p);
     const vEl = document.getElementById('speaker-vol');
     vEl.value = vol;
@@ -2237,7 +2263,7 @@ function speakerPlayText() {
     const el = document.getElementById('speaker-tts');
     const t = (el && el.value || '').trim();
     if (!t) {
-        toast('请输入文字');
+        toast(t('ov.enter_text'));
         return;
     }
     cmd(speakerDetailId, 'call_action', {
@@ -2251,7 +2277,7 @@ function cameraPlayText() {
     const el = document.getElementById('camera-tts');
     const t = (el && el.value || '').trim();
     if (!t) {
-        toast('请输入文字');
+        toast(t('ov.enter_text'));
         return;
     }
     const p = pts.find(x => x.point_id === cameraDetailId);
@@ -2295,7 +2321,7 @@ function openApplianceDetail(id, ev) {
     applianceDetailId = id;
     const name = (p.props && p.props.name) || pointDisplayName(p);
     document.getElementById('appliance-detail-title').textContent = (TYPE_ICON[p.type] || '') + ' ' + name;
-    document.getElementById('appliance-detail-meta').textContent = ((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : (TYPE_LABEL[p.type] || p.type)) + (p.online ? ' · 在线' : ' · 离线');
+    document.getElementById('appliance-detail-meta').textContent = ((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : mhTypeLabel(p.type)) + (p.online ? ' · ' + t('ov.online') : ' · ' + t('ov.offline'));
     const on = p.value === 'on' || p.value === 'true';
     const pow = document.getElementById('appliance-power');
     const noCtrl = !!(p.props && p.props.no_control);
@@ -2379,7 +2405,7 @@ function openApplianceDetail(id, ev) {
     if (rows.length) {
         box.innerHTML = rows.map(r => '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">' + esc(r.label || '') + '</span><span>' + esc(r.value || '') + '</span></div>').join('');
     } else {
-        box.innerHTML = '<div class="modal-hint">暂无更多状态，请稍后在模块里点同步</div>';
+        box.innerHTML = '<div class="modal-hint">' + t('ov.no_more_status') + '</div>';
     }
     document.getElementById('appliance-detail-modal').hidden = false;
 }
@@ -2427,7 +2453,7 @@ function openAcDetail(id, ev) {
     if (!p || p.type !== 'air-conditioner') return;
     acDetailId = id;
     document.getElementById('ac-detail-title').textContent = (TYPE_ICON['air-conditioner'] || '') + ' ' + (p.point_id.split('/').pop());
-    document.getElementById('ac-detail-meta').textContent = p.point_id + (p.online ? ' · 在线' : ' · 离线');
+    document.getElementById('ac-detail-meta').textContent = p.point_id + (p.online ? ' · ' + t('ov.online') : ' · ' + t('ov.offline'));
     const pr = p.props || {};
     const on = p.value === 'on' || p.value === 'true';
     const pow = document.getElementById('ac-power');
@@ -2448,7 +2474,7 @@ function openAcDetail(id, ev) {
         b.classList.toggle('on', b.dataset.fan === fk);
         b.disabled = !p.online;
     });
-    const amb = pr.temperature != null ? ('室温 ' + pr.temperature + '°') : '室温 —';
+    const amb = pr.temperature != null ? t('ov.room_temp', { v: pr.temperature }) : t('ov.room_temp_none');
     document.getElementById('ac-ambient').textContent = amb;
     document.getElementById('ac-detail-modal').hidden = false;
 }
@@ -2475,7 +2501,7 @@ function openCoverDetail(id, ev) {
     if (!p || !isCoverType(p.type)) return;
     coverDetailId = id;
     document.getElementById('cover-detail-title').textContent = (TYPE_ICON.cover || '') + ' ' + (p.point_id.split('/').pop());
-    document.getElementById('cover-detail-meta').textContent = p.point_id + (p.online ? ' · 在线' : ' · 离线');
+    document.getElementById('cover-detail-meta').textContent = p.point_id + (p.online ? ' · ' + t('ov.online') : ' · ' + t('ov.offline'));
     const pr = p.props || {};
     let pct = parseInt(p.value, 10);
     if (!Number.isFinite(pct) && pr.position != null) pct = parseInt(pr.position, 10);
@@ -2550,7 +2576,7 @@ try {
 async function cmd(id, c, params) {
     const p = pts.find(x => x.point_id === id);
     if (p && !p.online) {
-        toast('设备离线');
+        toast(t('ov.device_offline'));
         return;
     }
     try {
@@ -2567,9 +2593,9 @@ async function cmd(id, c, params) {
             body: JSON.stringify(body)
         });
         if (r.ok) {
-            toast('已发送');
+            toast(t('ov.sent'));
         } else {
-            let msg = '失败';
+            let msg = t('ov.failed');
             try {
                 const j = await r.json();
                 msg = (j && (j.error || j.message || j.result)) || ('HTTP ' + r.status);
@@ -2581,19 +2607,19 @@ async function cmd(id, c, params) {
         }
         loadPoints();
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function permitZigbeeJoin() {
     if (radioProv.zigbee_permit_join) {
-        toast('Zigbee 正在入网，请勿重复开启');
+        toast(t('ov.zigbee_join_already_on'));
         return;
     }
     if (radioProv.ble_mesh_provisioning || radioProv.ble_mesh_permit_provision) {
-        toast('BLE Mesh 正在配网，请稍后再试');
+        toast(t('ov.ble_mesh_busy_later'));
         return;
     }
-    toast('正在打开入网窗口…');
+    toast(t('ov.opening_join'));
     try {
         const r = await fetch('/api/zigbee/permit_join', {
             method: 'POST',
@@ -2609,24 +2635,24 @@ async function permitZigbeeJoin() {
             radioProv.zigbee_permit_join = true;
             radioProv.busy = true;
             if (view === 'overview') renderOverview();
-            toast('Zigbee 入网已开启 120 秒');
+            toast(t('ov.zigbee_join_started'));
         } else {
-            toast('开启失败' + (j.error ? ': ' + j.error : (j.result ? ': ' + j.result : '')));
+            toast(t('ov.open_failed') + (j.error ? ': ' + j.error : (j.result ? ': ' + j.result : '')));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function permitBleMeshProvision() {
     if (radioProv.ble_mesh_permit_provision || radioProv.ble_mesh_provisioning) {
-        toast('BLE Mesh 正在配网，请勿重复开启');
+        toast(t('ov.ble_mesh_prov_already_on'));
         return;
     }
     if (radioProv.zigbee_permit_join) {
-        toast('Zigbee 正在入网，请稍后再试');
+        toast(t('ov.zigbee_busy_later'));
         return;
     }
-    toast('正在打开配网窗口…');
+    toast(t('ov.opening_prov'));
     try {
         const r = await fetch('/api/ble_mesh/permit_provision', {
             method: 'POST',
@@ -2643,13 +2669,13 @@ async function permitBleMeshProvision() {
             radioProv.ble_mesh_provisioning = true;
             radioProv.busy = true;
             if (view === 'overview') renderOverview();
-            toast('BLE Mesh 配网已开启 120 秒');
+            toast(t('ov.ble_mesh_prov_started'));
             loadPoints();
         } else {
-            toast('开启失败' + (j.error ? ': ' + j.error : (j.result ? ': ' + j.result : '')));
+            toast(t('ov.open_failed') + (j.error ? ': ' + j.error : (j.result ? ': ' + j.result : '')));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 let radioProvLoading = false;
@@ -2668,7 +2694,7 @@ async function refreshRadioProv() {
     }
 }
 async function stopZigbeeJoin() {
-    toast('正在关闭入网窗口…');
+    toast(t('ov.closing_join'));
     try {
         const r = await fetch('/api/zigbee/permit_join', {
             method: 'POST',
@@ -2682,16 +2708,16 @@ async function stopZigbeeJoin() {
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.result === 'ok') {
             await refreshRadioProv();
-            toast('Zigbee 入网已关闭');
+            toast(t('ov.zigbee_join_stopped'));
         } else {
-            toast('关闭失败' + (j.error ? ': ' + j.error : ''));
+            toast(t('ov.close_failed') + (j.error ? ': ' + j.error : ''));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }
 async function stopBleMeshProvision() {
-    toast('正在关闭配网窗口…');
+    toast(t('ov.closing_prov'));
     try {
         const r = await fetch('/api/ble_mesh/permit_provision', {
             method: 'POST',
@@ -2705,12 +2731,12 @@ async function stopBleMeshProvision() {
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.result === 'ok') {
             await refreshRadioProv();
-            toast('BLE Mesh 配网窗口已关闭');
+            toast(t('ov.ble_mesh_prov_stopped'));
         } else {
-            toast('关闭失败' + (j.error ? ': ' + j.error : ''));
+            toast(t('ov.close_failed') + (j.error ? ': ' + j.error : ''));
         }
     } catch (e) {
-        toast('网络错误');
+        toast(t('ov.network_error'));
     }
 }(function() {
     const q = document.getElementById('q');

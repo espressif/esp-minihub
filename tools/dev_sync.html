@@ -137,17 +137,20 @@
         <input type="file" id="web-dir" webkitdirectory directory multiple />
       </label>
       <label>或若干文件
-        <input type="file" id="web-files" multiple accept=".html,.css,.js,.svg,.png,.map" />
+        <input type="file" id="web-files" multiple accept=".html,.css,.js,.svg,.png,.map,.json" />
       </label>
     </div>
     <label style="margin-top:0.75rem">散文件时的设备路径（选了整个文件夹则按目录，忽略此项）
       <select id="web-target">
-        <option value="auto">自动（index.html / login.html / css/* / js/*）</option>
+        <option value="auto">自动（index.html / login.html 留根目录，*.css→css/，*.js→js/，其余留根目录）</option>
         <option value="css/">强制前缀 css/</option>
         <option value="js/">强制前缀 js/</option>
+        <option value="i18n/">强制前缀 i18n/</option>
         <option value="root">强制根目录（仅文件名）</option>
       </select>
     </label>
+    <p class="hint">单个文件不带目录信息，工具不猜哪个是语言文件：上传 <code>i18n/*.json</code> 请选「强制前缀 i18n/」，
+      或直接选整个 <code>web</code> 文件夹（会自动带上 <code>i18n/</code> 子目录）。下方队列会显示每个文件的实际目标路径。</p>
     <div class="file-list" id="web-queue"></div>
     <div class="actions">
       <button class="primary" type="button" id="web-upload">上传所选</button>
@@ -258,7 +261,7 @@
 
   $("#log-clear").onclick = () => { logEl.textContent = ""; };
 
-  const WEB_FILE = /\.(html|css|js|svg|png|map)$/i;
+  const WEB_FILE = /\.(html|css|js|svg|png|map|json)$/i;
   const READ_RETRY_MS = 250;
   const STALE_FILE_MSG = "文件在上传前被修改或无法读取，请重新选择后再传";
 
@@ -375,11 +378,17 @@
     const fileName = file.name || "";
     if (mode === "css/") return "css/" + fileName.split("/").pop();
     if (mode === "js/") return "js/" + fileName.split("/").pop();
+    if (mode === "i18n/") return "i18n/" + fileName.split("/").pop();
     if (mode === "root") return fileName.split("/").pop();
     const n = fileName.split("/").pop();
     if (n === "index.html" || n === "login.html") return n;
     if (n.endsWith(".css")) return "css/" + n;
     if (n.endsWith(".js") || n.endsWith(".map")) return "js/" + n;
+    /* A picked .json goes to the web root: a single-file upload carries no folder,
+     * so guessing "it must be a dictionary" would need a hard-coded list of
+     * language names here — one more place to edit per new language. Pick the
+     * i18n/ prefix from the dropdown instead; the queue row shows the destination
+     * before anything is sent, and a folder upload already keeps i18n/. */
     return n;
   }
 

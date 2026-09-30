@@ -241,8 +241,8 @@ char *minihub_device_widget_report_payload(uint32_t seq,
  * There is deliberately NO fallback from a control to the device-class icon:
  * the two directories hold different artwork (avatar vs control mockup).
  *
- * A "-" in the parameter id maps to "_" (light-mode -> light_mode) because file
- * names are underscore-only.
+ * A "-" in the parameter id maps to "_" when resolving the file name, because
+ * icon file names are underscore-only while ids are not.
  *
  * buf receives the path RELATIVE to MINIHUB_DW_IMAGES_DIR (e.g.
  * "parameters/light_brightness.svg", "devices/light.svg"); size

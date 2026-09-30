@@ -136,11 +136,29 @@ This is **not** ``PUT /api/dev/fs/`` (LCD JSON under ``/data/ui/``, gated by
 Language layout
 ---------------
 
-Today the console is a **single** ``index.html`` / ``login.html`` (Chinese UI
-in the generic Host). The HTTP server does **not** pick
-``web/en/login.html`` vs ``web/zh_CN/login.html``. Putting those folders on
-LittleFS does not switch language until firmware maps ``Accept-Language`` to
-them.
+The console is **one** ``index.html`` / ``login.html`` plus one string file per
+language (``web/i18n/zh_CN.json``, ``web/i18n/en.json``). The language is chosen
+in the browser, not by the server:
+
+``localStorage['minihub.lang']`` → browser language (``zh*`` → ``zh_CN``,
+otherwise ``en``) → ``en``.
+
+A language the user picked therefore wins over the browser default on the next
+visit. ``localStorage`` is per origin, so each Hub remembers its own choice.
+Switching writes the key and reloads the page; the catalog is refetched with
+``?lang=``, so device and parameter names follow the same choice.
+
+The page is hidden until its string file has loaded, so an English user never
+sees a Chinese first frame. ``/web/i18n/`` and ``/web/js/i18n.js`` are the two
+paths served **without** a session, because the login page is the first thing a
+user sees and must translate itself; they carry UI strings only.
+
+This is why the HTTP server does **not** map ``Accept-Language`` onto
+``web/en/`` versus ``web/zh_CN/`` folders — there are no per-language page
+trees to pick between. Only the ROM fallback page (before any web assets are
+mounted) still selects zh/en from ``Accept-Language``.
+
+A Store module's own ``web/`` UI is not covered by this mechanism yet.
 
 Module UIs
 ----------
