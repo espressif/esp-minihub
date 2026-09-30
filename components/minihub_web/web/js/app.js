@@ -370,6 +370,16 @@ async function loadMeta() {
             }
         }
         authStatusByAdapter = next;
+        /* If any auth module is mid-sync, keep polling so the syncing / "加载中"
+         * state is cleared as soon as the (possibly background or auto) sync
+         * finishes, instead of lingering until the next unrelated refresh
+         * (issue #8). pollAuthSyncWhileBusy() self-guards against duplicate timers. */
+        if (authModules().some(function (m) {
+                const s = authStatus(m.adapter);
+                return !!(s && s.syncing);
+            })) {
+            pollAuthSyncWhileBusy();
+        }
         if (adapterEnabled('matter')) {
             const mt = await fetch('/api/matter/status');
             if (mt.ok) matterStatus = await mt.json();
