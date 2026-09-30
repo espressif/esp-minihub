@@ -275,7 +275,16 @@ function sectionHeader(ad, count) {
     if (mod) {
         const mid = mod.id;
         const st = authStatus(ad);
-        const acct = st.logged_in ? '<span class="mod-acct">' + esc(st.user_id || '-') + (st.region ? ' · ' + esc(st.region) : '') + '</span>' : (showActs ? '<span class="mod-acct off">' + esc(lbl(mod, 'logged_out', t('ov.logged_out'))) + '</span>' : '');
+        let acct;
+        if (st.logged_in) {
+            acct = '<span class="mod-acct">' + esc(st.user_id || '-') + (st.region ? ' · ' + esc(st.region) : '') + '</span>';
+        } else if (!st.loaded) {
+            /* Status not yet known (first paint / reboot) — show a neutral
+             * "checking" badge instead of a false "not logged in". */
+            acct = showActs ? '<span class="mod-acct off">' + esc('检查中') + '</span>' : '';
+        } else {
+            acct = showActs ? '<span class="mod-acct off">' + esc(lbl(mod, 'logged_out', t('ov.logged_out'))) + '</span>' : '';
+        }
         const syncBadge = st.syncing ? '<span class="mod-acct busy">' + t('ov.syncing') + '</span>' : '';
         let acts = '';
         if (showActs) {
