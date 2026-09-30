@@ -694,14 +694,27 @@ static void match_rules_for_point(const char *point_id, const char *new_value)
     }
 }
 
-static bool time_synced(void)
+static bool clock_is_valid(void)
 {
-    return sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
+    time_t now = time(NULL);
+    if (now < 0) {
+        return false;
+    }
+    struct tm local_tm;
+    if (!localtime_r(&now, &local_tm)) {
+        return false;
+    }
+    /* Accept any clock set to a plausible year. We deliberately do not require
+     * SNTP sync to be *completed*: on LAN-only setups (no reachable NTP) the
+     * sync status stays RESET and the old hard gate left time rules dead, so
+     * scheduled rules never fired. With a valid local clock the HH:MM compare
+     * simply won't match a 1970 timestamp, so relaxing this is safe. */
+    return (local_tm.tm_year + 1900) >= 2020;
 }
 
 static void check_time_rules(void)
 {
-    if (!time_synced()) {
+    if (!clock_is_valid()) {
         return;
     }
 
