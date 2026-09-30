@@ -1,28 +1,27 @@
-parameter,label,data_type,properties,min,max,step,unit,ui_element,options,description,visible,css,image,requires
-battery,电量,Int,Read,0,100,1,%,ui.text,,Battery level (read-only),TRUE,,,
-brightness,亮度,Int,Read/Write,1,100,1,%,ui.slider,,Brightness level,TRUE,,,power
-cct,色温,Int,Read/Write,2700,6500,100,K,ui.slider,,Color correlated temperature,TRUE,,,power
-co2,二氧化碳,Int,Read,0,5000,1,ppm,ui.text,,CO2 concentration (read-only),TRUE,,,
-contact,门磁,Bool,Read,,,,,ui.text,,Door / window contact state (true = open),TRUE,,,
-current_a,电流,Float,Read,0,16,0.01,A,ui.text,,Electrical current (metering readout),TRUE,,,
-energy_wh,电量,Float,Read,0,999999,1,Wh,ui.text,,Cumulative energy (Wh; metering readout),TRUE,,,
-fault,故障,Int,Read,0,255,1,,ui.text,,Device fault / error code (read-only),TRUE,,,
-hue,颜色,Int,Read/Write,0,360,1,°,ui.slider,,Hue of the light,TRUE,,,power
-humidity,湿度,Float,Read,0,100,0.1,%,ui.text,,Relative humidity (read-only),TRUE,,,
-illuminance,光照度,Float,Read,0,100000,1,lx,ui.text,,Ambient illuminance (read-only),TRUE,,,
-indicator,指示灯,Bool,Read/Write,,,,,ui.toggle,,Status / indicator LED,TRUE,,,
-intensity,强度,Int,Read/Write,0,100,1,%,ui.slider,,Intensity,TRUE,,,power
-leak,漏水,Bool,Read,,,,,ui.text,,Water leak detected,TRUE,,,
-light-mode,灯光模式,Int,Read/Write,0,2,1,,ui.dropdown,"[{""value"":0,""label"":""默认 (HSV + CCT)""},{""value"":1,""label"":""HSV""},{""value"":2,""label"":""CCT""}]",Light mode,TRUE,,,power
-motion,人体移动,Bool,Read,,,,,ui.text,,Motion detected,TRUE,,,
-name,名称,String,Read/Write,,,,,ui.text,,Name of the device,FALSE,,,
-occupancy,有人,Bool,Read,,,,,ui.text,,Occupancy detected,TRUE,,,
-pm25,PM2.5,Float,Read,0,1000,0.1,µg/m³,ui.text,,PM2.5 particulate matter (read-only),TRUE,,,
-power,电源,Bool,Read/Write,,,,,ui.toggle,,Turn the device on/off,TRUE,,,
-power_w,功率,Float,Read,0,4000,1,W,ui.text,,Active electrical power (metering readout; not on/off power),TRUE,,,
-pressure_hpa,气压,Float,Read,300,1100,0.1,hPa,ui.text,,Atmospheric pressure (read-only),TRUE,,,
-saturation,饱和度,Int,Read/Write,0,100,1,%,ui.slider,,Saturation,TRUE,,,power
-smoke,烟雾,Bool,Read,,,,,ui.text,,Smoke detected,TRUE,,,
-tamper,防拆,Bool,Read,,,,,ui.text,,Tamper detected,TRUE,,,
-temperature,温度,Float,Read,-40,125,0.1,°C,ui.text,,Device or ambient temperature (read-only),TRUE,,,
-voltage_v,电压,Float,Read,0,250,0.1,V,ui.text,,Line voltage (metering readout),TRUE,,,
+parameter,label_zh,label_en,data_type,properties,min,max,step,unit,ui_element,options,description,visible,css,image,requires
+battery,电量,Battery,Int,Read,0,100,1,%,ui.text,,Battery level (read-only),TRUE,,,
+brightness,亮度,Brightness,Int,Read/Write,1,100,1,%,ui.slider,,Brightness level,TRUE,,,power
+cct,色温,Color temperature,Int,Read/Write,2700,6500,100,K,ui.slider,,Color correlated temperature,TRUE,,,power
+co2,二氧化碳,CO2,Int,Read,0,5000,1,ppm,ui.text,,CO2 concentration (read-only),TRUE,,,
+contact,门磁,Contact,Bool,Read,,,,,ui.text,,Door / window contact state (true = open),TRUE,,,
+current_a,电流,Current,Float,Read,0,16,0.01,A,ui.text,,Electrical current (metering readout),TRUE,,,
+energy_wh,电量,Energy,Float,Read,0,999999,1,Wh,ui.text,,Cumulative energy (Wh; metering readout),TRUE,,,
+fault,故障,Fault,Int,Read,0,255,1,,ui.text,,Device fault / error code (read-only),TRUE,,,
+hue,颜色,Color,Int,Read/Write,0,360,1,°,ui.slider,,Hue of the light,TRUE,,,power
+humidity,湿度,Humidity,Float,Read,0,100,0.1,%,ui.text,,Relative humidity (read-only),TRUE,,,
+illuminance,光照度,Illuminance,Float,Read,0,100000,1,lx,ui.text,,Ambient illuminance (read-only),TRUE,,,
+indicator,指示灯,Indicator,Bool,Read/Write,,,,,ui.toggle,,Status / indicator LED,TRUE,,,
+intensity,强度,Intensity,Int,Read/Write,0,100,1,%,ui.slider,,Intensity,TRUE,,,power
+leak,漏水,Water leak,Bool,Read,,,,,ui.text,,Water leak detected,TRUE,,,
+motion,人体移动,Motion,Bool,Read,,,,,ui.text,,Motion detected,TRUE,,,
+name,名称,Name,String,Read/Write,,,,,ui.text,,Name of the device,FALSE,,,
+occupancy,有人,Occupancy,Bool,Read,,,,,ui.text,,Occupancy detected,TRUE,,,
+pm25,PM2.5,PM2.5,Float,Read,0,1000,0.1,µg/m³,ui.text,,PM2.5 particulate matter (read-only),TRUE,,,
+power,电源,Power,Bool,Read/Write,,,,,ui.toggle,,Turn the device on/off,TRUE,,,
+power_w,功率,Power (W),Float,Read,0,4000,1,W,ui.text,,Active electrical power (metering readout; not on/off power),TRUE,,,
+pressure_hpa,气压,Pressure,Float,Read,300,1100,0.1,hPa,ui.text,,Atmospheric pressure (read-only),TRUE,,,
+saturation,饱和度,Saturation,Int,Read/Write,0,100,1,%,ui.slider,,Saturation,TRUE,,,power
+smoke,烟雾,Smoke,Bool,Read,,,,,ui.text,,Smoke detected,TRUE,,,
+tamper,防拆,Tamper,Bool,Read,,,,,ui.text,,Tamper detected,TRUE,,,
+temperature,温度,Temperature,Float,Read,-40,125,0.1,°C,ui.text,,Device or ambient temperature (read-only),TRUE,,,
+voltage_v,电压,Voltage,Float,Read,0,250,0.1,V,ui.text,,Line voltage (metering readout),TRUE,,,

@@ -33,12 +33,13 @@ CSS）。数据源：`model/*.csv`。构建时嵌入扁平注册表；图标打�
 | 列 | 内容 |
 |----|------|
 | `parameter` | key，不带 `esp.param.` 前缀 |
-| `label` | UI / 规则选择器显示名 |
+| `label_zh` | 中文显示名——默认语言，也是回落语言 |
+| `label_en` | 英文显示名——留空则回落到 `label_zh` |
 | `data_type` | `Bool` / `Int` / `String` / … |
 | `properties` | 如 `Read/Write` |
 | `min` / `max` / `step` / `unit` | 滑杆默认范围 |
 | `ui_element` | 上述封闭集 |
-| `options` | `ui.dropdown` 的 JSON 数组 |
+| `options` | `ui.dropdown` 的 JSON 数组；每项用 `labels: {"zh":…, "en":…}`，不再写平铺的 `label` |
 | `description` | 自由文本 |
 | `css` | 渲染 CSS |
 | `image` | 可选控件图标文件名（在 `images/parameters/` 下） |
@@ -66,7 +67,7 @@ CSS）。数据源：`model/*.csv`。构建时嵌入扁平注册表；图标打�
 ### 内置类型
 
 - **`light`** — `power`、`brightness`、`cct`、`hue`（标签「颜色」）、`saturation`、
-  `intensity`、`light-mode`
+  `intensity`
 - **`switch`** — `power`、`voltage_v`、`current_a`、`power_w`、`energy_wh`
 - **`name`** — 在目录中；无设备列出 → 不成控件
 

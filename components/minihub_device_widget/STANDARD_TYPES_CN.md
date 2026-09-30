@@ -16,7 +16,7 @@
 
 | 设备 ID | RainMaker 类型 | 参数 | 主参数 | 必选 |
 |---------|----------------|------|--------|------|
-| light | esp.device.lightbulb | power, brightness, cct, hue, saturation, intensity, light-mode | power | power |
+| light | esp.device.lightbulb | power, brightness, cct, hue, saturation, intensity | power | power |
 | switch | esp.device.switch | power, voltage_v, current_a, power_w, energy_wh | power | power |
 
 `esp.device.light` = `esp.device.lightbulb`。`name` 仅作元数据（不在上表类型列表中）。
@@ -43,7 +43,6 @@
 | 颜色 | hue | Int | Read, Write | 0, 360, 1 | ui.slider | 颜色（度；id 仍为 `hue`） |
 | 饱和度 | saturation | Int | Read, Write | 0, 100, 1 | ui.slider | 饱和度 % |
 | 强度 | intensity | Int | Read, Write | 0, 100, 1 | ui.slider | 强度 % |
-| 灯光模式 | light-mode | Int | Read, Write | 0, 2, 1 | ui.dropdown | 0 HSV+CCT，1 HSV，2 CCT |
 | 电压 | voltage_v | Float | Read | 0, 250, 0.1 | ui.text | 电压（V）；只读计量 |
 | 电流 | current_a | Float | Read | 0, 16, 0.01 | ui.text | 电流（A）；只读计量 |
 | 功率 | power_w | Float | Read | 0, 4000, 1 | ui.text | 有功功率（W）；不是开关 `power`；只读 |
@@ -53,7 +52,7 @@
 |------|------|
 | name | —（元数据） |
 | power | light, switch |
-| brightness, cct, hue, saturation, intensity, light-mode | light |
+| brightness, cct, hue, saturation, intensity | light |
 | voltage_v, current_a, power_w, energy_wh | switch |
 
 图标：设备头像在 `images/devices/`；可选控件图标在 `images/parameters/`。见
@@ -65,6 +64,6 @@
 |---------|----------|------|
 | ui.toggle | toggle | Bool（`power`） |
 | ui.slider | slider | 有界设定值；`hue` 彩虹由 CSS tone |
-| ui.dropdown | dropdown | 固定选项（`light-mode`） |
+| ui.dropdown | dropdown | 固定选项集（出厂目录暂无使用者；选项写在 parameters.csv 的 `options`） |
 | ui.text | text | String（`name`）或计量读数；`access:R` 时只读 |
 | ui.hidden | hidden | 类型级不渲染（≠ 实例 `visible:false`） |

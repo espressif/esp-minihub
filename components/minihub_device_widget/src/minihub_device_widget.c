@@ -323,6 +323,7 @@ static esp_err_t dw_build(const char *text, dw_table_t *out)
 
     dw_entry_t *tmp = NULL;
     size_t tmp_cap = 0, tmp_len = 0;
+    size_t unlabeled = 0;
     bool cols_warned = false;
 
     for (;;) {
@@ -365,13 +366,18 @@ static esp_err_t dw_build(const char *text, dw_table_t *out)
             }
         }
 
-        /* label comes from style_json.label (fall back to parameter / device) */
+        /* e->label is the default language only: style_json.labels.zh, falling
+         * back to the parameter name. The per-request language pick happens
+         * when /api/device_widgets serialises the entry, not here. */
         e.label = NULL;
         cJSON *root = cJSON_Parse(e.style_json);
         if (root) {
-            cJSON *l = cJSON_GetObjectItemCaseSensitive(root, "label");
+            cJSON *labels = cJSON_GetObjectItemCaseSensitive(root, "labels");
+            cJSON *l = labels ? cJSON_GetObjectItemCaseSensitive(labels, "zh") : NULL;
             if (cJSON_IsString(l) && l->valuestring) {
                 e.label = strdup(l->valuestring);
+            } else if (!labels) {
+                unlabeled++;
             }
             cJSON_Delete(root);
         }
@@ -401,6 +407,16 @@ static esp_err_t dw_build(const char *text, dw_table_t *out)
     if (tmp_len == 0) {
         free(tmp);
         return ESP_ERR_NOT_FOUND;
+    }
+    if (unlabeled) {
+        /* A catalog seeded by pre-i18n firmware keeps surviving boots (editing
+         * /data/config/devices.csv by hand is a supported path, so the loader
+         * must not reject it), but its rows have style_json.label and no labels
+         * map: every card then shows the technical parameter name. */
+        ESP_LOGW(TAG, "%u catalog row(s) have no style_json.labels; re-upload "
+                      "model/*.csv (PUT /api/dev/catalog/) or delete "
+                      MINIHUB_DW_CSV_PATH " to get the localized registry",
+                 (unsigned)unlabeled);
     }
 
     /* Drop rows that look like a shifted/corrupt parse. A CSV written by an
@@ -914,8 +930,8 @@ static bool dw_image_name_ok(const char *name)
     return true;
 }
 
-/* "light-mode" -> "light_mode": icon files only use underscores, while
- * parameter ids may carry a hyphen (see the light light-mode control). */
+/* Parameter ids may carry a hyphen while icon file names are underscore-only,
+ * so a "-" in the id maps to "_" when resolving the file. */
 static void dw_image_norm(const char *in, char *out, size_t size)
 {
     size_t i = 0;

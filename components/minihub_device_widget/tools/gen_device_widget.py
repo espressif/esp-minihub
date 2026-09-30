@@ -7,7 +7,8 @@ git-diffable, meant to be extended by developers):
 
   model/devices.csv      device types            (device_id, parameters, ...)
   model/services.csv     RainMaker system services (service_id, rainmaker_type, ...)
-  model/parameters.csv   parameter catalog       (parameter, label, data_type, ui_element, ...)
+  model/parameters.csv   parameter catalog       (parameter, label_zh, label_en,
+                                  data_type, ui_element, ...)
   model/ui_elements.csv  closed UI enum          (id, label, description, binds)
 
 They mirror the ESP RainMaker four layers Device -> Service -> Parameter ->
@@ -90,10 +91,18 @@ SERVICE_COLS = ["service_id", "parameters"]
 # property (a registered point's props.visible), so it is deliberately not a
 # column here - and there is no `device` column either, so the catalog stays a
 # single global lookup instead of a per-device override table.
-PARAM_COLS = ["parameter", "label", "data_type", "properties", "min",
+PARAM_COLS = ["parameter", "label_zh", "label_en", "data_type", "properties", "min",
               "max", "step", "unit", "ui_element", "options", "description",
               "visible", "css", "image", "requires"]
 UI_COLS = ["id", "label", "description", "binds"]
+
+# CSV label column -> language code used in style_json.labels and in the
+# ?lang= query of /api/device_widgets. This is the list for the Python side
+# (check_catalog_i18n.py imports it), so adding a language means one entry here
+# plus one column in parameters.csv. The C flattener keeps its own copy of the
+# codes (minihub_device_widget_model.c, dw_build_style) because it cannot import
+# this file -- change both when adding a language.
+LABEL_COLS = {"label_zh": "zh", "label_en": "en"}
 
 MODEL_FILES = {
     M_DEVICES: (os.path.join(MODEL_DIR, "devices.csv"), DEVICE_COLS),
@@ -349,9 +358,23 @@ def check_requires_names(key, req, known):
                     f"parameters.csv: '{key}' requires unknown parameter '{n}'")
 
 
+def build_labels(pd):
+    """style_json.labels: {lang: text}, empty cells omitted.
+
+    There is deliberately no flat `label` key. The console reads the top-level
+    `label` that /api/device_widgets picks per request, and a flat Chinese
+    `label` here would win over it in the card renderer."""
+    labels = {}
+    for col, code in LABEL_COLS.items():
+        text = _s(pd.get(col))
+        if text:
+            labels[code] = text
+    return labels
+
+
 def build_style(pd):
     widget = ui_to_widget(_s(pd.get("ui_element")))
-    style = {"widget": widget, "label": _s(pd.get("label"))}
+    style = {"widget": widget, "labels": build_labels(pd)}
     for k in ("min", "max", "step"):
         v = pd.get(k)
         if v not in (None, ""):
@@ -428,7 +451,7 @@ def build_runtime_entries(dev_rows, param_defs):
 
 def _spec(pd):
     return {
-        "label": _s(pd.get("label")),
+        "labels": build_labels(pd),
         "data_type": _s(pd.get("data_type")),
         "properties": _s(pd.get("properties")),
         "min": (_csv_num(pd["min"]) if pd.get("min") not in (None, "") else None),
@@ -543,6 +566,16 @@ def main():
     out_dir = os.path.abspath(args.out_dir) if args.out_dir else None
 
     dev_rows, services, param_defs, ui_rows = read_model()
+    # Fail the build on catalog / localisation drift instead of shipping a console
+    # that silently renders one language. Runs for --check too: that is the lint pass.
+    import check_catalog_i18n
+    i18n_errors, i18n_warnings = check_catalog_i18n.run()
+    for w in i18n_warnings:
+        print(f"  warn  {w}")
+    if i18n_errors:
+        for e in i18n_errors:
+            print(f"  ERROR {e}")
+        raise SystemExit(f"catalog i18n check failed: {len(i18n_errors)} error(s)")
     entries = build_runtime_entries(dev_rows, param_defs)
     print(f"parsed {len(entries)} runtime entries from model/ "
           f"({len(param_defs)} catalog parameters, "

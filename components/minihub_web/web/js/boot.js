@@ -7,8 +7,8 @@ function toggleSecret(btn) {
     if (!input) return;
     const show = input.type === 'password';
     input.type = show ? 'text' : 'password';
-    btn.textContent = show ? '隐藏' : '显示';
-    btn.setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
+    btn.textContent = show ? t('boot.hide') : t('boot.show');
+    btn.setAttribute('aria-label', show ? t('boot.hide_password') : t('boot.show_password'));
 }
 
 (function installAuthFetchGuard() {
@@ -102,7 +102,7 @@ document.querySelectorAll('.nav-item').forEach(n => n.onclick = () => switchView
 document.getElementById('menu-btn').onclick = () => document.getElementById('sidebar').classList.toggle('open');
 
 document.getElementById('user-row').onclick = () => {
-    const n = prompt('设置本地显示名称', localName());
+    const n = prompt(t('ov.name_prompt'), localName());
     if (n && n.trim()) {
         localStorage.setItem('minihub_display_name', n.trim());
         renderLocalUser();
@@ -123,7 +123,7 @@ function bootConsole() {
     loadAdapters().then(async (ok) => {
         if (!ok) {
             const foot = document.getElementById('foot');
-            if (foot) foot.textContent = 'Hub 正在重新加载…';
+            if (foot) foot.textContent = t('boot.reloading');
             setTimeout(bootConsole, 2000);
             return;
         }
@@ -139,7 +139,12 @@ function bootConsole() {
         loadStoreData();
     });
 }
-bootConsole();
+/* Wait for the dictionary before the first render, otherwise the console paints in
+ * one language and swaps a frame later. A rejected dictionary still boots: the
+ * helper falls back to the key text and the page is already visible by then. */
+window.i18nReady.catch(function () {}).then(function () {
+    bootConsole();
+});
 renderLocalUser();
 /* 1 s: drives the 更新 stamp and is also the fast path for noticing a session
  * that a newer login replaced (single-slot session → 401 → guard → /login). */

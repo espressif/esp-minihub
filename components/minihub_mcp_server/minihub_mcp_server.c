@@ -234,25 +234,25 @@ static esp_err_t try_power_command_from_value(const char *point_id, const char *
 static const char *history_label_for_value(const char *value)
 {
     if (!value || !value[0]) {
-        return "事件";
+        return "event";
     }
     if (strcmp(value, "open") == 0) {
-        return "打开";
+        return "open";
     }
     if (strcmp(value, "closed") == 0) {
-        return "关闭";
+        return "closed";
     }
     if (strcmp(value, "detected") == 0) {
-        return "有人移动";
+        return "motion detected";
     }
     if (strcmp(value, "clear") == 0) {
-        return "无人";
+        return "clear";
     }
     if (strcmp(value, "on") == 0) {
-        return "开";
+        return "on";
     }
     if (strcmp(value, "off") == 0) {
-        return "关";
+        return "off";
     }
     return value;
 }
@@ -381,7 +381,7 @@ static esp_mcp_value_t tool_points_history(const esp_mcp_property_list_t *proper
                 cJSON_AddStringToObject(row, "new", newv->valuestring);
                 cJSON_AddStringToObject(row, "label", history_label_for_value(newv->valuestring));
             } else {
-                cJSON_AddStringToObject(row, "label", "事件");
+                cJSON_AddStringToObject(row, "label", "event");
             }
             cJSON_AddStringToObject(row, "source", "local");
             cJSON_AddItemToArray(items, row);
@@ -419,7 +419,7 @@ static esp_mcp_value_t tool_points_history(const esp_mcp_property_list_t *proper
                         }
                         int64_t ts_ms = (int64_t)ts->valuedouble;
                         const char *label =
-                            (cJSON_IsString(lab) && lab->valuestring[0]) ? lab->valuestring : "事件";
+                            (cJSON_IsString(lab) && lab->valuestring[0]) ? lab->valuestring : "event";
                         if (history_near_duplicate(items, ts_ms, label)) {
                             continue;
                         }

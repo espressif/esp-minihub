@@ -41,7 +41,7 @@ Host **类型目录** 决定设备页怎么画：有哪些类型、参数标签�
      - 必选
      - 头像
    * - ``light``
-     - power, brightness, cct, hue, saturation, intensity, light-mode
+     - power, brightness, cct, hue, saturation, intensity
      - power
      - power
      - 灯泡图标 （见下）
@@ -163,12 +163,6 @@ hidden。色相 / 饱和度 / 色温都是 **slider**，彩虹或色带靠 CSS�
      - 0–100 %, step 1
      - slider
      - light
-   * - ``light-mode``
-     - 灯光模式
-     - Int
-     - 0–2
-     - dropdown
-     - light （0 HSV+CCT / 1 HSV / 2 CCT）
    * - ``voltage_v``
      - 电压
      - Float
@@ -377,11 +371,31 @@ CSV 列说明
 ``primary_param``、``mandatory_params``、可选 ``image`` （``images/devices/``
 下的类图标）。
 
-``parameters.csv`` 列：``parameter``、``label``、``data_type``、
+``parameters.csv`` 列：``parameter``、``label_zh``、``label_en``、``data_type``、
 ``properties``、``min`` / ``max`` / ``step`` / ``unit``、``ui_element``、
-``options`` （下拉 JSON 数组）、``description``、``css``、可选 ``requires``。
+``options`` （下拉 JSON 数组；每项写 ``labels`` 映射，不再写平铺的 ``label``）、
+``description``、``css``、可选 ``requires``。
 遗留的 ``visible`` 表头会被忽略；隐藏用实例 ``visible: false``。参数
 ``image`` 列当前不用 （控件走 CSS）。
+
+两列显示名是控制台双语的来源。``/api/device_widgets`` 每个参数只下发一个
+``label``，由 ``lang`` 查询参数（``zh`` / ``en``，缺省回落 ``Accept-Language``，
+再回落 ``zh``）从该行的 ``labels`` 映射里挑。加一种语言要动五个已知的地方：
+CSV 新加一列、生成器的 ``LABEL_COLS``、扁平化那一侧的列集合（``PARAM_REQ_COLS``、
+``dw_param_cols_t``、``dw_build_style``）、``dw_request_lang()`` 认识的语言码，
+以及控制台自己的语言集（``i18n.js`` 与开关里的选项）；而取用显示名的那些点
+都不用动——条目结构体、API 形状、卡片与规则渲染都保持原样。
+
+``tools/check_catalog_i18n.py`` 随生成器一起跑，按下面三级判定，让缺翻译在
+构建期暴露，而不是几个月后才被发现：
+
+* **错误** — ``label_zh`` / ``label_en`` 列缺失、``label_zh`` 单元格为空、
+  ``options`` 项没有 ``labels`` 映射、控制台两份文案文件 key 集合不一致、
+  或代码取用的 key 在任何文案文件里都没有定义；
+* **警告** — ``label_en`` 单元格为空，或 ``label_en`` 与 ``label_zh`` 相同。
+  专名（``PM2.5``、``HSV``、``CCT``）中英本来就一样，所以相同只警告不失败；
+* **运行时回落** — 该行没提供的语言，先回落 ``label_zh``，再回落参数名。
+  警告只会退化成中文，不会拦住构建，也不会弄坏页面。
 
 ``requires`` 是可写控件的前提。默认写一个参数名：``power`` 与
 ``{"all": ["power"]}`` 相同，该参数明确关闭时控件禁用。多个参数用对象：

@@ -3,105 +3,105 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>MiniHub</title>
+<title data-i18n="app.title">MiniHub</title>
 <link rel="stylesheet" href="/web/css/app.css">
 <link rel="stylesheet" href="/web/css/device_widgets.css">
 </head>
-<body>
-<div class="app"><aside class="sidebar" id="sidebar">  <div class="sb-brand"><div class="logo">M</div><div><div class="sb-title">MiniHub</div>    <div class="sb-sub" id="hub-ver">v0.1.0</div></div></div>  <nav class="nav">    <button class="nav-item active" data-view="overview"><span class="nav-ico">&#8962;</span>概览</button>    <button class="nav-item" data-view="map"><span class="nav-ico">&#128205;</span>地图</button>    <button class="nav-item" data-view="rules"><span class="nav-ico">&#8644;</span>规则</button>    <button class="nav-item" data-view="scenes"><span class="nav-ico">&#9733;</span>场景</button>    <button class="nav-item" data-view="store"><span class="nav-ico">&#11015;</span>MiniHub Store</button>    <button class="nav-item" data-view="system"><span class="nav-ico">&#9881;</span>系统</button>  </nav>  <div class="sb-foot" id="user-row" title="点击设置本地名称">    <div class="user-row"><div class="user-ava" id="user-ava">用</div>    <div><div class="user-name" id="user-name">用户</div>    <div class="user-sub">本地账户</div></div></div></div></aside><div class="main">  <header class="topbar">    <button class="menu-btn" id="menu-btn">&#9776;</button>    <h2 id="page-title">概览</h2>    <div style="font-size:.75rem;color:var(--dim)" id="foot">--</div>  </header>  <div class="page">    <div id="view-overview" class="view">      <div class="stats">        <div class="stat"><div class="stat-lbl">能力点</div><div class="stat-val" id="s-total">-</div></div>        <div class="stat"><div class="stat-lbl">在线</div><div class="stat-val" id="s-online">-</div></div>        <div class="stat"><div class="stat-lbl">适配器</div><div class="stat-val" id="s-adapters">-</div></div>      </div>      <div class="toolbar"><div id="chips"></div><select class="ov-select" id="filter-room" onchange="onRoomFilterChange(this.value)"><option value="">全部房间</option></select><select class="ov-select" id="filter-type" onchange="onTypeFilterChange(this.value)"><option value="">全部类型</option></select><input class="search" id="q" placeholder="搜索设备..." /></div>      <div id="content"><div class="skel"></div></div>    </div>
+<body class="i18n-pending">
+<div class="app"><aside class="sidebar" id="sidebar">  <div class="sb-brand"><div class="logo">M</div><div><div class="sb-title">MiniHub</div>    <div class="sb-sub" id="hub-ver">v0.1.0</div></div></div>  <nav class="nav">    <button class="nav-item active" data-view="overview"><span class="nav-ico">&#8962;</span><span data-i18n="title.overview">概览</span></button>    <button class="nav-item" data-view="map"><span class="nav-ico">&#128205;</span><span data-i18n="title.map">地图</span></button>    <button class="nav-item" data-view="rules"><span class="nav-ico">&#8644;</span><span data-i18n="title.rules">规则</span></button>    <button class="nav-item" data-view="scenes"><span class="nav-ico">&#9733;</span><span data-i18n="title.scenes">场景</span></button>    <button class="nav-item" data-view="store"><span class="nav-ico">&#11015;</span><span data-i18n="title.store">MiniHub Store</span></button>    <button class="nav-item" data-view="system"><span class="nav-ico">&#9881;</span><span data-i18n="title.system">系统</span></button>  </nav>  <div class="sb-foot" id="user-row" data-i18n-title="ov.name_tip" title="点击设置本地名称">    <div class="user-row"><div class="user-ava" id="user-ava">用</div>    <div><div class="user-name" id="user-name" data-i18n="ov.user">用户</div>    <div class="user-sub" data-i18n="ov.user_local">本地账户</div></div></div></div></aside><div class="main">  <header class="topbar">    <button class="menu-btn" id="menu-btn">&#9776;</button>    <h2 id="page-title" data-i18n="title.overview">概览</h2>    <div class="topbar-right"><select class="lang-sel" id="lang-sel" onchange="setLang(this.value)" aria-label="Language">      <option value="zh_CN">中文</option>      <option value="en">EN</option>    </select><div style="font-size:.75rem;color:var(--dim)" id="foot">--</div></div>  </header>  <div class="page">    <div id="view-overview" class="view">      <div class="stats">        <div class="stat"><div class="stat-lbl" data-i18n="ov.stat_points">能力点</div><div class="stat-val" id="s-total">-</div></div>        <div class="stat"><div class="stat-lbl" data-i18n="ov.stat_online">在线</div><div class="stat-val" id="s-online">-</div></div>        <div class="stat"><div class="stat-lbl" data-i18n="ov.stat_adapters">适配器</div><div class="stat-val" id="s-adapters">-</div></div>      </div>      <div class="toolbar"><div id="chips"></div><select class="ov-select" id="filter-room" onchange="onRoomFilterChange(this.value)"><option value="" data-i18n="ov.all_rooms">全部房间</option></select><select class="ov-select" id="filter-type" onchange="onTypeFilterChange(this.value)"><option value="" data-i18n="ov.all_types">全部类型</option></select><input class="search" id="q" data-i18n-ph="ov.search_ph" placeholder="搜索设备..." /></div>      <div id="content"><div class="skel"></div></div>    </div>
     <div id="view-system" class="view" hidden>
       <div class="sys-grid" id="sys-info-grid"></div>
       <div class="sys-net">
-        <h3 style="margin-bottom:10px;font-size:1rem">网络</h3>
+        <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.net_title">网络</h3>
         <div class="seg" id="sys-if-seg">
-          <button type="button" id="sys-if-eth" class="on" onclick="sysSelectIface('eth')">以太网</button>
+          <button type="button" id="sys-if-eth" class="on" onclick="sysSelectIface('eth')" data-i18n="mdl.net_iface_eth">以太网</button>
           <button type="button" id="sys-if-wifi" onclick="sysSelectIface('wifi')">Wi-Fi</button>
         </div>
         <div id="sys-if-note" class="modal-hint"></div>
-        <label for="sys-dhcp">DHCP 模式</label>
+        <label for="sys-dhcp" data-i18n="mdl.net_dhcp_mode">DHCP 模式</label>
         <select id="sys-dhcp" onchange="sysToggleDhcp()">
-          <option value="1">自动</option>
-          <option value="0">手动</option>
+          <option value="1" data-i18n="mdl.opt_auto">自动</option>
+          <option value="0" data-i18n="mdl.opt_manual">手动</option>
         </select>
         <div id="sys-static-fields">
           <div class="row2">
             <div><label for="sys-ip">IP</label><input id="sys-ip" /></div>
-            <div><label for="sys-mask">掩码</label><input id="sys-mask" /></div>
+            <div><label for="sys-mask" data-i18n="mdl.net_mask">掩码</label><input id="sys-mask" /></div>
           </div>
           <div class="row2">
-            <div><label for="sys-gw">网关</label><input id="sys-gw" /></div>
-            <div><label for="sys-dns1">DNS 主</label><input id="sys-dns1" /></div>
+            <div><label for="sys-gw" data-i18n="mdl.net_gw">网关</label><input id="sys-gw" /></div>
+            <div><label for="sys-dns1" data-i18n="mdl.net_dns1">DNS 主</label><input id="sys-dns1" /></div>
           </div>
-          <label for="sys-dns2">DNS 备</label><input id="sys-dns2" />
+          <label for="sys-dns2" data-i18n="mdl.net_dns2">DNS 备</label><input id="sys-dns2" />
         </div>
         <div id="sys-wifi-cred" hidden>
           <label>SSID</label>
-          <input id="sys-wifi-ssid" maxlength="32" autocomplete="off" placeholder="热点名称" />
-          <label for="sys-wifi-pass">密码</label>
+          <input id="sys-wifi-ssid" maxlength="32" autocomplete="off" placeholder="热点名称" data-i18n-ph="mdl.net_ssid_ph" />
+          <label for="sys-wifi-pass" data-i18n="mdl.net_password">密码</label>
           <div class="secret-field">
-            <input id="sys-wifi-pass" type="password" maxlength="64" autocomplete="new-password" placeholder="留空则沿用已保存密码" />
-            <button type="button" class="secret-toggle" aria-label="显示密码" onclick="toggleSecret(this)">显示</button>
+            <input id="sys-wifi-pass" type="password" maxlength="64" autocomplete="new-password" placeholder="留空则沿用已保存密码" data-i18n-ph="mdl.net_pass_ph" />
+            <button type="button" class="secret-toggle" aria-label="显示密码" data-i18n-aria="mdl.aria_show_password" onclick="toggleSecret(this)" data-i18n="mdl.show">显示</button>
           </div>
           <label class="sys-check" for="sys-wifi-open">
             <input id="sys-wifi-open" type="checkbox" />
-            <span>开放网络（无密码）</span>
+            <span data-i18n="mdl.net_open_network">开放网络（无密码）</span>
           </label>
           <div class="modal-actions" style="margin-top:8px;justify-content:flex-start">
-            <button class="btn-sm on" type="button" onclick="sysApplyWifi()">保存 Wi-Fi</button>
+            <button class="btn-sm on" type="button" onclick="sysApplyWifi()" data-i18n="mdl.net_save_wifi">保存 Wi-Fi</button>
           </div>
-          <div class="sys-hint">写入本机 NVS 并重连。页面只显示 SSID，不回显密码。改到别的网络后，请用新地址打开控制台。</div>
+          <div class="sys-hint" data-i18n="mdl.net_wifi_hint">写入本机 NVS 并重连。页面只显示 SSID，不回显密码。改到别的网络后，请用新地址打开控制台。</div>
         </div>
         <div class="modal-actions" style="margin-top:14px;justify-content:flex-start">
-          <button class="btn-sm on" type="button" onclick="sysApplyNet()">应用</button>
-          <button class="btn-sm" type="button" onclick="loadSystem()">刷新</button>
+          <button class="btn-sm on" type="button" onclick="sysApplyNet()" data-i18n="mdl.apply">应用</button>
+          <button class="btn-sm" type="button" onclick="loadSystem()" data-i18n="mdl.refresh">刷新</button>
         </div>
-        <div class="sys-hint">修改 IP 后请用新地址打开页面；配置已写入 NVS，重启仍生效。</div>
+        <div class="sys-hint" data-i18n="mdl.net_ip_hint">修改 IP 后请用新地址打开页面；配置已写入 NVS，重启仍生效。</div>
       </div>
       <div class="sys-net" style="margin-top:16px" id="sys-ota">
-        <h3 style="margin-bottom:10px;font-size:1rem">固件升级</h3>
-        <div id="sys-ota-status" class="modal-hint">状态：空闲</div>
+        <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.ota_title">固件升级</h3>
+        <div id="sys-ota-status" class="modal-hint"></div>
         <div style="height:8px;background:var(--bg2);border-radius:4px;margin:8px 0;overflow:hidden">
           <div id="sys-ota-bar" style="height:100%;width:0%;background:var(--accent);transition:width .2s"></div>
         </div>
-        <label>自定义 URL</label>
+        <label data-i18n="mdl.ota_custom_url">自定义 URL</label>
         <input id="sys-ota-url" placeholder="http://192.168.x.x/minihub.bin" />
         <div class="modal-actions" style="margin-top:8px">
-          <button class="btn-sm on" type="button" onclick="sysOtaStartUrl()">从 URL 升级</button>
+          <button class="btn-sm on" type="button" onclick="sysOtaStartUrl()" data-i18n="mdl.ota_from_url">从 URL 升级</button>
         </div>
-        <label style="margin-top:12px">本地上传 (.bin)</label>
+        <label style="margin-top:12px" data-i18n="mdl.ota_local_upload">本地上传 (.bin)</label>
         <input id="sys-ota-file" type="file" accept=".bin,application/octet-stream" />
         <div class="modal-actions" style="margin-top:8px">
-          <button class="btn-sm on" type="button" onclick="sysOtaUpload()">上传并升级</button>
-          <button class="btn-sm" type="button" onclick="sysOtaPoll()">刷新状态</button>
+          <button class="btn-sm on" type="button" onclick="sysOtaUpload()" data-i18n="mdl.ota_upload_start">上传并升级</button>
+          <button class="btn-sm" type="button" onclick="sysOtaPoll()" data-i18n="mdl.ota_refresh_status">刷新状态</button>
         </div>
-        <div class="sys-hint">RainMaker 云升级请用 RainMaker APP 推送；与本地升级互斥。成功后设备将自动重启。</div>
+        <div class="sys-hint" data-i18n="mdl.ota_hint">RainMaker 云升级请用 RainMaker APP 推送；与本地升级互斥。成功后设备将自动重启。</div>
       </div>
       <div class="sys-net" style="margin-top:16px" id="sys-reboot">
-        <h3 style="margin-bottom:10px;font-size:1rem">重启</h3>
+        <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.reboot">重启</h3>
         <div class="modal-actions" style="justify-content:flex-start">
-          <button class="btn-sm" type="button" onclick="sysReboot()">重启</button>
+          <button class="btn-sm" type="button" onclick="sysReboot()" data-i18n="mdl.reboot">重启</button>
         </div>
-        <div class="sys-hint">重启 MiniHub。不清除 Wi-Fi、登录密码或设备数据。</div>
+        <div class="sys-hint" data-i18n="mdl.reboot_hint">重启 MiniHub。不清除 Wi-Fi、登录密码或设备数据。</div>
       </div>
       <div class="sys-net" style="margin-top:16px" id="sys-reset">
-        <h3 style="margin-bottom:10px;font-size:1rem">恢复出厂</h3>
+        <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.factory_reset">恢复出厂</h3>
         <div class="modal-actions" style="justify-content:flex-start">
-          <button class="btn-sm" type="button" onclick="sysFactoryReset()">恢复出厂</button>
+          <button class="btn-sm" type="button" onclick="sysFactoryReset()" data-i18n="mdl.factory_reset">恢复出厂</button>
         </div>
-        <div class="sys-hint">清除 NVS（Wi-Fi、登录密码等）并重启。不清除 storage 上的设备数据。与按键长按恢复出厂相同。</div>
+        <div class="sys-hint" data-i18n="mdl.factory_reset_hint">清除 NVS（Wi-Fi、登录密码等）并重启。不清除 storage 上的设备数据。与按键长按恢复出厂相同。</div>
       </div>
 
     </div>
-<div id="view-map" class="view" hidden>      <div class="map-info" id="map-info">正在通过 IP 定位...</div>      <div id="map-leaflet" class="map-leaflet"></div>      <p style="margin-top:12px;font-size:.78rem;color:var(--dim)">        位置来自公网 IP 地理库（城市级精度），设备标记为示意分布</p>    </div>    <div id="view-rules" class="view" hidden>
+<div id="view-map" class="view" hidden>      <div class="map-info" id="map-info" data-i18n="map.locating">定位中…</div>      <div id="map-leaflet" class="map-leaflet"></div>      <p style="margin-top:12px;font-size:.78rem;color:var(--dim)" data-i18n="mdl.map_note">        位置来自公网 IP 地理库（城市级精度），设备标记为示意分布</p>    </div>    <div id="view-rules" class="view" hidden>
       <div class="rules-ai" id="rules-ai" hidden>
-        <h3>用描述生成规则（云端）</h3>
-        <textarea id="rules-ai-prompt" placeholder="例：当 button/mqtt_button 变为 pressed 时，让 light/zigbee_light 执行 turn_on"></textarea>
+        <h3 data-i18n="mdl.rules_ai_title">用描述生成规则（云端）</h3>
+        <textarea id="rules-ai-prompt" placeholder="例：当 button/mqtt_button 变为 pressed 时，让 light/zigbee_light 执行 turn_on" data-i18n-ph="mdl.rules_ai_ph"></textarea>
         <div class="rules-ai-actions">
-          <button class="btn-sm on" type="button" id="rules-ai-gen" onclick="rulesAiGenerate()">生成</button>
-          <button class="btn-sm" type="button" id="rules-ai-mic" disabled title="语音输入后续支持">语音</button>
-          <button class="btn-sm" type="button" onclick="rulesAiToggleCfg()">API 设置</button>
+          <button class="btn-sm on" type="button" id="rules-ai-gen" onclick="rulesAiGenerate()" data-i18n="mdl.rules_ai_generate">生成</button>
+          <button class="btn-sm" type="button" id="rules-ai-mic" disabled title="语音输入后续支持" data-i18n-title="mdl.rules_ai_voice_tip" data-i18n="mdl.rules_ai_voice">语音</button>
+          <button class="btn-sm" type="button" onclick="rulesAiToggleCfg()" data-i18n="mdl.rules_ai_config">API 设置</button>
         </div>
-        <div class="rules-ai-hint">经 Hub 转发 OpenAI 兼容接口（避免浏览器 CORS）；密钥仅存本机浏览器、不进 NVS。确认前不写入规则。</div>
+        <div class="rules-ai-hint" data-i18n="mdl.rules_ai_hint">经 Hub 转发 OpenAI 兼容接口（避免浏览器 CORS）；密钥仅存本机浏览器、不进 NVS。确认前不写入规则。</div>
         <div class="rules-ai-cfg" id="rules-ai-cfg" hidden>
           <div class="row2">
             <div><label for="rules-ai-base">Base URL</label><input id="rules-ai-base" placeholder="https://api.openai.com/v1" autocomplete="off" /></div>
@@ -109,25 +109,25 @@
           </div>
           <label for="rules-ai-key">API Key</label>
           <input id="rules-ai-key" type="password" placeholder="sk-..." autocomplete="off" />
-          <div class="rules-ai-hint">也可填其它兼容服务（DeepSeek 等）。局域网 Ollama 可后续用同一表单。</div>
+          <div class="rules-ai-hint" data-i18n="mdl.rules_ai_alt_hint">也可填其它兼容服务（DeepSeek 等）。局域网 Ollama 可后续用同一表单。</div>
         </div>
         <div class="rules-ai-draft" id="rules-ai-draft" hidden>
-          <div class="card-top" style="margin-bottom:8px"><div class="card-name">生成预览（未生效）</div></div>
+          <div class="card-top" style="margin-bottom:8px"><div class="card-name" data-i18n="mdl.rules_ai_preview">生成预览（未生效）</div></div>
           <div id="rules-ai-draft-body"></div>
-          <label class="store-cfg-check"><input type="checkbox" id="rules-ai-replace" /> 整文件替换（默认追加到现有规则）</label>
+          <label class="store-cfg-check"><input type="checkbox" id="rules-ai-replace" /> <span data-i18n="mdl.rules_ai_replace">整文件替换（默认追加到现有规则）</span></label>
           <div class="rules-ai-actions">
-            <button class="btn-sm on" type="button" id="rules-ai-apply" onclick="rulesAiApply()">确认生效</button>
-            <button class="btn-sm" type="button" onclick="rulesAiCancel()">取消</button>
+            <button class="btn-sm on" type="button" id="rules-ai-apply" onclick="rulesAiApply()" data-i18n="mdl.rules_ai_apply">确认生效</button>
+            <button class="btn-sm" type="button" onclick="rulesAiCancel()" data-i18n="mdl.cancel">取消</button>
           </div>
         </div>
       </div>
       <div class="store-bar">
         <div class="store-cfg-row">
-          <button class="btn-sm on" type="button" id="rules-add-btn" onclick="rulesEditNew()">添加规则</button>
-          <input class="store-search" id="rules-import-url" placeholder="rules.json URL，如 http://192.168.1.10/rules.json" />
-          <button class="btn-sm" type="button" id="rules-import-btn" onclick="importRules()">导入</button>
-          <button class="btn-sm" type="button" id="rules-export-btn" onclick="exportRules()">导出 JSON</button>
-          <button class="btn-sm" type="button" id="rules-refresh-btn" onclick="loadRules()">刷新</button>
+          <button class="btn-sm on" type="button" id="rules-add-btn" onclick="rulesEditNew()" data-i18n="mdl.rules_add">添加规则</button>
+          <input class="store-search" id="rules-import-url" placeholder="rules.json URL，如 http://192.168.1.10/rules.json" data-i18n-ph="mdl.rules_import_ph" />
+          <button class="btn-sm" type="button" id="rules-import-btn" onclick="importRules()" data-i18n="mdl.import">导入</button>
+          <button class="btn-sm" type="button" id="rules-export-btn" onclick="exportRules()" data-i18n="mdl.rules_export">导出 JSON</button>
+          <button class="btn-sm" type="button" id="rules-refresh-btn" onclick="loadRules()" data-i18n="mdl.refresh">刷新</button>
         </div>
       </div>
       <div id="rules-list"></div>
@@ -137,17 +137,17 @@
     <div id="view-scenes" class="view" hidden>
       <div class="toolbar">
         <div class="toolbar-left">
-          <button class="btn-sm on" type="button" id="scenes-add-btn" onclick="scenesEditNew()">添加场景</button>
-          <button class="btn-sm" type="button" id="scenes-refresh-btn" onclick="loadScenes()">刷新</button>
+          <button class="btn-sm on" type="button" id="scenes-add-btn" onclick="scenesEditNew()" data-i18n="mdl.scenes_add">添加场景</button>
+          <button class="btn-sm" type="button" id="scenes-refresh-btn" onclick="loadScenes()" data-i18n="mdl.refresh">刷新</button>
         </div>
-        <div class="toolbar-right modal-hint">本地一键场景：跨适配器批量下发指令（非云端场景）</div>
+        <div class="toolbar-right modal-hint" data-i18n="mdl.scenes_note">本地一键场景：跨适配器批量下发指令（非云端场景）</div>
       </div>
       <div id="scenes-list"></div>
       <div id="scenes-detail" hidden></div>
       <div id="scenes-edit" hidden></div>
     </div>
-    <div id="view-store" class="view" hidden>      <div class="store-bar">        <div class="store-cfg" id="store-cfg">          <div class="store-cfg-row">            <input class="store-search" id="store-custom-url" placeholder="自定义 Store URL，如 http://192.168.1.10:8080" />            <button class="btn-sm" type="button" id="store-cfg-save" onclick="saveStoreConfig()">保存</button>          </div>          <label class="store-cfg-check"><input type="checkbox" id="store-disable-default" onchange="saveStoreConfig()" /> 禁用默认 URL</label>          <div class="store-cfg-hint" id="store-default-hint"></div>        </div>        <div class="store-bar-row">          <div class="store-tabs" id="store-tabs">            <button class="chip active" data-tab="installed">已安装</button>            <button class="chip" data-tab="avail">可用</button>          </div>          <button class="btn-sm" type="button" id="store-refresh" onclick="refreshStoreCatalog()">刷新目录</button>        </div>        <input class="store-search" id="store-q" placeholder="搜索模块..." />      </div>      <div id="store-content"><div class="skel"></div></div>    </div>  </div></div></div><div class="modal-overlay" id="device-log-modal" hidden onclick="if(event.target===this)closeDeviceLog()"><div class="modal" style="max-width:440px" onclick="event.stopPropagation()"><div class="modal-title" id="device-log-title">事件记录</div><div class="modal-hint" id="device-log-meta"></div><div class="device-log-list" id="device-log-list"><div class="skel"></div></div><div class="modal-hint" id="device-log-cloud-hint"></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeDeviceLog()">关闭</button></div></div></div>
-<div class="modal-overlay" id="device-detail-modal" hidden onclick="if(event.target===this)closeDeviceDetail()"><div class="modal" role="dialog" aria-labelledby="device-detail-title"><h3 id="device-detail-title">设备</h3><div class="modal-hint" id="device-detail-meta"></div><div id="device-detail-body" class="device-detail-body"></div><div class="modal-actions device-detail-actions"><button class="btn-sm" type="button" onclick="closeDeviceDetail()">关闭</button><button class="btn-sm on" type="button" id="device-detail-info-btn" onclick="toggleDeviceDetailInfo()">详情</button></div></div></div><div class="modal-overlay" id="appliance-detail-modal" hidden onclick="if(event.target===this)closeApplianceDetail()"><div class="modal" role="dialog" aria-labelledby="appliance-detail-title"><h3 id="appliance-detail-title">设备</h3><div class="modal-hint" id="appliance-detail-meta"></div><div class="detail-power"><span class="lbl">电源</span><label class="toggle"><input type="checkbox" id="appliance-power"><span class="slider"></span></label></div><div id="appliance-temp-block" hidden><div class="range-row" id="appliance-cold-block" hidden><div class="row-top"><span>冷藏室设定</span><span id="appliance-cold-val">4°C</span></div><input id="appliance-cold" type="range" min="2" max="8" step="1" value="4" /></div><div class="range-row" id="appliance-freeze-block" hidden><div class="row-top"><span>冷冻室设定</span><span id="appliance-freeze-val">-18°C</span></div><input id="appliance-freeze" type="range" min="-24" max="-15" step="1" value="-18" /></div><div class="range-row" id="appliance-water-temp-block" hidden><div class="row-top"><span>出水温度</span><span id="appliance-water-temp-val">45°C</span></div><input id="appliance-water-temp" type="range" min="40" max="99" step="1" value="45" /></div></div><div id="appliance-detail-rows" class="card-props" style="margin:10px 0;display:flex;flex-direction:column;gap:8px"></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeApplianceDetail()">关闭</button></div></div></div><div class="modal-overlay" id="ac-detail-modal" hidden onclick="if(event.target===this)closeAcDetail()"><div class="modal" role="dialog" aria-labelledby="ac-detail-title"><h3 id="ac-detail-title">空调</h3><div class="modal-hint" id="ac-detail-meta"></div><div class="detail-power"><span class="lbl">电源</span><label class="toggle"><input type="checkbox" id="ac-power"><span class="slider"></span></label></div><div class="seg" id="ac-mode-seg"><button type="button" data-mode="cool" onclick="acSetMode('cool')">制冷</button><button type="button" data-mode="heat" onclick="acSetMode('heat')">制热</button><button type="button" data-mode="dry" onclick="acSetMode('dry')">除湿</button><button type="button" data-mode="fan" onclick="acSetMode('fan')">送风</button></div><div class="range-row" id="ac-temp-block"><div class="row-top"><span>设定温度</span><span id="ac-temp-val">26°</span></div><input id="ac-temp" type="range" min="16" max="30" step="1" value="26" /></div><div class="seg" id="ac-fan-seg"><button type="button" data-fan="auto" onclick="acSetFan('auto')">自动</button><button type="button" data-fan="low" onclick="acSetFan('low')">低</button><button type="button" data-fan="medium" onclick="acSetFan('medium')">中</button><button type="button" data-fan="high" onclick="acSetFan('high')">高</button></div><div class="ambient-ro" id="ac-ambient">室温 —</div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeAcDetail()">关闭</button></div></div></div><div class="modal-overlay" id="cover-detail-modal" hidden onclick="if(event.target===this)closeCoverDetail()"><div class="modal" role="dialog" aria-labelledby="cover-detail-title"><h3 id="cover-detail-title">窗帘</h3><div class="modal-hint" id="cover-detail-meta"></div><div class="cover-pos" id="cover-pos-val">0%</div><div class="range-row"><div class="row-top"><span>开合位置</span><span id="cover-pos-label">0%</span></div><input id="cover-pos" type="range" min="0" max="100" step="1" value="0" /></div><div class="cover-btns"><button class="btn-sm" type="button" id="cover-open" onclick="coverCmd('open')">打开</button><button class="btn-sm" type="button" id="cover-close" onclick="coverCmd('close')">关闭</button><button class="btn-sm" type="button" id="cover-stop" onclick="coverCmd('stop')">停止</button></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeCoverDetail()">关闭</button></div></div></div><div class="modal-overlay" id="plug-detail-modal" hidden onclick="if(event.target===this)closePlugDetail()"><div class="modal" role="dialog" aria-labelledby="plug-detail-title"><h3 id="plug-detail-title">插座</h3><div class="modal-hint" id="plug-detail-meta"></div><div class="detail-power" id="plug-power-row"><span class="lbl">电源</span><label class="toggle"><input type="checkbox" id="plug-power"><span class="slider"></span></label></div><div class="ambient-ro" id="plug-meter">功率 — · 电量 —</div><div id="plug-extras"></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closePlugDetail()">关闭</button></div></div></div><div class="modal-overlay" id="camera-detail-modal" hidden onclick="if(event.target===this)closeCameraDetail()"><div class="modal" role="dialog" aria-labelledby="camera-detail-title"><h3 id="camera-detail-title">摄像头</h3><div class="modal-hint" id="camera-detail-meta"></div><div class="cam-preview" id="camera-preview" aria-label="预览"><img id="camera-preview-img" alt="抓拍" hidden /><div class="cam-preview-inner" id="camera-preview-ph">加载预览…<div class="cam-preview-sub">最近抓拍（非实时）</div></div></div><div class="detail-power" id="camera-power-row"><span class="lbl">电源</span><label class="toggle"><input type="checkbox" id="camera-power"><span class="slider"></span></label></div><div id="camera-extras"></div><div id="camera-voice-block" hidden><label class="lbl" for="camera-tts">语音/播报</label><div class="row2" style="margin-top:6px"><input id="camera-tts" type="text" placeholder="输入文字，如：你好" /><button class="btn-sm on" type="button" onclick="cameraPlayText()">播报</button></div><div class="modal-hint" style="margin-top:6px">使用设备 Spec 的 play_text / 文本指令（若支持）</div></div><div class="ambient-ro" id="camera-stream-ro" hidden></div><div class="cam-media-actions" id="camera-media-actions"><button class="btn-sm on" type="button" onclick="refreshCameraPreview()">刷新抓拍</button><button class="btn-sm" type="button" disabled title="后续接入">实时预览</button><button class="btn-sm" type="button" disabled title="后续接入">云回放</button></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeCameraDetail()">关闭</button></div></div></div><div class="modal-overlay" id="speaker-detail-modal" hidden onclick="if(event.target===this)closeSpeakerDetail()"><div class="modal" role="dialog" aria-labelledby="speaker-detail-title"><h3 id="speaker-detail-title">音箱</h3><div class="modal-hint" id="speaker-detail-meta"></div><div id="speaker-vol-block" class="range-row"><div class="row-top"><span>音量</span><span id="speaker-vol-val">50%</span></div><input id="speaker-vol" type="range" min="5" max="100" value="50" /></div><div id="speaker-tts-block"><label for="speaker-tts">文字播报</label><input id="speaker-tts" placeholder="请输入要播放的文字" autocomplete="off" /><div class="modal-actions" style="justify-content:flex-start;margin-top:8px"><button class="btn-sm on" type="button" onclick="speakerPlayText()">播放</button></div></div><div id="speaker-extras"></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeSpeakerDetail()">关闭</button></div></div></div><div class="modal-overlay" id="auth-login-modal" hidden onclick="if(event.target===this)closeAuthLogin()">
+    <div id="view-store" class="view" hidden>      <div class="store-bar">        <div class="store-cfg" id="store-cfg">          <div class="store-cfg-row">            <input class="store-search" id="store-custom-url" placeholder="自定义 Store URL，如 http://192.168.1.10:8080" data-i18n-ph="mdl.store_url_ph" />            <button class="btn-sm" type="button" id="store-cfg-save" onclick="saveStoreConfig()" data-i18n="mdl.save">保存</button>          </div>          <label class="store-cfg-check"><input type="checkbox" id="store-disable-default" onchange="saveStoreConfig()" /> <span data-i18n="mdl.store_disable_default">禁用默认 URL</span></label>          <div class="store-cfg-hint" id="store-default-hint"></div>        </div>        <div class="store-bar-row">          <div class="store-tabs" id="store-tabs">            <button class="chip active" data-tab="installed" data-i18n="mdl.store_tab_installed">已安装</button>            <button class="chip" data-tab="avail" data-i18n="mdl.store_tab_available">可用</button>          </div>          <button class="btn-sm" type="button" id="store-refresh" onclick="refreshStoreCatalog()" data-i18n="mdl.store_refresh_catalog">刷新目录</button>        </div>        <input class="store-search" id="store-q" placeholder="搜索模块..." data-i18n-ph="mdl.store_search_ph" />      </div>      <div id="store-content"><div class="skel"></div></div>    </div>  </div></div></div><div class="modal-overlay" id="device-log-modal" hidden onclick="if(event.target===this)closeDeviceLog()"><div class="modal" style="max-width:440px" onclick="event.stopPropagation()"><div class="modal-title" id="device-log-title">事件记录</div><div class="modal-hint" id="device-log-meta"></div><div class="device-log-list" id="device-log-list"><div class="skel"></div></div><div class="modal-hint" id="device-log-cloud-hint"></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeDeviceLog()" data-i18n="mdl.close">关闭</button></div></div></div>
+<div class="modal-overlay" id="device-detail-modal" hidden onclick="if(event.target===this)closeDeviceDetail()"><div class="modal" role="dialog" aria-labelledby="device-detail-title"><h3 id="device-detail-title">设备</h3><div class="modal-hint" id="device-detail-meta"></div><div id="device-detail-body" class="device-detail-body"></div><div class="modal-actions device-detail-actions"><button class="btn-sm" type="button" onclick="closeDeviceDetail()" data-i18n="mdl.close">关闭</button><button class="btn-sm on" type="button" id="device-detail-info-btn" onclick="toggleDeviceDetailInfo()">详情</button></div></div></div><div class="modal-overlay" id="appliance-detail-modal" hidden onclick="if(event.target===this)closeApplianceDetail()"><div class="modal" role="dialog" aria-labelledby="appliance-detail-title"><h3 id="appliance-detail-title">设备</h3><div class="modal-hint" id="appliance-detail-meta"></div><div class="detail-power"><span class="lbl" data-i18n="mdl.power">电源</span><label class="toggle"><input type="checkbox" id="appliance-power"><span class="slider"></span></label></div><div id="appliance-temp-block" hidden><div class="range-row" id="appliance-cold-block" hidden><div class="row-top"><span data-i18n="mdl.fridge_cold_set">冷藏室设定</span><span id="appliance-cold-val">4°C</span></div><input id="appliance-cold" type="range" min="2" max="8" step="1" value="4" /></div><div class="range-row" id="appliance-freeze-block" hidden><div class="row-top"><span data-i18n="mdl.fridge_freeze_set">冷冻室设定</span><span id="appliance-freeze-val">-18°C</span></div><input id="appliance-freeze" type="range" min="-24" max="-15" step="1" value="-18" /></div><div class="range-row" id="appliance-water-temp-block" hidden><div class="row-top"><span data-i18n="mdl.water_outlet_temp">出水温度</span><span id="appliance-water-temp-val">45°C</span></div><input id="appliance-water-temp" type="range" min="40" max="99" step="1" value="45" /></div></div><div id="appliance-detail-rows" class="card-props" style="margin:10px 0;display:flex;flex-direction:column;gap:8px"></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeApplianceDetail()" data-i18n="mdl.close">关闭</button></div></div></div><div class="modal-overlay" id="ac-detail-modal" hidden onclick="if(event.target===this)closeAcDetail()"><div class="modal" role="dialog" aria-labelledby="ac-detail-title"><h3 id="ac-detail-title">空调</h3><div class="modal-hint" id="ac-detail-meta"></div><div class="detail-power"><span class="lbl" data-i18n="mdl.power">电源</span><label class="toggle"><input type="checkbox" id="ac-power"><span class="slider"></span></label></div><div class="seg" id="ac-mode-seg"><button type="button" data-mode="cool" onclick="acSetMode('cool')" data-i18n="mdl.ac_cool">制冷</button><button type="button" data-mode="heat" onclick="acSetMode('heat')" data-i18n="mdl.ac_heat">制热</button><button type="button" data-mode="dry" onclick="acSetMode('dry')" data-i18n="mdl.ac_dry">除湿</button><button type="button" data-mode="fan" onclick="acSetMode('fan')" data-i18n="mdl.ac_fan">送风</button></div><div class="range-row" id="ac-temp-block"><div class="row-top"><span data-i18n="mdl.ac_set_temp">设定温度</span><span id="ac-temp-val">26°</span></div><input id="ac-temp" type="range" min="16" max="30" step="1" value="26" /></div><div class="seg" id="ac-fan-seg"><button type="button" data-fan="auto" onclick="acSetFan('auto')" data-i18n="mdl.opt_auto">自动</button><button type="button" data-fan="low" onclick="acSetFan('low')" data-i18n="mdl.ac_fan_low">低</button><button type="button" data-fan="medium" onclick="acSetFan('medium')" data-i18n="mdl.ac_fan_medium">中</button><button type="button" data-fan="high" onclick="acSetFan('high')" data-i18n="mdl.ac_fan_high">高</button></div><div class="ambient-ro" id="ac-ambient">室温 —</div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeAcDetail()" data-i18n="mdl.close">关闭</button></div></div></div><div class="modal-overlay" id="cover-detail-modal" hidden onclick="if(event.target===this)closeCoverDetail()"><div class="modal" role="dialog" aria-labelledby="cover-detail-title"><h3 id="cover-detail-title">窗帘</h3><div class="modal-hint" id="cover-detail-meta"></div><div class="cover-pos" id="cover-pos-val">0%</div><div class="range-row"><div class="row-top"><span data-i18n="mdl.cover_position">开合位置</span><span id="cover-pos-label">0%</span></div><input id="cover-pos" type="range" min="0" max="100" step="1" value="0" /></div><div class="cover-btns"><button class="btn-sm" type="button" id="cover-open" onclick="coverCmd('open')" data-i18n="mdl.cover_open">打开</button><button class="btn-sm" type="button" id="cover-close" onclick="coverCmd('close')" data-i18n="mdl.close">关闭</button><button class="btn-sm" type="button" id="cover-stop" onclick="coverCmd('stop')" data-i18n="mdl.cover_stop">停止</button></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeCoverDetail()" data-i18n="mdl.close">关闭</button></div></div></div><div class="modal-overlay" id="plug-detail-modal" hidden onclick="if(event.target===this)closePlugDetail()"><div class="modal" role="dialog" aria-labelledby="plug-detail-title"><h3 id="plug-detail-title">插座</h3><div class="modal-hint" id="plug-detail-meta"></div><div class="detail-power" id="plug-power-row"><span class="lbl" data-i18n="mdl.power">电源</span><label class="toggle"><input type="checkbox" id="plug-power"><span class="slider"></span></label></div><div class="ambient-ro" id="plug-meter">功率 — · 电量 —</div><div id="plug-extras"></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closePlugDetail()" data-i18n="mdl.close">关闭</button></div></div></div><div class="modal-overlay" id="camera-detail-modal" hidden onclick="if(event.target===this)closeCameraDetail()"><div class="modal" role="dialog" aria-labelledby="camera-detail-title"><h3 id="camera-detail-title">摄像头</h3><div class="modal-hint" id="camera-detail-meta"></div><div class="cam-preview" id="camera-preview" aria-label="预览" data-i18n-aria="mdl.camera_preview_aria"><img id="camera-preview-img" alt="抓拍" data-i18n-alt="mdl.camera_snap_alt" hidden /><div class="cam-preview-inner" id="camera-preview-ph">加载预览…<div class="cam-preview-sub">最近抓拍（非实时）</div></div></div><div class="detail-power" id="camera-power-row"><span class="lbl" data-i18n="mdl.power">电源</span><label class="toggle"><input type="checkbox" id="camera-power"><span class="slider"></span></label></div><div id="camera-extras"></div><div id="camera-voice-block" hidden><label class="lbl" for="camera-tts" data-i18n="mdl.camera_tts_label">语音/播报</label><div class="row2" style="margin-top:6px"><input id="camera-tts" type="text" placeholder="输入文字，如：你好" data-i18n-ph="mdl.camera_tts_ph" /><button class="btn-sm on" type="button" onclick="cameraPlayText()" data-i18n="mdl.camera_tts_play">播报</button></div><div class="modal-hint" style="margin-top:6px" data-i18n="mdl.camera_tts_hint">使用设备 Spec 的 play_text / 文本指令（若支持）</div></div><div class="ambient-ro" id="camera-stream-ro" hidden></div><div class="cam-media-actions" id="camera-media-actions"><button class="btn-sm on" type="button" onclick="refreshCameraPreview()" data-i18n="mdl.camera_refresh_snap">刷新抓拍</button><button class="btn-sm" type="button" disabled title="后续接入" data-i18n-title="mdl.coming_soon" data-i18n="mdl.camera_live">实时预览</button><button class="btn-sm" type="button" disabled title="后续接入" data-i18n-title="mdl.coming_soon" data-i18n="mdl.camera_cloud_playback">云回放</button></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeCameraDetail()" data-i18n="mdl.close">关闭</button></div></div></div><div class="modal-overlay" id="speaker-detail-modal" hidden onclick="if(event.target===this)closeSpeakerDetail()"><div class="modal" role="dialog" aria-labelledby="speaker-detail-title"><h3 id="speaker-detail-title">音箱</h3><div class="modal-hint" id="speaker-detail-meta"></div><div id="speaker-vol-block" class="range-row"><div class="row-top"><span data-i18n="mdl.speaker_volume">音量</span><span id="speaker-vol-val">50%</span></div><input id="speaker-vol" type="range" min="5" max="100" value="50" /></div><div id="speaker-tts-block"><label for="speaker-tts" data-i18n="mdl.speaker_tts_label">文字播报</label><input id="speaker-tts" placeholder="请输入要播放的文字" data-i18n-ph="mdl.speaker_tts_ph" autocomplete="off" /><div class="modal-actions" style="justify-content:flex-start;margin-top:8px"><button class="btn-sm on" type="button" onclick="speakerPlayText()" data-i18n="mdl.speaker_play">播放</button></div></div><div id="speaker-extras"></div><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeSpeakerDetail()" data-i18n="mdl.close">关闭</button></div></div></div><div class="modal-overlay" id="auth-login-modal" hidden onclick="if(event.target===this)closeAuthLogin()">
   <div class="modal auth-form" role="dialog" aria-labelledby="auth-login-title" onclick="event.stopPropagation()">
     <h3 id="auth-login-title">登录</h3>
     <div id="auth-host-block" hidden>
@@ -159,7 +159,7 @@
     <label for="auth-pass" id="auth-pass-label">密码</label>
     <div class="secret-field" id="auth-pass-field">
       <input id="auth-pass" type="password" autocomplete="current-password" />
-      <button type="button" class="secret-toggle" aria-label="显示密码" onclick="toggleSecret(this)">显示</button>
+      <button type="button" class="secret-toggle" aria-label="显示密码" data-i18n-aria="mdl.aria_show_password" onclick="toggleSecret(this)" data-i18n="mdl.show">显示</button>
     </div>
     <div id="auth-apikey-block" hidden>
       <label for="auth-keyid" id="auth-keyid-label">API Key ID</label>
@@ -172,14 +172,14 @@
       <input id="auth-access" autocomplete="off" />
       <label for="auth-refresh" id="auth-refresh-label">refresh_token</label>
       <input id="auth-refresh" autocomplete="off" />
-      <label for="auth-phoneid" id="auth-phoneid-label">phone_id（可选）</label>
+      <label for="auth-phoneid" id="auth-phoneid-label" data-i18n="mdl.auth_phoneid_optional">phone_id（可选）</label>
       <input id="auth-phoneid" autocomplete="off" />
     </div>
     <div id="auth-2fa-block" hidden>
       <div id="auth-captcha-block" hidden>
         <label for="auth-icode" id="auth-captcha-label">图形验证码</label>
         <img id="auth-captcha-img" alt="captcha" />
-        <input id="auth-icode" placeholder="3-8位字母或数字" autocomplete="off" maxlength="8" autocapitalize="off" spellcheck="false" />
+        <input id="auth-icode" placeholder="3-8位字母或数字" data-i18n-ph="mdl.auth_icode_ph" autocomplete="off" maxlength="8" autocapitalize="off" spellcheck="false" />
       </div>
       <div id="auth-ticket-block" hidden>
         <label for="auth-ticket" id="auth-ticket-label">短信验证码</label>
@@ -192,7 +192,8 @@
       <button class="btn-sm on" type="button" id="auth-submit" onclick="submitAuthLogin()">登录</button>
     </div>
   </div>
-</div><div class="modal-overlay" id="home-picker-modal" hidden onclick="if(event.target===this)closeHomePicker()">  <div class="modal" role="dialog" aria-labelledby="home-picker-title">    <h3 id="home-picker-title">选择家庭</h3>    <p class="modal-hint" id="home-picker-hint">同步将导入该家庭下的设备名称与房间</p>    <div class="home-list" id="home-picker-list"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeHomePicker()">取消</button>      <button class="btn-sm on" type="button" id="home-picker-confirm" onclick="confirmHomePicker()">同步此家庭</button>    </div>  </div></div><div class="modal-overlay" id="matter-add-modal" hidden onclick="if(event.target===this)closeMatterAdd()">  <div class="modal matter-wide" role="dialog" aria-labelledby="matter-add-title">    <h3 id="matter-add-title">添加 Matter 设备</h3>    <div class="modal-hint" id="matter-add-hint">默认经 BLE 发现，并同时使用 DNS-SD；不填 Wi-Fi 时写入 Hub Thread 数据集。</div>    <input type="hidden" id="matter-discovery" value="ble_thread" />    <label for="matter-code">配对码 pairing_code</label>    <input id="matter-code" placeholder="1472-121-2614 或 MT:..." autocomplete="off" />    <label for="matter-node">节点 ID（可选，留空自动分配）</label>    <input id="matter-node" placeholder="2" inputmode="numeric" />    <label for="matter-eps">Endpoint（逗号分隔，默认 1）</label>    <input id="matter-eps" placeholder="1" value="1" />    <div class="matter-wifi-row" id="matter-wifi-row">      <label class="lbl" id="matter-wifi-toggle-label" for="matter-wifi-enable">是否配置 Wi-Fi 信息</label>      <label class="toggle">        <input type="checkbox" id="matter-wifi-enable" onchange="onMatterWifiToggle()" aria-labelledby="matter-wifi-toggle-label" />        <span class="slider"></span>      </label>    </div>    <div id="matter-wifi-block" hidden>      <label for="matter-wifi-ssid">STA SSID</label>      <input id="matter-wifi-ssid" autocomplete="off" disabled />      <label for="matter-wifi-pass">Wi-Fi 密码</label>      <div class="secret-field"><input id="matter-wifi-pass" type="password" autocomplete="off" placeholder="可留空沿用 Hub 已保存密码" disabled /><button type="button" class="secret-toggle" aria-label="显示密码" onclick="toggleSecret(this)">显示</button></div>    </div>    <div class="matter-spacer" aria-hidden="true"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeMatterAdd()">取消</button>      <button class="btn-sm on" type="button" id="matter-add-submit" onclick="submitMatterAdd()">添加</button>    </div>  </div></div><div class="toast" id="toast"></div>
+</div><div class="modal-overlay" id="home-picker-modal" hidden onclick="if(event.target===this)closeHomePicker()">  <div class="modal" role="dialog" aria-labelledby="home-picker-title">    <h3 id="home-picker-title">选择家庭</h3>    <p class="modal-hint" id="home-picker-hint">同步将导入该家庭下的设备名称与房间</p>    <div class="home-list" id="home-picker-list"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeHomePicker()" data-i18n="mdl.cancel">取消</button>      <button class="btn-sm on" type="button" id="home-picker-confirm" onclick="confirmHomePicker()">同步此家庭</button>    </div>  </div></div><div class="modal-overlay" id="matter-add-modal" hidden onclick="if(event.target===this)closeMatterAdd()">  <div class="modal matter-wide" role="dialog" aria-labelledby="matter-add-title">    <h3 id="matter-add-title" data-i18n="mdl.matter_title">添加 Matter 设备</h3>    <div class="modal-hint" id="matter-add-hint">默认经 BLE 发现，并同时使用 DNS-SD；不填 Wi-Fi 时写入 Hub Thread 数据集。</div>    <input type="hidden" id="matter-discovery" value="ble_thread" />    <label for="matter-code" data-i18n="mdl.matter_code_label">配对码 pairing_code</label>    <input id="matter-code" placeholder="1472-121-2614 或 MT:..." data-i18n-ph="mdl.matter_code_ph" autocomplete="off" />    <label for="matter-node" data-i18n="mdl.matter_node_label">节点 ID（可选，留空自动分配）</label>    <input id="matter-node" placeholder="2" inputmode="numeric" />    <label for="matter-eps" data-i18n="mdl.matter_eps_label">Endpoint（逗号分隔，默认 1）</label>    <input id="matter-eps" placeholder="1" value="1" />    <div class="matter-wifi-row" id="matter-wifi-row">      <label class="lbl" id="matter-wifi-toggle-label" for="matter-wifi-enable" data-i18n="mdl.matter_wifi_toggle">是否配置 Wi-Fi 信息</label>      <label class="toggle">        <input type="checkbox" id="matter-wifi-enable" onchange="onMatterWifiToggle()" aria-labelledby="matter-wifi-toggle-label" />        <span class="slider"></span>      </label>    </div>    <div id="matter-wifi-block" hidden>      <label for="matter-wifi-ssid">STA SSID</label>      <input id="matter-wifi-ssid" autocomplete="off" disabled />      <label for="matter-wifi-pass" data-i18n="mdl.matter_wifi_password">Wi-Fi 密码</label>      <div class="secret-field"><input id="matter-wifi-pass" type="password" autocomplete="off" placeholder="可留空沿用 Hub 已保存密码" disabled /><button type="button" class="secret-toggle" aria-label="显示密码" data-i18n-aria="mdl.aria_show_password" onclick="toggleSecret(this)" data-i18n="mdl.show">显示</button></div>    </div>    <div class="matter-spacer" aria-hidden="true"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeMatterAdd()" data-i18n="mdl.cancel">取消</button>      <button class="btn-sm on" type="button" id="matter-add-submit" onclick="submitMatterAdd()" data-i18n="mdl.matter_add">添加</button>    </div>  </div></div><div class="toast" id="toast"></div>
+<script src="/web/js/i18n.js"></script>
 <script src="/web/js/app.js"></script>
 <script src="/web/js/system.js"></script>
 <script src="/web/js/rules.js"></script>

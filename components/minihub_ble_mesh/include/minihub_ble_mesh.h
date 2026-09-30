@@ -27,6 +27,26 @@ bool minihub_ble_mesh_permit_provision_active(void);
 /** True while permit window is open or an active provision (e.g. PB-GATT) is in progress. */
 bool minihub_ble_mesh_provisioning_busy(void);
 
+/** Why a permit request was refused. The console and the MCP gateway both report
+ *  it; neither should re-derive it from the stack predicates, which is how the
+ *  two copies drifted into Chinese-only text in one and English in the other. */
+typedef enum {
+    MINIHUB_BLE_MESH_PERMIT_OK = 0,
+    MINIHUB_BLE_MESH_PERMIT_BUSY,           /**< a window or provision is already running */
+    MINIHUB_BLE_MESH_PERMIT_STACK_OFF,      /**< stack failed to start or is still booting */
+    MINIHUB_BLE_MESH_PERMIT_ZIGBEE_ACTIVE,  /**< Zigbee joining holds the radio */
+    MINIHUB_BLE_MESH_PERMIT_BAD_ARG,        /**< seconds out of range */
+    MINIHUB_BLE_MESH_PERMIT_FAILED,         /**< anything else */
+} minihub_ble_mesh_permit_t;
+
+/** Classify a minihub_ble_mesh_permit_provision() result. `zigbee_joining` is an
+ *  argument rather than a call so the mesh stack never depends on Zigbee. */
+minihub_ble_mesh_permit_t minihub_ble_mesh_permit_classify(esp_err_t err, bool zigbee_joining);
+
+/** Text for a classification, in Chinese when `zh`. Returns NULL for
+ *  MINIHUB_BLE_MESH_PERMIT_FAILED so the caller can show esp_err_to_name(). */
+const char *minihub_ble_mesh_permit_text(minihub_ble_mesh_permit_t reason, bool zh);
+
 esp_err_t minihub_ble_mesh_onoff(uint16_t unicast, minihub_ble_mesh_onoff_cmd_t cmd);
 
 /** Generic Level (−32768…32767). */

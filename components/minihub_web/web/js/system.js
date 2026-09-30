@@ -13,15 +13,15 @@ function sysCard(title, val, sub) {
     return '<div class="sys-card"><h4>' + esc(title) + '</h4><div class="v">' + esc(val) + '</div>' + (sub ? '<div class="s">' + esc(sub) + '</div>' : '') + '</div>';
 }
 
-function fmtChip(t) {
-    if (!t) return '-';
+function fmtChip(chip) {
+    if (!chip) return '-';
     const L = {
-        binary_sensor: '门窗报警器',
-        smoke: '烟感',
-        router: '路由器',
-        car: '汽车'
+        binary_sensor: t('sys.door_window_alarm'),
+        smoke: t('sys.smoke_detector'),
+        router: t('sys.router'),
+        car: t('sys.vehicle')
     };
-    return L[t] || String(t).toUpperCase();
+    return L[chip] || String(chip).toUpperCase();
 }
 
 function sysWifiOn() {
@@ -63,13 +63,13 @@ function sysFillNet() {
     const linked = !!(st.ip);
     const note = document.getElementById('sys-if-note');
     if (!st.present) {
-        note.textContent = '此固件未启用该接口';
+        note.textContent = t('sys.iface_not_enabled');
         note.hidden = false;
     } else if (!linked) {
-        note.textContent = (sysIface === 'wifi' && st.ssid) ? '连接中…' : '未连接';
+        note.textContent = (sysIface === 'wifi' && st.ssid) ? t('sys.connecting') : t('sys.not_connected');
         note.hidden = false;
     } else {
-        note.textContent = '当前 ' + st.ip;
+        note.textContent = t('sys.current_ip', { ip: st.ip });
         note.hidden = false;
     }
     document.getElementById('sys-dhcp').value = st.dhcp !== false ? '1' : '0';
@@ -89,15 +89,14 @@ function sysFillNet() {
         passEl.type = 'password';
         const eye = passEl.parentElement && passEl.parentElement.querySelector('.secret-toggle');
         if (eye) {
-            eye.textContent = '显示';
-            eye.setAttribute('aria-label', '显示密码');
+            eye.textContent = t('sys.show');
+            eye.setAttribute('aria-label', t('sys.show_password'));
         }
     }
     sysToggleDhcp();
 }
 
 let otaTimer = null;
-const OTA_STATE = ['空闲', '升级中', '成功', '失败'];
 
 function sysOtaRender(j) {
     const st = document.getElementById('sys-ota-status');
@@ -107,7 +106,19 @@ function sysOtaRender(j) {
     const prog = j.progress;
     const src = j.source || 'none';
     const err = j.error || '';
-    let line = '状态：' + (OTA_STATE[state] || state) + ' · 来源 ' + src;
+    /* Resolved here, not in a module-level table: the dictionary is not loaded when
+     * this file is parsed. */
+    const stateKeys = {
+        0: 'sys.state_idle',
+        1: 'sys.state_upgrading',
+        2: 'sys.state_success',
+        3: 'sys.failed'
+    };
+    const stateLabel = stateKeys[state] ? t(stateKeys[state]) : state;
+    let line = t('sys.ota_status_line', {
+        state: stateLabel,
+        src: src
+    });
     if (prog != null && prog >= 0) line += ' · ' + prog + '%';
     if (j.bytes_written) line += ' · ' + j.bytes_written + ' B';
     if (err) line += ' · ' + err;
@@ -119,7 +130,7 @@ function sysOtaRender(j) {
         clearInterval(otaTimer);
         otaTimer = null;
     }
-    if (state === 2) toast('升级成功，即将重启');
+    if (state === 2) toast(t('sys.ota_success_reboot'));
 }
 async function sysOtaPoll() {
     try {
@@ -131,10 +142,10 @@ async function sysOtaPoll() {
 async function sysOtaStartUrl() {
     const url = (document.getElementById('sys-ota-url').value || '').trim();
     if (!url) {
-        toast('请填写固件 URL');
+        toast(t('sys.enter_firmware_url'));
         return;
     }
-    toast('开始 URL 升级…');
+    toast(t('sys.starting_url_update'));
     try {
         const r = await fetch('/api/ota', {
             method: 'POST',
@@ -146,27 +157,27 @@ async function sysOtaStartUrl() {
             })
         });
         if (r.status === 409) {
-            toast('升级忙碌中');
+            toast(t('sys.update_busy'));
             return;
         }
         if (!r.ok) {
-            toast('启动失败');
+            toast(t('sys.start_failed'));
             return;
         }
-        toast('已开始下载');
+        toast(t('sys.download_started'));
         sysOtaPoll();
     } catch (e) {
-        toast('网络错误');
+        toast(t('sys.network_error'));
     }
 }
 async function sysOtaUpload() {
     const inp = document.getElementById('sys-ota-file');
     const f = inp && inp.files && inp.files[0];
     if (!f) {
-        toast('请选择 .bin 文件');
+        toast(t('sys.choose_bin_file'));
         return;
     }
-    toast('上传中 ' + f.name + '…');
+    toast(t('sys.uploading_file', { name: f.name }));
     try {
         const r = await fetch('/api/ota/upload', {
             method: 'POST',
@@ -176,19 +187,20 @@ async function sysOtaUpload() {
             body: f
         });
         if (r.status === 409) {
-            toast('升级忙碌中');
+            toast(t('sys.update_busy'));
             return;
         }
         if (!r.ok) {
-            const t = await r.text().catch(() => '');
-            toast('上传失败 ' + (t || r.status));
+            /* Named `detail`, not `t`: a local `t` would shadow the i18n helper. */
+            const detail = await r.text().catch(() => '');
+            toast(t('sys.upload_failed', { detail: detail || r.status }));
             sysOtaPoll();
             return;
         }
-        toast('上传完成，即将重启');
+        toast(t('sys.upload_done_reboot'));
         sysOtaPoll();
     } catch (e) {
-        toast('上传错误');
+        toast(t('sys.upload_error'));
         sysOtaPoll();
     }
 }
@@ -197,7 +209,7 @@ async function loadSystem() {
     try {
         const r = await fetch('/api/system');
         if (!r.ok) {
-            toast('加载系统信息失败');
+            toast(t('sys.load_failed'));
             return;
         }
         sysSnap = await r.json();
@@ -208,12 +220,12 @@ async function loadSystem() {
         const ver = 'v' + (sysSnap.version || '0.1.0');
         const idfLine = sysSnap.idf_version ? ('IDF: ' + sysSnap.idf_version) : '';
         const commitLine = sysSnap.commit ? ('MiniHub: ' + sysSnap.commit) : '';
-        grid.innerHTML = '<div class="sys-card"><h4>固件版本</h4><div class="v">' + esc(ver) + '</div>' + (idfLine ? '<div class="s">' + esc(idfLine) + '</div>' : '') + (commitLine ? '<div class="s">' + esc(commitLine) + '</div>' : '') + '</div>' + sysCard('芯片类型', fmtChip(sysSnap.chip), [sysSnap.chip_cores != null ? ('Cores: ' + sysSnap.chip_cores) : '', sysSnap.chip_revision != null ? ('Revision: ' + sysSnap.chip_revision) : ''].filter(Boolean).join(', ')) + sysCard('Flash', fmtBytes(sysSnap.flash_size), '总容量') + sysCard('内部 RAM', fmtBytes(ram.internal_free), '共 ' + fmtBytes(ram.internal_total)) + sysCard('PSRAM', fmtBytes(ram.psram_free), '共 ' + fmtBytes(ram.psram_total)) + sysCard('Storage', fmtBytes(st.free), '剩余 · 共 ' + fmtBytes(st.total) + ' · 已用 ' + fmtBytes(st.used)) + sysCard('Modstore', fmtBytes(ms.free), '剩余 · 共 ' + fmtBytes(ms.total) + ' · 已用 ' + fmtBytes(ms.used)) + sysCard('运行时间', (Number(sysSnap.uptime_s) || 0) + ' s', '');
+        grid.innerHTML = '<div class="sys-card"><h4>' + esc(t('sys.firmware_version')) + '</h4><div class="v">' + esc(ver) + '</div>' + (idfLine ? '<div class="s">' + esc(idfLine) + '</div>' : '') + (commitLine ? '<div class="s">' + esc(commitLine) + '</div>' : '') + '</div>' + sysCard(t('sys.chip_type'), fmtChip(sysSnap.chip), [sysSnap.chip_cores != null ? ('Cores: ' + sysSnap.chip_cores) : '', sysSnap.chip_revision != null ? ('Revision: ' + sysSnap.chip_revision) : ''].filter(Boolean).join(', ')) + sysCard('Flash', fmtBytes(sysSnap.flash_size), t('sys.total_capacity')) + sysCard(t('sys.internal_ram'), fmtBytes(ram.internal_free), t('sys.total_value', { total: fmtBytes(ram.internal_total) })) + sysCard('PSRAM', fmtBytes(ram.psram_free), t('sys.total_value', { total: fmtBytes(ram.psram_total) })) + sysCard('Storage', fmtBytes(st.free), t('sys.free_total_used', { free: fmtBytes(st.free), total: fmtBytes(st.total), used: fmtBytes(st.used) })) + sysCard('Modstore', fmtBytes(ms.free), t('sys.free_total_used', { free: fmtBytes(ms.free), total: fmtBytes(ms.total), used: fmtBytes(ms.used) })) + sysCard(t('sys.uptime'), (Number(sysSnap.uptime_s) || 0) + ' s', '');
         const hv = document.getElementById('hub-ver');
         if (hv && sysSnap.version) hv.textContent = 'v' + sysSnap.version;
         sysFillNet();
     } catch (e) {
-        toast('网络错误');
+        toast(t('sys.network_error'));
     }
 }
 async function sysApplyNet() {
@@ -227,10 +239,10 @@ async function sysApplyNet() {
         dns: [document.getElementById('sys-dns1').value.trim(), document.getElementById('sys-dns2').value.trim()].filter(Boolean)
     };
     if (!dhcp && (!body.ip || !body.netmask || !body.gw)) {
-        toast('请填写 IP / 掩码 / 网关');
+        toast(t('sys.enter_ip_mask_gw'));
         return;
     }
-    toast('正在应用…');
+    toast(t('sys.applying'));
     try {
         const r = await fetch('/api/net/config', {
             method: 'POST',
@@ -241,24 +253,24 @@ async function sysApplyNet() {
         });
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.result === 'ok') {
-            toast('已应用');
+            toast(t('sys.applied'));
             if (!dhcp && body.ip && body.ip !== location.hostname) {
-                toast('请改用 http://' + body.ip + '/');
+                toast(t('sys.use_new_address', { url: 'http://' + body.ip + '/' }));
             }
             setTimeout(loadSystem, 800);
         } else {
-            toast('失败' + (j.error ? ': ' + j.error : ''));
+            toast(t('sys.failed') + (j.error ? ': ' + j.error : ''));
         }
     } catch (e) {
-        toast('网络错误（若已改 IP，请用新地址打开）');
+        toast(t('sys.network_error_ip_changed'));
     }
 }
 
 async function sysReboot() {
-    if (!window.confirm('重启 MiniHub？配置和设备数据都会保留。')) {
+    if (!window.confirm(t('sys.reboot_confirm'))) {
         return;
     }
-    toast('正在重启…');
+    toast(t('sys.rebooting'));
     try {
         const r = await fetch('/api/system/reboot', {
             method: 'POST',
@@ -271,20 +283,20 @@ async function sysReboot() {
         });
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.result === 'ok') {
-            toast('设备即将重启');
+            toast(t('sys.device_rebooting'));
         } else {
-            toast('失败' + (j.error ? ': ' + j.error : ''));
+            toast(t('sys.failed') + (j.error ? ': ' + j.error : ''));
         }
     } catch (e) {
-        toast('若设备已重启，请稍后重新打开页面');
+        toast(t('sys.reopen_later'));
     }
 }
 
 async function sysFactoryReset() {
-    if (!window.confirm('恢复出厂会清除 NVS（Wi-Fi、登录密码）并重启。storage 上的设备数据会保留。继续？')) {
+    if (!window.confirm(t('sys.factory_reset_confirm'))) {
         return;
     }
-    toast('正在恢复出厂…');
+    toast(t('sys.factory_resetting'));
     try {
         const r = await fetch('/api/system/reset', {
             method: 'POST',
@@ -297,12 +309,12 @@ async function sysFactoryReset() {
         });
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.result === 'ok') {
-            toast('设备即将重启，请稍后重新登录');
+            toast(t('sys.relogin_later'));
         } else {
-            toast('失败' + (j.error ? ': ' + j.error : ''));
+            toast(t('sys.failed') + (j.error ? ': ' + j.error : ''));
         }
     } catch (e) {
-        toast('若设备已重启，请稍后重新打开页面');
+        toast(t('sys.reopen_later'));
     }
 }
 
@@ -311,13 +323,13 @@ async function sysApplyWifi() {
     const password = document.getElementById('sys-wifi-pass').value || '';
     const open = document.getElementById('sys-wifi-open').checked;
     if (!ssid) {
-        toast('请填写 SSID');
+        toast(t('sys.enter_ssid'));
         return;
     }
-    if (!window.confirm('保存后设备会重连到「' + ssid + '」。当前页面可能会断开，继续？')) {
+    if (!window.confirm(t('sys.wifi_reconnect_confirm', { ssid: ssid }))) {
         return;
     }
-    toast('正在保存 Wi-Fi…');
+    toast(t('sys.saving_wifi'));
     try {
         const r = await fetch('/api/net/wifi', {
             method: 'POST',
@@ -332,7 +344,7 @@ async function sysApplyWifi() {
         });
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.result === 'ok') {
-            toast('已保存，设备正在重连');
+            toast(t('sys.saved_reconnecting'));
             document.getElementById('sys-wifi-pass').value = '';
             /* GOT_IP is often 3–5 s after reconnect; one early refresh stays blank. */
             for (let i = 0; i < 12; i++) {
@@ -340,15 +352,15 @@ async function sysApplyWifi() {
                 await loadSystem();
                 const st = sysSnap && sysSnap.net && sysSnap.net.wifi;
                 if (st && st.ip) {
-                    toast('Wi-Fi 已连接 ' + st.ip);
+                    toast(t('sys.wifi_connected_ip', { ip: st.ip }));
                     return;
                 }
             }
-            toast('仍未拿到地址，可点刷新');
+            toast(t('sys.no_address_yet'));
         } else {
-            toast('失败' + (j.error ? ': ' + j.error : ''));
+            toast(t('sys.failed') + (j.error ? ': ' + j.error : ''));
         }
     } catch (e) {
-        toast('网络已断开的话，请连上新的 Wi-Fi 再打开控制台');
+        toast(t('sys.network_error_new_wifi'));
     }
 }

@@ -44,7 +44,7 @@ Built-in device types
      - Mandatory
      - Avatar
    * - ``light``
-     - power, brightness, cct, hue, saturation, intensity, light-mode
+     - power, brightness, cct, hue, saturation, intensity
      - power
      - power
      - bulb icon (below)
@@ -168,12 +168,6 @@ hidden. Hue / saturation / CCT are **sliders**; rainbow or tone comes from CSS.
      - 0–100 %, step 1
      - slider
      - light
-   * - ``light-mode``
-     - Light mode
-     - Int
-     - 0–2
-     - dropdown
-     - light (0 HSV+CCT / 1 HSV / 2 CCT)
    * - ``voltage_v``
      - Voltage
      - Float
@@ -383,11 +377,37 @@ Two layers. Core never owns either CSV.
 ``primary_param``, ``mandatory_params``, optional ``image`` (class avatar under
 ``images/devices/``).
 
-``parameters.csv`` columns: ``parameter``, ``label``, ``data_type``,
-``properties``, ``min`` / ``max`` / ``step`` / ``unit``, ``ui_element``,
-``options`` (JSON array for dropdown), ``description``, ``css``, optional
+``parameters.csv`` columns: ``parameter``, ``label_zh``, ``label_en``,
+``data_type``, ``properties``, ``min`` / ``max`` / ``step`` / ``unit``,
+``ui_element``, ``options`` (JSON array for dropdown; each item carries a
+``labels`` map rather than a flat ``label``), ``description``, ``css``, optional
 ``requires``. A leftover ``visible`` header is ignored; hide with instance
 ``visible: false``. Parameter ``image`` is unused today (controls are CSS).
+
+The two label columns are what makes the console bilingual. ``/api/device_widgets``
+serves one ``label`` per parameter, picked from the row's ``labels`` map by the
+``lang`` query (``zh`` / ``en``, falling back to ``Accept-Language``, then to
+``zh``). Adding a language touches five known places — the CSV column, the
+generator's ``LABEL_COLS``, the flattener's column set (``PARAM_REQ_COLS``,
+``dw_param_cols_t``, ``dw_build_style``), the codes ``dw_request_lang()`` accepts,
+and the console's own language set (``i18n.js`` plus the switch options) — and
+none of the label consumers: the entry struct, the API shape and the card and
+rule renderers stay as they are.
+
+``tools/check_catalog_i18n.py`` runs with the generator and grades the same
+three ways, so a missing translation is visible at build time rather than
+months later:
+
+* **error** — a ``label_zh`` / ``label_en`` column missing, an empty
+  ``label_zh`` cell, an option item without a ``labels`` map, the console's two
+  string files disagreeing on their key set, or a key the console asks for that
+  no string file defines;
+* **warning** — an empty ``label_en`` cell, or ``label_en`` equal to
+  ``label_zh``. Proper nouns (``PM2.5``, ``HSV``, ``CCT``) legitimately read the
+  same in both languages, so equality warns instead of failing;
+* **runtime fallback** — a language the row does not provide serves
+  ``label_zh``, then the parameter name. A warning degrades to Chinese; it never
+  breaks a build or a page.
 
 ``requires`` is a precondition for a writable control. The default is one
 parameter name: ``power`` means the same as ``{"all": ["power"]}``. The

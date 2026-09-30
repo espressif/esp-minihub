@@ -34,8 +34,8 @@ static const char *const DEVICE_REQ_COLS[] = {
     "device_id", "parameters", "primary_param", "mandatory_params", "image",
 };
 static const char *const PARAM_REQ_COLS[] = {
-    "parameter", "label", "data_type", "properties", "min", "max", "step", "unit",
-    "ui_element", "options", "description", "visible", "css", "image",
+    "parameter", "label_zh", "label_en", "data_type", "properties", "min", "max",
+    "step", "unit", "ui_element", "options", "description", "visible", "css", "image",
 };
 
 typedef struct {
@@ -534,20 +534,75 @@ static void dw_csv_write_field(FILE *f, const char *s, bool force_quote)
     fputc('"', f);
 }
 
-static cJSON *dw_build_style(const dw_csv_table_t *params, int row, int *cols)
+/* parameters.csv columns the flattener reads, resolved by header name once per
+ * load. Named fields on purpose: the previous int p_cols[14] + slot magic in
+ * dw_build_style meant adding a column shifted every index and silently read
+ * the neighbouring cell instead of failing. */
+typedef struct {
+    int parameter;
+    int label_zh;
+    int label_en;
+    int properties;
+    int min;
+    int max;
+    int step;
+    int unit;
+    int ui_element;
+    int options;
+    int css;
+    int image;
+} dw_param_cols_t;
+
+static void dw_param_cols_resolve(const dw_csv_table_t *par, dw_param_cols_t *c)
 {
-    /* cols: parameter,label,...,ui_element,options,...,css,image indices */
-    const char *ui = dw_cell(params, row, cols[8]); /* ui_element */
-    const char *label = dw_cell(params, row, cols[1]);
+    c->parameter   = dw_col_index(par, "parameter");
+    c->label_zh    = dw_col_index(par, "label_zh");
+    c->label_en    = dw_col_index(par, "label_en");
+    c->properties  = dw_col_index(par, "properties");
+    c->min         = dw_col_index(par, "min");
+    c->max         = dw_col_index(par, "max");
+    c->step        = dw_col_index(par, "step");
+    c->unit        = dw_col_index(par, "unit");
+    c->ui_element  = dw_col_index(par, "ui_element");
+    c->options     = dw_col_index(par, "options");
+    c->css         = dw_col_index(par, "css");
+    c->image       = dw_col_index(par, "image");
+}
+
+static cJSON *dw_build_style(const dw_csv_table_t *params, int row, const dw_param_cols_t *c)
+{
+    const char *ui = dw_cell(params, row, c->ui_element);
     cJSON *style = cJSON_CreateObject();
     if (!style) {
         return NULL;
     }
     cJSON_AddStringToObject(style, "widget", dw_ui_to_widget(ui));
-    cJSON_AddStringToObject(style, "label", label ? label : "");
+    /* Both languages travel in the entry's style_json.labels map; there is no
+     * flat `label` key, because the card renderer prefers style_json.label over
+     * the per-request label the API picks, which would pin every language to
+     * Chinese. Empty cell = that language is not provided (the API falls back
+     * to zh, then to the parameter name). */
+    cJSON *labels = cJSON_CreateObject();
+    if (!labels) {
+        cJSON_Delete(style);
+        return NULL;
+    }
+    /* The "zh" / "en" codes below are the Python side's LABEL_COLS in
+     * tools/gen_device_widget.py, restated here because C cannot import it.
+     * A new language means both places plus PARAM_REQ_COLS and dw_param_cols_t. */
+    const char *zh = dw_cell(params, row, c->label_zh);
+    const char *en = dw_cell(params, row, c->label_en);
+    if (zh && zh[0]) {
+        cJSON_AddStringToObject(labels, "zh", zh);
+    }
+    if (en && en[0]) {
+        cJSON_AddStringToObject(labels, "en", en);
+    }
+    cJSON_AddItemToObject(style, "labels", labels);
+    const char *const keys[] = { "min", "max", "step" };
+    const int bounds[] = { c->min, c->max, c->step };
     for (int k = 0; k < 3; k++) {
-        const char *keys[] = { "min", "max", "step" };
-        const char *v = dw_cell(params, row, cols[4 + k]);
+        const char *v = dw_cell(params, row, bounds[k]);
         if (v && v[0]) {
             char *end = NULL;
             double d = strtod(v, &end);
@@ -556,13 +611,13 @@ static cJSON *dw_build_style(const dw_csv_table_t *params, int row, int *cols)
             }
         }
     }
-    const char *unit = dw_cell(params, row, cols[7]);
+    const char *unit = dw_cell(params, row, c->unit);
     if (unit && unit[0]) {
         cJSON_AddStringToObject(style, "unit", unit);
     }
     /* properties "Read" → access R; "Read/Write" → RW (UI defaults when
      * instance props omit access). */
-    const char *props = dw_cell(params, row, cols[3]);
+    const char *props = dw_cell(params, row, c->properties);
     if (props && props[0]) {
         char lower[64];
         size_t n = 0;
@@ -577,14 +632,14 @@ static cJSON *dw_build_style(const dw_csv_table_t *params, int row, int *cols)
             cJSON_AddStringToObject(style, "access", "R");
         }
     }
-    const char *opts = dw_cell(params, row, cols[9]);
+    const char *opts = dw_cell(params, row, c->options);
     if (opts && opts[0]) {
         cJSON *o = cJSON_Parse(opts);
         if (o) {
             cJSON_AddItemToObject(style, "options", o);
         }
     }
-    const char *css = dw_cell(params, row, cols[12]);
+    const char *css = dw_cell(params, row, c->css);
     if (css && css[0]) {
         cJSON_AddStringToObject(style, "css", css);
     }
@@ -821,14 +876,9 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
     int d_id = dw_col_index(dev, "device_id");
     int d_par = dw_col_index(dev, "parameters");
     int d_img = dw_col_index(dev, "image");
-    int p_cols[14];
-    static const char *pnames[] = {
-        "parameter", "label", "data_type", "properties", "min", "max", "step", "unit",
-        "ui_element", "options", "description", "visible", "css", "image",
-    };
-    for (int i = 0; i < 14; i++) {
-        p_cols[i] = dw_col_index(par, pnames[i]);
-    }
+    dw_param_cols_t pc;
+    dw_param_cols_resolve(par, &pc);
+    int c_p = pc.parameter;
 
     FILE *f = fopen(out_path, "wb");
     if (!f) {
@@ -861,7 +911,7 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
             if (!tok[0]) {
                 continue;
             }
-            int pr = dw_find_param_row(par, p_cols[0], tok);
+            int pr = dw_find_param_row(par, c_p, tok);
             if (pr < 0) {
                 free(plist);
                 fclose(f);
@@ -871,7 +921,7 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
                         tok, dev_id);
                 return ESP_ERR_INVALID_ARG;
             }
-            cJSON *style = dw_build_style(par, pr, p_cols);
+            cJSON *style = dw_build_style(par, pr, &pc);
             if (!style) {
                 free(plist);
                 fclose(f);
@@ -886,7 +936,7 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
                 unlink(out_path);
                 return ESP_ERR_NO_MEM;
             }
-            const char *pimg = dw_cell(par, pr, p_cols[13]);
+            const char *pimg = dw_cell(par, pr, pc.image);
             dw_csv_write_field(f, dev_id, false);
             fputc(',', f);
             dw_csv_write_field(f, tok, false);

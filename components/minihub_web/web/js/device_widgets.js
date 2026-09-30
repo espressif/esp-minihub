@@ -305,7 +305,7 @@ function dwBuildInstances(points) {
 
 async function ensureDwCatalog() {
     if (dwCatalog) return dwCatalog;
-    const wr = await fetch('/api/device_widgets');
+    const wr = await fetch(window.mhCatalogUrl('/api/device_widgets'));
     if (!wr.ok) throw new Error('http ' + wr.status);
     dwCatalog = await wr.json();
     return dwCatalog;
@@ -316,7 +316,7 @@ async function loadDeviceWidgets() {
     if (!el) return;
     try {
         const [wr, pr] = await Promise.all([
-            fetch('/api/device_widgets'),
+            fetch(window.mhCatalogUrl('/api/device_widgets')),
             fetch('/api/points')
         ]);
         if (!wr.ok) throw new Error('http ' + wr.status);
@@ -332,7 +332,7 @@ async function loadDeviceWidgets() {
         }
         dwInstances = dwBuildInstances(points);
     } catch (e) {
-        el.innerHTML = '<div class="modal-hint">设备目录加载失败：' + esc(String(e)) + '</div>';
+        el.innerHTML = '<div class="modal-hint">' + t('dw.catalog_load_failed', { error: esc(String(e)) }) + '</div>';
         return;
     }
     renderDeviceWidgets();
@@ -359,7 +359,7 @@ function dwInstanceParamsHtml(inst) {
     const cat = dwCatalogForType(byType, inst.type);
     const built = dwInstanceCardBody(inst, cat);
     if (!built.visibleCount) {
-        return '<div class="modal-hint">该设备无可显示参数。</div>';
+        return '<div class="modal-hint">' + t('dw.no_visible_params') + '</div>';
     }
 
     return '<div class="dw-params">' + built.primary + built.extra + '</div>';
@@ -376,7 +376,7 @@ function closeDeviceDetail() {
 function dwSyncDetailInfoBtn() {
     const btn = document.getElementById('device-detail-info-btn');
     if (!btn) return;
-    btn.textContent = deviceDetailPanel === 'info' ? '返回' : '详情';
+    btn.textContent = deviceDetailPanel === 'info' ? t('dw.back') : t('dw.details');
 }
 
 function toggleDeviceDetailInfo() {
@@ -407,7 +407,7 @@ function dwInfoRowHtml(label, value, opts) {
     const cls = 'device-info-row' +
         (opts.muted ? ' is-muted' : '') +
         (opts.disabled ? ' is-disabled' : '');
-    const empty = (opts.empty != null) ? String(opts.empty) : '未知';
+    const empty = (opts.empty != null) ? String(opts.empty) : t('dw.unknown');
     const v = (value != null && String(value) !== '') ? String(value) : empty;
     return '<div class="' + cls + '"><span class="k">' + esc(label) +
         '</span><span class="v">' + esc(v) + '</span></div>';
@@ -438,7 +438,7 @@ async function dwTriggerDeviceOta(pointId) {
             else alert(msg);
             return;
         }
-        if (typeof toast === 'function') toast('已触发设备 OTA');
+        if (typeof toast === 'function') toast(t('dw.ota_triggered'));
     } catch (e) {
         if (typeof toast === 'function') toast(String(e && e.message ? e.message : e));
         else alert(String(e));
@@ -446,7 +446,7 @@ async function dwTriggerDeviceOta(pointId) {
 }
 
 function dwInstanceInfoHtml(inst) {
-    if (!inst) return '<div class="modal-hint">找不到该设备点。</div>';
+    if (!inst) return '<div class="modal-hint">' + t('dw.point_not_found') + '</div>';
     const points = (typeof pts !== 'undefined' && Array.isArray(pts)) ? pts : [];
     const pt = points.find(function (p) {
         return p && (p.point_id === inst.point_id || p.point_id === inst.key);
@@ -454,8 +454,7 @@ function dwInstanceInfoHtml(inst) {
     const pr = (pt && pt.props && typeof pt.props === 'object') ? pt.props : {};
     const typeLab = (typeof dwTypeDisplay === 'function')
         ? dwTypeDisplay({ type: inst.type, props: pr })
-        : ((typeof TYPE_LABEL !== 'undefined' && TYPE_LABEL[inst.type])
-            ? TYPE_LABEL[inst.type] : (inst.type || ''));
+        : mhTypeLabel(inst.type);
     const protocol = inst.protocol ||
         (typeof pointProtocol === 'function'
             ? pointProtocol(pt || { point_id: inst.point_id })
@@ -475,23 +474,23 @@ function dwInstanceInfoHtml(inst) {
     const otaVer = ota && ota.version != null ? String(ota.version) : '';
 
     let html = '<div class="device-info-rows">';
-    html += dwInfoRowHtml('设备 ID', pid);
-    html += dwInfoRowHtml('品类', typeLab || inst.type || '');
-    html += dwInfoRowHtml('协议', protocol);
-    html += dwInfoRowHtml('适配器', adapter);
-    html += dwInfoRowHtml('状态', inst.online ? '在线' : '离线');
-    html += dwInfoRowHtml('厂商', mfr);
-    html += dwInfoRowHtml('型号', model);
-    html += dwInfoRowHtml('软件版本', swVer);
-    html += dwInfoRowHtml('硬件版本', hwVer);
+    html += dwInfoRowHtml(t('dw.device_id'), pid);
+    html += dwInfoRowHtml(t('dw.category'), typeLab || inst.type || '');
+    html += dwInfoRowHtml(t('dw.protocol'), protocol);
+    html += dwInfoRowHtml(t('dw.adapter'), adapter);
+    html += dwInfoRowHtml(t('dw.status'), inst.online ? t('dw.online') : t('dw.offline'));
+    html += dwInfoRowHtml(t('dw.manufacturer'), mfr);
+    html += dwInfoRowHtml(t('dw.model'), model);
+    html += dwInfoRowHtml(t('dw.sw_version'), swVer);
+    html += dwInfoRowHtml(t('dw.hw_version'), hwVer);
 
     if (otaAvail) {
-        const hint = otaVer ? ('目标 ' + otaVer) : '';
+        const hint = otaVer ? t('dw.ota_target', { version: otaVer }) : '';
         html += '<div class="device-info-row"><span class="k">OTA</span><span class="v">' +
             (hint ? esc(hint) + ' · ' : '') +
             '<button class="btn-sm on" type="button" onclick="dwTriggerDeviceOta(\'' +
             String(pid).replace(/\\/g, '\\\\').replace(/'/g, "\\'") +
-            '\')">触发 OTA</button></span></div>';
+            '\')">' + t('dw.trigger_ota') + '</button></span></div>';
     } else {
         html += dwInfoRowHtml('OTA', '', { muted: true, disabled: true, empty: '—' });
     }
@@ -532,11 +531,10 @@ function dwPatchDetailReadonly(inst) {
     if (meta) {
         const typeLab = (typeof dwTypeDisplay === 'function')
             ? dwTypeDisplay(inst)
-            : ((typeof TYPE_LABEL !== 'undefined' && TYPE_LABEL[inst.type])
-                ? TYPE_LABEL[inst.type] : (inst.type || ''));
+            : mhTypeLabel(inst.type);
         meta.textContent = (inst.point_id || deviceDetailId) +
             (typeLab ? ' · ' + typeLab : '') +
-            (inst.online ? ' · 在线' : ' · 离线');
+            (inst.online ? ' · ' + t('dw.online') : ' · ' + t('dw.offline'));
     }
 }
 
@@ -557,9 +555,9 @@ function refreshDeviceDetail() {
         (ae.tagName === 'INPUT' || ae.tagName === 'SELECT' || ae.tagName === 'TEXTAREA') &&
         !dwParamIsPrerequisite(focusedParam, inst);
     if (!inst) {
-        document.getElementById('device-detail-title').textContent = '设备';
-        document.getElementById('device-detail-meta').textContent = deviceDetailId + ' · 已离线或已移除';
-        if (body) body.innerHTML = '<div class="modal-hint">找不到该设备点。</div>';
+        document.getElementById('device-detail-title').textContent = t('dw.device');
+        document.getElementById('device-detail-meta').textContent = deviceDetailId + ' · ' + t('dw.offline_or_removed');
+        if (body) body.innerHTML = '<div class="modal-hint">' + t('dw.point_not_found') + '</div>';
         dwSyncDetailInfoBtn();
         return;
     }
@@ -580,11 +578,10 @@ function refreshDeviceDetail() {
     if (meta) {
         const typeLab = (typeof dwTypeDisplay === 'function')
             ? dwTypeDisplay(inst)
-            : ((typeof TYPE_LABEL !== 'undefined' && TYPE_LABEL[inst.type])
-                ? TYPE_LABEL[inst.type] : (inst.type || ''));
+            : mhTypeLabel(inst.type);
         meta.textContent = (inst.point_id || deviceDetailId) +
             (typeLab ? ' · ' + typeLab : '') +
-            (inst.online ? ' · 在线' : ' · 离线');
+            (inst.online ? ' · ' + t('dw.online') : ' · ' + t('dw.offline'));
     }
     if (body) {
         body.innerHTML = deviceDetailPanel === 'info'
@@ -600,7 +597,7 @@ async function openDeviceDetail(id, ev) {
     try {
         await ensureDwCatalog();
     } catch (e) {
-        toast('设备目录加载失败');
+        toast(t('dw.catalog_load_failed_short'));
         return;
     }
 
@@ -611,7 +608,7 @@ async function openDeviceDetail(id, ev) {
     }
     const inst = dwFindInstance(id);
     if (!inst) {
-        toast('找不到设备');
+        toast(t('dw.device_not_found'));
         return;
     }
     deviceDetailId = inst.key || inst.point_id;
@@ -884,7 +881,7 @@ function dwToggleCardExpand(key, ev) {
         const chev = card.querySelector('.dw-expand');
         if (chev) {
             chev.setAttribute('aria-expanded', open ? 'true' : 'false');
-            chev.title = open ? '收起参数' : '展开参数';
+            chev.title = open ? t('dw.collapse_params') : t('dw.expand_params');
         }
     }
 }
@@ -894,7 +891,7 @@ function renderDeviceWidgets() {
     if (!el) return;
     const byType = dwCatalogIndex();
     if (!dwInstances.length) {
-        el.innerHTML = '<div class="modal-hint">暂无设备</div>';
+        el.innerHTML = '<div class="modal-hint">' + t('dw.no_devices') + '</div>';
         return;
     }
 
@@ -915,12 +912,12 @@ function renderDeviceWidgets() {
         /* Type not in the catalog: rows are built from raw parameter names.
          * Say so on the card rather than looking like a corrupt catalog. */
         const missBadge = built.fallbackCount
-            ? '<span class="badge warn" title="该设备类型未在设备目录 (devices.csv) 中登记，参数按原始名称显示">类型未登记</span>'
+            ? '<span class="badge warn" title="' + escAttr(t('dw.type_unregistered_tip')) + '">' + t('dw.type_unregistered') + '</span>'
             : '';
         const expandBtn = hasExtra
             ? ('<button type="button" class="dw-expand" aria-expanded="' +
                 (expanded ? 'true' : 'false') + '" title="' +
-                (expanded ? '收起参数' : '展开参数') +
+                (expanded ? t('dw.collapse_params') : t('dw.expand_params')) +
                 '" onclick="dwToggleCardExpand(\'' + escAttr(key) + '\', event)"></button>')
             : '';
         html += '<div class="dcard dw-card' + offline + (expanded ? ' expanded' : '') +
@@ -949,7 +946,7 @@ function renderDeviceWidgets() {
     });
 
     if (!shown) {
-        el.innerHTML = '<div class="modal-hint">设备参数均不可见</div>';
+        el.innerHTML = '<div class="modal-hint">' + t('dw.all_params_hidden') + '</div>';
         return;
     }
     el.innerHTML = html;
@@ -1093,7 +1090,8 @@ function dwParamControl(type, p, live, gated) {
         let body = '';
         opts.forEach(function (o) {
             const val = (o && typeof o === 'object') ? o.value : o;
-            const lbl = (o && typeof o === 'object') ? o.label : o;
+            const L = (o && o.labels) ? o.labels : {};
+            const lbl = L[window.mhCatalogLang()] || L.zh || (o && o.label) || (o && o.value) || o;
             const sel = (valStr !== '' && String(val) === valStr) ? ' selected' : '';
             body += '<option value="' + escAttr(String(val)) + '"' + sel + '>' +
                 esc(lbl) + '</option>';
@@ -1153,12 +1151,12 @@ async function dwSend(device, parameter, value, pointId) {
         });
         if (!r.ok) {
             const j = await r.json().catch(function () { return {}; });
-            toast('控制失败: ' + (j.error || r.status));
+            toast(t('dw.control_failed', { error: (j.error || r.status) }));
         } else if (typeof loadPoints === 'function') {
             loadPoints();
         }
     } catch (e) {
-        toast('控制失败: ' + e);
+        toast(t('dw.control_failed', { error: e }));
     }
 }
 

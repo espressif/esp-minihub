@@ -263,6 +263,14 @@ static bool http_want_zh(httpd_req_t *req)
     return strcasestr(lang, "zh") != NULL;
 }
 
+/* Human-readable API text follows the client's language. Browsers send
+ * Accept-Language on every fetch; a client that sends none (a script, an MCP
+ * bridge) gets English, which is the machine-readable default. */
+static const char *api_msg(httpd_req_t *req, const char *zh, const char *en)
+{
+    return http_want_zh(req) ? zh : en;
+}
+
 static esp_err_t send_preinstall_index_or_fallback(httpd_req_t *req)
 {
     const char *index_paths[] = {
@@ -536,7 +544,8 @@ static esp_err_t handle_api_module_rpc(httpd_req_t *req)
         cJSON *resp = cJSON_CreateObject();
         cJSON_AddStringToObject(resp, "result", "fail");
         cJSON_AddStringToObject(resp, "error", "module_not_ready");
-        cJSON_AddStringToObject(resp, "message", "模块未安装或未加载");
+        cJSON_AddStringToObject(resp, "message", api_msg(req, "模块未安装或未加载",
+                                                          "module not installed or loaded"));
         err = send_json(req, resp);
         cJSON_Delete(resp);
         return err;
@@ -547,7 +556,7 @@ static esp_err_t handle_api_module_rpc(httpd_req_t *req)
         cJSON *resp = cJSON_CreateObject();
         cJSON_AddStringToObject(resp, "result", "fail");
         cJSON_AddStringToObject(resp, "error", "method_not_found");
-        cJSON_AddStringToObject(resp, "message", "方法不存在");
+        cJSON_AddStringToObject(resp, "message", api_msg(req, "方法不存在", "method not found"));
         err = send_json(req, resp);
         cJSON_Delete(resp);
         return err;
@@ -695,7 +704,14 @@ static esp_err_t handle_root(httpd_req_t *req)
 #if CONFIG_MINIHUB_WEB_UI
 static esp_err_t handle_web_asset(httpd_req_t *req)
 {
-    if (minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
+    /* The login page is the first thing a user sees and it localises itself, so it
+     * needs the string files and the helper before it can fetch /api/auth/status.
+     * Both paths carry UI strings only — no device data, no credentials — so they are
+     * the deliberate exception to the session gate. Everything else under /web/ and
+     * /img/ still requires a session. */
+    const bool public_i18n = (strncmp(req->uri, "/web/i18n/", strlen("/web/i18n/")) == 0) ||
+                             (strcmp(req->uri, "/web/js/i18n.js") == 0);
+    if (!public_i18n && minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
         return send_login_redirect(req);
     }
     const char *prefix = "/web/";
@@ -2048,22 +2064,56 @@ static esp_err_t handle_api_points(httpd_req_t *req)
 
 /* ---- device-widget registry bridge (data-driven device catalog) ---- */
 
-/* Extract the widget type from a style_json string (best effort). */
-static const char *dw_widget_of(const char *style_json, char *buf, size_t sz)
+/* Which language to serve catalog labels in: ?lang= wins, then Accept-Language,
+ * then Chinese. Anything unrecognised is treated as "zh" — a usable catalog
+ * beats a strict one, and the frontend always sends the short code. */
+static const char *dw_request_lang(httpd_req_t *req)
 {
-    buf[0] = '\0';
+    char query[160];
+    char lang[8] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
+        httpd_query_key_value(query, "lang", lang, sizeof(lang)) == ESP_OK &&
+        lang[0]) {
+        if (strcasecmp(lang, "en") == 0) {
+            return "en";
+        }
+        return "zh";
+    }
+    return http_want_zh(req) ? "zh" : "en";
+}
+
+/* One parse per catalog entry: the widget id is needed for every response, and
+ * `labels[lang]` is the display name for this one. style_json carries no flat
+ * `label`, so a language the catalog does not provide falls back to zh and then
+ * to the entry's default label (the parameter name when even zh is missing). */
+static void dw_style_describe(const char *style_json, const char *lang,
+                              char *widget, size_t widget_sz,
+                              char *label, size_t label_sz)
+{
+    widget[0] = '\0';
+    label[0] = '\0';
     if (!style_json) {
-        return buf;
+        return;
     }
     cJSON *root = cJSON_Parse(style_json);
-    if (root) {
-        cJSON *w = cJSON_GetObjectItemCaseSensitive(root, "widget");
-        if (cJSON_IsString(w) && w->valuestring) {
-            snprintf(buf, sz, "%s", w->valuestring);
-        }
-        cJSON_Delete(root);
+    if (!root) {
+        return;
     }
-    return buf;
+    cJSON *w = cJSON_GetObjectItemCaseSensitive(root, "widget");
+    if (cJSON_IsString(w) && w->valuestring) {
+        snprintf(widget, widget_sz, "%s", w->valuestring);
+    }
+    cJSON *labels = cJSON_GetObjectItemCaseSensitive(root, "labels");
+    if (labels) {
+        cJSON *l = cJSON_GetObjectItemCaseSensitive(labels, lang);
+        if (!cJSON_IsString(l) || !l->valuestring[0]) {
+            l = cJSON_GetObjectItemCaseSensitive(labels, "zh");
+        }
+        if (cJSON_IsString(l) && l->valuestring[0]) {
+            snprintf(label, label_sz, "%s", l->valuestring);
+        }
+    }
+    cJSON_Delete(root);
 }
 
 /* GET /api/device_widgets
@@ -2071,15 +2121,19 @@ static const char *dw_widget_of(const char *style_json, char *buf, size_t sz)
  * parameter of the type is offered; hiding one is a property of the registered
  * POINT (props.params.<name>.visible), which the UI intersects with this catalog.
  * Each device carries its device-class `image` (avatar, /img/devices/...).
- * Parameters carry `label`, `widget`, and `style` (min/max/unit/options);
+ * Parameters carry `label` (in the language asked for, from the entry's
+ * style_json.labels map), `widget`, and `style` (min/max/unit/options);
  * interactive controls are CSS widgets — param `image` is always empty
- * (legacy field kept for clients). See minihub_device_widget.h. */
+ * (legacy field kept for clients). `style` is passed through verbatim, so its
+ * `labels` map and the per-option `labels` reach the frontend.
+ * See minihub_device_widget.h. */
 static esp_err_t handle_api_device_widgets(httpd_req_t *req)
 {
     esp_err_t err = api_auth(req);
     if (err != ESP_OK) {
         return err;
     }
+    const char *lang = dw_request_lang(req);
 
     cJSON *root = cJSON_CreateObject();
     cJSON *devs = cJSON_CreateArray();
@@ -2089,7 +2143,6 @@ static esp_err_t handle_api_device_widgets(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
     }
     cJSON_AddItemToObject(root, "devices", devs);
-    char wbuf[32];
     char ibuf[MINIHUB_DW_IMAGE_PATH_MAX];   /* resolved icon path (subdir/name) */
     size_t ndev = minihub_device_widget_device_count();
     for (size_t i = 0; i < ndev; i++) {
@@ -2111,9 +2164,12 @@ static esp_err_t handle_api_device_widgets(httpd_req_t *req)
         for (size_t j = 0; j < d->count; j++) {
             const minihub_device_widget_entry_t *e = &d->entries[j];
             cJSON *pj = cJSON_CreateObject();
+            char wbuf[32];
+            char lbuf[64];
+            dw_style_describe(e->style_json, lang, wbuf, sizeof(wbuf), lbuf, sizeof(lbuf));
             cJSON_AddStringToObject(pj, "parameter", e->parameter);
-            cJSON_AddStringToObject(pj, "label", e->label);
-            cJSON_AddStringToObject(pj, "widget", dw_widget_of(e->style_json, wbuf, sizeof(wbuf)));
+            cJSON_AddStringToObject(pj, "label", lbuf[0] ? lbuf : e->label);
+            cJSON_AddStringToObject(pj, "widget", wbuf);
             /* Controls are CSS widgets; do not resolve /img/parameters mockups. */
             cJSON_AddStringToObject(pj, "image", "");
             cJSON_AddStringToObject(pj, "style", e->style_json ? e->style_json : "{}");
@@ -3200,19 +3256,14 @@ static esp_err_t handle_api_ble_mesh_permit(httpd_req_t *req)
     }
     cJSON_AddStringToObject(resp, "result", bm_err == ESP_OK ? "ok" : "fail");
     if (bm_err != ESP_OK) {
-        if (bm_err == ESP_ERR_INVALID_STATE && minihub_ble_mesh_provisioning_busy()) {
-            cJSON_AddStringToObject(resp, "error", "BLE Mesh 正在配网，请勿重复开启");
-        } else if (bm_err == ESP_ERR_INVALID_STATE && !minihub_ble_mesh_running()) {
-            cJSON_AddStringToObject(resp, "error", "BLE Mesh 栈未就绪（启动失败或仍在初始化）");
 #if CONFIG_MINIHUB_ZIGBEE_SDK
-        } else if (bm_err == ESP_ERR_INVALID_STATE && minihub_zigbee_permit_join_active()) {
-            cJSON_AddStringToObject(resp, "error", "Zigbee 正在入网，无法同时开启 BLE Mesh 配网");
+        const bool zigbee_joining = minihub_zigbee_permit_join_active();
+#else
+        const bool zigbee_joining = false;
 #endif
-        } else if (bm_err == ESP_ERR_INVALID_ARG) {
-            cJSON_AddStringToObject(resp, "error", "seconds 无效（须 >= 0；0 关闭窗口）");
-        } else {
-            cJSON_AddStringToObject(resp, "error", esp_err_to_name(bm_err));
-        }
+        const char *why = minihub_ble_mesh_permit_text(
+            minihub_ble_mesh_permit_classify(bm_err, zigbee_joining), http_want_zh(req));
+        cJSON_AddStringToObject(resp, "error", why ? why : esp_err_to_name(bm_err));
     }
     cJSON_AddBoolToObject(resp, "permit_provision", minihub_ble_mesh_permit_provision_active());
     cJSON_AddBoolToObject(resp, "ready", minihub_ble_mesh_running());

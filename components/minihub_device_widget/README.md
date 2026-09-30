@@ -35,12 +35,13 @@ parameter renders (widget, label, bounds, CSS). Source of truth:
 | Column | Content |
 |--------|---------|
 | `parameter` | Key without `esp.param.` prefix |
-| `label` | UI / rule-picker label |
+| `label_zh` | Chinese label — the default language and the fallback |
+| `label_en` | English label — empty falls back to `label_zh` |
 | `data_type` | `Bool` / `Int` / `String` / … |
 | `properties` | e.g. `Read/Write` |
 | `min` / `max` / `step` / `unit` | Slider defaults |
 | `ui_element` | Closed set above |
-| `options` | JSON array for `ui.dropdown` |
+| `options` | JSON array for `ui.dropdown`; each item carries `labels: {"zh":…, "en":…}` instead of a flat `label` |
 | `description` | Free text |
 | `css` | Renderer CSS |
 | `image` | Optional control-icon file name under `images/parameters/` |
@@ -70,7 +71,7 @@ Reference only (RainMaker system services). Not part of the widget registry.
 ### Seeded types
 
 - **`light`** — `power`, `brightness`, `cct`, `hue` (label 颜色), `saturation`,
-  `intensity`, `light-mode`
+  `intensity`
 - **`switch`** — `power`, `voltage_v`, `current_a`, `power_w`, `energy_wh`
 - **`name`** — in catalog; no device lists it → never a control
 

@@ -28,24 +28,29 @@ let view = 'overview',
     leafletMap = null,
     deviceLayer = null;
 let enabledAdapters = {};
-const TITLES = {
-    overview: '概览',
-    map: '地图',
-    rules: '规则',
-    scenes: '场景',
-    store: 'MiniHub Store',
-    system: '系统'
-};
-const ADAPTER_LABEL = {
-    mqtt: 'MQTT',
-    zigbee: 'Zigbee',
-    ble_mesh: 'BLE Mesh',
-    matter: 'Matter',
-    wifi: 'Wi-Fi'
-};
 const ADAPTER_HIDDEN = {
     thread: true
 };
+/* Catalog / UI names live in /web/i18n/*.json, not in a JS table: a new device
+ * type then needs a string entry, and nothing here, to carry an English name. */
+function mhName(kind, key, fallback) {
+    const k = kind + '.' + key;
+    const s = t(k);
+    return s === k ? (fallback || key) : s;
+}
+
+function mhTypeLabel(type) {
+    return mhName('type', type, type || '');
+}
+
+function mhAdapterLabel(ad) {
+    return mhName('adapter', ad, ad);
+}
+
+function mhTitle(view) {
+    return mhName('title', view, view);
+}
+
 const TYPE_ICON = {
     switch: '\u26A1',
     light: '\u2600',
@@ -70,35 +75,6 @@ const TYPE_ICON = {
     oven: '\uD83C\uDF73',
     appliance: '\uD83D\uDCE6'
 };
-const TYPE_LABEL = {
-    switch: '开关',
-    light: '灯',
-    sensor: '传感器',
-    button: '无线开关',
-    curtain: '窗帘',
-    airer: '晾衣架',
-    light_strip: '灯带',
-    fan: '风扇',
-    fan_light: '风扇灯',
-    binary_sensor: '传感',
-    client: '终端',
-    smoke: '烟感',
-    router: '路由',
-    car: '汽车',
-    cover: '窗帘',
-    camera: '摄像头',
-    television: '电视',
-    lock: '门锁',
-    speaker: '音箱',
-    'air-conditioner': '空调',
-    fridge: '冰箱',
-    water_purifier: '净水',
-    water_heater: '热水',
-    washer: '洗衣机',
-    dishwasher: '洗碗',
-    oven: '烤箱',
-    appliance: '家电'
-};
 
 function dwTypeDisplay(p) {
     const pr = (p && p.props && typeof p.props === 'object') ? p.props : {};
@@ -106,8 +82,7 @@ function dwTypeDisplay(p) {
     if (cat != null && String(cat) !== '') {
         return String(cat);
     }
-    const t = p && p.type;
-    return (TYPE_LABEL[t] || t || '');
+    return mhTypeLabel(p && p.type);
 }
 
 function adapterEnabled(ad) {
@@ -165,7 +140,7 @@ function adapterLabel(ad) {
     const m = modules.find(x => x.adapter === ad);
     if (m && modUi(m).filter_label) return modUi(m).filter_label;
     if (m && m.name) return m.name;
-    return ADAPTER_LABEL[ad] || ad;
+    return mhAdapterLabel(ad);
 }
 
 function authModuleFor(ad) {
@@ -277,13 +252,13 @@ function refreshOverviewFilterOptions(list) {
     const ts = document.getElementById('filter-type');
     if (rs) {
         const cur = roomFilter;
-        rs.innerHTML = '<option value="">全部房间</option>' + rooms.map(r => '<option value="' + escAttr(r) + '">' + esc(r) + '</option>').join('');
+        rs.innerHTML = '<option value="">' + escAttr(t('ov.all_rooms')) + '</option>' + rooms.map(r => '<option value="' + escAttr(r) + '">' + esc(r) + '</option>').join('');
         rs.value = rooms.indexOf(cur) >= 0 ? cur : '';
         roomFilter = rs.value;
     }
     if (ts) {
         const cur = typeFilter;
-        ts.innerHTML = '<option value="">全部类型</option>' + types.map(tp => '<option value="' + escAttr(tp) + '">' + esc(TYPE_LABEL[tp] || tp) + '</option>').join('');
+        ts.innerHTML = '<option value="">' + escAttr(t('ov.all_types')) + '</option>' + types.map(tp => '<option value="' + escAttr(tp) + '">' + esc(mhTypeLabel(tp)) + '</option>').join('');
         ts.value = types.indexOf(cur) >= 0 ? cur : '';
         typeFilter = ts.value;
     }
@@ -292,7 +267,7 @@ function refreshOverviewFilterOptions(list) {
 function adapterRoomChipsHtml(adapterPts) {
     const rooms = Array.from(new Set(adapterPts.map(pointRoomName).filter(Boolean))).sort();
     if (!rooms.length) return '';
-    let h = '<div class="room-chips"><button type="button" class="chip' + (roomFilter === '' ? ' active' : '') + '" onclick="onRoomFilterChange(\'\')">全部房间</button>';
+    let h = '<div class="room-chips"><button type="button" class="chip' + (roomFilter === '' ? ' active' : '') + '" onclick="onRoomFilterChange(\'\')">' + esc(t('ov.all_rooms')) + '</button>';
     rooms.forEach(r => {
         const safe = String(r).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         h += '<button type="button" class="chip' + (roomFilter === r ? ' active' : '') + '" onclick="onRoomFilterChange(\'' + safe + '\')">' + esc(r) + '</button>';
@@ -318,7 +293,7 @@ function switchView(v) {
     const viewEl = document.getElementById('view-' + v);
     if (viewEl) viewEl.hidden = false;
     document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === v));
-    document.getElementById('page-title').textContent = TITLES[v] || v;
+    document.getElementById('page-title').textContent = mhTitle(v);
     document.getElementById('sidebar').classList.remove('open');
     if (v === 'map') {
         ensureLeaflet().then(async () => {
@@ -328,7 +303,7 @@ function switchView(v) {
             }, 150);
         }).catch(() => {
             const info = document.getElementById('map-info');
-            if (info) info.textContent = '地图库加载失败（网络无法访问 CDN），概览不受影响';
+            if (info) info.textContent = t('app.map_lib_failed');
         });
     }
     if (v === 'store') {
@@ -427,7 +402,7 @@ async function loadPoints() {
         lastPtsSig = sig;
         pts = next;
         const foot = document.getElementById('foot');
-        if (foot) foot.textContent = '更新 ' + new Date().toLocaleTimeString();
+        if (foot) foot.textContent = t('foot.updated', { time: new Date().toLocaleTimeString(window.mhLocale()) });
         if (changed) {
             if (view === 'overview') renderOverview();
             if (view === 'map' && window.L) renderMap();
@@ -436,7 +411,7 @@ async function loadPoints() {
         }
     } catch (e) {
         const c = document.getElementById('content');
-        if (c && !pts.length) c.innerHTML = '<div class="empty">加载失败</div>';
+        if (c && !pts.length) c.innerHTML = '<div class="empty">' + t('app.load_failed') + '</div>';
     } finally {
         pointsLoading = false;
     }
@@ -509,24 +484,24 @@ function renderOverview() {
             const canSession = hasModAction(mod, 'session');
             let ctaBtns = '';
             if (canLogin) {
-                ctaBtns += '<button class="btn-primary" type="button" onclick="openModuleLogin(\'' + mod.id + '\')">' + esc(lbl(mod, 'cta_logged_out_button', lbl(mod, 'login', '登录'))) + '</button>';
+                ctaBtns += '<button class="btn-primary" type="button" onclick="openModuleLogin(\'' + mod.id + '\')">' + esc(lbl(mod, 'cta_logged_out_button', lbl(mod, 'login', t('app.login')))) + '</button>';
             }
             if (canSession) {
-                ctaBtns += '<button class="btn-sm" type="button" style="margin-left:8px" onclick="openModuleSession(\'' + mod.id + '\')">' + esc(lbl(mod, 'session', '导入会话')) + '</button>';
+                ctaBtns += '<button class="btn-sm" type="button" style="margin-left:8px" onclick="openModuleSession(\'' + mod.id + '\')">' + esc(lbl(mod, 'session', t('app.import_session'))) + '</button>';
             }
             if (!ctaBtns) return;
-            html += '<div class="cta"><div style="font-weight:700">' + esc(lbl(mod, 'cta_logged_out_title', adapterLabel(ad) + ' 未登录')) + '</div>' + '<p style="color:var(--muted);margin:12px 0">' + esc(lbl(mod, 'cta_logged_out_body', '')) + '</p>' + '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center">' + ctaBtns + '</div></div>';
+            html += '<div class="cta"><div style="font-weight:700">' + esc(lbl(mod, 'cta_logged_out_title', t('app.not_logged_in', { adapter: adapterLabel(ad) }))) + '</div>' + '<p style="color:var(--muted);margin:12px 0">' + esc(lbl(mod, 'cta_logged_out_body', '')) + '</p>' + '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center">' + ctaBtns + '</div></div>';
         } else if (!pts.filter(p => p.adapter === ad).length && hasModAction(mod, 'sync')) {
             const ctaFn = hasModAction(mod, 'homes') ? 'openHomePicker' : 'syncModule';
             html += '<div class="cta"><div style="font-weight:700">' + esc(fillTpl(lbl(mod, 'cta_empty_title', adapterLabel(ad) + ' · {user}'), {
                 user: st.user_id || '-'
-            })) + '</div>' + '<p style="color:var(--muted);margin:12px 0">' + esc(lbl(mod, 'cta_empty_body', '')) + '</p>' + '<button class="btn-primary" onclick="' + ctaFn + '(\'' + mod.id + '\')">' + esc(lbl(mod, 'cta_empty_button', lbl(mod, 'sync', '同步'))) + '</button></div>';
+            })) + '</div>' + '<p style="color:var(--muted);margin:12px 0">' + esc(lbl(mod, 'cta_empty_body', '')) + '</p>' + '<button class="btn-primary" onclick="' + ctaFn + '(\'' + mod.id + '\')">' + esc(lbl(mod, 'cta_empty_button', lbl(mod, 'sync', t('app.sync')))) + '</button></div>';
         }
     });
     const groupKeys = Object.keys(groups).sort().filter(adapterEnabled);
     if (!list.length && !html && !groupKeys.length) {
         lastOverviewHtml = '';
-        el.innerHTML = '<div class="empty">暂无设备</div>';
+        el.innerHTML = '<div class="empty">' + t('app.no_devices') + '</div>';
         return;
     }
     if (!list.length && html && !groupKeys.length) {

@@ -56,52 +56,52 @@ function rulesAiSystemPrompt(pointIds) {
 function rulesAiValidate(file) {
     if (!file || typeof file !== 'object' || !Array.isArray(file.rules) || !file.rules.length) return {
         ok: false,
-        error: '缺少 rules 数组'
+        error: t('rules.err_missing_rules_array')
     };
     for (let i = 0; i < file.rules.length; i++) {
         const r = file.rules[i];
         if (!r || typeof r !== 'object') return {
             ok: false,
-            error: '规则 ' + (i + 1) + ' 无效'
+            error: t('rules.err_rule_invalid', { n: i + 1 })
         };
         if (!r.id || !r.name || !r.when || !r.then) return {
             ok: false,
-            error: '规则 ' + (i + 1) + ' 缺 id/name/when/then'
+            error: t('rules.err_rule_missing_fields', { n: i + 1 })
         };
         const w = r.when;
         if (w.type === 'point') {
             const hasVal = (w.value != null && w.value !== '') || (w.equals != null && w.equals !== '');
             if (!w.point_id || !hasVal) return {
                 ok: false,
-                error: '规则 ' + (i + 1) + ' when.point 不完整'
+                error: t('rules.err_rule_when_incomplete', { n: i + 1 })
             };
         } else if (w.type === 'time') {
             if (!/^\d{2}:\d{2}$/.test(w.at || '')) return {
                 ok: false,
-                error: '规则 ' + (i + 1) + ' when.at 须 HH:MM'
+                error: t('rules.err_rule_when_time', { n: i + 1 })
             };
         } else return {
             ok: false,
-            error: '规则 ' + (i + 1) + ' when.type 无效'
+            error: t('rules.err_rule_when_type', { n: i + 1 })
         };
         const th = r.then;
         if (th.type === 'command') {
             if (!th.point_id || !th.cmd) return {
                 ok: false,
-                error: '规则 ' + (i + 1) + ' then.command 不完整'
+                error: t('rules.err_rule_then_incomplete', { n: i + 1 })
             };
         } else if (th.type === 'delay') {
             if (!(th.seconds > 0)) return {
                 ok: false,
-                error: '规则 ' + (i + 1) + ' then.delay.seconds 无效'
+                error: t('rules.err_rule_then_delay', { n: i + 1 })
             };
         } else return {
             ok: false,
-            error: '规则 ' + (i + 1) + ' then.type 无效'
+            error: t('rules.err_rule_then_type', { n: i + 1 })
         };
         if (r.if != null && !Array.isArray(r.if)) return {
             ok: false,
-            error: '规则 ' + (i + 1) + ' if 须为数组'
+            error: t('rules.err_rule_if_array', { n: i + 1 })
         };
     }
     return {
@@ -136,12 +136,12 @@ function rulesAiRenderDraft(file) {
         const i = ifPlain(iff);
         const th = thenPlain(rule.then);
         html += '<div class="dcard" style="margin-bottom:10px">' +
-            '<div class="card-top"><div class="card-name">' + esc(rule.name || rule.id || ('草稿 ' + (idx + 1))) + '</div>' +
-            (rule.enabled === false ? '<span class="badge">禁用</span>' : '<span class="badge sensor">启用</span>') + '</div>' +
+            '<div class="card-top"><div class="card-name">' + esc(rule.name || rule.id || t('rules.draft', { n: idx + 1 })) + '</div>' +
+            (rule.enabled === false ? '<span class="badge">' + t('rules.disabled') + '</span>' : '<span class="badge sensor">' + t('rules.enabled') + '</span>') + '</div>' +
             '<div class="card-meta"><span>' + esc(rule.id || '') + '</span></div>' +
-            '<div class="rule-flow">' + ruleStepHtml('当 · 触发', w) + '<div class="rule-arrow">↓</div>' + ruleStepHtml('且 · 条件', i) + '<div class="rule-arrow">↓</div>' + ruleStepHtml('则 · 动作', th) + '</div></div>';
+            '<div class="rule-flow">' + ruleStepHtml(t('rules.trigger_when'), w) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('rules.condition_if'), i) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('rules.action_then'), th) + '</div></div>';
     });
-    html += '<details class="rule-tech"><summary>技术详情（JSON）</summary><pre class="rule-pre">' + esc(JSON.stringify(file, null, 2)) + '</pre></details>';
+    html += '<details class="rule-tech"><summary>' + t('rules.tech_details') + '</summary><pre class="rule-pre">' + esc(JSON.stringify(file, null, 2)) + '</pre></details>';
     body.innerHTML = html;
     box.hidden = false;
 }
@@ -174,7 +174,7 @@ function rulesAiNextIds(n) {
 async function rulesAiGenerate() {
     const prompt = (document.getElementById('rules-ai-prompt').value || '').trim();
     if (!prompt) {
-        toast('请先填写规则描述');
+        toast(t('rules.ai_need_prompt'));
         return;
     }
     rulesAiLoadCfg();
@@ -182,7 +182,7 @@ async function rulesAiGenerate() {
     const model = (document.getElementById('rules-ai-model').value || '').trim() || 'gpt-4o-mini';
     const key = (document.getElementById('rules-ai-key').value || '').trim();
     if (!key) {
-        toast('请先在 API 设置中填写 API Key');
+        toast(t('rules.ai_need_key'));
         const cfg = document.getElementById('rules-ai-cfg');
         if (cfg) cfg.hidden = false;
         return;
@@ -198,7 +198,7 @@ async function rulesAiGenerate() {
     }).filter(Boolean);
     const btn = document.getElementById('rules-ai-gen');
     if (btn) btn.disabled = true;
-    toast('正在生成…');
+    toast(t('rules.ai_generating'));
     try {
         const r = await fetch('/api/rules/ai/chat', {
             method: 'POST',
@@ -225,18 +225,18 @@ async function rulesAiGenerate() {
         });
         if (!r.ok) {
             const msg = (j.error && j.error.message) || j.message || (j.upstream_body ? String(j.upstream_body).slice(0, 120) : '') || ('HTTP ' + r.status);
-            toast('云端失败: ' + msg);
+            toast(t('rules.ai_cloud_failed', { msg: msg }));
             return;
         }
         const content = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
         const parsed = rulesAiExtractJson(content);
         if (!parsed) {
-            toast('模型未返回合法 JSON');
+            toast(t('rules.ai_bad_json'));
             return;
         }
         const v = rulesAiValidate(parsed);
         if (!v.ok) {
-            toast('校验失败: ' + v.error);
+            toast(t('rules.ai_validation_failed', { err: v.error }));
             return;
         }
         parsed.rules.forEach(function(rule) {
@@ -245,16 +245,16 @@ async function rulesAiGenerate() {
         });
         rulesAiDraft = parsed;
         rulesAiRenderDraft(parsed);
-        toast('已生成 ' + parsed.rules.length + ' 条，请确认');
+        toast(t('rules.ai_generated', { n: parsed.rules.length }));
     } catch (e) {
-        toast('生成失败（Hub 须能访问云端 API）');
+        toast(t('rules.ai_gen_failed'));
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 async function rulesAiApply() {
     if (!rulesAiDraft || !Array.isArray(rulesAiDraft.rules) || !rulesAiDraft.rules.length) {
-        toast('没有可生效的草稿');
+        toast(t('rules.ai_no_draft'));
         return;
     }
     const replace = !!(document.getElementById('rules-ai-replace') && document.getElementById('rules-ai-replace').checked);
@@ -288,15 +288,15 @@ async function rulesAiApply() {
             return {};
         });
         if (!r.ok) {
-            toast('生效失败: ' + (j.message || r.status));
+            toast(t('rules.ai_apply_failed', { err: (j.message || r.status) }));
             return;
         }
-        toast('已生效 ' + (j.count != null ? j.count : nextRules.length) + ' 条');
+        toast(t('rules.ai_applied', { n: (j.count != null ? j.count : nextRules.length) }));
         rulesAiCancel();
         rulesSel = null;
         await loadRules();
     } catch (e) {
-        toast('生效失败');
+        toast(t('rules.apply_failed'));
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -340,7 +340,7 @@ function rulesDeviceLabel(pointId) {
 
 function whenSummary(w) {
     if (!w || typeof w !== 'object') return '-';
-    if (w.type === 'time') return '定时 ' + (w.at || '');
+    if (w.type === 'time') return t('rules.summary_time', { at: (w.at || '') });
     if (w.type === 'point') {
         const dev = rulesDeviceLabel(w.point_id);
         const param = w.parameter ? String(w.parameter) : '';
@@ -352,24 +352,24 @@ function whenSummary(w) {
     return w.type || '-';
 }
 
-function thenSummary(t) {
-    if (!t || typeof t !== 'object') return '-';
-    if (t.type === 'delay') {
-        const n = t.ms != null ? t.ms : (t.seconds != null ? t.seconds * 1000 : '');
-        return '延时 ' + n + ' ms';
+function thenSummary(th) {
+    if (!th || typeof th !== 'object') return '-';
+    if (th.type === 'delay') {
+        const n = th.ms != null ? th.ms : (th.seconds != null ? th.seconds * 1000 : '');
+        return t('rules.summary_delay', { n: n });
     }
-    if (t.type === 'command') return (t.cmd || '') + ' → ' + rulesDeviceLabel(t.point_id || '');
-    return t.type || '-';
+    if (th.type === 'command') return (th.cmd || '') + ' → ' + rulesDeviceLabel(th.point_id || '');
+    return th.type || '-';
 }
 
 function whenPlain(w) {
     if (!w || typeof w !== 'object') return {
-        title: '未知触发',
-        body: '未配置触发条件'
+        title: t('rules.when_unknown'),
+        body: t('rules.when_unconfigured')
     };
     if (w.type === 'time') return {
-        title: '定时到达',
-        body: '每天 <b>' + esc(w.at || '??:??') + '</b> 触发'
+        title: t('rules.when_time'),
+        body: t('rules.when_time_body', { at: esc(w.at || '??:??') })
     };
     if (w.type === 'point') {
         const dev = rulesDeviceLabel(w.point_id);
@@ -378,12 +378,12 @@ function whenPlain(w) {
         const val = rulesCondValue(w);
         const target = param ? (esc(dev) + ' · <b>' + esc(param) + '</b>') : ('<b>' + esc(dev) + '</b>');
         return {
-            title: '设备状态变化',
-            body: '当 ' + target + ' ' + esc(op) + ' <b>' + esc(val || '?') + '</b> 时'
+            title: t('rules.device_state_change'),
+            body: t('rules.when_device_body', { target: target, op: esc(op), val: esc(val || '?') })
         };
     }
     return {
-        title: esc(w.type || '触发'),
+        title: esc(w.type || t('rules.trigger')),
         body: esc(JSON.stringify(w))
     };
 }
@@ -391,11 +391,11 @@ function whenPlain(w) {
 function ifPlain(iff) {
     const arr = Array.isArray(iff) ? iff : [];
     if (!arr.length) return {
-        title: '无额外条件',
-        body: '触发后直接执行动作'
+        title: t('rules.if_none'),
+        body: t('rules.if_none_body')
     };
     const lines = arr.map(function(c, i) {
-        if (!c || typeof c !== 'object') return (i + 1) + '. （无效条件）';
+        if (!c || typeof c !== 'object') return (i + 1) + '. ' + t('rules.if_invalid');
         const dev = rulesDeviceLabel(c.point_id);
         const param = c.parameter ? String(c.parameter) : '';
         const op = rulesOpLabel(rulesCondOp(c));
@@ -404,29 +404,29 @@ function ifPlain(iff) {
         return (i + 1) + '. ' + target + ' ' + esc(op) + ' <b>' + esc(val || '?') + '</b>';
     }).join('<br>');
     return {
-        title: '还需同时满足',
+        title: t('rules.if_also'),
         body: lines
     };
 }
 
 function thenPlain(th) {
     if (!th || typeof th !== 'object') return {
-        title: '未知动作',
-        body: '未配置动作'
+        title: t('rules.then_unknown'),
+        body: t('rules.then_unconfigured')
     };
     if (th.type === 'delay') {
         const n = th.ms != null ? th.ms : (th.seconds != null ? th.seconds * 1000 : null);
         return {
-            title: '延时等待',
-            body: '等待 <b>' + esc(n != null ? String(n) : '?') + '</b> 毫秒（阻塞，同条规则无后续动作）'
+            title: t('rules.then_delay'),
+            body: t('rules.then_delay_body', { n: esc(n != null ? String(n) : '?') })
         };
     }
     if (th.type === 'command') return {
-        title: '下发指令',
-        body: '对 <b>' + esc(rulesDeviceLabel(th.point_id || '?')) + '</b> 执行 <b>' + esc(th.cmd || '?') + '</b>'
+        title: t('rules.send_command'),
+        body: t('rules.then_command_body', { dev: esc(rulesDeviceLabel(th.point_id || '?')), cmd: esc(th.cmd || '?') })
     };
     return {
-        title: esc(th.type || '动作'),
+        title: esc(th.type || t('rules.action')),
         body: esc(JSON.stringify(th))
     };
 }
@@ -446,9 +446,9 @@ async function loadRules() {
         };
         if (view === 'rules') renderRules();
     } catch (e) {
-        toast('规则加载失败');
+        toast(t('rules.load_failed'));
         const el = document.getElementById('rules-list');
-        if (el) el.innerHTML = '<div class="empty">加载失败</div>';
+        if (el) el.innerHTML = '<div class="empty">' + t('rules.load_error') + '</div>';
     }
 }
 
@@ -465,7 +465,7 @@ let dwRuleCatalog = null;
 
 async function dwRuleLoadCatalog() {
     try {
-        const r = await fetch('/api/device_widgets');
+        const r = await fetch(window.mhCatalogUrl('/api/device_widgets'));
         if (r.ok) dwRuleCatalog = await r.json();
     } catch (e) {  }
 }
@@ -645,9 +645,9 @@ function rulesDeviceOptionsHtml(selected) {
     if (!ids.length) ids = [''];
     return ids.map(function(id) {
         const pt = rulesFindPoint(id);
-        const label = rulesDeviceLabel(id) + (pt && pt.type ? '（' + pt.type + '）' : '');
+        const label = rulesDeviceLabel(id) + (pt && pt.type ? ' (' + pt.type + ')' : '');
         return '<option value="' + escAttr(id) + '"' + (id === selected ? ' selected' : '') + '>' +
-            esc(label || '(无设备)') + '</option>';
+            esc(label || t('rules.no_devices')) + '</option>';
     }).join('');
 }
 
@@ -655,7 +655,7 @@ function rulesParamOptionsHtml(pointId, selected) {
     const names = rulesVisibleParams(pointId);
     if (selected && names.indexOf(selected) < 0) names.unshift(selected);
     if (!names.length) {
-        return '<option value="">（无可用参数）</option>';
+        return '<option value="">' + t('rules.no_params') + '</option>';
     }
     return names.map(function(name) {
         const meta = rulesParamMeta(pointId, name);
@@ -675,7 +675,7 @@ function rulesOpOptionsHtml(selected) {
 function rulesValueInputHtml(id, pointId, parameter, value) {
     const v = value != null ? String(value) : '';
     if (!parameter) {
-        return '<input type="text" id="' + id + '" value="' + escAttr(v) + '" placeholder="值" />';
+        return '<input type="text" id="' + id + '" value="' + escAttr(v) + '" placeholder="' + t('rules.field_value') + '" />';
     }
     const meta = rulesParamMeta(pointId, parameter);
     const w = meta.widget || '';
@@ -683,14 +683,15 @@ function rulesValueInputHtml(id, pointId, parameter, value) {
         const on = (v === 'on' || v === 'true' || v === '1' || v === 'ON');
         const off = (v === 'off' || v === 'false' || v === '0' || v === 'OFF');
         return '<select id="' + id + '">' +
-            '<option value="on"' + (on || (!on && !off && !v) ? ' selected' : '') + '>开 (on)</option>' +
-            '<option value="off"' + (off ? ' selected' : '') + '>关 (off)</option></select>';
+            '<option value="on"' + (on || (!on && !off && !v) ? ' selected' : '') + '>' + t('rules.opt_on') + '</option>' +
+            '<option value="off"' + (off ? ' selected' : '') + '>' + t('rules.opt_off') + '</option></select>';
     }
     if ((w === 'dropdown' || w === 'segmented') && meta.options && meta.options.length) {
         let body = '';
         meta.options.forEach(function(o) {
             const val = (o && typeof o === 'object') ? o.value : o;
-            const lbl = (o && typeof o === 'object') ? o.label : o;
+            const L = (o && o.labels) ? o.labels : {};
+            const lbl = L[window.mhCatalogLang()] || L.zh || (o && o.label) || (o && o.value) || o;
             const sel = (v !== '' && String(val) === v) ? ' selected' : '';
             body += '<option value="' + escAttr(String(val)) + '"' + sel + '>' + esc(String(lbl)) + '</option>';
         });
@@ -706,7 +707,7 @@ function rulesValueInputHtml(id, pointId, parameter, value) {
             '" max="' + escAttr(String(max)) + '" step="' + escAttr(String(step)) +
             '" value="' + escAttr(String(num)) + '" />' + unit;
     }
-    return '<input type="text" id="' + id + '" value="' + escAttr(v) + '" placeholder="值" />';
+    return '<input type="text" id="' + id + '" value="' + escAttr(v) + '" placeholder="' + t('rules.field_value') + '" />';
 }
 
 function rulesSelectHtml(id, optsHtml, onchange) {
@@ -720,12 +721,12 @@ function rulesPointCondFields(prefix, cond, onDevChange, onParamChange) {
     const op = rulesCondOp(c);
     const value = rulesCondValue(c);
     return '<div class="row2">' +
-        '<div><label>设备</label>' + rulesSelectHtml(prefix + '-dev', rulesDeviceOptionsHtml(pointId), onDevChange) + '</div>' +
-        '<div><label>参数</label>' + rulesSelectHtml(prefix + '-param', rulesParamOptionsHtml(pointId, parameter), onParamChange) + '</div>' +
+        '<div><label>' + t('rules.field_device') + '</label>' + rulesSelectHtml(prefix + '-dev', rulesDeviceOptionsHtml(pointId), onDevChange) + '</div>' +
+        '<div><label>' + t('rules.field_parameter') + '</label>' + rulesSelectHtml(prefix + '-param', rulesParamOptionsHtml(pointId, parameter), onParamChange) + '</div>' +
         '</div>' +
         '<div class="row2 rule-ed-opval">' +
-        '<div><label>条件</label>' + rulesSelectHtml(prefix + '-op', rulesOpOptionsHtml(op)) + '</div>' +
-        '<div><label>值</label><div class="rule-ed-val">' + rulesValueInputHtml(prefix + '-val', pointId, parameter, value) + '</div></div>' +
+        '<div><label>' + t('rules.field_condition') + '</label>' + rulesSelectHtml(prefix + '-op', rulesOpOptionsHtml(op)) + '</div>' +
+        '<div><label>' + t('rules.field_value') + '</label><div class="rule-ed-val">' + rulesValueInputHtml(prefix + '-val', pointId, parameter, value) + '</div></div>' +
         '</div>';
 }
 
@@ -784,7 +785,7 @@ async function rulesEditOpen(id) {
         return x.id === id;
     });
     if (!rule) {
-        toast('规则不存在');
+        toast(t('rules.rule_not_found'));
         return;
     }
     rulesEditMode = id;
@@ -801,9 +802,9 @@ function rulesEditWhenFields(when) {
         type: 'point'
     };
     const typ = w.type === 'time' ? 'time' : 'point';
-    let html = '<label>触发类型</label><select id="re-when-type" onchange="rulesEditSyncWhenType()">' +
-        '<option value="point"' + (typ === 'point' ? ' selected' : '') + '>设备状态变化</option>' +
-        '<option value="time"' + (typ === 'time' ? ' selected' : '') + '>定时（HH:MM）</option></select>';
+    let html = '<label>' + t('rules.trigger_type') + '</label><select id="re-when-type" onchange="rulesEditSyncWhenType()">' +
+        '<option value="point"' + (typ === 'point' ? ' selected' : '') + '>' + t('rules.device_state_change') + '</option>' +
+        '<option value="time"' + (typ === 'time' ? ' selected' : '') + '>' + t('rules.opt_time_type') + '</option></select>';
     if (typ === 'point') {
         const first = rulesDeviceInstances()[0];
         const cond = {
@@ -820,37 +821,37 @@ function rulesEditWhenFields(when) {
         html += '<div id="re-when-point">' + rulesPointCondFields('re-when', cond,
             'rulesEditSyncWhenDevice()', 'rulesEditSyncWhenParam()') + '</div>';
     } else {
-        html += '<label>时间 at</label><input type="time" id="re-when-at" value="' + escAttr(w.at || '23:00') + '" />';
+        html += '<label>' + t('rules.field_time_at') + '</label><input type="time" id="re-when-at" value="' + escAttr(w.at || '23:00') + '" />';
     }
     return html;
 }
 
 function rulesEditThenFields(th) {
-    const t = th && typeof th === 'object' ? th : {
+    const act = th && typeof th === 'object' ? th : {
         type: 'command'
     };
-    const typ = t.type === 'delay' ? 'delay' : 'command';
-    let html = '<label>动作类型</label><select id="re-then-type" onchange="rulesEditSyncThenType()">' +
-        '<option value="command"' + (typ === 'command' ? ' selected' : '') + '>下发指令（command）</option>' +
-        '<option value="delay"' + (typ === 'delay' ? ' selected' : '') + '>延时（delay，无后续动作）</option></select>';
+    const typ = act.type === 'delay' ? 'delay' : 'command';
+    let html = '<label>' + t('rules.action_type') + '</label><select id="re-then-type" onchange="rulesEditSyncThenType()">' +
+        '<option value="command"' + (typ === 'command' ? ' selected' : '') + '>' + t('rules.opt_cmd_type') + '</option>' +
+        '<option value="delay"' + (typ === 'delay' ? ' selected' : '') + '>' + t('rules.opt_delay_type') + '</option></select>';
     if (typ === 'command') {
-        const cmd = t.cmd || 'turn_on';
+        const cmd = act.cmd || 'turn_on';
         const cmdOpts = RULE_CMDS.map(function(c) {
             return '<option value="' + c + '"' + (c === cmd ? ' selected' : '') + '>' + c + '</option>';
         }).join('');
         const extra = (RULE_CMDS.indexOf(cmd) < 0) ? '<option value="' + escAttr(cmd) + '" selected>' + esc(cmd) + '</option>' : '';
-        html += '<div class="row2"><div><label>目标设备</label>' +
-            rulesSelectHtml('re-then-pid', rulesDeviceOptionsHtml(t.point_id || '')) + '</div>' +
-            '<div><label>指令</label><select id="re-then-cmd">' + extra + cmdOpts + '</select></div></div>';
+        html += '<div class="row2"><div><label>' + t('rules.target_device') + '</label>' +
+            rulesSelectHtml('re-then-pid', rulesDeviceOptionsHtml(act.point_id || '')) + '</div>' +
+            '<div><label>' + t('rules.field_cmd') + '</label><select id="re-then-cmd">' + extra + cmdOpts + '</select></div></div>';
     } else {
-        html += '<label>秒数 seconds</label><input type="number" id="re-then-sec" min="1" value="' + (t.seconds > 0 ? t.seconds : 5) + '" />';
+        html += '<label>' + t('rules.field_seconds') + '</label><input type="number" id="re-then-sec" min="1" value="' + (act.seconds > 0 ? act.seconds : 5) + '" />';
     }
     return html;
 }
 
 function rulesEditIfRows(iff) {
     const arr = Array.isArray(iff) ? iff : [];
-    if (!arr.length) return '<div class="rules-ai-hint" id="re-if-empty">无附加条件（触发后直接执行）</div><div id="re-if-list"></div>';
+    if (!arr.length) return '<div class="rules-ai-hint" id="re-if-empty">' + t('rules.no_extra') + '</div><div id="re-if-list"></div>';
     let rows = '';
     arr.forEach(function(c, i) {
         const cond = {
@@ -866,7 +867,7 @@ function rulesEditIfRows(iff) {
         rows += '<div class="rule-if-row" data-if-i="' + i + '">' +
             rulesPointCondFields('re-if-' + i, cond,
                 'rulesEditSyncIfDevice(' + i + ')', 'rulesEditSyncIfParam(' + i + ')') +
-            '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveIf(' + i + ')">删除</button></div>';
+            '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveIf(' + i + ')">' + t('rules.delete') + '</button></div>';
     });
     return '<div id="re-if-list">' + rows + '</div>';
 }
@@ -903,20 +904,20 @@ function rulesEditRender(rule) {
     };
 
     edit.innerHTML = '<div class="rule-ed">' +
-        '<button class="btn-sm" type="button" onclick="rulesEditCancel()">← 取消</button>' +
-        '<h3 style="margin-top:12px">' + (isNew ? '添加规则' : '编辑规则') + '</h3>' +
+        '<button class="btn-sm" type="button" onclick="rulesEditCancel()">' + t('rules.back_cancel') + '</button>' +
+        '<h3 style="margin-top:12px">' + (isNew ? t('rules.add_rule') : t('rules.edit_rule')) + '</h3>' +
         '<input type="hidden" id="re-id" value="' + escAttr(r.id || '') + '" />' +
-        '<label>名称</label><input type="text" id="re-name" value="' + escAttr(r.name || '') + '" placeholder="如 亮度过高提醒" />' +
-        '<label class="rule-ed-check"><input type="checkbox" id="re-enabled"' + (r.enabled !== false ? ' checked' : '') + ' /> 启用</label>' +
-        '<div class="rule-ed-sec"><h4>当 · When（触发）</h4><div id="re-when-box">' + rulesEditWhenFields(r.when) + '</div></div>' +
-        '<div class="rule-ed-sec"><h4>且 · And If（条件，可选）</h4>' + rulesEditIfRows(r.if) +
-        '<button class="btn-sm" type="button" style="margin-top:8px" onclick="rulesEditAddIf()">+ 添加条件</button></div>' +
-        '<div class="rule-ed-sec"><h4>则 · Then（动作）</h4><div id="re-then-box">' + rulesEditThenFields(r.then) + '</div></div>' +
+        '<label>' + t('rules.field_name') + '</label><input type="text" id="re-name" value="' + escAttr(r.name || '') + '" placeholder="' + t('rules.name_ph') + '" />' +
+        '<label class="rule-ed-check"><input type="checkbox" id="re-enabled"' + (r.enabled !== false ? ' checked' : '') + ' /> ' + t('rules.enabled') + '</label>' +
+        '<div class="rule-ed-sec"><h4>' + t('rules.section_when') + '</h4><div id="re-when-box">' + rulesEditWhenFields(r.when) + '</div></div>' +
+        '<div class="rule-ed-sec"><h4>' + t('rules.section_if') + '</h4>' + rulesEditIfRows(r.if) +
+        '<button class="btn-sm" type="button" style="margin-top:8px" onclick="rulesEditAddIf()">' + t('rules.add_condition') + '</button></div>' +
+        '<div class="rule-ed-sec"><h4>' + t('rules.section_then') + '</h4><div id="re-then-box">' + rulesEditThenFields(r.then) + '</div></div>' +
         '<div class="rule-ed-actions">' +
-        '<button class="btn-sm on" type="button" onclick="rulesEditSave()">保存并生效</button>' +
-        '<button class="btn-sm" type="button" onclick="rulesEditCancel()">取消</button>' +
-        (isNew ? '' : '<button class="btn-sm bad" type="button" onclick="rulesEditDelete()">删除规则</button>') +
-        '</div><p class="rules-ai-hint">保存将整表写入 Hub（与导入相同热重载）。选择设备与参数；原始 point_id 仅内部存储。</p></div>';
+        '<button class="btn-sm on" type="button" onclick="rulesEditSave()">' + t('rules.save_apply') + '</button>' +
+        '<button class="btn-sm" type="button" onclick="rulesEditCancel()">' + t('rules.cancel') + '</button>' +
+        (isNew ? '' : '<button class="btn-sm bad" type="button" onclick="rulesEditDelete()">' + t('rules.delete_rule') + '</button>') +
+        '</div><p class="rules-ai-hint">' + t('rules.save_hint') + '</p></div>';
 }
 
 function rulesEditCollectIf() {
@@ -984,19 +985,19 @@ function rulesEditSnapshot() {
 }
 
 function rulesEditValidate(r) {
-    if (!r.name) return '请填写名称';
+    if (!r.name) return t('rules.err_name');
     if (r.when.type === 'point') {
-        if (!r.when.point_id) return '请选择触发设备';
-        if (!r.when.parameter) return '请选择触发参数';
-        if (r.when.value == null || r.when.value === '') return '请填写触发值';
+        if (!r.when.point_id) return t('rules.err_trigger_device');
+        if (!r.when.parameter) return t('rules.err_trigger_param');
+        if (r.when.value == null || r.when.value === '') return t('rules.err_trigger_value');
     } else if (r.when.type === 'time') {
-        if (!/^\d{2}:\d{2}$/.test(r.when.at || '')) return '定时须为 HH:MM';
-    } else return '触发类型无效';
+        if (!/^\d{2}:\d{2}$/.test(r.when.at || '')) return t('rules.err_time_hhmm');
+    } else return t('rules.err_trigger_type');
     if (r.then.type === 'command') {
-        if (!r.then.point_id || !r.then.cmd) return '请完整填写动作设备与指令';
+        if (!r.then.point_id || !r.then.cmd) return t('rules.err_action_fields');
     } else if (r.then.type === 'delay') {
-        if (!(r.then.seconds > 0)) return '延时秒数无效';
-    } else return '动作类型无效';
+        if (!(r.then.seconds > 0)) return t('rules.err_delay_seconds');
+    } else return t('rules.err_action_type');
     return null;
 }
 
@@ -1052,7 +1053,7 @@ function rulesEditSyncWhenParam() {
 function rulesEditSyncIfDevice(i) {
     const row = document.querySelector('.rule-if-row[data-if-i="' + i + '"]');
     if (!row) return;
-    const btn = '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveIf(' + i + ')">删除</button>';
+    const btn = '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveIf(' + i + ')">' + t('rules.delete') + '</button>';
     row.innerHTML = rulesEditRebuildPointBox('re-if-' + i,
         'rulesEditSyncIfDevice(' + i + ')', 'rulesEditSyncIfParam(' + i + ')') + btn;
 }
@@ -1097,7 +1098,7 @@ function rulesEditAddIf() {
             op: 'eq',
             value: 'on'
         }, 'rulesEditSyncIfDevice(' + i + ')', 'rulesEditSyncIfParam(' + i + ')') +
-        '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveIf(' + i + ')">删除</button>';
+        '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveIf(' + i + ')">' + t('rules.delete') + '</button>';
     list.appendChild(wrap);
 }
 
@@ -1166,7 +1167,7 @@ async function rulesEditSave() {
         else if ((rulesCfg.rules || []).some(function(r) {
                 return r.id === snap.id;
             })) {
-            toast('ID 已存在');
+            toast(t('rules.err_id_exists'));
             return;
         }
     } else {
@@ -1179,35 +1180,35 @@ async function rulesEditSave() {
     });
     try {
         await rulesSaveAll(next);
-        toast('已保存');
+        toast(t('rules.saved'));
         rulesEditMode = null;
         rulesSel = snap.id;
         await loadRules();
     } catch (e) {
-        toast('保存失败: ' + (e.message || e));
+        toast(t('rules.save_failed', { err: (e.message || e) }));
     }
 }
 async function rulesEditDelete() {
     if (rulesEditMode === 'new' || !rulesEditMode) return;
-    if (!confirm('删除规则 ' + rulesEditMode + '？')) return;
+    if (!confirm(t('rules.confirm_delete', { id: rulesEditMode }))) return;
     const next = (rulesCfg.rules || []).filter(function(r) {
         return r.id !== rulesEditMode;
     });
     try {
         await rulesSaveAll(next);
-        toast('已删除');
+        toast(t('rules.deleted'));
         rulesEditMode = null;
         rulesSel = null;
         await loadRules();
     } catch (e) {
-        toast('删除失败: ' + (e.message || e));
+        toast(t('rules.delete_failed', { err: (e.message || e) }));
     }
 }
 
 async function importRules() {
     const u = (document.getElementById('rules-import-url').value || '').trim();
     if (!u) {
-        toast('请填写 URL');
+        toast(t('rules.err_url'));
         return;
     }
     const btn = document.getElementById('rules-import-btn');
@@ -1224,14 +1225,14 @@ async function importRules() {
         });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) {
-            toast('导入失败: ' + (j.message || r.status));
+            toast(t('rules.import_failed_detail', { err: (j.message || r.status) }));
             return;
         }
-        toast('已导入 ' + ((j.count != null) ? j.count : '') + ' 条');
+        toast(t('rules.imported', { n: ((j.count != null) ? j.count : '') }));
         rulesSel = null;
         await loadRules();
     } catch (e) {
-        toast('导入失败');
+        toast(t('rules.import_failed'));
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -1240,7 +1241,7 @@ async function importRules() {
 function exportRules() {
     const text = JSON.stringify(rulesCfg, null, 2);
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => toast('已复制到剪贴板')).catch(() => downloadRules(text));
+        navigator.clipboard.writeText(text).then(() => toast(t('rules.copied'))).catch(() => downloadRules(text));
     } else downloadRules(text);
 }
 
@@ -1252,5 +1253,5 @@ function downloadRules(text) {
     a.download = 'rules.json';
     a.click();
     URL.revokeObjectURL(a.href);
-    toast('已下载 rules.json');
+    toast(t('rules.downloaded'));
 }
