@@ -802,7 +802,17 @@ function rulesDeviceOptionsHtml(selected) {
     }).filter(Boolean);
     if (!ids.length) {
         (pts || []).forEach(function(p) {
-            if (p && p.point_id) ids.push(p.point_id);
+            if (!p || !p.point_id) return;
+            /* Hide devices belonging to an auth adapter (e.g. miot) that is logged
+             * out, so devices from a previous link / removed account no longer linger
+             * in the rule device picker (issue #9). The core already unregisters
+             * these points on sync/logout; this is a UI-side safeguard for the
+             * transient window before that completes. */
+            if (p.adapter && typeof authStatus === 'function') {
+                const st = authStatus(p.adapter);
+                if (st && st.loaded === true && st.logged_in === false) return;
+            }
+            ids.push(p.point_id);
         });
     }
     if (selected && ids.indexOf(selected) < 0) ids.unshift(selected);
