@@ -2547,18 +2547,20 @@ static esp_err_t handle_api_devices_control(httpd_req_t *req)
     /* Copy before cJSON_Delete(root): the response still names this parameter. */
     char param_name[64];
     snprintf(param_name, sizeof(param_name), "%s", parameter->valuestring);
-    if (!minihub_device_widget_find(device->valuestring, param_name)) {
-        cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown device/parameter");
-    }
-    /* Prefer explicit point_id (multi-instance same type); else first-match
-     * resolve. Transport prefix comes from registration, not the type catalog. */
+    /* Control authorization is derived from the registered device point and its
+     * live props.params — NOT the static compiled device_widgets catalog. Plugins
+     * (e.g. miot) expose valid parameters (indicator, power, …) the catalog may
+     * not list, so gating on the catalog wrongly 404s legitimate controls. The
+     * transport prefix comes from registration, not the type catalog.
+     * minihub_point_resolve_by_type_param already guarantees the resolved point
+     * carries the parameter; for an explicit point_id we require the same. */
     char path[MINIHUB_POINT_ID_MAX];
     path[0] = '\0';
     if (cJSON_IsString(point_id_j) && point_id_j->valuestring &&
         point_id_j->valuestring[0]) {
         const minihub_point_t *pt = minihub_point_get(point_id_j->valuestring);
-        if (pt && pt->type[0] && strcmp(pt->type, device->valuestring) == 0) {
+        if (pt && pt->type[0] && strcmp(pt->type, device->valuestring) == 0 &&
+            minihub_point_has_param(point_id_j->valuestring, parameter->valuestring)) {
             strncpy(path, point_id_j->valuestring, sizeof(path) - 1);
             path[sizeof(path) - 1] = '\0';
         }
@@ -2568,6 +2570,8 @@ static esp_err_t handle_api_devices_control(httpd_req_t *req)
                                                              parameter->valuestring,
                                                              path, sizeof(path));
         if (rerr != ESP_OK) {
+            ESP_LOGW(TAG, "control 404: no registered point for type='%s' param='%s'",
+                     device->valuestring, parameter->valuestring);
             cJSON_Delete(root);
             return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "device not registered");
         }
