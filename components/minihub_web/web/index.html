@@ -216,6 +216,7 @@
       <div id="auth-captcha-block" hidden>
         <label for="auth-icode" id="auth-captcha-label">图形验证码</label>
         <img id="auth-captcha-img" alt="captcha" />
+        <button type="button" class="btn-sm" id="auth-captcha-refresh" onclick="refreshAuthCaptcha()">刷新</button>
         <input id="auth-icode" placeholder="3-8位字母或数字" data-i18n-ph="mdl.auth_icode_ph" autocomplete="off" maxlength="8" autocapitalize="off" spellcheck="false" />
       </div>
       <div id="auth-ticket-block" hidden>
