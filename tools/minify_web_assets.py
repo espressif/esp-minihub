@@ -13,9 +13,14 @@ extra blank lines. Does not touch inline // (avoids http:// and regex).
 from __future__ import annotations
 
 import argparse
+import gzip
 import shutil
 import sys
 from pathlib import Path
+
+# Text asset kinds that benefit from gzip. Images (png/jpg/svg-as-image) are
+# already compressed and are skipped.
+GZIP_SUFFIXES = {".js", ".css", ".html", ".htm", ".json", ".svg"}
 
 
 def _strip_block_comments(src: str) -> str:
@@ -184,12 +189,14 @@ def minify_text(path: Path, text: str) -> str:
     return _collapse_blank_lines(text)
 
 
-def process_tree(src: Path, dst: Path | None, *, in_place: bool) -> tuple[int, int, int]:
+def process_tree(src: Path, dst: Path | None, *, in_place: bool,
+                 gzip_files: bool) -> tuple[int, int, int, int]:
     if not src.is_dir():
         raise SystemExit(f"not a directory: {src}")
     files = 0
     bin_in = 0
     bout = 0
+    gz_out = 0
     for path in sorted(src.rglob("*")):
         if not path.is_file():
             continue
@@ -215,7 +222,11 @@ def process_tree(src: Path, dst: Path | None, *, in_place: bool) -> tuple[int, i
             target = dst / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(out_bytes)
-    return files, bin_in, bout
+            if gzip_files and path.suffix.lower() in GZIP_SUFFIXES:
+                gz = target.with_name(target.name + ".gz")
+                gz.write_bytes(gzip.compress(out_bytes, mtime=0))
+                gz_out += gz.stat().st_size
+    return files, bin_in, bout, gz_out
 
 
 def main() -> int:
@@ -223,13 +234,16 @@ def main() -> int:
     ap.add_argument("--src", required=True, type=Path)
     ap.add_argument("--dst", type=Path)
     ap.add_argument("--in-place", action="store_true")
+    ap.add_argument("--gzip", action="store_true",
+                    help="also write a .gz sibling for each text asset")
     ap.add_argument("-q", "--quiet", action="store_true")
     args = ap.parse_args()
     src = args.src.resolve()
     if args.in_place:
         if args.dst:
             raise SystemExit("--in-place and --dst are mutually exclusive")
-        n, a, b = process_tree(src, None, in_place=True)
+        # Never drop .gz next to the source tree in in-place mode.
+        n, a, b, g = process_tree(src, None, in_place=True, gzip_files=False)
     else:
         if not args.dst:
             raise SystemExit("need --dst or --in-place")
@@ -237,11 +251,14 @@ def main() -> int:
         if dst.exists():
             shutil.rmtree(dst)
         dst.mkdir(parents=True, exist_ok=True)
-        n, a, b = process_tree(src, dst, in_place=False)
+        n, a, b, g = process_tree(src, dst, in_place=False, gzip_files=args.gzip)
     if not args.quiet:
         saved = a - b
         pct = (100.0 * saved / a) if a else 0.0
-        print(f"minify_web_assets: {n} files {a} → {b} bytes (−{saved}, {pct:.1f}%)")
+        line = f"minify_web_assets: {n} files {a} → {b} bytes (−{saved}, {pct:.1f}%)"
+        if args.gzip:
+            line += f"; gz {g} bytes"
+        print(line)
     return 0
 
 

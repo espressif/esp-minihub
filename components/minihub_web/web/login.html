@@ -24,38 +24,169 @@ color:#8b9bb4;font-weight:500;font-size:.75rem;cursor:pointer}
 .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 select{width:auto;margin:0;padding:4px 8px;border-radius:8px;border:1px solid #243049;
 background:#0b0f1a;color:#8b9bb4;font-size:.72rem;font-weight:600;cursor:pointer}
-body.i18n-pending{visibility:hidden}
 </style>
 </head>
-<body class="i18n-pending">
+<body>
 <div class="box">
   <div class="top">
-    <h1 id="title">MiniHub</h1>
-    <select id="lang-sel" onchange="setLang(this.value)" aria-label="Language">
-      <option value="zh_CN">中文</option>
-      <option value="en">EN</option>
-    </select>
+    <h1 id="title">登录</h1>
+    <select id="lang-sel" onchange="setLang(this.value)"></select>
   </div>
-  <p id="hint"></p>
+  <p id="hint">输入 admin 密码进入控制台。</p>
   <form id="f">
     <label data-i18n="login.user">用户名</label>
     <input id="user" value="admin" readonly>
     <label data-i18n="login.password">密码</label>
     <div class="secret-field">
       <input id="pw" type="password" minlength="6" maxlength="64" autocomplete="current-password">
-      <button type="button" class="secret-toggle" id="eye" onclick="toggleSecret(this)"></button>
+      <button type="button" class="secret-toggle" id="eye" onclick="toggleSecret(this)">显示</button>
     </div>
     <div class="err" id="err"></div>
     <button type="submit" id="go" data-i18n="login.submit">确定</button>
   </form>
 </div>
-<script src="/web/js/i18n.js"></script>
 <script>
-/* The login page is the first thing anyone sees, so it localises itself: /web/i18n/*
- * and this script's own path are the two deliberate exceptions to the session gate
- * in handle_web_asset(). */
+/* Inline minimal localisation so the login form can render and work
+ * immediately, without waiting for the full console i18n dictionary. */
+const LANG_KEY = 'minihub.lang';
+/* Same table as js/i18n.js (kept duplicated on purpose: this page must work with
+ * no fetch at all). Options, validity and the "switch to" target all read it. */
+const LANGS = [
+  { code: 'zh_CN', self: '中文', locale: 'zh-CN' },
+  { code: 'en', self: 'English', locale: 'en-US' }
+];
+const DICT = {
+  zh_CN: {
+    'lang.switch_to': '切换到 {lang}',
+    'login.title.signin': '登录',
+    'login.title.setup': '设置密码',
+    'login.hint.signin': '输入 admin 密码进入控制台。',
+    'login.hint.setup': '用户名固定为 admin，请设置至少 6 位密码。',
+    'login.user': '用户名',
+    'login.password': '密码',
+    'login.show': '显示',
+    'login.hide': '隐藏',
+    'login.aria.show': '显示密码',
+    'login.aria.hide': '隐藏密码',
+    'login.submit': '确定',
+    'login.err.expired': '会话已失效：其它终端登录过，或长时间未打开页面。',
+    'login.err.setup': '设置失败（密码至少 6 位，且只能设置一次）',
+    'login.err.creds': '用户名或密码错误',
+    'login.err.net': '网络错误'
+  },
+  en: {
+    'lang.switch_to': 'Switch to {lang}',
+    'login.title.signin': 'Sign in',
+    'login.title.setup': 'Set password',
+    'login.hint.signin': 'Enter the admin password to open the console.',
+    'login.hint.setup': 'The username is fixed to admin. Choose a password of at least 6 characters.',
+    'login.user': 'Username',
+    'login.password': 'Password',
+    'login.show': 'Show',
+    'login.hide': 'Hide',
+    'login.aria.show': 'Show password',
+    'login.aria.hide': 'Hide password',
+    'login.submit': 'Submit',
+    'login.err.expired': 'Session ended: another device signed in, or this page stayed closed for a long time.',
+    'login.err.setup': 'Could not set the password (at least 6 characters, and it can only be set once).',
+    'login.err.creds': 'Wrong username or password',
+    'login.err.net': 'Network error'
+  }
+};
+
+function langRow(code) {
+  for (let i = 0; i < LANGS.length; i++) { if (LANGS[i].code === code) return LANGS[i]; }
+  return null;
+}
+
+function isLang(v) { return !!langRow(v); }
+
+function resolveLang() {
+  let stored = null;
+  try { stored = localStorage.getItem(LANG_KEY); } catch (e) {}
+  if (isLang(stored)) return stored;
+  const wanted = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ''];
+  for (let i = 0; i < wanted.length; i++) {
+    const w = String(wanted[i]).toLowerCase();
+    for (let j = 0; j < LANGS.length; j++) {
+      if (w.indexOf(LANGS[j].code.split('_')[0]) === 0) return LANGS[j].code;
+    }
+  }
+  return 'en';
+}
+
+const lang = resolveLang();
+const strings = DICT[lang];
+const base = DICT.zh_CN;
+
+function t(key, vars) {
+  let s = Object.prototype.hasOwnProperty.call(strings, key) ? strings[key] : null;
+  if (s === null && Object.prototype.hasOwnProperty.call(base, key)) s = base[key];
+  if (s === null) return key;
+  if (vars) {
+    for (const k in vars) {
+      if (Object.prototype.hasOwnProperty.call(vars, k)) {
+        s = s.split('{' + k + '}').join(String(vars[k]));
+      }
+    }
+  }
+  return s;
+}
+
+function applyI18n(root) {
+  const scope = root || document;
+  scope.querySelectorAll('[data-i18n]').forEach(function (el) {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  scope.querySelectorAll('[data-i18n-ph]').forEach(function (el) {
+    el.placeholder = t(el.getAttribute('data-i18n-ph'));
+  });
+  document.documentElement.lang = langRow(lang).locale;
+  syncLangSel();
+}
+
+/* The select shows the language you are in; its accessible name and tooltip say
+ * what the *other* entry does, because that is what someone who cannot read this
+ * language is looking for. Options come from LANGS, so the markup never lists
+ * languages. */
+function syncLangSel() {
+  const sel = document.getElementById('lang-sel');
+  if (!sel) return;
+  if (!sel.options.length) {
+    LANGS.forEach(function (l) {
+      const o = document.createElement('option');
+      o.value = l.code;
+      o.textContent = l.self;
+      sel.appendChild(o);
+    });
+  }
+  sel.value = lang;
+  const other = LANGS.filter(function (l) { return l.code !== lang; })[0];
+  const name = t('lang.switch_to', { lang: other.self });
+  sel.setAttribute('aria-label', name);
+  sel.title = name;
+}
+
+function setLang(next) {
+  if (!isLang(next) || next === lang) return;
+  try { localStorage.setItem(LANG_KEY, next); } catch (e) {}
+  location.reload();
+}
+
+applyI18n(document);
+
 let setup = false;
-let expired = false;
+let expired = new URLSearchParams(location.search).get('reason') === 'expired';
+
+/* Auth state is injected server-side (window.__mhAuth) so the login page never
+ * needs to fetch a JSON endpoint. Browser JSON-viewer extensions can replace
+ * the current document with a JSON fetch response, which would hide the form. */
+if (typeof window.__mhAuth === 'object' && window.__mhAuth !== null) {
+    if (window.__mhAuth.login_auth === false) { location.href = '/'; }
+    setup = !window.__mhAuth.password_set;
+    expired = !!window.__mhAuth.expired;
+    if (!expired && window.__mhAuth.logged_in) { location.href = '/'; }
+}
 
 function paintSecret() {
   const btn = document.getElementById('eye');
@@ -82,24 +213,16 @@ function toggleSecret(btn) {
   paintSecret();
 }
 
-/* The console bounces here when a poll comes back 401; say why, because the
- * single-slot session makes that happen without the user doing anything. */
 if (new URLSearchParams(location.search).get('reason') === 'expired') {
   expired = true;
+  document.getElementById('err').textContent = t('login.err.expired');
 }
 
-/* Reveal is i18n.js's job on every page (it removes the pending class both when the
- * dictionary settles and when it times out); doing it here too just moves the guard
- * behind statements that can throw. */
-window.i18nReady.catch(function () {}).then(function () {
-  paint();
-  return fetch('/api/auth/status').then(r => r.json()).then(j => {
-    if (j.login_auth === false) { location.href = '/'; return; }
-    setup = !j.password_set;
-    paint();
-    if (j.logged_in) location.href = '/';
-  }).catch(() => {});
-});
+const goBtn = document.getElementById('go');
+if (goBtn) goBtn.disabled = true;
+
+paint();
+if (goBtn) goBtn.disabled = false;
 
 document.getElementById('f').onsubmit = async (e) => {
   e.preventDefault();
@@ -118,6 +241,10 @@ document.getElementById('f').onsubmit = async (e) => {
     document.getElementById('err').textContent = t('login.err.net');
   }
 };
+
+window.mhLang = lang;
+window.t = t;
+window.setLang = setLang;
 </script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-09-29-rename-label';
+window.mhWebBuild = '2026-10-02-no-window-stop-keepalive';
 
 function toggleSecret(btn) {
     const field = btn && btn.closest ? btn.closest('.secret-field') : null;
@@ -38,7 +38,13 @@ function toggleSecret(btn) {
             return;
         }
         redirecting = true;
-        location.replace('/login?reason=expired');
+        /* Hop to /login?reason=expired; handle_login_page() clears the session, so
+         * there is no client-side /api/auth/logout (its response could be committed
+         * as the document). window.stop() is deliberately absent: the browser drops
+         * these requests when the navigation commits anyway. It was NOT the blank
+         * login page — that was the server appending a second response after the
+         * 401; see api_auth() in minihub_web.c. */
+        location.replace('/login?reason=expired&r=' + Date.now());
     }
     function responseNeedsLogin(r, url) {
         if (!r || shouldIgnore(url)) {
@@ -142,24 +148,31 @@ function bootConsole() {
 /* Wait for the dictionary before the first render, otherwise the console paints in
  * one language and swaps a frame later. A rejected dictionary still boots: the
  * helper falls back to the key text and the page is already visible by then. */
+function startConsolePolling() {
+    /* 1 s: drives the 更新 stamp and is also the fast path for noticing a session
+     * that a newer login replaced (single-slot session → 401 → guard → /login). */
+    setInterval(loadPoints, 1000);
+    setInterval(loadRtspCamStatusSafe, 12000);
+    setInterval(() => loadAdapters().then(async () => {
+        await loadModulesForAuth();
+        await loadMeta();
+    }), 30000);
+    setInterval(() => {
+        if (!(adapterEnabled('zigbee') || adapterEnabled('ble_mesh'))) return;
+        refreshRadioProv();
+    }, 5000);
+    connectEventsWs();
+}
+
 window.i18nReady.catch(function () {}).then(function () {
+    /* The console document is only served to a live session. Start device
+     * loads immediately; a 401 still hops to /login via the fetch guard. */
     bootConsole();
+    startConsolePolling();
 });
 renderLocalUser();
-/* 1 s: drives the 更新 stamp and is also the fast path for noticing a session
- * that a newer login replaced (single-slot session → 401 → guard → /login). */
-setInterval(loadPoints, 1000);
-setInterval(loadRtspCamStatusSafe, 12000);
-setInterval(() => loadAdapters().then(async () => {
-    await loadModulesForAuth();
-    await loadMeta();
-}), 30000);
-setInterval(() => {
-    if (!(adapterEnabled('zigbee') || adapterEnabled('ble_mesh'))) return;
-    refreshRadioProv();
-}, 5000);
 
-(function connectEventsWs() {
+function connectEventsWs() {
     let ws;
     let retryMs = 2000;
     let pointsTimer = null;
@@ -200,4 +213,4 @@ setInterval(() => {
         };
     }
     connect();
-})();
+}
