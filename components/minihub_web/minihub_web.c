@@ -193,11 +193,58 @@ static bool resolve_host_web_file(const char *rel_or_null, char *out, size_t out
 }
 #endif
 
+/* Only text assets compress well; images are already compressed and would just
+ * waste CPU/flash on a near-no-op .gz sibling. */
+static bool path_is_gzip_compressible(const char *path)
+{
+    const char *dot = strrchr(path, '.');
+    if (!dot) {
+        return false;
+    }
+    if (strcasecmp(dot, ".js") == 0) {
+        return true;
+    }
+    if (strcasecmp(dot, ".css") == 0) {
+        return true;
+    }
+    if (strcasecmp(dot, ".html") == 0 || strcasecmp(dot, ".htm") == 0) {
+        return true;
+    }
+    if (strcasecmp(dot, ".json") == 0) {
+        return true;
+    }
+    if (strcasecmp(dot, ".svg") == 0) {
+        return true;
+    }
+    return false;
+}
+
 static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
 {
     struct stat st;
     if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
         return ESP_ERR_NOT_FOUND;
+    }
+
+    /* Serve a pre-compressed .gz sibling when the client accepts gzip. This cuts
+     * the Host Web console's JS/CSS payload ~4x on first (uncached) loads without
+     * any on-device compression. Text types only; images are already compressed.
+     * The Content-Type is derived from the original (non-.gz) path. */
+    const char *orig_path = path;
+    char gz_path[MINIHUB_PATH_MAX];
+    bool use_gz = false;
+    char ae[64];
+    if (path_is_gzip_compressible(orig_path) &&
+        httpd_req_get_hdr_value_str(req, "Accept-Encoding", ae, sizeof(ae)) == ESP_OK &&
+        strstr(ae, "gzip") != NULL) {
+        int m = snprintf(gz_path, sizeof(gz_path), "%s.gz", orig_path);
+        if (m > 0 && (size_t)m < sizeof(gz_path) &&
+            stat(gz_path, &st) == 0 && S_ISREG(st.st_mode)) {
+            path = gz_path;
+            use_gz = true;
+        } else if (stat(orig_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+            return ESP_ERR_NOT_FOUND;
+        }
     }
 
     /* Console JS/CSS is ~300 KB and no-cache means the browser revalidates every
@@ -235,23 +282,47 @@ static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
         return ESP_ERR_NO_MEM;
     }
 
-    httpd_resp_set_type(req, content_type_for_path(path));
+    httpd_resp_set_type(req, content_type_for_path(orig_path));
+    if (use_gz) {
+        httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    }
+    /* The same URL can serve either a gzip or a plain body depending on the
+     * client's Accept-Encoding, so advertise that to any cache in the path. */
+    httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     httpd_resp_set_hdr(req, "ETag", etag);
     size_t n;
     bool sent_any = false;
     while ((n = fread(buf, 1, cap, f)) > 0) {
         if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) {
+            int e = errno;
             free(buf);
             fclose(f);
-            /* Peer reset (errno 104) or SO_SNDTIMEO (errno 11). No empty trailer. */
+            /* A client that navigated away or let the link go idle makes the
+             * send buffer fill until SO_SNDTIMEO (EAGAIN/11), or tears the
+             * socket down (ECONNRESET/104, EPIPE/32). That is expected during a
+             * session-expiry redirect and must not look like a server failure,
+             * so report success instead of tripping "uri handler execution
+             * failed". Any other errno is a genuine error worth surfacing. No
+             * empty trailer is sent on the aborted path. */
+            if (e == EAGAIN || e == ECONNRESET || e == EPIPE) {
+                return ESP_OK;
+            }
             return sent_any ? ESP_ERR_INVALID_STATE : ESP_FAIL;
         }
         sent_any = true;
     }
     free(buf);
     fclose(f);
-    return httpd_resp_send_chunk(req, NULL, 0);
+    esp_err_t term = httpd_resp_send_chunk(req, NULL, 0);
+    /* Same client-gone handling for the terminating chunk. */
+    if (term != ESP_OK) {
+        int e = errno;
+        if (e == EAGAIN || e == ECONNRESET || e == EPIPE) {
+            return ESP_OK;
+        }
+    }
+    return term;
 }
 
 static bool http_want_zh(httpd_req_t *req)
@@ -354,7 +425,11 @@ static esp_err_t send_login_page_injected(httpd_req_t *req, const char *path, bo
 
     const char *inject_marker = "</head>";
     char *inject_pos = strcasestr(file_buf, inject_marker);
-    size_t prefix_len = inject_pos ? (size_t)(inject_pos - file_buf) : 0;
+    /* With no </head> (hand-edited or hot-updated login.html) there is no
+     * injection point: append the script after the document. Do not send a
+     * zero-length leading chunk — httpd_resp_send_chunk() treats a 0-length
+     * chunk as the end of a chunked response, which would blank the page. */
+    size_t prefix_len = inject_pos ? (size_t)(inject_pos - file_buf) : file_len;
 
     char script[256];
     int script_len = snprintf(script, sizeof(script),
@@ -621,6 +696,14 @@ static esp_err_t send_json(httpd_req_t *req, cJSON *json)
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     esp_err_t err = httpd_resp_send(req, body, HTTPD_RESP_USE_STRLEN);
     free(body);
+    if (err != ESP_OK) {
+        /* If the client went away (expiry redirect cancels in-flight API
+         * fetches), don't surface it as a handler failure. */
+        int e = errno;
+        if (e == EAGAIN || e == ECONNRESET || e == EPIPE) {
+            return ESP_OK;
+        }
+    }
     return err;
 }
 
@@ -853,16 +936,11 @@ static esp_err_t handle_root(httpd_req_t *req)
 #if CONFIG_MINIHUB_WEB_UI
 static esp_err_t handle_web_asset(httpd_req_t *req)
 {
-    /* The login page is the first thing a user sees and it localises itself, so it
-     * needs the string files and the helper before it can fetch /api/auth/status.
-     * Both paths carry UI strings only — no device data, no credentials — so they are
-     * the deliberate exception to the session gate. Everything else under /web/ and
-     * /img/ still requires a session. */
-    const bool public_i18n = (strncmp(req->uri, "/web/i18n/", strlen("/web/i18n/")) == 0) ||
-                             (strcmp(req->uri, "/web/js/i18n.js") == 0);
-    if (!public_i18n && minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
-        return send_login_redirect(req);
-    }
+    /* Static assets contain no credentials or device data, so the whole /web/
+     * tree is public. Keeping JS/CSS/HTML/i18n JSON public means a session that
+     * expires while the console is still loading assets will not accidentally
+     * serve the login HTML into a <script>/<link> tag (causing syntax errors and
+     * partial/aborted responses). The API endpoints remain the real gate. */
     const char *prefix = "/web/";
     if (strncmp(req->uri, prefix, strlen(prefix)) != 0) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
@@ -896,9 +974,11 @@ static esp_err_t handle_web_asset(httpd_req_t *req)
  * "..") and the extension is limited to the image types we ship. */
 static esp_err_t handle_device_image(httpd_req_t *req)
 {
-    if (minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
-        return send_login_redirect(req);
-    }
+    /* Device/control icons are static artwork with no credentials or device
+     * data, so they are served without a session gate, just like /web/ assets.
+     * A session that expires while the console is open must not 302 its <img>
+     * tags to the login page. Path confinement (no leading "/", no "..",
+     * svg/png only) still applies below. */
     const char *prefix = MINIHUB_IMAGES_URI_PREFIX;
     if (strncmp(req->uri, prefix, strlen(prefix)) != 0) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
@@ -948,12 +1028,12 @@ static bool module_web_id_ok(const char *id)
 /**
  * GET /modules/<id>/web[/<rel>] → /store/modules/<id>/web/<rel>
  * Empty rel or trailing slash → index.html.
+ *
+ * Module web assets are static JS/CSS/HTML and are served without a session
+ * gate, just like /web/ assets. The module's API endpoints enforce auth.
  */
 static esp_err_t handle_module_web_asset(httpd_req_t *req)
 {
-    if (minihub_auth_web_login_enabled() && minihub_auth_check(req) != ESP_OK) {
-        return send_login_redirect(req);
-    }
     const char *prefix = "/modules/";
     if (strncmp(req->uri, prefix, strlen(prefix)) != 0) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");

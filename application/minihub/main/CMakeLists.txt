@@ -163,6 +163,7 @@ if(CONFIG_MINIHUB_WEB_UI)
         COMMAND ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/minify_web_assets.py
                 --src ${_MINIHUB_WEB_SRC}
                 --dst ${MINIHUB_FS_DIR}/web
+                --gzip
                 -q
         COMMAND ${CMAKE_COMMAND} -E touch ${MINIHUB_FS_DIR}/web/.stamp
         DEPENDS ${_minihub_web_src} ${MINIHUB_REPO_ROOT}/tools/minify_web_assets.py
