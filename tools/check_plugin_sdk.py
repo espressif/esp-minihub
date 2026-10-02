@@ -159,8 +159,15 @@ def _tool_from_cc(cc: str, name: str) -> str:
     return which_alt or name
 
 
-def emit_sizes(cc: str, sdk_inc: Path, out: Path) -> int:
-    """Compile SDK-only sizeof probe to asm; emit #define MH_SDK_SIZE_<type> <n>."""
+def emit_sizes(cc: str, sdk_inc: Path, out: Path, cflags: tuple[str, ...] = ()) -> int:
+    """Compile SDK-only sizeof probe to asm; emit #define MH_SDK_SIZE_<type> <n>.
+
+    When invoked from a Host firmware build, `cflags` carries
+    -DMH_PLUGIN_SDK_HOST_BUILD plus the build's sdkconfig.h include, so the
+    mirrored structs are derived from the *actual* Host sdkconfig rather than the
+    baked-in canonical. This makes MH_SDK_SIZE match the Host build for any
+    target/config and still verifies the mirror reproduces the real layout.
+    """
     lines = "\n".join(f"char mh_sdk_sz_{t}[sizeof({t})];" for t in LAYOUT_TYPES)
     src = '#include "minihub_plugin_sdk.h"\n' + lines + "\n"
     with tempfile.TemporaryDirectory(prefix="mh_sdk_sz_") as td:
@@ -173,6 +180,7 @@ def emit_sizes(cc: str, sdk_inc: Path, out: Path) -> int:
             "-std=gnu17",
             "-S",
             "-fno-common",
+            *cflags,
             "-o",
             str(s_path),
             f"-I{sdk_inc}",
@@ -334,14 +342,21 @@ def main() -> int:
     ap.add_argument("--sdk-inc", type=Path, default=DEFAULT_SDK.parent)
     ap.add_argument("--sizes-out", type=Path, default=None)
     ap.add_argument("--check-out", type=Path, default=None)
+    ap.add_argument(
+        "--cflags",
+        default="",
+        help="Extra compiler flags for emit-sizes (e.g. Host sdkconfig include). "
+        "Space-separated; passed verbatim to the probe compile.",
+    )
     args = ap.parse_args()
+    cflags = tuple(args.cflags.split()) if args.cflags else ()
 
     if args.command == "coverage":
         return check_coverage(args.sdk, args.allowlist)
 
     if args.command == "emit-sizes":
         out = args.sizes_out or Path("plugin_sdk_sizes.h")
-        return emit_sizes(args.cc, args.sdk_inc, out)
+        return emit_sizes(args.cc, args.sdk_inc, out, cflags)
 
     if args.command == "emit-check":
         sizes = args.sizes_out or Path("plugin_sdk_sizes.h")
@@ -349,7 +364,7 @@ def main() -> int:
         rc = check_coverage(args.sdk, args.allowlist)
         if rc:
             return rc
-        rc = emit_sizes(args.cc, args.sdk_inc, sizes)
+        rc = emit_sizes(args.cc, args.sdk_inc, sizes, cflags)
         if rc:
             return rc
         return emit_proto_check(args.sdk, args.allowlist, check)

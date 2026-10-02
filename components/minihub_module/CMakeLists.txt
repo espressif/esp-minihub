@@ -36,7 +36,9 @@ if(CONFIG_MINIHUB_DYNAMIC_MODULES)
             --allowlist "${_mh_repo_for_sdk}/docs/module_sdk/host_export_allowlist.json"
             --sizes-out "${_plugin_sdk_sizes_h}"
             --check-out "${_plugin_sdk_abi_c}"
+            --cflags "-DMH_PLUGIN_SDK_HOST_BUILD -I${CMAKE_BINARY_DIR}/config -include sdkconfig.h"
         DEPENDS
+            "${CMAKE_BINARY_DIR}/config/sdkconfig.h"
             "${_plugin_sdk_h}"
             "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk/esp_idf.h"
             "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk/lwip.h"

@@ -3,8 +3,8 @@
 dependencies:
   idf:
     version: ">=5.1"
-  espressif/cjson: "^1.7.19"
+  espressif/cjson: "1.7.19~2"
   espressif/esp_rainmaker:
-    version: "^1.16.0"
+    version: "1.16.0"
     rules:
       - if: "$CONFIG{MINIHUB_RAINMAKER} == True"

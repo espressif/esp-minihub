@@ -2,4 +2,4 @@
 ## (product claw checkout). Do not path-depend it here: Host and Mosaic
 ## place esp-claw in different trees.
 dependencies:
-  espressif/cjson: "^1.7.19"
+  espressif/cjson: "1.7.19~2"
