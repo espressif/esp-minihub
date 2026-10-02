@@ -31,7 +31,9 @@ extern "C" {
  * @file esp_idf.h
  * @brief Plugin SDK — ESP-IDF export subset (err, log, HTTP client, NVS, heap, timer).
  *
- * Layout of ``esp_http_client_config_t`` matches MiniHub Host ESP-IDF ~6.2.
+ * Layout of ``esp_http_client_config_t`` matches MiniHub Host ESP-IDF ~6.2
+ * with the Host sdkconfig (HTTPS=y, DS peripheral=y, HW ECDSA sign=y);
+ * ``tools/check_plugin_sdk.py`` asserts the Host sizeof against it.
  * Each API carries an ``@note`` with its IDF header origin.
  * Full IDF documentation: ESP-IDF programming guide for the Host IDF version.
  */
@@ -257,12 +259,18 @@ esp_err_t nvs_set_str(nvs_handle_t handle, const char *key, const char *value);
 /** @brief HTTP client handle (opaque).
  *  @note IDF: ``components/esp_http_client/include/esp_http_client.h`` */
 typedef struct esp_http_client *esp_http_client_handle_t;
-/** @brief Opaque DS/peripheral key config (forward declaration).
- *  @note IDF: ``components/esp_http_client/include/esp_http_client.h`` */
-struct esp_key_config_t;
+/** @brief Opaque unified private-key config (forward declaration).
+ *  @note IDF: ``components/esp_security/include/esp_key_config.h`` — the struct
+ *  tag is ``struct esp_key_config`` and the typedef is ``esp_key_config_t``,
+ *  so the SDK mirrors both spellings to stay pointer-compatible with Host. */
+struct esp_key_config;
+typedef struct esp_key_config esp_key_config_t;
 /** @brief Network interface request (forward declaration).
  *  @note IDF: ``components/esp_http_client/include/esp_http_client.h`` */
 struct ifreq;
+/** @brief Custom transport list item (forward declaration).
+ *  @note IDF: ``components/tcp_transport/include/esp_transport.h`` */
+struct esp_transport_item_t;
 
 /** @brief HTTP client event identifiers.
  *  @note IDF: ``components/esp_http_client/include/esp_http_client.h`` */
@@ -317,6 +325,25 @@ typedef enum {
     ESP_HTTP_CLIENT_TLS_VER_MAX,
 } esp_http_client_proto_ver_t;
 
+/** @brief ECDSA curve selection for the ECDSA peripheral.
+ *  Mirrors Host (``CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN=y``,
+ *  ``SOC_ECDSA_SUPPORT_CURVE_P384=y``).
+ *  @note IDF: ``components/esp_http_client/include/esp_http_client.h`` */
+typedef enum {
+    ESP_HTTP_CLIENT_ECDSA_CURVE_SECP256R1 = 0,
+    ESP_HTTP_CLIENT_ECDSA_CURVE_SECP384R1,
+    ESP_HTTP_CLIENT_ECDSA_CURVE_MAX,
+} esp_http_client_ecdsa_curve_t;
+
+/** @brief TLS dynamic RX buffer strategy (``CONFIG_MBEDTLS_DYNAMIC_BUFFER``).
+ *  Declared for source compatibility; the Host build leaves that option off,
+ *  so ``esp_http_client_config_t`` has no such field.
+ *  @note IDF: ``components/esp_http_client/include/esp_http_client.h`` */
+typedef enum {
+    HTTP_TLS_DYN_BUF_RX_STATIC = 1,
+    HTTP_TLS_DYN_BUF_STRATEGY_MAX,
+} esp_http_client_tls_dyn_buf_strategy_t;
+
 /** @brief HTTP request method.
  *  @note IDF: ``components/esp_http_client/include/esp_http_client.h`` */
 typedef enum {
@@ -357,10 +384,67 @@ typedef enum {
     HTTP_ADDR_TYPE_INET6 = AF_INET6,
 } esp_http_client_addr_type_t;
 
+/*
+ * Layout switches for the mirrored IDF structs (two-level macros).
+ *
+ * Level 1 (gate): MH_PLUGIN_SDK_HOST_BUILD — defined ONLY when this header is
+ * compiled as part of a MiniHub Host firmware build, where CONFIG_* from
+ * sdkconfig.h is visible. Plugin builds (out-of-tree, cross compiler only) never
+ * define it.
+ *
+ * Level 2 (member switches): MH_SDK_HTTP_CLIENT_* — derived from the real
+ * Kconfig when the gate is on, otherwise baked in as the canonical MiniHub Host
+ * configuration (HTTPS=y, HW ECDSA sign=y; DS peripheral / session tickets /
+ * custom transport / mbedTLS dynamic buffer off). The #else canonical is only a
+ * fallback for out-of-tree plugin builds that have no sdkconfig; it should be kept
+ * close to the real Host target (e.g. esp32s31 keeps DS off).
+ *
+ * The gate exists because gating members directly on CONFIG_* would break plugin
+ * builds: CONFIG_* is undefined there, so #if CONFIG_* is always false and the
+ * optional fields would silently disappear (sizeof(esp_http_client_config_t)
+ * 168 -> 152).
+ *
+ * Sizing: tools/check_plugin_sdk.py emit-sizes compiles this header WITH
+ * MH_PLUGIN_SDK_HOST_BUILD (plus the Host sdkconfig.h) during the Host build, so
+ * MH_SDK_SIZE_* is derived from the actual Host config and matches the Host
+ * firmware for ANY target — the Host-side _Static_assert then verifies the
+ * mirror reproduces the real layout under that exact config (catches a missing
+ * #if CONFIG_* guard in the mirror), instead of comparing against a hardcoded
+ * canonical that could never match every target.
+ */
+#ifdef MH_PLUGIN_SDK_HOST_BUILD
+#  if CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS
+#    define MH_SDK_HTTP_CLIENT_HTTPS 1
+#  endif
+#  if CONFIG_ESP_TLS_USE_DS_PERIPHERAL
+#    define MH_SDK_HTTP_CLIENT_DS 1
+#  endif
+#  if CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
+#    define MH_SDK_HTTP_CLIENT_ECDSA 1
+#  endif
+#  if CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS
+#    define MH_SDK_HTTP_CLIENT_SESSION_TICKETS 1
+#  endif
+#  if CONFIG_ESP_HTTP_CLIENT_ENABLE_CUSTOM_TRANSPORT
+#    define MH_SDK_HTTP_CLIENT_CUSTOM_TRANSPORT 1
+#  endif
+#  if CONFIG_MBEDTLS_DYNAMIC_BUFFER
+#    define MH_SDK_HTTP_CLIENT_DYN_BUF 1
+#  endif
+#else /* Standalone plugin build: canonical MiniHub Host configuration. */
+#  define MH_SDK_HTTP_CLIENT_HTTPS 1
+#  define MH_SDK_HTTP_CLIENT_ECDSA 1
+/* DS peripheral OFF: on the MiniHub Host target (esp32s31) SOC_DIG_SIGN_SUPPORTED
+ * is present but ESP_TLS_USE_DS_PERIPHERAL has no default/select, so it stays off
+ * in the real Host sdkconfig. The canonical MUST equal the Host target's actual
+ * sdkconfig, otherwise plugin-mode sizeof != Host sizeof and the ABI assert fails. */
+#endif
+
 /**
  * @brief HTTP client configuration.
  *
- * Layout frozen to MiniHub Host IDF 6.2 (HTTPS=y, DS peripheral=y).
+ * Layout mirrors MiniHub Host IDF 6.2; optional fields follow the
+ * MH_SDK_HTTP_CLIENT_* switches above.
  * @note IDF: ``components/esp_http_client/include/esp_http_client.h``
  */
 typedef struct {
@@ -394,10 +478,16 @@ typedef struct {
     size_t client_cert_len;
     const char *client_key_pem;
     size_t client_key_len;
-    const struct esp_key_config_t *client_key;
+    const esp_key_config_t *client_key;
     const char *client_key_password;
     size_t client_key_password_len;
     esp_http_client_proto_ver_t tls_version;
+#if MH_SDK_HTTP_CLIENT_ECDSA
+    bool use_ecdsa_peripheral;
+    uint8_t ecdsa_key_efuse_blk;
+    uint8_t ecdsa_key_efuse_blk_high;
+    esp_http_client_ecdsa_curve_t ecdsa_curve;
+#endif
     const char *user_agent;
     esp_http_client_method_t method;
     int timeout_ms;
@@ -419,9 +509,22 @@ typedef struct {
     int keep_alive_interval;
     int keep_alive_count;
     struct ifreq *if_name;
+#if MH_SDK_HTTP_CLIENT_HTTPS
     const char **alpn_protos;
+#endif
+#if MH_SDK_HTTP_CLIENT_DS
     void *ds_data;
+#endif
+#if MH_SDK_HTTP_CLIENT_SESSION_TICKETS
+    bool save_client_session;
+#endif
+#if MH_SDK_HTTP_CLIENT_CUSTOM_TRANSPORT
+    struct esp_transport_item_t *transport;
+#endif
     esp_http_client_addr_type_t addr_type;
+#if MH_SDK_HTTP_CLIENT_DYN_BUF
+    esp_http_client_tls_dyn_buf_strategy_t tls_dyn_buf_strategy;
+#endif
 } esp_http_client_config_t;
 
 /** @brief Create HTTP client from config.
