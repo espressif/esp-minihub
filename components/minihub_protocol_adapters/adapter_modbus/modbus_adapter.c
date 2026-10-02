@@ -22,11 +22,13 @@
 #include "driver/uart.h"
 #include "mbcontroller.h"
 
-/* FC numbers (mb_proto.h is not a public esp-modbus include). */
+/* FC numbers (mb_proto.h is not a public esp-modbus include; newer esp-modbus
+ * exposes MB_FUNC_* in mb_port_types.h). Use a local prefix so this file builds
+ * against both old and new esp-modbus without redeclaration. */
 enum {
-    MB_FUNC_WRITE_SINGLE_COIL = 5,
-    MB_FUNC_WRITE_REGISTER = 6,
-    MB_FUNC_WRITE_MULTIPLE_REGISTERS = 16,
+    MINIHUB_MB_FC_WRITE_SINGLE_COIL = 5,
+    MINIHUB_MB_FC_WRITE_REGISTER = 6,
+    MINIHUB_MB_FC_WRITE_MULTIPLE_REGISTERS = 16,
 };
 
 #ifndef CONFIG_MINIHUB_MODBUS_UART_NUM
@@ -371,7 +373,7 @@ static esp_err_t write_map(modbus_map_t *m, const char *value_str)
     if (m->fc == MODBUS_FC_COIL) {
         bool on = value_str && (strcmp(value_str, "on") == 0 || strcmp(value_str, "1") == 0 ||
                                 strcasecmp(value_str, "true") == 0);
-        cmd = MB_FUNC_WRITE_SINGLE_COIL;
+        cmd = MINIHUB_MB_FC_WRITE_SINGLE_COIL;
         uint16_t coil = on ? 0xFF00 : 0x0000;
         data[0] = (uint8_t)(coil >> 8);
         data[1] = (uint8_t)(coil & 0xFF);
@@ -399,7 +401,7 @@ static esp_err_t write_map(modbus_map_t *m, const char *value_str)
             uint16_t u = (uint16_t)(int16_t)raw;
             data[0] = (uint8_t)(u >> 8);
             data[1] = (uint8_t)u;
-            if (cmd == MB_FUNC_WRITE_REGISTER) {
+            if (cmd == MINIHUB_MB_FC_WRITE_REGISTER) {
                 /* single register write uses 16-bit value in host endian for some stacks;
                  * esp-modbus expects register image as bytes in PDU order. */
             }
