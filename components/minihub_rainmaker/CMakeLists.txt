@@ -6,14 +6,23 @@
 set(_rmaker_srcs rainmaker_stub.c)
 set(_rmaker_requires minihub_core espressif__cjson minihub_ota esp_event nvs_flash esp_hw_support mbedtls)
 
+# esp_sha_compat.c provides a weak, software esp_sha() (PSA-backed) so
+# RainMaker links under soft crypto. It is always compiled (not only under
+# CONFIG_MINIHUB_RAINMAKER) so the symbol exists in every build; the top-level
+# CMakeLists then forces the linker to resolve it with -Wl,-u,esp_sha
+# regardless of component link order. The definition is weak and carries no
+# CONFIG_MBEDTLS_HARDWARE_SHA gate: that macro is mbedTLS-internal and has
+# moved between IDF versions, and a build where it is defined would otherwise
+# compile this file to an empty object while the IDF supplies no esp_sha() ->
+# "undefined reference to esp_sha" from esp_rmaker_node_auth.c.
+set(_rmaker_sha_srcs esp_sha_compat.c)
+
 if(CONFIG_MINIHUB_RAINMAKER)
-    # esp_sha_compat.c provides a software esp_sha() so RainMaker links while
-    # the project keeps soft crypto (CONFIG_MBEDTLS_HARDWARE_SHA unset).
-    set(_rmaker_srcs rainmaker_node.c rainmaker_bridge.c esp_sha_compat.c)
+    set(_rmaker_srcs rainmaker_node.c rainmaker_bridge.c)
 endif()
 
 idf_component_register(
-    SRCS ${_rmaker_srcs}
+    SRCS ${_rmaker_srcs} ${_rmaker_sha_srcs}
     INCLUDE_DIRS include
     REQUIRES ${_rmaker_requires}
 )

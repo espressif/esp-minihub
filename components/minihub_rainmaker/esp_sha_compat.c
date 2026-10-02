@@ -12,33 +12,38 @@
  * This file provides a pure-software SHA implementation backed by the PSA
  * crypto API, the only SHA surface that survives in MbedTLS 4.x after the
  * legacy mbedtls/sha256.h API was removed. So the project keeps soft crypto
- * while still linking RainMaker. It is compiled only when
- * CONFIG_MBEDTLS_HARDWARE_SHA is not set; when that option is on the IDF
- * supplies the real hardware implementation and this is skipped to avoid a
- * duplicate symbol.
+ * while still linking RainMaker.
+ *
+ * The definition is compiled unconditionally and marked __attribute__((weak)):
+ * it must not depend on CONFIG_MBEDTLS_HARDWARE_SHA. That symbol is not
+ * visible from this component in every build (it is an mbedTLS-internal
+ * option, and its name/default has moved between IDF versions), and a build
+ * where the macro happens to be defined would compile this file to an empty
+ * object while the IDF side supplies no esp_sha() at all -> link failure
+ * "undefined reference to esp_sha" from esp_rmaker_node_auth.c. Being weak,
+ * it never collides with the real hardware implementation when the IDF does
+ * provide one: a strong definition simply overrides this one.
  */
 #include "psa/crypto.h"
 #include "psa/crypto_sizes.h"
 #include "mbedtls/platform_util.h"
 #include "hal/sha_types.h"
 
-#ifndef CONFIG_MBEDTLS_HARDWARE_SHA
-
-void esp_sha(esp_sha_type sha_type, const unsigned char *input, size_t ilen,
-             unsigned char *output)
+__attribute__((weak)) void esp_sha(esp_sha_type sha_type,
+                                   const unsigned char *input, size_t ilen,
+                                   unsigned char *output)
 {
     psa_algorithm_t alg = PSA_ALG_NONE;
 
-#if CONFIG_MBEDTLS_SHA1_C
+    /* Map unconditionally: PSA SHA-1/SHA-256 are always available in
+     * tf-psa-crypto, so relying on CONFIG_MBEDTLS_SHA1_C / SHA256_C here would
+     * risk silently returning without hashing when those macros are not
+     * visible to this component. */
     if (sha_type == SHA1) {
         alg = PSA_ALG_SHA_1;
-    }
-#endif
-#if CONFIG_MBEDTLS_SHA256_C
-    if (sha_type == SHA2_256) {
+    } else if (sha_type == SHA2_256) {
         alg = PSA_ALG_SHA_256;
     }
-#endif
 
     if (alg == PSA_ALG_NONE) {
         /* Unsupported type (e.g. SHA2_224 when not built). RainMaker node-auth
@@ -54,5 +59,3 @@ void esp_sha(esp_sha_type sha_type, const unsigned char *input, size_t ilen,
         mbedtls_platform_zeroize(output, output_len);
     }
 }
-
-#endif /* !CONFIG_MBEDTLS_HARDWARE_SHA */
