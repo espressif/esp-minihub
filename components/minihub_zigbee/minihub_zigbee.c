@@ -32,6 +32,7 @@ static minihub_zigbee_attr_cb_t s_user_attr_cb;
 static void *s_user_ctx;
 static bool s_inited;
 static QueueHandle_t s_device_q;
+static QueueHandle_t s_forget_q;
 static TaskHandle_t s_device_task;
 
 static void apply_device(const minihub_zigbee_device_t *dev)
@@ -45,12 +46,20 @@ static void apply_device(const minihub_zigbee_device_t *dev)
     }
 }
 
+static void forget_device(const char *point_id);
+
 static void device_worker(void *arg)
 {
     (void)arg;
     minihub_zigbee_device_t dev;
+    char forget_id[MINIHUB_POINT_ID_MAX];
     for (;;) {
-        if (xQueueReceive(s_device_q, &dev, portMAX_DELAY) == pdTRUE) {
+        /* Drain deferred "device left" cleanups first (flash work must not run
+         * inline in the Zigbee task). */
+        while (xQueueReceive(s_forget_q, forget_id, 0) == pdTRUE) {
+            forget_device(forget_id);
+        }
+        if (xQueueReceive(s_device_q, &dev, pdMS_TO_TICKS(250)) == pdTRUE) {
             apply_device(&dev);
         }
     }
@@ -76,6 +85,28 @@ static void on_stack_attr(const minihub_zigbee_attr_evt_t *evt, void *ctx)
     if (s_user_attr_cb && evt) {
         s_user_attr_cb(evt, s_user_ctx);
     }
+}
+
+static void forget_device(const char *point_id)
+{
+    if (!point_id || !point_id[0]) {
+        return;
+    }
+    const minihub_zigbee_device_t *dev = minihub_zigbee_find_by_point(point_id);
+    if (dev) {
+        (void)minihub_zb_nvs_remove(point_id, s_devices, &s_device_count);
+    }
+    esp_err_t ureg = minihub_point_unregister(point_id);
+    if (ureg != ESP_OK && ureg != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "forget unregister %s: %s", point_id, esp_err_to_name(ureg));
+    }
+    ESP_LOGI(TAG, "forgot device %s", point_id);
+}
+
+static void on_device_left(uint64_t ieee, uint16_t short_addr, void *ctx)
+{
+    (void)ctx;
+    (void)minihub_zigbee_forget_device(ieee, short_addr);
 }
 
 static void on_stack_ready(void *ctx)
@@ -112,6 +143,9 @@ esp_err_t minihub_zigbee_init(void)
     }
 
     s_device_q = xQueueCreate(ZB_DEVICE_Q_LEN, sizeof(minihub_zigbee_device_t));
+    if (!s_forget_q) {
+        s_forget_q = xQueueCreate(MINIHUB_ZB_MAX_DEVICES, MINIHUB_POINT_ID_MAX);
+    }
     if (s_device_q && !s_device_task) {
         /* NVS cJSON_Print + point.registered handlers need headroom beyond 4K. */
         BaseType_t ok = minihub_task_create_psram(device_worker, "zb_dev", 6144, NULL, 5, &s_device_task);
@@ -121,7 +155,7 @@ esp_err_t minihub_zigbee_init(void)
         }
     }
 
-    zigbee_stack_set_hooks(on_stack_device, on_stack_attr, on_stack_ready, NULL);
+    zigbee_stack_set_hooks(on_stack_device, on_stack_attr, on_stack_ready, on_device_left, NULL);
     s_inited = true;
     return ESP_OK;
 }
@@ -323,15 +357,64 @@ esp_err_t minihub_zigbee_remove_device(const char *point_id)
         return ESP_ERR_INVALID_ARG;
     }
     (void)minihub_zigbee_init();
-    esp_err_t err = minihub_zb_nvs_remove(point_id, s_devices, &s_device_count);
-    if (err != ESP_OK) {
-        return err;
+
+    /* Capture ieee/short before the table entry may be removed. */
+    uint16_t short_addr = 0;
+    uint64_t ieee = 0;
+    const minihub_zigbee_device_t *dev = minihub_zigbee_find_by_point(point_id);
+    if (dev) {
+        short_addr = dev->short_addr;
+        ieee = dev->ieee;
     }
+
+    /* Ask the device to leave the network so it does not re-announce and get
+     * re-registered (root cause: deletion left the device on the network). */
+    if (dev) {
+        (void)zigbee_stack_remove_device(short_addr, ieee);
+    }
+
+    esp_err_t err = minihub_zb_nvs_remove(point_id, s_devices, &s_device_count);
+    if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "nvs remove %s: %s", point_id, esp_err_to_name(err));
+    }
+
+    /* Always drop the live point so the card disappears even if NVS had no
+     * entry (aligns with matter, which unregisters on NOT_FOUND too). */
     esp_err_t ureg = minihub_point_unregister(point_id);
     if (ureg != ESP_OK && ureg != ESP_ERR_NOT_FOUND) {
         ESP_LOGW(TAG, "point unregister %s: %s", point_id, esp_err_to_name(ureg));
     }
     ESP_LOGI(TAG, "removed device %s", point_id);
+    return ESP_OK;
+}
+
+esp_err_t minihub_zigbee_forget_device(uint64_t ieee, uint16_t short_addr)
+{
+    (void)minihub_zigbee_init();
+    const minihub_zigbee_device_t *dev = NULL;
+    if (ieee) {
+        for (size_t i = 0; i < s_device_count; i++) {
+            if (s_devices[i].ieee == ieee) {
+                dev = &s_devices[i];
+                break;
+            }
+        }
+    }
+    if (!dev && short_addr) {
+        dev = minihub_zigbee_find_by_addr(short_addr, 0);
+    }
+    if (!dev || !dev->point_id[0]) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    char id[MINIHUB_POINT_ID_MAX];
+    strncpy(id, dev->point_id, sizeof(id) - 1);
+    id[sizeof(id) - 1] = '\0';
+    if (s_forget_q && xQueueSend(s_forget_q, id, 0) == pdTRUE) {
+        return ESP_OK;
+    }
+    /* Queue unavailable (worker not started) — apply inline; flash risk noted. */
+    ESP_LOGW(TAG, "forget queue unavailable — applying inline");
+    forget_device(id);
     return ESP_OK;
 }
 

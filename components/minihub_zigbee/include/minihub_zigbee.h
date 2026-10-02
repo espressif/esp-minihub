@@ -60,6 +60,10 @@ const minihub_zigbee_device_t *minihub_zigbee_find_by_point(const char *point_id
 /** Find device by short_addr + endpoint. */
 const minihub_zigbee_device_t *minihub_zigbee_find_by_addr(uint16_t short_addr, uint8_t endpoint);
 
+/** Forget a device that left the network: drop its NVS entry + unregister point.
+ *  Called from the stack's device-left hook; defers flash work to a worker. */
+esp_err_t minihub_zigbee_forget_device(uint64_t ieee, uint16_t short_addr);
+
 /**
  * Offer an end-device OTA image for a Zigbee point (or IEEE hex string).
  *

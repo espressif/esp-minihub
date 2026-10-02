@@ -72,8 +72,11 @@ static esp_err_t remove_one(const char *adapter, const char *point_id)
 #if CONFIG_MINIHUB_ZIGBEE_SDK
     if (strcmp(adapter, "zigbee") == 0) {
         esp_err_t err = minihub_zigbee_remove_device(point_id);
-        if (err == ESP_OK) {
+        if (err == ESP_OK || err == ESP_ERR_NOT_FOUND) {
+            /* Drop the live point even if NVS had no entry (mirrors matter). */
+            (void)minihub_point_unregister(point_id);
             (void)minihub_config_remove_adapter_device("zigbee", point_id);
+            return ESP_OK;
         }
         return err;
     }

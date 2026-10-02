@@ -36,10 +36,20 @@ esp_err_t zigbee_stack_subscribe(uint16_t short_addr, uint8_t endpoint, uint64_t
 /** Re-run ActiveEP/SimpleDesc interview (e.g. refresh metering caps after firmware upgrade). */
 void zigbee_stack_rediscover(uint16_t short_addr, uint64_t ieee);
 
+/** Called when a Zigbee device leaves the network (LEAVE_INDICATION / DEVICE_LEFT).
+ *  Implementations must NOT do flash/NVS work inline — the signal runs in the
+ *  Zigbee task; defer it (the host layer queues it to a worker). */
+typedef void (*zigbee_stack_device_left_cb_t)(uint64_t ieee, uint16_t short_addr, void *ctx);
+
 void zigbee_stack_set_hooks(minihub_zigbee_device_cb_t on_device,
                             minihub_zigbee_attr_cb_t on_attr,
                             zigbee_stack_ready_cb_t on_ready,
+                            zigbee_stack_device_left_cb_t on_left,
                             void *ctx);
+
+/** Send a ZDO Mgmt_Leave to @p short_addr / @p ieee so the end-device leaves the
+ *  network (no rejoin). Best-effort; returns ESP_ERR_INVALID_STATE if stack down. */
+esp_err_t zigbee_stack_remove_device(uint16_t short_addr, uint64_t ieee);
 
 void zigbee_stack_notify_device(const minihub_zigbee_device_t *dev);
 void zigbee_stack_notify_attr(const minihub_zigbee_attr_evt_t *evt);
