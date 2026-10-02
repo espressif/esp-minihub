@@ -11,6 +11,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
+#include "minihub_config.h"
+#include "minihub_store.h"
 
 #if CONFIG_MINIHUB_FACTORY_RESET_BUTTON
 #include "driver/gpio.h"
@@ -20,7 +22,15 @@ static const char *TAG = "minihub_factory";
 
 void minihub_factory_reset_execute(void)
 {
-    ESP_LOGW(TAG, "factory reset: erasing NVS then restart");
+    ESP_LOGW(TAG, "factory reset: clearing user data then erasing NVS");
+    /* Clear user data on the filesystem (rules / scenes / adapters and any
+     * Store-installed modules & packs). NVS erase below handles wifi/network
+     * credentials and the store custom URL. Factory preinstall and the Web
+     * console are intentionally preserved. */
+    minihub_config_factory_reset();
+#if CONFIG_MINIHUB_STORE
+    minihub_store_factory_reset();
+#endif
     esp_err_t err = nvs_flash_erase();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "nvs_flash_erase failed: %s", esp_err_to_name(err));

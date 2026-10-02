@@ -31,6 +31,8 @@ esp_err_t minihub_store_install(const char *kind, const char *id);
 /** Remove installed module binary + manifest, or pack file from modstore/config.
  * Also drops the adapters.json slot (account and device config). */
 esp_err_t minihub_store_uninstall(const char *kind, const char *id);
+/** Factory reset: remove all Store-installed modules and packs (preinstall preserved). */
+esp_err_t minihub_store_factory_reset(void);
 
 /**
  * Upgrade an installed store item to the catalog version.
