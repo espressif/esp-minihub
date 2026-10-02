@@ -318,6 +318,51 @@ async function sysFactoryReset() {
     }
 }
 
+async function sysChangePassword() {
+    const oldP = document.getElementById('sys-pw-old').value || '';
+    const newP = document.getElementById('sys-pw-new').value || '';
+    const confirmP = document.getElementById('sys-pw-confirm').value || '';
+    const hint = document.getElementById('sys-pw-hint');
+    hint.textContent = t('mdl.pw_hint');
+    if (!oldP || !newP) {
+        hint.textContent = t('mdl.pw_err_empty');
+        return;
+    }
+    if (newP !== confirmP) {
+        hint.textContent = t('mdl.pw_err_match');
+        return;
+    }
+    if (newP.length < 6 || newP.length > 64) {
+        hint.textContent = t('mdl.pw_err_len');
+        return;
+    }
+    try {
+        const r = await fetch('/api/auth/change', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: 'admin', old_password: oldP, new_password: newP })
+        });
+        if (r.ok) {
+            hint.textContent = t('mdl.pw_ok');
+            document.getElementById('sys-pw-old').value = '';
+            document.getElementById('sys-pw-new').value = '';
+            document.getElementById('sys-pw-confirm').value = '';
+            return;
+        }
+        if (r.status === 401) {
+            hint.textContent = t('mdl.pw_err_old');
+            return;
+        }
+        if (r.status === 400) {
+            hint.textContent = t('mdl.pw_err_bad');
+            return;
+        }
+        hint.textContent = t('mdl.pw_err_other');
+    } catch (e) {
+        hint.textContent = t('mdl.pw_err_net');
+    }
+}
+
 async function sysApplyWifi() {
     const ssid = (document.getElementById('sys-wifi-ssid').value || '').trim();
     const password = document.getElementById('sys-wifi-pass').value || '';

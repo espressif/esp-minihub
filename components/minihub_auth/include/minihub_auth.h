@@ -51,6 +51,17 @@ esp_err_t minihub_auth_check_token(const char *token);
 esp_err_t minihub_auth_setup_password(const char *username, const char *password);
 
 /**
+ * Change the web password while signed in. username must be admin, the old
+ * password must match, and the new password must be 6-64 chars.
+ * Returns ESP_ERR_NOT_SUPPORTED if login auth is off, ESP_ERR_INVALID_STATE
+ * if the password is unset or the old password is wrong, and
+ * ESP_ERR_INVALID_ARG if the username or new password is invalid.
+ */
+esp_err_t minihub_auth_change_password(const char *username,
+                                       const char *old_password,
+                                       const char *new_password);
+
+/**
  * Verify admin + password. On success fills ``sess_hex`` (64 hex chars + NUL)
  * and remembers the session in RAM.
  */

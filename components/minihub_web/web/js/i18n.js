@@ -17,10 +17,27 @@
      * the page: a blank console is worse than a Chinese one. */
     const READY_TIMEOUT_MS = 3000;
 
-    const LOCALES = { zh_CN: 'zh-CN', en: 'en-US' };
+    /* Supported languages in exactly one place: validity, the ICU locale, the
+     * picker's options and the "switch to" target all read this table. `self` is
+     * each language's own name, because the entry a user picks has to be written
+     * the way they recognise it. Adding a language is one row here plus
+     * /web/i18n/<code>.json. */
+    const LANGS = [
+        { code: 'zh_CN', self: '中文', locale: 'zh-CN' },
+        { code: 'en', self: 'English', locale: 'en-US' },
+    ];
+
+    function langRow(code) {
+        for (let i = 0; i < LANGS.length; i++) {
+            if (LANGS[i].code === code) {
+                return LANGS[i];
+            }
+        }
+        return null;
+    }
 
     function isLang(v) {
-        return v === 'zh_CN' || v === 'en';
+        return !!langRow(v);
     }
 
     function resolveLang() {
@@ -36,10 +53,16 @@
         const wanted = (navigator.languages && navigator.languages.length)
             ? navigator.languages : [navigator.language || ''];
         for (let i = 0; i < wanted.length; i++) {
-            if (String(wanted[i]).toLowerCase().indexOf('zh') === 0) {
-                return 'zh_CN';
+            const w = String(wanted[i]).toLowerCase();
+            for (let j = 0; j < LANGS.length; j++) {
+                if (w.indexOf(LANGS[j].code.split('_')[0]) === 0) {
+                    return LANGS[j].code;
+                }
             }
         }
+        /* An unrecognised browser language is a product choice, not a table
+         * lookup: English, never Chinese, so a stranger is not trapped in a
+         * language they cannot read. */
         return 'en';
     }
 
@@ -89,7 +112,36 @@
     }
 
     function mhLocale() {
-        return LOCALES[lang] || 'en-US';
+        return langRow(lang).locale;
+    }
+
+    /* The select shows the language you are in; its accessible name and tooltip say
+     * what the *other* entry does, because that is what someone who cannot read
+     * this language is looking for. Options come from LANGS, so the markup never
+     * lists languages. */
+    function syncLangSel() {
+        const sel = document.getElementById('lang-sel');
+        if (!sel) {
+            return;
+        }
+        if (!sel.options.length) {
+            LANGS.forEach(function (l) {
+                const o = document.createElement('option');
+                o.value = l.code;
+                o.textContent = l.self;
+                sel.appendChild(o);
+            });
+        }
+        sel.value = lang;
+        const other = LANGS.filter(function (l) {
+            return l.code !== lang;
+        })[0];
+        const label = t('lang.switch_to', { lang: other.self });
+        /* A dictionary that never arrives renders keys verbatim; that must not
+         * become the accessible name. */
+        const name = (label === 'lang.switch_to') ? other.self : label;
+        sel.setAttribute('aria-label', name);
+        sel.title = name;
     }
 
     function applyI18n(root) {
@@ -110,17 +162,18 @@
             el.setAttribute('alt', t(el.getAttribute('data-i18n-alt')));
         });
         if (scope === document) {
-            document.documentElement.lang = (lang === 'zh_CN') ? 'zh-CN' : 'en';
-            const sel = document.getElementById('lang-sel');
-            if (sel) {
-                sel.value = lang;
-            }
+            document.documentElement.lang = langRow(lang).locale;
+            syncLangSel();
         }
     }
 
     function reveal() {
         document.body.classList.remove(PENDING_CLASS);
     }
+
+    /* Build the picker before the dictionary resolves: a stalled fetch must not
+     * cost the user the control that lets them leave the wrong language. */
+    syncLangSel();
 
     const i18nReady = (function () {
         const wanted = (lang === FALLBACK) ? [fetchDict(FALLBACK)] : [fetchDict(lang), fetchDict(FALLBACK)];

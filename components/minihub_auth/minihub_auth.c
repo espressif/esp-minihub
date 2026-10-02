@@ -283,6 +283,55 @@ esp_err_t minihub_auth_setup_password(const char *username, const char *password
     return ESP_OK;
 }
 
+esp_err_t minihub_auth_change_password(const char *username,
+                                       const char *old_password,
+                                       const char *new_password)
+{
+    if (!web_login_on()) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    if (!s_pw_set) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!username || strcmp(username, MINIHUB_WEB_USERNAME) != 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!old_password || !new_password) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (strlen(new_password) < 6 || strlen(new_password) > 64) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    /* Require the current password before overwriting. */
+    uint8_t old_hash[32];
+    hash_password(old_password, old_hash);
+    if (!ct_eq32(old_hash, s_pw_sha)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint8_t new_hash[32];
+    hash_password(new_password, new_hash);
+
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open("minihub", NVS_READWRITE, &nvs);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = nvs_set_blob(nvs, "web_pw", new_hash, sizeof(new_hash));
+    if (err == ESP_OK) {
+        err = nvs_commit(nvs);
+    }
+    nvs_close(nvs);
+    if (err != ESP_OK) {
+        return err;
+    }
+    memcpy(s_pw_sha, new_hash, sizeof(new_hash));
+    /* s_pw_set stays true. */
+    ESP_LOGI(TAG, "web password changed");
+    return ESP_OK;
+}
+
 esp_err_t minihub_auth_login(const char *username, const char *password,
                              char sess_hex[MINIHUB_AUTH_SESS_HEX_LEN + 1])
 {
