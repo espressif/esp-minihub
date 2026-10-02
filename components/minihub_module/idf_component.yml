@@ -2,8 +2,8 @@
 ## Use the component registry (IDF_COMPONENT_STORAGE_URL / components-file.espressif.cn),
 ## not a GitHub git pin of esp-iot-solution (github.com is often unreachable).
 dependencies:
-  espressif/cjson: "^1.7.19"
+  espressif/cjson: "1.7.19~2"
   espressif/elf_loader:
-    version: "^1.3.0"
+    version: "1.3.3"
     rules:
       - if: "$CONFIG{MINIHUB_DYNAMIC_MODULES} == True"

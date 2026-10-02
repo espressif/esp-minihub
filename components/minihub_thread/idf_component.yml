@@ -4,5 +4,5 @@
 ## mdns left IDF core in 5.x/6.x — pull from the registry (same as esp_rainmaker).
 
 dependencies:
-  espressif/esp_rcp_update: "^1.0.0"
-  espressif/mdns: "^1.9.0"
+  espressif/esp_rcp_update: "1.6.2"
+  espressif/mdns: "1.13.1"

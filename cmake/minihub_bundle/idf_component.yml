@@ -61,6 +61,6 @@ dependencies:
     path: ../../components/minihub_protocol_adapters/adapter_ble_mesh
   adapter_matter:
     path: ../../components/minihub_protocol_adapters/adapter_matter
-  espressif/cjson: "^1.7.19"
-  espressif/network_provisioning: "^1.1.0"
-  espressif/esp_flash_dispatcher: "^1.0.2"
+  espressif/cjson: "1.7.19~2"
+  espressif/network_provisioning: "1.2.4"
+  espressif/esp_flash_dispatcher: "1.0.3"
