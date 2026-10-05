@@ -18,4 +18,15 @@ menu "Web UI"
             PUT /api/dev/fs/ui/... under /data/ui/. Consumed by LCD UI at boot;
             not a compile-time dependency on MINIHUB_LCD_UI.
 
+    config MINIHUB_WEB_VERSION
+        string "Web bundle version (deploy folder)"
+        default MINIHUB_VERSION
+        help
+            Version of the deployed Web bundle: the Webs/v<version>/ folder name
+            under the deploy root and the window.mhWebVersion baked into the web
+            assets. Kept separate from MINIHUB_VERSION because web and firmware
+            releases are usually not in sync -- a web-only fix bumps this without
+            touching the firmware. Used by tools/deploy.sh as the --web-version
+            default. Defaults to MINIHUB_VERSION (defined in the MiniHub menu).
+
 endmenu

@@ -5,6 +5,7 @@
  */
 
 #include "minihub_ota.h"
+#include "minihub_net.h"
 #include "minihub_task.h"
 
 #include <stdlib.h>
@@ -475,7 +476,15 @@ esp_err_t minihub_ota_start_url(const char *url)
     set_error(NULL);
     unlock();
 
-    char *url_copy = strdup(url);
+    size_t cap = strlen(url) + 32;
+    char *url_copy = malloc(cap);
+    if (url_copy && minihub_net_copy_url_with_mac(url, url_copy, cap) != ESP_OK) {
+        free(url_copy);
+        url_copy = NULL;
+    }
+    if (!url_copy) {
+        url_copy = strdup(url);
+    }
     if (!url_copy) {
         lock();
         s_state = MINIHUB_OTA_FAILED;

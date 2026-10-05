@@ -56,7 +56,7 @@ IDE MCP can scaffold L3 files but **cannot** compile `.so`. Prefer copying patte
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product / `application/<app>/build` |
-| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Catalog + `.mhub` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | `Stores/ESP32S31/<id>/` when `targets` is that chip; `Stores/Common/<id>/` only for `["ALL"]` |
 | `MINIHUB_PLUGIN_DIRS` | (empty) | Extra plugin trees (`:`/`;`). **Configure-time** (`cmake/minihub_bundle/minihub_import.cmake`). Does **not** auto-preinstall |
 
 Needs Host `CONFIG_MINIHUB_DYNAMIC_MODULES` (product feature `dynamic_modules`). Link flags: `cmake/minihub_module_so.cmake` (`-Wl,-z,max-page-size=4`).
@@ -109,8 +109,8 @@ python3 tools/store_server.py --port 8080
 |------|------|
 | `application/<app>/build/modules/libadapter_<id>.so` | Linked ELF (stripped) |
 | `application/<app>/build/<id>.so` | MHMD header + ELF (local only; not left in deploy) |
-| `$MINIHUB_PLUGINS_DEPLOY_DIR/catalog.json` | Store catalog |
-| `$MINIHUB_PLUGINS_DEPLOY_DIR/<id>/<id>.mhub` | Zip: `module.json` + `<id>.so` [+ ui/web] |
+| `$MINIHUB_PLUGINS_DEPLOY_DIR/Stores/Common/catalog.json` | Derived catalog array (every bucket) staged into the modstore image |
+| `$MINIHUB_PLUGINS_DEPLOY_DIR/Stores/ESP32S31/<id>/<id>.mhub` | Zip for an ESP32S31 target: `module.json` + `<id>.so` [+ ui/web] |
 | `application/<app>/build/modstore_image/files/<id>.mhub` | Copy used for on-device Store littlefs image |
 
 ## Install

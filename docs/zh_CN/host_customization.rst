@@ -79,8 +79,14 @@ Host 二次开发
    在 ``application/myhub/main/`` （或产品下自建 component）增加源文件，并写入
    ``CMakeLists.txt`` 的 ``SRCS`` 。一般不必改启动流程；开协议栈靠 Kconfig。
 
-   网页侧栏版本（前面加 ``v``）来自 Kconfig ``MINIHUB_PRODUCT_VERSION``
-   （默认 ``0.1.0``）。Git 描述仍在系统页单独显示为提交号，不作为这个产品版本。
+   系统页的「Host 固件版本」与「Web 版本」是两个独立的值；但「产品/侧栏版本」与
+   「固件版本」是同一个，统一由 ``MINIHUB_VERSION`` 给出（默认 ``0.1.0``，侧栏
+   前面加 ``v``）。``MINIHUB_VERSION`` 用于 OTA 比较、``Firmwares/<chip>/<ver>/``
+   文件夹，并在侧栏/系统页显示为 ``v<ver>``；Git 描述仍单独显示为提交号。
+
+   Web 版本单独由 ``MINIHUB_WEB_VERSION`` 管理（``Webs/v<ver>/`` 文件夹与
+   ``window.mhWebVersion``），因为 Web 与固件发布常不同步，可在 ``menuconfig`` 里
+   单独设置，默认跟随 ``MINIHUB_VERSION``；``tools/deploy.sh`` 发布时分别读取这两个值。
 
 6. **编译烧录**
 

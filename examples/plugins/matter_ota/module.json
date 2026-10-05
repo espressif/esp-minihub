@@ -2,6 +2,7 @@
   "id": "matter_ota",
   "name": "Espressif Matter OTA (cloud catalog demo)",
   "version": "0.1.0",
+  "targets": ["ESP32S31"],
   "kind": "module",
   "runtime": "native",
   "adapter": "matter_ota",

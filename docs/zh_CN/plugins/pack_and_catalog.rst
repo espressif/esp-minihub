@@ -52,16 +52,17 @@
 ``./tools/build_firmware.py … modules`` 编译同时含 ``module.json`` 与
 ``CMakeLists.txt`` 的全部原生插件 （``examples/plugins/*/`` 以及
 ``MINIHUB_PLUGIN_DIRS``）。它不打包。``./tools/build_firmware.py … pack``
-把已有的 ``libadapter_ID.so`` 封装成 MHMD 和 ``DEPLOY/ID/ID.mhub``，并回写
+把已有的 ``libadapter_ID.so`` 封装成 MHMD 和 ``Stores/ESP32S31/ID/ID.mhub``
+（ ``targets`` 为 ``["ALL"]`` 时是 ``Stores/Common`` ），并回写
 ``catalog.json`` 的 **size**。固件 ``build`` 成功后也会自动跑这套打包
 （源码须在 CMake 路径上）。
 
 ``.mhub`` 已经放进 store 目录后（例如
-``~/workspace/minihub_store/ble_mesh_pack/ble_mesh_pack.mhub`` ），运行
-``sync_store_catalog.py`` （``--from-store`` 是默认行为）。它遍历每个
-``DEPLOY/ID/ID.mhub`` ，读取 zip 内的 ``module.json`` （有则一并读
-``ui.json`` ），写出 ``catalog.json`` 。不需要插件源码。同一脚本也在
-``module_sdk.zip`` 里。本地 Store 服务读的是这份目录文件；只拷贝 zip
+``~/workspace/minihub_store/Stores/ESP32S31/ble_mesh_pack/ble_mesh_pack.mhub`` ），运行
+``sync_store_catalog.py`` （ ``--from-store`` 是默认行为）。它遍历
+``Stores/ESP32S31/ID/ID.mhub`` 和 ``Stores/Common/ID/ID.mhub`` ，读取 zip 内的 ``module.json`` （有则一并读
+``ui.json`` ），在该包旁边写出 ``catalog.json`` 。不需要插件源码。同一脚本也在
+``module_sdk.zip`` 里。 ``GET /api/catalog`` 聚合这些对象；只拷贝 zip
 不会更新目录。默认部署根是 ``MINIHUB_PLUGINS_DEPLOY_DIR`` 或
 ``~/workspace/minihub_store`` 。
 
@@ -70,8 +71,10 @@
 
 .. code-block:: text
 
-   DEPLOY/catalog.json
-   DEPLOY/ID/ID.mhub
+   DEPLOY/Stores/ESP32S31/ID/catalog.json
+   DEPLOY/Stores/ESP32S31/ID/ID.mhub
+   DEPLOY/Stores/Common/ID/catalog.json
+   DEPLOY/Stores/Common/ID/ID.mhub
 
 默认 ``store_server.py`` 监听 ``http://0.0.0.0:8080``
 (可用 ``--port`` 或 ``MINIHUB_STORE_PORT`` 覆盖)。
@@ -91,7 +94,8 @@
      "id": "color_bulb",
      "name": "Color Bulb (simulated)",
      "version": "0.1.0",
-     "url": "/files/color_bulb.mhub",
+     "targets": ["ESP32S31"],
+     "url": "/files/Stores/ESP32S31/color_bulb/color_bulb.mhub",
      "adapter": "color_bulb",
      "size": 3762,
      "binary_size": 12000
@@ -100,6 +104,10 @@
 * ``kind`` — L2/L3 为 ``module``；纯配置 L1 可为 ``pack``
   (仅 JSON 包时 ``module`` / ``pack`` 可互换)
 * ``url`` — ``.mhub`` 的路径或绝对 HTTP URL
+* ``targets`` — 芯片文件夹名，与 ``Firmwares/<chip>/`` 使用同一套字符串
+  （例如 ``ESP32S31`` ），JS 模块也可以是 ``ALL`` 。从 ``module.json``
+  抄入；已经写了的列表原样保留。省略该字段时，JS 模块打包写成
+  ``["ALL"]`` ，其它模块写成 ``["ESP32S31"]``
 * ``adapter`` — 可选；安装时 Host 会在 ``adapters.json`` 中建槽
 * ``size`` — **外层 zip** 字节数（须与磁盘上 ``.mhub`` 一致；``pack`` 会回写）
 * ``binary_size`` — 内层 MHMD ``.so`` 大小（不是 zip）

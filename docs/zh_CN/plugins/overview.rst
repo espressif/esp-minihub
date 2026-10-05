@@ -100,8 +100,10 @@ Host 与插件
 
 .. code-block:: text
 
-   DEPLOY/catalog.json
-   DEPLOY/ID/ID.mhub
+   DEPLOY/Stores/ESP32S31/ID/catalog.json
+   DEPLOY/Stores/ESP32S31/ID/ID.mhub
+   DEPLOY/Stores/Common/ID/catalog.json
+   DEPLOY/Stores/Common/ID/ID.mhub
 
 .. _store-preinstall:
 

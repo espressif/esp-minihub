@@ -8,12 +8,16 @@ extra blank lines. Does not touch inline // (avoids http:// and regex).
 
   python3 tools/minify_web_assets.py --src components/minihub_web/web --dst /tmp/web
   python3 tools/minify_web_assets.py --src components/minihub_web/web --in-place
+  python3 tools/minify_web_assets.py --src components/minihub_web/web \\
+      --deploy-root ~/workspace/minihub_store --web-version v0.1.0 \\
+      --notes release_notes.txt
 """
 
 from __future__ import annotations
 
 import argparse
 import gzip
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -21,6 +25,7 @@ from pathlib import Path
 # Text asset kinds that benefit from gzip. Images (png/jpg/svg-as-image) are
 # already compressed and are skipped.
 GZIP_SUFFIXES = {".js", ".css", ".html", ".htm", ".json", ".svg"}
+_MH_WEB_VERSION = re.compile(r"window\.mhWebVersion\s*=\s*(['\"])(?:\\.|[^\\])*?\1")
 
 
 def _strip_block_comments(src: str) -> str:
@@ -229,16 +234,59 @@ def process_tree(src: Path, dst: Path | None, *, in_place: bool,
     return files, bin_in, bout, gz_out
 
 
-def main() -> int:
+def stamp_web_version(dst: Path, version: str) -> None:
+    """Make the published bundle's version string match Webs/<version>/."""
+    text = version.strip()
+    (dst / "version.txt").write_text(text + "\n", encoding="utf-8")
+    boot = dst / "js" / "boot.js"
+    if not boot.is_file():
+        return
+    src = boot.read_text(encoding="utf-8")
+    escaped = text.replace("\\", "\\\\").replace("'", "\\'")
+    new, n = _MH_WEB_VERSION.subn(f"window.mhWebVersion = '{escaped}'", src, count=1)
+    if n:
+        boot.write_text(new, encoding="utf-8")
+
+
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--src", required=True, type=Path)
     ap.add_argument("--dst", type=Path)
+    ap.add_argument(
+        "--deploy-root",
+        type=Path,
+        help="with --web-version, write Webs/<version>/ under this deploy root",
+    )
+    ap.add_argument("--web-version", help="version folder name under <deploy-root>/Webs/")
+    ap.add_argument(
+        "--notes",
+        type=Path,
+        help="with --deploy-root and --web-version, copy this file to Webs/<version>/release_notes.txt",
+    )
     ap.add_argument("--in-place", action="store_true")
     ap.add_argument("--gzip", action="store_true",
                     help="also write a .gz sibling for each text asset")
     ap.add_argument("-q", "--quiet", action="store_true")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     src = args.src.resolve()
+    if args.deploy_root or args.web_version:
+        if not args.deploy_root or not args.web_version:
+            raise SystemExit("--deploy-root and --web-version are used together")
+        if args.dst or args.in_place:
+            raise SystemExit("--deploy-root/--web-version replace --dst and --in-place")
+        if "/" in args.web_version or args.web_version.startswith("."):
+            raise SystemExit("--web-version must be a single folder name")
+        args.dst = args.deploy_root.expanduser() / "Webs" / args.web_version
+    notes_bytes: bytes | None = None
+    if args.notes is not None:
+        if not args.deploy_root or not args.web_version:
+            raise SystemExit("--notes requires --deploy-root and --web-version")
+        notes_path = args.notes.expanduser()
+        if not notes_path.is_file():
+            raise SystemExit(
+                f"--notes must be an existing file (for example release_notes.txt): {notes_path}"
+            )
+        notes_bytes = notes_path.read_bytes()
     if args.in_place:
         if args.dst:
             raise SystemExit("--in-place and --dst are mutually exclusive")
@@ -252,6 +300,10 @@ def main() -> int:
             shutil.rmtree(dst)
         dst.mkdir(parents=True, exist_ok=True)
         n, a, b, g = process_tree(src, dst, in_place=False, gzip_files=args.gzip)
+        if args.web_version:
+            stamp_web_version(dst, args.web_version)
+        if notes_bytes is not None:
+            (dst / "release_notes.txt").write_bytes(notes_bytes)
     if not args.quiet:
         saved = a - b
         pct = (100.0 * saved / a) if a else 0.0

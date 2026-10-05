@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Pack examples/plugins/<id>/ (or MINIHUB_PLUGIN_DIRS) into deploy/<id>/<id>.mhub, or wrap native .so (MHMD).
+"""Pack examples/plugins/<id>/ (or MINIHUB_PLUGIN_DIRS) into a Store ``.mhub``, or wrap native .so (MHMD).
+
+Concrete ``targets`` (for example ``ESP32S31``) land in ``deploy/Stores/ESP32S31/<id>/<id>.mhub``.
+``["ALL"]`` stays in ``deploy/Stores/Common/<id>/<id>.mhub``. Several chips get one copy each.
 
 Two orthogonal steps (do not conflate):
 
@@ -26,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import struct
 import sys
 import zipfile
@@ -37,11 +41,14 @@ DEFAULT_PACK_FORMAT = "zip"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from store_paths import (  # noqa: E402
+    find_deploy_mhubs,
     iter_module_source_dirs,
-    module_deploy_dir,
+    module_deploy_dirs,
     module_mhmd_path,
     module_source_dir,
+    prune_plugin_dirs,
     resolve_deploy_dir,
+    store_buckets,
 )
 
 # Build-derived keys — never required in source-tree module.json
@@ -123,15 +130,14 @@ def source_manifest(manifest: dict) -> dict:
     return out
 
 
-def resolve_native_so(module_id: str, *, root: Path, deploy_mod: Path) -> Path:
+def resolve_native_so(module_id: str, *, root: Path, deploy: Path) -> Path:
     """Prefer build/<id>.so; else recover MHMD from an existing deploy .mhub."""
     so = module_mhmd_path(module_id, root=root)
     if so.is_file():
         return so
-    mhub = deploy_mod / f"{module_id}.mhub"
-    if mhub.is_file():
+    name = f"{module_id}.so"
+    for mhub in find_deploy_mhubs(module_id, deploy):
         with zipfile.ZipFile(mhub) as zf:
-            name = f"{module_id}.so"
             if name in zf.namelist():
                 so.parent.mkdir(parents=True, exist_ok=True)
                 so.write_bytes(zf.read(name))
@@ -162,6 +168,9 @@ def packaged_manifest(
         av = read_adapter_version(module_dir, module_id)
         if av:
             out["adapter_version"] = av
+    from sync_store_catalog import plugin_targets
+
+    out["targets"] = plugin_targets(manifest, module_dir)
     return out
 
 
@@ -177,7 +186,6 @@ def pack_store_module(
     root = root or ROOT
     deploy = resolve_deploy_dir(deploy)
     module_dir = module_source_dir(module_id, root=root)
-    deploy_mod = module_deploy_dir(module_id, deploy)
     manifest_path = module_dir / "module.json"
     if not manifest_path.is_file():
         raise FileNotFoundError(f"missing {manifest_path}")
@@ -187,6 +195,12 @@ def pack_store_module(
     if mid != module_id:
         raise ValueError(f"module.json id={mid!r} != directory {module_id!r}")
 
+    from sync_store_catalog import plugin_targets
+
+    targets = plugin_targets(manifest, module_dir)
+    buckets = store_buckets(targets)
+    deploy_dirs = module_deploy_dirs(module_id, targets, deploy)
+    deploy_mod = deploy_dirs[0]
     deploy_mod.mkdir(parents=True, exist_ok=True)
     pkg_path = deploy_mod / f"{module_id}.mhub"
     compression = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
@@ -195,7 +209,7 @@ def pack_store_module(
     so: Path | None = None
     hybrid = is_hybrid_module(manifest)
     if not is_config_only(manifest) and (hybrid or not is_js_module(manifest, module_dir)):
-        so = resolve_native_so(module_id, root=root, deploy_mod=deploy_mod)
+        so = resolve_native_so(module_id, root=root, deploy=deploy)
 
     pkg_manifest = packaged_manifest(
         manifest, module_dir=module_dir, module_id=module_id, so=so
@@ -251,14 +265,23 @@ def pack_store_module(
                         zf.write(path, arc)
                         names.append(arc)
 
-    # Hard cutover: remove legacy .hub and any deploy-side MHMD .so
-    legacy_hub = deploy_mod / f"{module_id}.hub"
-    if legacy_hub.is_file():
-        legacy_hub.unlink()
-    stray_so = deploy_mod / f"{module_id}.so"
-    if stray_so.is_file():
-        stray_so.unlink()
+    for extra in deploy_dirs[1:]:
+        extra.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(pkg_path, extra / pkg_path.name)
 
+    # Hard cutover: remove legacy .hub and any deploy-side MHMD .so
+    for dest in deploy_dirs:
+        legacy_hub = dest / f"{module_id}.hub"
+        if legacy_hub.is_file():
+            legacy_hub.unlink()
+        stray_so = dest / f"{module_id}.so"
+        if stray_so.is_file():
+            stray_so.unlink()
+    prune_plugin_dirs(deploy, module_id, buckets)
+
+    from sync_store_catalog import write_packed_catalog
+
+    write_packed_catalog(module_id, deploy)
     print(
         f"Packed {module_id}: {pkg_path} ({pkg_path.stat().st_size} bytes) [{', '.join(names)}]"
     )
@@ -287,7 +310,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_pack = sub.add_parser(
         "pack",
-        help="Pack plugin dir → deploy/<id>/<id>.mhub",
+        help="Pack plugin dir → Stores/<chip-or-Common>/<id>/<id>.mhub",
     )
     p_pack.add_argument("module_id", nargs="+", help="module id(s), or 'all'")
     p_pack.add_argument(
@@ -300,6 +323,11 @@ def main(argv: list[str] | None = None) -> int:
         "--store",
         action="store_true",
         help="for --format zip: ZIP_STORED (no deflate)",
+    )
+    p_pack.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help="keep packing remaining modules when one fails (e.g. native .so not built yet)",
     )
     p_pack.add_argument("--deploy", type=Path, default=None, help="deploy root")
 
@@ -346,12 +374,22 @@ def main(argv: list[str] | None = None) -> int:
             print("No modules with module.json found", file=sys.stderr)
             return 1
 
+    failed: list[str] = []
     for mid in ids:
         try:
             pack_store_module(mid, deploy=deploy, compress=not args.store)
         except (OSError, ValueError, FileNotFoundError) as exc:
             print(f"pack_store_module {mid}: {exc}", file=sys.stderr)
+            if args.continue_on_error:
+                failed.append(mid)
+                continue
             return 1
+    if failed:
+        print(
+            f"packed {len(ids) - len(failed)}/{len(ids)}; "
+            f"skipped (native .so not built?): {', '.join(failed)}",
+            file=sys.stderr,
+        )
     return 0
 
 

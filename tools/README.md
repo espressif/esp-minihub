@@ -9,7 +9,7 @@ Env used by several scripts:
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product folder under `application/` |
-| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Store catalog + `<id>/<id>.mhub` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Deploy root: `Stores/ESP32S31/<id>/` or `Stores/Common/<id>/`, `Firmwares/`, `Assets/`, `Webs/` |
 
 ---
 
@@ -157,7 +157,7 @@ Also: `./tools/build_firmware.py pack`.
 
 ### `sync_store_catalog.py`
 
-Rewrite deploy `catalog.json`. Default (no args): walk `DEPLOY/ID/ID.mhub` only — no sources, no `MINIHUB_PLUGIN_DIRS`. `--from-store` is the same. Pass `all` or an id to pack from sources first, then rewrite the catalog the same way. The script is also copied into `module_sdk.zip`.
+Rewrite `Stores/ESP32S31/<id>/catalog.json` or `Stores/Common/<id>/catalog.json`. No derived array is written to the deploy tree (`/api/catalog` aggregates per-plugin catalogs at request time); pass `--aggregate PATH` to emit one array at an explicit path. Chip targets use the uppercase chip folder; `["ALL"]` stays in `Common`. Default (no args): walk those `.mhub` files only — no sources, no `MINIHUB_PLUGIN_DIRS`. `--from-store` is the same. Pass `all` or an id to pack from sources first, then rewrite the catalogs the same way. The script is also copied into `module_sdk.zip`.
 
 ```bash
 python3 tools/sync_store_catalog.py
@@ -168,7 +168,7 @@ python3 tools/sync_store_catalog.py my_js --deploy ~/workspace/minihub_store
 
 ### `store_server.py`
 
-LAN Store HTTP (default `:8080`): `catalog.json` and `/files/<id>.mhub`.
+LAN deploy HTTP (default `:8080`): `GET /api/catalog`, `GET /api/firmware`, and `GET /files/<path>`.
 
 ```bash
 python3 tools/store_server.py --port 8080

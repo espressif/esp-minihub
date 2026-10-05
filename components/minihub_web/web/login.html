@@ -22,15 +22,15 @@ margin:0;width:auto;padding:4px 6px;border:0;border-radius:6px;background:transp
 color:#8b9bb4;font-weight:500;font-size:.75rem;cursor:pointer}
 .err{color:#f87171;font-size:.8rem;min-height:1.2em}
 .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
-select{width:auto;margin:0;padding:4px 8px;border-radius:8px;border:1px solid #243049;
-background:#0b0f1a;color:#8b9bb4;font-size:.72rem;font-weight:600;cursor:pointer}
+select,#lang-sel{width:auto;margin:0;padding:4px 8px;border-radius:8px;border:1px solid #243049;
+background:#0b0f1a;color:#8b9bb4;font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit}
 </style>
 </head>
 <body>
 <div class="box">
   <div class="top">
     <h1 id="title">登录</h1>
-    <select id="lang-sel" onchange="setLang(this.value)"></select>
+    <button id="lang-sel" type="button" onclick="switchLangSel()"></button>
   </div>
   <p id="hint">输入 admin 密码进入控制台。</p>
   <form id="f">
@@ -145,26 +145,21 @@ function applyI18n(root) {
   syncLangSel();
 }
 
-/* The select shows the language you are in; its accessible name and tooltip say
- * what the *other* entry does, because that is what someone who cannot read this
- * language is looking for. Options come from LANGS, so the markup never lists
- * languages. */
+/* The control shows the language you would switch TO, not the one you are in. */
 function syncLangSel() {
-  const sel = document.getElementById('lang-sel');
-  if (!sel) return;
-  if (!sel.options.length) {
-    LANGS.forEach(function (l) {
-      const o = document.createElement('option');
-      o.value = l.code;
-      o.textContent = l.self;
-      sel.appendChild(o);
-    });
-  }
-  sel.value = lang;
+  const el = document.getElementById('lang-sel');
+  if (!el) return;
   const other = LANGS.filter(function (l) { return l.code !== lang; })[0];
+  el.textContent = other.self;
+  el.dataset.next = other.code;
   const name = t('lang.switch_to', { lang: other.self });
-  sel.setAttribute('aria-label', name);
-  sel.title = name;
+  el.setAttribute('aria-label', name);
+  el.title = name;
+}
+
+function switchLangSel() {
+  const el = document.getElementById('lang-sel');
+  if (el && el.dataset.next) setLang(el.dataset.next);
 }
 
 function setLang(next) {

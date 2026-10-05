@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <stdbool.h>
+#include <stddef.h>
+
 #include "esp_err.h"
 #include "cJSON.h"
 
@@ -66,3 +69,17 @@ esp_err_t minihub_store_get_config(char *custom_url, size_t custom_url_len, bool
  * @param disable_default if true, only custom URL is used (requires non-empty custom_url)
  */
 esp_err_t minihub_store_set_config(const char *custom_url, bool disable_default);
+
+/**
+ * Effective deploy origin: custom URL when set, otherwise the Kconfig
+ * default, unless that default is disabled. Empty when nothing is configured.
+ */
+bool minihub_store_copy_base_url(char *out, size_t out_len);
+
+/**
+ * Installed plugins whose remote catalog version is newer.
+ * ``*out`` is a JSON array of ``{id,name,kind,installed,version}`` on
+ * success (caller deletes). Does not download or install.
+ * ESP_ERR_INVALID_STATE when no deploy URL is configured.
+ */
+esp_err_t minihub_store_list_upgrades(cJSON **out);

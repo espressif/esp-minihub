@@ -823,6 +823,68 @@ minihub_device_widget_get(const char *device)
     return d;
 }
 
+/* ---- Cloud fallback for unknown device types ----
+ *
+ * A type missing from the local registry is not necessarily unknown to the deploy
+ * root: the data/update layer can fetch its icon + style + metadata on demand
+ * (GET /api/assets/device/<id>) and cache them under /data. The actual HTTP work
+ * lives in minihub_update; here it is a weak symbol so this component never links
+ * the network stack. When no fetcher is linked the stub returns NOT_SUPPORTED. */
+esp_err_t __attribute__((weak)) minihub_dw_cloud_fetch_default(const char *base_url, const char *device_id)
+{
+    (void)base_url;
+    (void)device_id;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+/* Negative cache: once a cloud fetch reports "no such type", do not keep hitting
+ * the server for the same device_id every render. Small, fixed-size, reboot-cleared. */
+#define DW_NEG_MAX 16
+static char s_neg[DW_NEG_MAX][32];
+static int s_neg_n;
+
+static bool dw_neg_contains(const char *device)
+{
+    for (int i = 0; i < s_neg_n; i++) {
+        if (strcmp(s_neg[i], device) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void dw_neg_add(const char *device)
+{
+    if (s_neg_n >= DW_NEG_MAX) {
+        return;
+    }
+    strncpy(s_neg[s_neg_n], device, sizeof(s_neg[0]) - 1);
+    s_neg[s_neg_n][sizeof(s_neg[0]) - 1] = '\0';
+    s_neg_n++;
+}
+
+const minihub_device_widget_device_t *
+minihub_device_widget_get_or_fetch(const char *base_url, const char *device)
+{
+    const minihub_device_widget_device_t *d = minihub_device_widget_get(device);
+    if (d) {
+        return d;
+    }
+    if (dw_neg_contains(device)) {
+        return NULL;
+    }
+    esp_err_t err = minihub_dw_cloud_fetch_default(base_url, device);
+    if (err == ESP_OK) {
+        /* Icons/styles landed under /data/images; the registry type itself may
+         * still be unknown (model comes from /data/config or a PUT). Try again. */
+        return minihub_device_widget_get(device);
+    }
+    if (err == ESP_ERR_NOT_FOUND) {
+        dw_neg_add(device);
+    }
+    return NULL;
+}
+
 const minihub_device_widget_device_t *
 minihub_device_widget_device_at(size_t index)
 {

@@ -2,6 +2,7 @@
   "id": "ble_mesh_pack",
   "name": "BLE Mesh L1 defaults (demo)",
   "version": "0.1.0",
+  "targets": ["ESP32S31"],
   "enabled": true,
   "kind": "pack",
   "runtime": "pack",

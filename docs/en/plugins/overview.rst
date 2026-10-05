@@ -108,8 +108,10 @@ Deploy / catalog (development PC):
 .. code-block:: text
 
    $MINIHUB_PLUGINS_DEPLOY_DIR/          # default ~/workspace/minihub_store
-     catalog.json
-     ID/ID.mhub
+     Stores/ESP32S31/ID/catalog.json
+     Stores/ESP32S31/ID/ID.mhub
+     Stores/Common/ID/catalog.json
+     Stores/Common/ID/ID.mhub
 
 .. _store-preinstall:
 
@@ -173,7 +175,7 @@ Developer scripts (L1 / L2 / L3)
      - yes
      - yes
      - yes
-     - Rewrite ``catalog.json`` from deployed ``DEPLOY/ID/ID.mhub`` (default)
+     - Rewrite ``catalog.json`` beside each deployed ``.mhub`` (default)
    * - ``tools/sync_store_catalog.py all``
      - yes
      - yes

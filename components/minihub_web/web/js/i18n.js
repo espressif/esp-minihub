@@ -115,33 +115,33 @@
         return langRow(lang).locale;
     }
 
-    /* The select shows the language you are in; its accessible name and tooltip say
+    /* The control shows the language you would switch TO, not the one you are in; its accessible name and tooltip say
      * what the *other* entry does, because that is what someone who cannot read
      * this language is looking for. Options come from LANGS, so the markup never
      * lists languages. */
     function syncLangSel() {
-        const sel = document.getElementById('lang-sel');
-        if (!sel) {
+        const el = document.getElementById('lang-sel');
+        if (!el) {
             return;
         }
-        if (!sel.options.length) {
-            LANGS.forEach(function (l) {
-                const o = document.createElement('option');
-                o.value = l.code;
-                o.textContent = l.self;
-                sel.appendChild(o);
-            });
-        }
-        sel.value = lang;
         const other = LANGS.filter(function (l) {
             return l.code !== lang;
         })[0];
+        el.textContent = other.self;
+        el.dataset.next = other.code;
         const label = t('lang.switch_to', { lang: other.self });
         /* A dictionary that never arrives renders keys verbatim; that must not
          * become the accessible name. */
         const name = (label === 'lang.switch_to') ? other.self : label;
-        sel.setAttribute('aria-label', name);
-        sel.title = name;
+        el.setAttribute('aria-label', name);
+        el.title = name;
+    }
+
+    function switchLangSel() {
+        const el = document.getElementById('lang-sel');
+        if (el && el.dataset.next) {
+            setLang(el.dataset.next);
+        }
     }
 
     function applyI18n(root) {
@@ -206,6 +206,7 @@
     window.applyI18n = applyI18n;
     window.i18nReady = i18nReady;
     window.setLang = setLang;
+    window.switchLangSel = switchLangSel;
     window.mhCatalogLang = mhCatalogLang;
     window.mhCatalogUrl = mhCatalogUrl;
     window.mhLocale = mhLocale;

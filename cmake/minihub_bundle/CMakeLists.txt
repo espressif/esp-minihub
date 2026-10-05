@@ -18,6 +18,7 @@ idf_component_register(
         minihub_hub
         minihub_auth
         minihub_ota
+        minihub_update
         minihub_provision
         minihub_net
         minihub_matter

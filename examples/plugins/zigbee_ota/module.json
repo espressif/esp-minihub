@@ -2,6 +2,7 @@
   "id": "zigbee_ota",
   "name": "Espressif Zigbee OTA (cloud catalog demo)",
   "version": "0.1.0",
+  "targets": ["ESP32S31"],
   "kind": "module",
   "runtime": "native",
   "adapter": "zigbee_ota",

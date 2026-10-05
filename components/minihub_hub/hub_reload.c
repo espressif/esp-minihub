@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include "minihub_core.h"
 #include "minihub_hub.h"
 
 #include "minihub_adapter.h"
@@ -197,6 +198,20 @@ esp_err_t minihub_hub_reload(void)
     s_reload_busy = false;
     xSemaphoreGive(s_reload_mu);
     minihub_hub_reload_done(err);
+    if (err == ESP_OK) {
+        /* Tell every client to re-read: a reload changes the point set wholesale
+         * (an install/enable/disable/uninstall adds and removes points), and the
+         * removals publish no point.updated of their own. Without this a console
+         * that re-fetched right after the request kept rendering adapters that
+         * this reload had just unregistered -- the HTTP call returns long before
+         * the async reload runs, so the client had no other way to notice. */
+        cJSON *d = cJSON_CreateObject();
+        if (d) {
+            cJSON_AddBoolToObject(d, "ok", true);
+            minihub_event_bus_publish("hub.reloaded", d);
+            cJSON_Delete(d);
+        }
+    }
     return err;
 }
 

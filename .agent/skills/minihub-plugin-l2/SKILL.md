@@ -92,7 +92,7 @@ Reference + regression test: `miot/tools/check_bright_scale.py`
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product under `application/` |
-| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Catalog + `.mhub` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | JS `targets` `["ALL"]` → `Stores/Common/<id>/`; a concrete chip → `Stores/ESP32S31/<id>/` |
 | `MINIHUB_PLUGIN_DIRS` | (empty) | Extra source trees (`:`/`;`). Set if the module is under `examples/plugins/` |
 
 No native compile. Packer zips `module.json` + `main.js` (+ `ui.json` / `web/` if present). Host must already have `CONFIG_MINIHUB_DYNAMIC_MODULES` and `CONFIG_MINIHUB_JS_PLUGINS`.

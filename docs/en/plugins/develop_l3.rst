@@ -55,7 +55,7 @@ the same translation unit. Header reference: :doc:`../api/plugin_host`
    export MINIHUB_PLUGIN_DIRS="$PWD"
    python3 /path/to/module_sdk/pack_store_module.py pack my_native
 
-   # 4. Rewrite catalog.json from every DEPLOY/ID/ID.mhub (no plugin sources).
+   # 4. Rewrite catalog.json from each Stores/ESP32S31 or Stores/Common .mhub.
    #    sync_store_catalog.py ships in module_sdk.zip next to pack_store_module.py.
    python3 /path/to/module_sdk/sync_store_catalog.py --from-store \
      --deploy ~/workspace/minihub_store

@@ -50,6 +50,7 @@ typedef struct {
 static const hub_api_rule_t s_rules[] = {
     {HUB_M_GET, "/api/"},
     {HUB_M_GET, "/api/system"},
+    {HUB_M_GET, "/api/update/notes"},
     {HUB_M_GET, "/api/points"},
     {HUB_M_GET, "/api/points/history"},
     {HUB_M_GET, "/api/rules"},

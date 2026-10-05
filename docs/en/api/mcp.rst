@@ -291,7 +291,7 @@ Gateway rules in ``hub_api_gateway.c`` (``s_rules[]``):
 
 **GET**
 
-* ``/api/``, ``/api/system``, ``/api/points``, ``/api/points/history``
+* ``/api/``, ``/api/system``, ``/api/update/notes``, ``/api/points``, ``/api/points/history``
 * ``/api/rules``, ``/api/adapters``, ``/api/config/adapters``
 * ``/api/location``, ``/api/modules``, ``/api/packs``, ``/api/scenes``, ``/api/events``
 * ``/api/store/catalog``, ``/api/store/config``, ``/api/ota``

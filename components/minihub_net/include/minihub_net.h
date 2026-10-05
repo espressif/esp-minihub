@@ -121,6 +121,21 @@ esp_err_t minihub_net_get_wifi_sta(char *ssid, size_t ssid_len, bool *has_passwo
  */
 esp_err_t minihub_net_set_wifi_sta(const char *ssid, const char *password, bool open_network);
 
+/**
+ * @brief STA MAC, or base MAC when STA is unavailable.
+ *
+ * Lowercase colon-separated, for example ``aa:bb:cc:dd:ee:ff``.
+ * ``out_len`` must be at least 18.
+ */
+esp_err_t minihub_net_format_mac(char *out, size_t out_len);
+
+/**
+ * @brief Copy ``url`` and append ``mac`` when it is not already in the query.
+ *
+ * If the MAC cannot be read, ``out`` is a plain copy of ``url``.
+ */
+esp_err_t minihub_net_copy_url_with_mac(const char *url, char *out, size_t out_len);
+
 #ifdef __cplusplus
 }
 #endif
