@@ -102,6 +102,15 @@
     width: 100%; min-height: 220px; font-family: var(--mono); font-size: 0.82rem; resize: vertical;
   }
   .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+  /* Folds use <details>: a class rule such as .file-list{display:grid} beats the
+   * UA [hidden]{display:none} rule, so a hidden attribute alone does not hide. */
+  .fold { margin-top: 0.6rem; }
+  .fold > summary {
+    cursor: pointer; font-size: 0.82rem; color: var(--muted);
+    padding: 0.2rem 0; user-select: none; list-style-position: inside;
+  }
+  .fold > summary:hover, .fold[open] > summary { color: var(--text); }
+  .file-list[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -126,7 +135,7 @@
     <button class="tab active" data-tab="web" type="button">网页资源</button>
     <button class="tab" data-tab="adapters" type="button">adapters.json</button>
     <button class="tab" data-tab="catalog" type="button">类型目录 CSV</button>
-    <button class="tab" data-tab="images" type="button">图标 <span class="badge">即将支持</span></button>
+    <button class="tab" data-tab="images" type="button">图标</button>
   </div>
 
   <section class="card panel active" id="panel-web">
@@ -151,7 +160,10 @@
     </label>
     <p class="hint">单个文件不带目录信息，工具不猜哪个是语言文件：上传 <code>i18n/*.json</code> 请选「强制前缀 i18n/」，
       或直接选整个 <code>web</code> 文件夹（会自动带上 <code>i18n/</code> 子目录）。下方队列会显示每个文件的实际目标路径。</p>
-    <div class="file-list" id="web-queue"></div>
+    <details class="fold" id="web-fold">
+      <summary id="web-fold-summary">文件列表（0）</summary>
+      <div class="file-list" id="web-queue"></div>
+    </details>
     <div class="actions">
       <button class="primary" type="button" id="web-upload">上传所选</button>
       <button class="ghost" type="button" id="web-dl-css">拉取 device_widgets.css</button>
@@ -182,6 +194,7 @@
         <div class="actions">
           <button class="primary" type="button" data-cat-put="devices.csv">上传 devices.csv</button>
           <button class="ghost" type="button" data-cat-get="devices.csv">下载</button>
+          <button class="ghost" type="button" data-cat-del="devices.csv">删除设备文件</button>
         </div>
       </div>
       <div style="flex:1; min-width:240px;">
@@ -192,13 +205,46 @@
         <div class="actions">
           <button class="primary" type="button" data-cat-put="parameters.csv">上传 parameters.csv</button>
           <button class="ghost" type="button" data-cat-get="parameters.csv">下载</button>
+          <button class="ghost" type="button" data-cat-del="parameters.csv">删除设备文件</button>
         </div>
       </div>
     </div>
   </section>
 
   <section class="card panel" id="panel-images">
-    <p class="hint">设备图标在 <code>/data/images/{devices,parameters}/</code>，Web 经 <code>GET /img/…</code> 读取。远程 PUT 图标尚未开放（避免任意写文件系统）；可先用构建时 stage，或后续窄接口。敬请期待。</p>
+    <p class="hint">设备图标在 <code>/data/images/{devices,parameters}/</code>，参数样式在 <code>/data/styles/</code>，Web 经
+      <code>GET /img/…</code> 读取。上传走 <code>PUT /api/dev/assets/&lt;相对路径&gt;</code>，删除走
+      <code>DELETE /api/dev/assets/…</code>；只允许 <code>images/devices/</code>、<code>images/parameters/</code>、
+      <code>styles/</code> 三个前缀，不会写到别处。写入后刷新浏览器即可看到新图标（无需重烧）。</p>
+    <div class="drop" id="img-drop">
+      <strong>拖放</strong> <code>.svg</code> / <code>.png</code> / <code>.css</code> 到此处，或
+      <label>选择若干图标文件
+        <input type="file" id="img-files" multiple accept=".svg,.png,.webp,.css" />
+      </label>
+    </div>
+    <label style="margin-top:0.75rem">设备目录
+      <select id="img-target">
+        <option value="images/devices/">images/devices/（设备类头像）</option>
+        <option value="images/parameters/">images/parameters/（控件图标）</option>
+        <option value="styles/">styles/（参数样式 CSS）</option>
+      </select>
+    </label>
+    <details class="fold" id="img-fold">
+      <summary id="img-fold-summary">文件列表（0）</summary>
+      <div class="file-list" id="img-queue"></div>
+    </details>
+    <div class="actions">
+      <button class="primary" type="button" id="img-upload">上传所选</button>
+      <button class="ghost" type="button" id="img-pull">从设备拉取图标列表</button>
+      <button class="ghost" type="button" id="img-del-sel">删除所选</button>
+      <label style="flex:0; flex-direction:row; align-items:center; gap:0.4rem; color:var(--text); font-size:0.88rem;">
+        <input type="checkbox" id="img-sel-all" /> 全选
+      </label>
+    </div>
+    <details class="fold" id="img-remote-fold">
+      <summary id="img-remote-summary">设备上的图标（0）</summary>
+      <div class="file-list" id="img-remote"></div>
+    </details>
   </section>
 
   <section class="card">
@@ -392,6 +438,12 @@
     return n;
   }
 
+  function webFoldSync() {
+    const fold = $("#web-fold");
+    const sum = $("#web-fold-summary");
+    if (fold && sum) sum.textContent = `${fold.open ? "收起" : "显示"}文件列表（${webQueue.length}）`;
+  }
+
   function renderWebQueue() {
     const box = $("#web-queue");
     box.innerHTML = "";
@@ -408,8 +460,29 @@
       rm.textContent = "移除";
       rm.onclick = () => { webQueue.splice(i, 1); renderWebQueue(); };
       row.appendChild(rm);
+      const del = document.createElement("button");
+      del.className = "ghost";
+      del.type = "button";
+      del.textContent = "删除设备文件";
+      del.onclick = () => deleteDeviceFile("/api/dev/web/" + dest, dest);
+      row.appendChild(del);
       box.appendChild(row);
     });
+    webFoldSync();
+  }
+
+  $("#web-fold").addEventListener("toggle", webFoldSync);
+  webFoldSync();
+
+  async function deleteDeviceFile(path, label) {
+    if (!confirm(`删除设备上的 ${label || path}？`)) return;
+    try {
+      const r = await hub("DELETE", path);
+      if (!r.ok) throw new Error(`${r.status} ${r.text}`);
+      log(`已删除 ${label || path}`, "log-ok");
+    } catch (e) {
+      log(`删除失败 ${label || path}: ${e.message || e}`, "log-err");
+    }
   }
 
   function addWebFiles(fileList) {
@@ -564,6 +637,24 @@
   $("#web-dir").onchange = (e) => addWebFiles(e.target.files);
   $("#web-target").onchange = renderWebQueue;
 
+  /* Gzip a buffer in the browser so we can keep a matching <rel>.gz beside the
+   * plain file. The device serves the .gz preferentially to gzip clients, so a
+   * stale .gz would otherwise shadow a freshly uploaded plain file. Always
+   * PUTting a fresh .gz (overwrite-if-present / create-if-new) keeps the two in
+   * lockstep with no need to query the device first. Falls back to null when
+   * CompressionStream is unavailable (older browsers) — caller then skips it. */
+  async function gzipBytes(buf) {
+    if (typeof CompressionStream === "undefined") return null;
+    try {
+      const cs = new CompressionStream("gzip");
+      const stream = new Blob([buf]).stream().pipeThrough(cs);
+      const ab = await new Response(stream).arrayBuffer();
+      return new Uint8Array(ab);
+    } catch (_) {
+      return null;
+    }
+  }
+
   $("#web-upload").onclick = async () => {
     await webIngest;
     if (!webQueue.length) { log("没有待上传文件", "log-err"); return; }
@@ -582,6 +673,18 @@
           if (!r.ok) throw new Error(`${r.status} ${r.text}`);
           ok++;
           log(`上传 OK ${dest} → ${r.text}`, "log-ok");
+          /* keep the sibling <dest>.gz in sync: overwrite if present, create if
+           * new — so gzip clients never serve a stale compressed copy. */
+          const gz = await gzipBytes(buf);
+          if (gz) {
+            try {
+              const rg = await hub("PUT", "/api/dev/web/" + dest + ".gz", gz, type || "application/octet-stream");
+              if (rg.ok) log(`  已同步 ${dest}.gz`, "log-ok");
+              else log(`  ${dest}.gz 同步失败 ${rg.status} ${rg.text}`, "log-err");
+            } catch (eg) {
+              log(`  ${dest}.gz 同步失败: ${eg.message || eg}`, "log-err");
+            }
+          }
         } catch (e) {
           fail++;
           log(`上传失败 ${dest}: ${e.message || e}`, "log-err");
@@ -691,6 +794,206 @@
         log(`已下载 ${which}`, "log-ok");
       } catch (e) {
         log(`下载失败: ${e.message || e}`, "log-err");
+      }
+    };
+  });
+
+  /* ---- 图标 / 参数样式（PUT/DELETE /api/dev/assets/…） ---- */
+  const imgQueue = [];
+
+  function imgFoldSync() {
+    const fold = $("#img-fold");
+    const sum = $("#img-fold-summary");
+    if (fold && sum) sum.textContent = `${fold.open ? "收起" : "显示"}文件列表（${imgQueue.length}）`;
+  }
+
+  function renderImgQueue() {
+    const box = $("#img-queue");
+    box.innerHTML = "";
+    imgQueue.forEach((item, i) => {
+      const row = document.createElement("div");
+      row.className = "file-row";
+      const dest = $("#img-target").value + item.name;
+      row.innerHTML = `<code>${item.name} → ${dest}</code>`;
+      const rm = document.createElement("button");
+      rm.className = "ghost";
+      rm.type = "button";
+      rm.textContent = "移除";
+      rm.onclick = () => { imgQueue.splice(i, 1); renderImgQueue(); };
+      row.appendChild(rm);
+      const del = document.createElement("button");
+      del.className = "ghost";
+      del.type = "button";
+      del.textContent = "删除设备文件";
+      del.onclick = () => deleteDeviceFile("/api/dev/assets/" + dest, dest);
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+    imgFoldSync();
+  }
+
+  function addImgFiles(files) {
+    [...(files || [])].forEach((f) => {
+      const n = String((f && f.name) || "").split("/").pop();
+      if (!n) return;
+      /* wireDrop hands over its own item shape (handle/entry); a plain <input>
+       * hands over File objects. Keep whichever can produce bytes. */
+      imgQueue.push(f instanceof File
+        ? { name: n, file: f, item: null }
+        : { name: n, file: f.file || null, item: f });
+    });
+    renderImgQueue();
+  }
+
+  $("#img-files").onchange = (e) => addImgFiles(e.target.files);
+  $("#img-target").onchange = renderImgQueue;
+  $("#img-fold").addEventListener("toggle", imgFoldSync);
+  imgFoldSync();
+  wireDrop($("#img-drop"), addImgFiles);
+
+  $("#img-upload").onclick = async () => {
+    if (!imgQueue.length) { log("没有待上传图标", "log-err"); return; }
+    const sub = $("#img-target").value;
+    const batch = [...imgQueue];
+    let ok = 0;
+    let fail = 0;
+    const btn = $("#img-upload");
+    btn.disabled = true;
+    try {
+      for (const item of batch) {
+        const dest = sub + item.name;
+        try {
+          const bytes = item.file
+            ? { buf: await item.file.arrayBuffer(), type: item.file.type || "" }
+            : await readFreshBytes(item.item);
+          const r = await hub("PUT", "/api/dev/assets/" + dest, bytes.buf,
+                              bytes.type || "application/octet-stream");
+          if (!r.ok) throw new Error(`${r.status} ${r.text}`);
+          ok++;
+          log(`图标上传 OK ${dest} → ${r.text}`, "log-ok");
+        } catch (e) {
+          fail++;
+          log(`图标上传失败 ${dest}: ${e.message || e}`, "log-err");
+        }
+      }
+      log(`应上传 ${batch.length} 个图标，成功 ${ok} 个，失败 ${fail} 个`, fail ? "log-err" : "log-ok");
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  /* ---- 设备上的图标：拉取列表 / 下载 / 单个或批量删除 ---- */
+  const imgRemote = [];
+
+  function syncRemoteSummary() {
+    const sum = $("#img-remote-summary");
+    if (!sum) return;
+    const n = imgRemote.filter((x) => x.sel).length;
+    sum.textContent = `设备上的图标（${imgRemote.length}${n ? "，已选 " + n : ""}）`;
+  }
+
+  function renderImgRemote() {
+    const box = $("#img-remote");
+    box.innerHTML = "";
+    imgRemote.forEach((it) => {
+      const row = document.createElement("div");
+      row.className = "file-row";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !!it.sel;
+      cb.onchange = () => { it.sel = cb.checked; syncRemoteSummary(); };
+      row.appendChild(cb);
+      const code = document.createElement("code");
+      const kb = Math.max(1, Math.round((it.size || 0) / 1024));
+      code.textContent = `${it.path}（${kb} KB）`;
+      row.appendChild(code);
+      const dl = document.createElement("button");
+      dl.className = "ghost";
+      dl.type = "button";
+      dl.textContent = "下载";
+      dl.onclick = async () => {
+        try {
+          /* The console serves assets under /img/ relative to /data/images. */
+          const r = await hub("GET", "/img/" + it.path.replace(/^images\//, ""));
+          if (!r.ok) throw new Error(`${r.status} ${r.text}`);
+          const blob = new Blob([r.text], { type: "image/svg+xml;charset=utf-8" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = it.path.split("/").pop();
+          a.click();
+          URL.revokeObjectURL(a.href);
+          log(`已下载 ${it.path}`, "log-ok");
+        } catch (e) {
+          log(`下载失败 ${it.path}: ${e.message || e}`, "log-err");
+        }
+      };
+      row.appendChild(dl);
+      const del = document.createElement("button");
+      del.className = "ghost";
+      del.type = "button";
+      del.textContent = "删除";
+      del.onclick = async () => {
+        await deleteDeviceFile("/api/dev/assets/" + it.path, it.path);
+        await pullImgList();
+      };
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+    syncRemoteSummary();
+  }
+
+  async function pullImgList() {
+    try {
+      const r = await hub("GET", "/api/dev/assets/list");
+      if (!r.ok) throw new Error(`${r.status} ${r.text}`);
+      const j = JSON.parse(r.text || "{}");
+      imgRemote.length = 0;
+      (j.items || []).forEach((it) => imgRemote.push({ path: it.path, size: it.size, sel: false }));
+      $("#img-sel-all").checked = false;
+      renderImgRemote();
+      log(`已拉取设备图标列表：${imgRemote.length} 个`, "log-ok");
+    } catch (e) {
+      log(`拉取图标列表失败: ${e.message || e}`, "log-err");
+    }
+  }
+
+  $("#img-pull").onclick = pullImgList;
+  $("#img-sel-all").onchange = (e) => {
+    imgRemote.forEach((x) => { x.sel = e.target.checked; });
+    renderImgRemote();
+  };
+
+  $("#img-del-sel").onclick = async () => {
+    const sel = imgRemote.filter((x) => x.sel);
+    if (!sel.length) { log("未选择要删除的图标", "log-err"); return; }
+    if (!confirm(`删除设备上选中的 ${sel.length} 个图标？`)) return;
+    let ok = 0;
+    let fail = 0;
+    for (const it of sel) {
+      try {
+        const r = await hub("DELETE", "/api/dev/assets/" + it.path);
+        if (!r.ok) throw new Error(`${r.status} ${r.text}`);
+        ok++;
+      } catch (e) {
+        fail++;
+        log(`删除失败 ${it.path}: ${e.message || e}`, "log-err");
+      }
+    }
+    log(`已删除 ${ok} 个，失败 ${fail} 个`, fail ? "log-err" : "log-ok");
+    await pullImgList();
+  };
+
+  /* 类型目录 CSV：删除设备上的模型文件（设备会回退到内置目录） */
+  document.querySelectorAll("[data-cat-del]").forEach((btn) => {
+    btn.onclick = async () => {
+      const which = btn.getAttribute("data-cat-del");
+      if (!confirm(`删除设备上的 /data/config/model/${which}？设备将回退到内置类型目录。`)) return;
+      try {
+        const r = await hub("DELETE", "/api/dev/catalog/" + which);
+        if (!r.ok) throw new Error(`${r.status} ${r.text}`);
+        log(`已删除 ${which}: ${r.text}`, "log-ok");
+      } catch (e) {
+        log(`删除 ${which} 失败: ${e.message || e}`, "log-err");
       }
     };
   });
