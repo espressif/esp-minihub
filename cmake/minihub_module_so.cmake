@@ -1,6 +1,8 @@
 # Build adapter components as .so for MiniHub Store (.mhub packaging).
 
 function(minihub_add_module_so module_id component_name)
+    # Optional ARGV2: plugin source dir (module.json). Used to pick
+    # Stores/ESP32S31 vs Stores/Common from that module's targets.
     if(NOT CONFIG_MINIHUB_DYNAMIC_MODULES)
         return()
     endif()
@@ -62,6 +64,30 @@ function(minihub_add_module_so module_id component_name)
     if(NOT _mh_python)
         set(_mh_python "python3")
     endif()
+    set(_mh_mod_dir "")
+    if(ARGC GREATER 2)
+        set(_mh_mod_dir "${ARGV2}")
+    endif()
+    set(_mh_mhub "${_mh_deploy}/Stores/Common/${module_id}/${module_id}.mhub")
+    if(NOT "${_mh_mod_dir}" STREQUAL "")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E env
+                    MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
+                    ${_mh_python} -c
+                    "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); import store_paths; print(store_paths.module_mhub_file(sys.argv[2], deploy=Path(sys.argv[3]), module_dir=Path(sys.argv[4])))"
+                    "${MINIHUB_REPO_ROOT}/tools"
+                    "${module_id}"
+                    "${_mh_deploy}"
+                    "${_mh_mod_dir}"
+            OUTPUT_VARIABLE _mh_mhub
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE _mh_mhub_rc
+        )
+        if(NOT _mh_mhub_rc EQUAL 0 OR "${_mh_mhub}" STREQUAL "")
+            message(WARNING "modstore: could not resolve ${module_id} deploy path (rc=${_mh_mhub_rc})")
+            set(_mh_mhub "${_mh_deploy}/Stores/Common/${module_id}/${module_id}.mhub")
+        endif()
+    endif()
     # Configure-time staging may copy a stale deploy .mhub before libadapter_*.so
     # exists. After linking, refresh MHMD + deploy .mhub + modstore files/<id>.mhub.
     # Do NOT rewrite/copy shared catalog.json here: ninja builds module_so_* in
@@ -86,7 +112,7 @@ function(minihub_add_module_so module_id component_name)
         COMMAND ${CMAKE_COMMAND} -E make_directory
                 ${CMAKE_BINARY_DIR}/modstore_image/files
         COMMAND ${CMAKE_COMMAND} -E copy
-                ${_mh_deploy}/${module_id}/${module_id}.mhub
+                ${_mh_mhub}
                 ${_mh_modstore_mhub}
         DEPENDS ${so_dependencies}
         COMMENT "Build module .so + pack .mhub: ${module_id}"
@@ -125,7 +151,7 @@ function(minihub_register_module_sos)
             list(APPEND _MH_MODULE_SO_TARGETS module_so_${_MOD})
             continue()
         endif()
-        minihub_add_module_so(${_MOD} ${_MOD})
+        minihub_add_module_so(${_MOD} ${_MOD} ${_MOD_DIR})
         message(STATUS "store module .so target: ${_MOD}")
         list(APPEND _MH_MODULE_SO_TARGETS module_so_${_MOD})
     endforeach()
@@ -149,16 +175,14 @@ function(minihub_register_module_sos)
 
     if(NOT TARGET module_store_catalog)
         add_custom_command(OUTPUT ${_mh_modstore_catalog}
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                    ${CMAKE_BINARY_DIR}/modstore_image
             COMMAND ${CMAKE_COMMAND} -E env
                     MINIHUB_PLUGINS_DEPLOY_DIR=${_mh_deploy}
                     MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
                     MINIHUB_APP=$ENV{MINIHUB_APP}
                     ${_mh_python} ${_mh_catalog_py} --deploy ${_mh_deploy}
-            COMMAND ${CMAKE_COMMAND} -E make_directory
-                    ${CMAKE_BINARY_DIR}/modstore_image
-            COMMAND ${CMAKE_COMMAND} -E copy
-                    ${_mh_deploy}/catalog.json
-                    ${_mh_modstore_catalog}
+                    --aggregate ${_mh_modstore_catalog}
             DEPENDS ${_MH_MODULE_SO_TARGETS}
             COMMENT "Sync Store catalog into modstore_image"
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}

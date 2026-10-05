@@ -2,6 +2,7 @@
   "id": "color_bulb",
   "name": "Color Bulb (simulated)",
   "version": "0.1.0",
+  "targets": ["ESP32S31"],
   "kind": "module",
   "runtime": "native",
   "adapter": "color_bulb",

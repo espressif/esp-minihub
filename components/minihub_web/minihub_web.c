@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 #include "sdkconfig.h"
 #include "esp_http_server.h"
 #include "esp_http_client.h"
@@ -42,6 +43,7 @@
 #include "minihub_auth.h"
 #include "minihub_scenes.h"
 #include "minihub_ota.h"
+#include "minihub_update.h"
 #if CONFIG_MINIHUB_MATTER_ADAPTER
 #include "minihub_matter.h"
 #endif
@@ -66,11 +68,12 @@
 
 static const char *TAG = "minihub_web";
 
-/* Product version shown in the sidebar / system page (not git describe).
- * Kconfig string; quoted by sdkconfig.h. Fallback keeps host builds that
- * have not regenerated sdkconfig.h on the same default. */
-#ifndef CONFIG_MINIHUB_PRODUCT_VERSION
-#define CONFIG_MINIHUB_PRODUCT_VERSION "0.1.0"
+/* Device version shown in the sidebar / system page (not git describe).
+ * Kconfig string (MINIHUB_VERSION, shared with the firmware/OTA version);
+ * quoted by sdkconfig.h. Fallback keeps host builds that have not
+ * regenerated sdkconfig.h on the same default. */
+#ifndef CONFIG_MINIHUB_VERSION
+#define CONFIG_MINIHUB_VERSION "0.1.0"
 #endif
 
 __attribute__((weak)) void minihub_map_download_begin(void)
@@ -1105,7 +1108,7 @@ static esp_err_t handle_api_info(httpd_req_t *req)
     const int64_t uptime_ms = esp_timer_get_time() / 1000;
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "name", "MiniHub");
-    cJSON_AddStringToObject(root, "version", CONFIG_MINIHUB_PRODUCT_VERSION);
+    cJSON_AddStringToObject(root, "version", CONFIG_MINIHUB_VERSION);
     cJSON_AddNumberToObject(root, "api_version", MINIHUB_CORE_API_VERSION);
     cJSON_AddBoolToObject(root, "auth_required", minihub_auth_enabled());
     cJSON_AddBoolToObject(root, "password_set", minihub_auth_password_set());
@@ -1178,8 +1181,8 @@ static esp_err_t handle_api_system(httpd_req_t *req)
 
     const esp_app_desc_t *app = esp_app_get_description();
     cJSON_AddStringToObject(root, "name", "MiniHub");
-    /* Product version shown in sidebar (hub-ver); keep stable across git builds. */
-    cJSON_AddStringToObject(root, "version", CONFIG_MINIHUB_PRODUCT_VERSION);
+    /* Device version shown in sidebar (hub-ver); keep stable across git builds. */
+    cJSON_AddStringToObject(root, "version", CONFIG_MINIHUB_VERSION);
     cJSON_AddStringToObject(root, "idf_version", esp_get_idf_version());
     if (app && app->version[0]) {
         cJSON_AddStringToObject(root, "commit", app->version);
@@ -3309,6 +3312,101 @@ static esp_err_t handle_api_ota_start(httpd_req_t *req)
     return err;
 }
 
+static esp_err_t handle_api_update_hints(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    cJSON *resp = minihub_update_hints_json();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_update_notes(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    cJSON *resp = minihub_update_notes_json();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_update_check(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    cJSON *resp = minihub_update_hints_refresh();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_update_apply(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char buf[256];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no body");
+    }
+    buf[len] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+    const cJSON *kind = cJSON_GetObjectItem(root, "kind");
+    const cJSON *force = cJSON_GetObjectItem(root, "force");
+    bool force_b = (force && cJSON_IsBool(force)) ? cJSON_IsTrue(force) : false;
+    minihub_update_kind_t k = MINIHUB_UPDATE_FIRMWARE;
+    bool known = false;
+    if (cJSON_IsString(kind)) {
+        if (!strcmp(kind->valuestring, "firmware")) { k = MINIHUB_UPDATE_FIRMWARE; known = true; }
+        else if (!strcmp(kind->valuestring, "asset")) { k = MINIHUB_UPDATE_ASSET; known = true; }
+        else if (!strcmp(kind->valuestring, "web")) { k = MINIHUB_UPDATE_WEB; known = true; }
+    }
+    cJSON_Delete(root);
+    if (!known) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "unknown kind");
+    }
+    char base[MINIHUB_STORE_BASE_URL_MAX];
+    if (!minihub_store_copy_base_url(base, sizeof(base))) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no deploy url");
+    }
+    int rc = minihub_update_apply_force(k, base, force_b);
+    if (rc < 0) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                  esp_err_to_name((esp_err_t)(-rc)));
+    }
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddNumberToObject(resp, "pending", rc);
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
 static esp_err_t handle_api_ota_upload(httpd_req_t *req)
 {
     esp_err_t err = api_auth(req);
@@ -4956,12 +5054,233 @@ static esp_err_t handle_api_dev_web_put(httpd_req_t *req)
     }
     fclose(f);
     free(body);
+
+    /* Drop a stale sibling <path>.gz so gzip clients never serve an out-of-date
+     * compressed copy of the file we just wrote. Skip when the upload itself is
+     * a .gz (dev_sync PUTs the plain file first, then the matching .gz). */
+    const size_t rel_len = strlen(rel);
+    if (rel_len < 3 || strcmp(rel + rel_len - 3, ".gz") != 0) {
+        char path_gz[sizeof(path) + 4];
+        if (snprintf(path_gz, sizeof(path_gz), "%s.gz", path) < (int)sizeof(path_gz)) {
+            if (unlink(path_gz) == 0) {
+                ESP_LOGI(TAG, "dev web put removed stale %s", path_gz);
+            }
+        }
+    }
+
     ESP_LOGI(TAG, "dev web put %s (%u bytes)", path, (unsigned)body_len);
 
     cJSON *resp = cJSON_CreateObject();
     cJSON_AddStringToObject(resp, "result", "ok");
     cJSON_AddStringToObject(resp, "path", path);
     cJSON_AddNumberToObject(resp, "bytes", (double)body_len);
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+/* DELETE /api/dev/web/<rel> — remove one console file from /data/web/. Lets the
+ * deploy path be tested for real (the Hub re-pulls it from GET /api/web) instead
+ * of reflashing storage. An empty directory is removed too. */
+static esp_err_t handle_api_dev_web_delete(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    static const char prefix[] = "/api/dev/web/";
+    if (strncmp(req->uri, prefix, sizeof(prefix) - 1) != 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path");
+    }
+    const char *rel = req->uri + sizeof(prefix) - 1;
+    if (!web_path_safe(rel)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path");
+    }
+
+    char path[MINIHUB_PATH_MAX];
+    if (snprintf(path, sizeof(path), "%s/%s", MINIHUB_WEB_DIR, rel) >= (int)sizeof(path)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "path too long");
+    }
+
+    if (unlink(path) != 0) {
+        /* unlink() refuses directories; drop it only when it is empty. */
+        if (errno != EISDIR || rmdir(path) != 0) {
+            return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+        }
+    }
+    ESP_LOGI(TAG, "dev web delete %s", path);
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddStringToObject(resp, "path", path);
+    cJSON_AddBoolToObject(resp, "removed", true);
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+/* PUT/DELETE /api/dev/assets/<rel> — device icons (images/{devices,parameters}/)
+ * and per-parameter styles (styles/). Only those prefixes are reachable, so this
+ * can never write outside the asset tree (the generic /api/dev/fs/ route stays
+ * ui/-only). The Web console reads them via GET /img/... and its style loader, so
+ * no reload is needed after a write. */
+#define DEV_ASSET_UPLOAD_MAX_BYTES (256 * 1024)
+
+static bool dev_asset_rel_ok(const char *rel)
+{
+    if (!web_path_safe(rel)) {
+        return false;
+    }
+    return strncmp(rel, "images/devices/", 15) == 0 ||
+           strncmp(rel, "images/parameters/", 18) == 0 ||
+           strncmp(rel, "styles/", 7) == 0;
+}
+
+static esp_err_t dev_asset_local_path(const char *uri, char *out, size_t n)
+{
+    static const char prefix[] = "/api/dev/assets/";
+    if (strncmp(uri, prefix, sizeof(prefix) - 1) != 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    const char *rel = uri + sizeof(prefix) - 1;
+    if (!dev_asset_rel_ok(rel)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    int wrote = snprintf(out, n, "/data/%s", rel);
+    if (wrote < 0 || (size_t)wrote >= n) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t handle_api_dev_assets_put(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char path[MINIHUB_PATH_MAX];
+    if (dev_asset_local_path(req->uri, path, sizeof(path)) != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_403_FORBIDDEN,
+                                   "only images/devices, images/parameters and styles are writable");
+    }
+
+    char *body = NULL;
+    size_t body_len = 0;
+    err = read_http_body(req, &body, &body_len, DEV_ASSET_UPLOAD_MAX_BYTES);
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid body");
+    }
+    err = mkdir_web_parents(path);
+    if (err != ESP_OK) {
+        free(body);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "mkdir failed");
+    }
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        free(body);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "open failed");
+    }
+    if (body_len > 0 && fwrite(body, 1, body_len, f) != body_len) {
+        fclose(f);
+        free(body);
+        unlink(path);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "write failed");
+    }
+    fclose(f);
+    free(body);
+    ESP_LOGI(TAG, "dev asset put %s (%u bytes)", path, (unsigned)body_len);
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddStringToObject(resp, "path", path);
+    cJSON_AddNumberToObject(resp, "bytes", (double)body_len);
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_dev_assets_delete(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char path[MINIHUB_PATH_MAX];
+    if (dev_asset_local_path(req->uri, path, sizeof(path)) != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_403_FORBIDDEN,
+                                   "only images/devices, images/parameters and styles are deletable");
+    }
+    if (unlink(path) != 0) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+    }
+    ESP_LOGI(TAG, "dev asset delete %s", path);
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddStringToObject(resp, "path", path);
+    cJSON_AddBoolToObject(resp, "removed", true);
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+/* GET /api/dev/assets/list — the asset files currently stored on the device.
+ * The dev panel needs this to show (and delete) icons one by one or in bulk;
+ * there is no directory listing anywhere else. */
+static esp_err_t handle_api_dev_assets_list(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    static const char *const roots[] = {"images/devices", "images/parameters", "styles"};
+    cJSON *items = cJSON_CreateArray();
+    if (!items) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    for (size_t r = 0; r < sizeof(roots) / sizeof(roots[0]); r++) {
+        char dir[MINIHUB_PATH_MAX];
+        if (snprintf(dir, sizeof(dir), "/data/%s", roots[r]) >= (int)sizeof(dir)) {
+            continue;
+        }
+        DIR *d = opendir(dir);
+        if (!d) {
+            continue;
+        }
+        struct dirent *e = NULL;
+        while ((e = readdir(d)) != NULL) {
+            if (e->d_name[0] == '.') {
+                continue;
+            }
+            char full[MINIHUB_PATH_MAX];
+            struct stat st;
+            if (snprintf(full, sizeof(full), "%s/%s", dir, e->d_name) >= (int)sizeof(full)) {
+                continue;
+            }
+            if (stat(full, &st) != 0 || !S_ISREG(st.st_mode)) {
+                continue;
+            }
+            cJSON *it = cJSON_CreateObject();
+            if (!it) {
+                continue;
+            }
+            /* "images/parameters" + "/" + d_name (up to NAME_MAX). */
+            char rel[320];
+            snprintf(rel, sizeof(rel), "%s/%s", roots[r], e->d_name);
+            cJSON_AddStringToObject(it, "path", rel);
+            cJSON_AddNumberToObject(it, "size", (double)st.st_size);
+            cJSON_AddItemToArray(items, it);
+        }
+        closedir(d);
+    }
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddItemToObject(resp, "items", items);
+    cJSON_AddNumberToObject(resp, "count", (double)cJSON_GetArraySize(items));
     err = send_json(req, resp);
     cJSON_Delete(resp);
     return err;
@@ -5063,6 +5382,44 @@ static esp_err_t handle_api_dev_catalog_put(httpd_req_t *req)
     cJSON_Delete(resp);
     return err;
 }
+
+/* DELETE /api/dev/catalog/{devices.csv|parameters.csv}
+ * Drop one stored model CSV and fall back to the built-in catalog: the derived
+ * flat file is removed too, so the reload re-seeds the embedded registry instead
+ * of serving a flatten built from a file that no longer exists. */
+static esp_err_t handle_api_dev_catalog_delete(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char name[32];
+    if (!catalog_name_from_uri(req->uri, name, sizeof(name))) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "use devices.csv or parameters.csv");
+    }
+
+    /* MINIHUB_DW_MODEL_DIR + "/" + the validated file name (at most 31 chars). */
+    char path[96];
+    if (snprintf(path, sizeof(path), "%s/%s", MINIHUB_DW_MODEL_DIR, name) >= (int)sizeof(path)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "path too long");
+    }
+    if (unlink(path) != 0) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+    }
+    (void)unlink(MINIHUB_DW_CSV_PATH);
+    err = minihub_device_widget_reload(NULL);
+    ESP_LOGI(TAG, "dev catalog delete %s (reload %s)", path, esp_err_to_name(err));
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddStringToObject(resp, "file", name);
+    cJSON_AddBoolToObject(resp, "removed", true);
+    cJSON_AddBoolToObject(resp, "reloaded", err == ESP_OK);
+    cJSON_AddNumberToObject(resp, "devices", (double)minihub_device_widget_device_count());
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
 #endif /* CONFIG_MINIHUB_WEB_UI */
 
 static esp_err_t minihub_web_add_uri(httpd_handle_t server, const httpd_uri_t *uri)
@@ -5158,6 +5515,14 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
                                   .handler = handle_api_scenes_import };
     httpd_uri_t scene_invoke = { .uri = "/api/scenes/invoke", .method = HTTP_POST, .handler = handle_api_scene_invoke };
     httpd_uri_t events = { .uri = "/api/events", .method = HTTP_GET, .handler = handle_api_events };
+    httpd_uri_t update_hints = { .uri = "/api/update/hints", .method = HTTP_GET,
+                                 .handler = handle_api_update_hints };
+    httpd_uri_t update_notes = { .uri = "/api/update/notes", .method = HTTP_GET,
+                                 .handler = handle_api_update_notes };
+    httpd_uri_t update_check = { .uri = "/api/update/check", .method = HTTP_POST,
+                                 .handler = handle_api_update_check };
+    httpd_uri_t update_apply = { .uri = "/api/update/apply", .method = HTTP_POST,
+                                 .handler = handle_api_update_apply };
     httpd_uri_t ota_status = { .uri = "/api/ota", .method = HTTP_GET, .handler = handle_api_ota_status };
     httpd_uri_t ota_start = { .uri = "/api/ota", .method = HTTP_POST, .handler = handle_api_ota_start };
     httpd_uri_t ota_upload = { .uri = "/api/ota/upload", .method = HTTP_POST, .handler = handle_api_ota_upload };
@@ -5246,6 +5611,10 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &scenes_import), TAG, "/api/scenes/import");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &scene_invoke), TAG, "/api/scenes/invoke");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &events), TAG, "/api/events");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_hints), TAG, "/api/update/hints");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_notes), TAG, "/api/update/notes");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_check), TAG, "/api/update/check");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_apply), TAG, "/api/update/apply");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_status), TAG, "/api/ota");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_start), TAG, "/api/ota POST");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_upload), TAG, "/api/ota/upload");
@@ -5318,6 +5687,24 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
         .handler = handle_api_dev_web_put,
     };
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_web_put), TAG, "/api/dev/web/*");
+    httpd_uri_t dev_web_delete = {
+        .uri = "/api/dev/web/*",
+        .method = HTTP_DELETE,
+        .handler = handle_api_dev_web_delete,
+    };
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_web_delete), TAG, "/api/dev/web/* DELETE");
+    httpd_uri_t dev_assets_put = {
+        .uri = "/api/dev/assets/*",
+        .method = HTTP_PUT,
+        .handler = handle_api_dev_assets_put,
+    };
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_assets_put), TAG, "/api/dev/assets/*");
+    httpd_uri_t dev_assets_delete = {
+        .uri = "/api/dev/assets/*",
+        .method = HTTP_DELETE,
+        .handler = handle_api_dev_assets_delete,
+    };
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_assets_delete), TAG, "/api/dev/assets/* DELETE");
     httpd_uri_t dev_catalog_get = {
         .uri = "/api/dev/catalog/*",
         .method = HTTP_GET,
@@ -5328,8 +5715,20 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
         .method = HTTP_PUT,
         .handler = handle_api_dev_catalog_put,
     };
+    httpd_uri_t dev_catalog_delete = {
+        .uri = "/api/dev/catalog/*",
+        .method = HTTP_DELETE,
+        .handler = handle_api_dev_catalog_delete,
+    };
+    httpd_uri_t dev_assets_list = {
+        .uri = "/api/dev/assets/list",
+        .method = HTTP_GET,
+        .handler = handle_api_dev_assets_list,
+    };
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_catalog_get), TAG, "/api/dev/catalog GET");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_catalog_put), TAG, "/api/dev/catalog PUT");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_catalog_delete), TAG, "/api/dev/catalog DELETE");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &dev_assets_list), TAG, "/api/dev/assets/list");
 #endif
 
     if (local.start_websocket) {
@@ -5369,7 +5768,7 @@ esp_err_t minihub_web_start(uint16_t port)
     /* Default ctrl_port (32768) collides with RainMaker protocomm_httpd
      * (on-network chal_resp) which also uses HTTPD_DEFAULT_CONFIG. */
     config.ctrl_port = ESP_HTTPD_DEF_CTRL_PORT + 1;
-    config.max_uri_handlers = 68;
+    config.max_uri_handlers = 80;
     config.max_open_sockets = 20;
     /* Store install/upgrade may HTTP-download .mhub on this task (esp_http_client
      * + local buffers). 8K overflows; 16K matches typical IDF httpd+client use. */
@@ -5390,6 +5789,7 @@ esp_err_t minihub_web_start(uint16_t port)
     }
 
     ESP_LOGI(TAG, "HTTP server on port %u", port);
+    minihub_update_hint_start();
     return ESP_OK;
 }
 

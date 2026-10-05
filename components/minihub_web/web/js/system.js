@@ -1,5 +1,6 @@
 let sysIface = 'eth',
     sysSnap = null;
+let sysHintProbed = false;
 
 function fmtBytes(n) {
     n = Number(n) || 0;
@@ -11,6 +12,48 @@ function fmtBytes(n) {
 
 function sysCard(title, val, sub) {
     return '<div class="sys-card"><h4>' + esc(title) + '</h4><div class="v">' + esc(val) + '</div>' + (sub ? '<div class="s">' + esc(sub) + '</div>' : '') + '</div>';
+}
+
+function firstText() {
+    for (let i = 0; i < arguments.length; i++) {
+        const v = arguments[i] == null ? '' : String(arguments[i]).trim();
+        if (v) return v;
+    }
+    return '';
+}
+
+function sysVerCard(title, val, subs) {
+    let html = '<div class="sys-card"><h4>' + esc(title) + '</h4><div class="v">' + esc(val || t('sys.none')) + '</div>';
+    (subs || []).forEach(function (line) {
+        if (line) html += '<div class="s">' + esc(line) + '</div>';
+    });
+    return html + '</div>';
+}
+
+function showReleaseNote(id, note) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const raw = note == null ? '' : String(note).trim();
+    el.textContent = raw || t('sys.none');
+}
+
+async function loadUpdateNotes() {
+    try {
+        const r = await fetch('/api/update/notes');
+        if (!r.ok) return {};
+        const j = await r.json();
+        return j && typeof j === 'object' ? j : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+/* Re-render the global update banner (boot.js) right after a check/apply, so it
+ * does not keep announcing a version we just installed until the next 60s poll. */
+function refreshUpdateBanner() {
+    if (typeof pollUpdateHint === 'function') {
+        try { pollUpdateHint(); } catch (e) {}
+    }
 }
 
 function fmtChip(chip) {
@@ -213,17 +256,73 @@ async function loadSystem() {
             return;
         }
         sysSnap = await r.json();
+        const notes = await loadUpdateNotes();
         const ram = sysSnap.ram || {};
         const st = sysSnap.storage || {};
         const ms = sysSnap.modstore || {};
-        const grid = document.getElementById('sys-info-grid');
-        const ver = 'v' + (sysSnap.version || '0.1.0');
+        const hostVer = firstText(notes.firmware_version, sysSnap.commit);
+        const webVer = firstText(notes.web_version, window.mhWebVersion);
         const idfLine = sysSnap.idf_version ? ('IDF: ' + sysSnap.idf_version) : '';
         const commitLine = sysSnap.commit ? ('MiniHub: ' + sysSnap.commit) : '';
-        grid.innerHTML = '<div class="sys-card"><h4>' + esc(t('sys.firmware_version')) + '</h4><div class="v">' + esc(ver) + '</div>' + (idfLine ? '<div class="s">' + esc(idfLine) + '</div>' : '') + (commitLine ? '<div class="s">' + esc(commitLine) + '</div>' : '') + '</div>' + sysCard(t('sys.chip_type'), fmtChip(sysSnap.chip), [sysSnap.chip_cores != null ? ('Cores: ' + sysSnap.chip_cores) : '', sysSnap.chip_revision != null ? ('Revision: ' + sysSnap.chip_revision) : ''].filter(Boolean).join(', ')) + sysCard('Flash', fmtBytes(sysSnap.flash_size), t('sys.total_capacity')) + sysCard(t('sys.internal_ram'), fmtBytes(ram.internal_free), t('sys.total_value', { total: fmtBytes(ram.internal_total) })) + sysCard('PSRAM', fmtBytes(ram.psram_free), t('sys.total_value', { total: fmtBytes(ram.psram_total) })) + sysCard('Storage', fmtBytes(st.free), t('sys.free_total_used', { free: fmtBytes(st.free), total: fmtBytes(st.total), used: fmtBytes(st.used) })) + sysCard('Modstore', fmtBytes(ms.free), t('sys.free_total_used', { free: fmtBytes(ms.free), total: fmtBytes(ms.total), used: fmtBytes(ms.used) })) + sysCard(t('sys.uptime'), (Number(sysSnap.uptime_s) || 0) + ' s', '');
+        const productLine = sysSnap.version ? t('sys.product_version', { version: sysSnap.version }) : '';
+        const verRows = document.getElementById('sys-ver-rows');
+        if (verRows) {
+            let hints = {};
+            try {
+                const hr = await fetch('/api/update/hints');
+                if (hr.ok) hints = await hr.json();
+            } catch (e) {}
+            const fwHint = (hints && hints.firmware) || {};
+            const webHint = (hints && hints.web) || {};
+            const assetsHint = (hints && hints.assets) || {};
+            /* Both rows are symmetric: the "新版本 vX" badge opens that channel's
+             * release notes (sysShowNotes), the 更新… button applies the new
+             * bundle, and 重新安装 force re-pulls the same version (force=true). */
+            const fwNew = fwHint.version ? '<button type="button" class="badge-new badge-btn" onclick="sysShowNotes(\'firmware\')">' + t('sys.new_version', { v: fwHint.version }) + '</button>' : '';
+            const fwUp = fwHint.version ?
+                '<button class="btn-sm on" type="button" onclick="sysUpdateApply(\'firmware\')">' + t('sys.update_firmware') + '</button>' : '';
+            const webNew = webHint.version ? '<button type="button" class="badge-new badge-btn" onclick="sysShowNotes(\'web\')">' + t('sys.new_version', { v: webHint.version }) + '</button>' : '';
+            const webUp = webHint.version ?
+                '<button class="btn-sm on" type="button" onclick="sysUpdateApply(\'web\')">' + t('sys.update_web') + '</button>' : '';
+            const fwReinstall = '<button class="btn-sm" type="button" onclick="sysUpdateApply(\'firmware\', true)">' + t('sys.reinstall') + '</button>';
+            const webReinstall = '<button class="btn-sm" type="button" onclick="sysUpdateApply(\'web\', true)">' + t('sys.reinstall') + '</button>';
+            const assetReinstall = '<button class="btn-sm" type="button" onclick="sysUpdateApply(\'asset\', true)">' + t('sys.reinstall') + '</button>';
+            const assetBadge = (assetsHint && assetsHint.pending > 0) ?
+                '<span class="badge-new">' + t('sys.assets_pending', { n: assetsHint.pending }) + '</span>' : '';
+            const assetRow = assetBadge ?
+                '<div class="ver-row"><div class="ver-meta"><div class="ver-title">' + t('sys.card_device_assets') + '</div></div>' +
+                '<div class="ver-actions">' + assetBadge +
+                '<button class="btn-sm" type="button" onclick="sysUpdateApply(\'asset\')">' + t('sys.update_assets') + '</button>' +
+                assetReinstall + '</div></div>' : '';
+            verRows.innerHTML =
+                '<div class="ver-row"><div class="ver-meta"><div class="ver-title">' + t('sys.card_firmware_version') + '</div>' +
+                '<div class="ver-val">' + esc(hostVer || t('sys.none')) + '</div>' +
+                '<div class="ver-extra">' + esc([idfLine, commitLine, productLine].filter(Boolean).join(' · ')) + '</div></div>' +
+                '<div class="ver-actions">' + fwNew + fwUp + fwReinstall + '</div></div>' +
+                '<div class="ver-row"><div class="ver-meta"><div class="ver-title">' + t('sys.card_web_version') + '</div>' +
+                '<div class="ver-val">' + esc(webVer || t('sys.none')) + '</div></div>' +
+                '<div class="ver-actions">' + webNew + webUp + webReinstall + '</div></div>' +
+                assetRow;
+        }
+        showReleaseNote('sys-web-note', notes.web_note);
+        showReleaseNote('sys-fw-note', notes.firmware_note);
+        const grid = document.getElementById('sys-info-grid');
+        grid.innerHTML = sysCard(t('sys.chip_type'), fmtChip(sysSnap.chip), [sysSnap.chip_cores != null ? ('Cores: ' + sysSnap.chip_cores) : '', sysSnap.chip_revision != null ? ('Revision: ' + sysSnap.chip_revision) : ''].filter(Boolean).join(', ')) + sysCard('Flash', fmtBytes(sysSnap.flash_size), t('sys.total_capacity')) + sysCard(t('sys.internal_ram'), fmtBytes(ram.internal_free), t('sys.total_value', { total: fmtBytes(ram.internal_total) })) + sysCard('PSRAM', fmtBytes(ram.psram_free), t('sys.total_value', { total: fmtBytes(ram.psram_total) })) + sysCard('Storage', fmtBytes(st.free), t('sys.free_total_used', { free: fmtBytes(st.free), total: fmtBytes(st.total), used: fmtBytes(st.used) })) + sysCard('Modstore', fmtBytes(ms.free), t('sys.free_total_used', { free: fmtBytes(ms.free), total: fmtBytes(ms.total), used: fmtBytes(ms.used) })) + sysCard(t('sys.uptime'), (Number(sysSnap.uptime_s) || 0) + ' s', '');
         const hv = document.getElementById('hub-ver');
         if (hv && sysSnap.version) hv.textContent = 'v' + sysSnap.version;
         sysFillNet();
+        /* The version rows show whatever the device's last probe cached, which is
+         * empty right after a boot or a flash. Re-probe once per page load so
+         * opening / refreshing the System view reflects the deploy server. */
+        if (!sysHintProbed) {
+            sysHintProbed = true;
+            try {
+                const c = await fetch('/api/update/check', { method: 'POST' });
+                if (c.ok) {
+                    await loadSystem();
+                }
+            } catch (e) {}
+        }
     } catch (e) {
         toast(t('sys.network_error'));
     }
@@ -408,4 +507,80 @@ async function sysApplyWifi() {
     } catch (e) {
         toast(t('sys.network_error_new_wifi'));
     }
+}
+
+async function sysUpdateCheck() {
+    toast(t('sys.checking_update'));
+    try {
+        const r = await fetch('/api/update/check', { method: 'POST' });
+        if (!r.ok) { toast(t('sys.failed')); return; }
+        refreshUpdateBanner();
+        await loadSystem();
+        toast(t('sys.checked_update'));
+    } catch (e) {
+        toast(t('sys.network_error'));
+    }
+}
+
+async function sysUpdateApply(kind, force) {
+    const labels = { web: t('sys.update_web'), asset: t('sys.update_assets'), firmware: t('sys.update_firmware') };
+    const name = labels[kind] || kind;
+    toast(t(force ? 'sys.applying_force_update' : 'sys.applying_update', { name: name }));
+    try {
+        const r = await fetch('/api/update/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kind: kind, force: !!force })
+        });
+        if (!r.ok) { toast(t('sys.failed')); return; }
+        toast(t('sys.applied_update', { name: name }));
+        if (kind === 'firmware') {
+            sysOtaPoll();
+        } else {
+            /* Re-probe so the cached hint state reflects what we just applied
+             * instead of waiting for the next hourly pass. */
+            try { await fetch('/api/update/check', { method: 'POST' }); } catch (e) {}
+            refreshUpdateBanner();
+            setTimeout(loadSystem, 1200);
+        }
+    } catch (e) {
+        toast(t('sys.network_error'));
+    }
+}
+
+async function sysShowNotes(kind) {
+    let note = '', title = '', meta = '';
+    try {
+        const hr = await fetch('/api/update/hints');
+        if (hr.ok) {
+            const h = await hr.json();
+            const obj = (kind === 'firmware') ? (h.firmware || {}) : (h.web || {});
+            note = obj.note || '';
+            if (kind === 'firmware') {
+                title = t('sys.card_firmware_version');
+                meta = t('sys.channel_firmware');
+            } else {
+                title = t('sys.card_web_version');
+                meta = t('sys.channel_web');
+            }
+            const ver = obj.version || '';
+            if (ver) {
+                title += ' · ' + t('sys.new_version', { v: ver });
+                if (obj.current) title += ' (' + t('ov.current') + ' ' + obj.current + ')';
+            }
+        }
+    } catch (e) {}
+    const ttl = document.getElementById('update-notes-title');
+    const mta = document.getElementById('update-notes-meta');
+    const body = document.getElementById('update-notes-body');
+    if (ttl) ttl.textContent = title;
+    if (mta) mta.textContent = meta;
+    if (body) body.textContent = note || t('sys.none');
+    const m = document.getElementById('update-notes-modal');
+    if (m) m.hidden = false;
+}
+
+function closeUpdateNotes() {
+    const m = document.getElementById('update-notes-modal');
+    if (m) m.hidden = true;
 }

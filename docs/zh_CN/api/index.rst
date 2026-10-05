@@ -18,6 +18,7 @@ L3（原生）模块作者：通过 Host
    :caption: Host 开发 API
 
    host_rest
+   deploy_index
    mcp
    net_api
    minihub_core

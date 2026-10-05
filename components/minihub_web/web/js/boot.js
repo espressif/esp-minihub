@@ -1,5 +1,6 @@
 /* MiniHub web — startup */
 window.mhWebBuild = '2026-10-02-no-window-stop-keepalive';
+window.mhWebVersion = '0.1.0';
 
 function toggleSecret(btn) {
     const field = btn && btn.closest ? btn.closest('.secret-field') : null;
@@ -176,6 +177,8 @@ function connectEventsWs() {
     let ws;
     let retryMs = 2000;
     let pointsTimer = null;
+    let adaptersTimer = null;
+    let storeTimer = null;
     function scheduleLoadPoints() {
         if (pointsTimer) {
             return;
@@ -184,6 +187,28 @@ function connectEventsWs() {
             pointsTimer = null;
             if (typeof loadPoints === 'function') {
                 loadPoints();
+            }
+        }, 450);
+    }
+    function scheduleLoadAdapters() {
+        if (adaptersTimer) {
+            return;
+        }
+        adaptersTimer = setTimeout(function () {
+            adaptersTimer = null;
+            if (typeof loadAdapters === 'function') {
+                loadAdapters();
+            }
+        }, 450);
+    }
+    function scheduleLoadStore() {
+        if (storeTimer) {
+            return;
+        }
+        storeTimer = setTimeout(function () {
+            storeTimer = null;
+            if (typeof loadStoreData === 'function') {
+                loadStoreData();
             }
         }, 450);
     }
@@ -199,8 +224,21 @@ function connectEventsWs() {
         ws.onmessage = function (ev) {
             try {
                 const msg = JSON.parse(ev.data);
-                if (msg && msg.event_type === 'point.updated') {
+                if (!msg) return;
+                /* hub.reloaded = a full reload finished, so the whole point set
+                 * may have changed. Removals (uninstall/disable) publish no
+                 * point.updated of their own, so this is the only signal.
+                 * The store list needs it too: /api/modules serves REGISTERED
+                 * modules, so an uninstalled one lingered there (and therefore
+                 * in the "installed" tab) long after it was off disk. */
+                if (msg.event_type === 'point.updated' || msg.event_type === 'hub.reloaded') {
                     scheduleLoadPoints();
+                }
+                if (msg.event_type === 'device_widgets.updated' || msg.event_type === 'hub.reloaded') {
+                    scheduleLoadAdapters();
+                }
+                if (msg.event_type === 'hub.reloaded' || msg.event_type === 'store.module.installed') {
+                    scheduleLoadStore();
                 }
             } catch (e) {}
         };
@@ -214,3 +252,91 @@ function connectEventsWs() {
     }
     connect();
 }
+
+
+const UPDATE_HINT_DISMISS_KEY = 'mhUpdateHintDismiss';
+
+function updateHintSignature(data) {
+    const fw = (data && data.firmware && data.firmware.version) ? String(data.firmware.version) : '';
+    const web = (data && data.web && data.web.version) ? String(data.web.version) : '';
+    const assets = (data && data.assets && data.assets.pending > 0) ? ('a' + String(data.assets.pending)) : '';
+    const plugins = ((data && data.plugins) || []).map(function (p) {
+        const id = (p && (p.id || p.name)) || '';
+        return String(id) + '@' + String((p && p.version) || '');
+    }).sort();
+    return [fw, web, assets, plugins.join(',')].join('|');
+}
+
+function renderUpdateHint(data) {
+    const el = document.getElementById('update-hint');
+    const text = document.getElementById('update-hint-text');
+    if (!el || !text) return;
+    const parts = [];
+    const fw = data && data.firmware;
+    if (fw && fw.version) {
+        parts.push(t('sys.hint_firmware', { version: fw.version }) +
+            (fw.current ? t('sys.hint_installed', { version: fw.current }) : ''));
+    }
+    const plugins = (data && data.plugins) || [];
+    plugins.forEach(function (p) {
+        const name = (p && (p.name || p.id)) || t('sys.hint_plugin_default');
+        const ver = (p && p.version) || '';
+        parts.push(t('sys.hint_plugin', { name: name, version: ver }) +
+            (p && p.installed ? t('sys.hint_installed', { version: p.installed }) : ''));
+    });
+    const web = data && data.web;
+    if (web && web.version) {
+        parts.push(t('sys.hint_web', { version: web.version }) +
+            (web.current ? t('sys.hint_installed', { version: web.current }) : ''));
+    }
+    const assets = data && data.assets;
+    if (assets && assets.pending > 0) {
+        parts.push(t('sys.hint_assets', { n: assets.pending }));
+    }
+    if (!parts.length) {
+        el.hidden = true;
+        text.textContent = '';
+        delete el.dataset.sig;
+        return;
+    }
+    const sig = updateHintSignature(data);
+    let dismissed = '';
+    try { dismissed = localStorage.getItem(UPDATE_HINT_DISMISS_KEY) || ''; } catch (e) {}
+    if (dismissed === sig) {
+        el.hidden = true;
+        text.textContent = '';
+        delete el.dataset.sig;
+        return;
+    }
+    text.textContent = parts.join(t('sys.hint_sep')) + t('sys.hint_sep') + t('sys.hint_manual');
+    el.dataset.sig = sig;
+    el.hidden = false;
+}
+
+function dismissUpdateHint() {
+    const el = document.getElementById('update-hint');
+    if (!el || !el.dataset.sig) return;
+    try { localStorage.setItem(UPDATE_HINT_DISMISS_KEY, el.dataset.sig); } catch (e) {}
+    el.hidden = true;
+}
+
+async function pollUpdateHint() {
+    try {
+        /* t() returns the raw key until /web/i18n/*.json lands, and this runs at
+         * parse time (before i18n.js's fetch settles). Compose the banner only
+         * after the dictionary is in, or it sticks as "sys.hint_web…" until the
+         * next 60s tick (the i18n-pending reveal can beat the fetch). */
+        if (window.i18nReady) {
+            try { await window.i18nReady; } catch (e) {}
+        }
+        const r = await fetch('/api/update/hints');
+        if (!r.ok) return;
+        renderUpdateHint(await r.json());
+    } catch (e) {}
+}
+
+const updateHintClose = document.getElementById('update-hint-x');
+if (updateHintClose) updateHintClose.addEventListener('click', dismissUpdateHint);
+
+pollUpdateHint();
+setInterval(pollUpdateHint, 60000);

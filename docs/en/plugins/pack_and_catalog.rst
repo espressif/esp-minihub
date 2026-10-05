@@ -43,7 +43,7 @@ Pack commands
    python3 tools/build_plugin_standalone.py color_bulb
 
    # After .mhub files are in the store directory, rewrite catalog.json.
-   # Default: walk DEPLOY/ID/ID.mhub (no sources, no MINIHUB_PLUGIN_DIRS).
+   # Default: walk Stores/ESP32S31/ID/ID.mhub and Stores/Common/ID/ID.mhub.
    python3 tools/sync_store_catalog.py
    python3 tools/sync_store_catalog.py --deploy ~/workspace/minihub_store
 
@@ -55,16 +55,17 @@ Pack commands
 both ``module.json`` and ``CMakeLists.txt`` (``examples/plugins/*/``
 plus ``MINIHUB_PLUGIN_DIRS``). It does not pack. ``./tools/build_firmware.py …
 pack`` wraps an existing ``libadapter_ID.so`` into MHMD and
-``DEPLOY/ID/ID.mhub``, then refreshes ``catalog.json`` **size**. A successful
+``Stores/ESP32S31/ID/ID.mhub`` (or ``Stores/Common`` when ``targets`` is
+``["ALL"]``), then refreshes ``catalog.json`` **size**. A successful
 firmware ``build`` runs that pack step automatically when those sources are on
 the CMake path.
 
 After the ``.mhub`` files are already in the store directory (for example
-``~/workspace/minihub_store/ble_mesh_pack/ble_mesh_pack.mhub``), run
+``~/workspace/minihub_store/Stores/ESP32S31/ble_mesh_pack/ble_mesh_pack.mhub``), run
 ``sync_store_catalog.py`` (``--from-store`` is the default). It walks each
-``DEPLOY/ID/ID.mhub``, reads ``module.json`` (and ``ui.json`` when the zip has
-one), and writes ``catalog.json``. Plugin sources are not required. The same
-script is inside ``module_sdk.zip``. The local Store server serves that file;
+``Stores/ESP32S31/ID/ID.mhub`` and ``Stores/Common/ID/ID.mhub``, reads ``module.json`` (and ``ui.json`` when the zip has
+one), and writes ``catalog.json`` beside that package. Plugin sources are not required. The same
+script is inside ``module_sdk.zip``. ``GET /api/catalog`` aggregates those objects;
 copying a zip alone does not update the catalog. Default deploy root is
 ``MINIHUB_PLUGINS_DEPLOY_DIR`` or ``~/workspace/minihub_store``.
 
@@ -73,8 +74,10 @@ Deploy layout
 
 .. code-block:: text
 
-   DEPLOY/catalog.json
-   DEPLOY/ID/ID.mhub
+   DEPLOY/Stores/ESP32S31/ID/catalog.json
+   DEPLOY/Stores/ESP32S31/ID/ID.mhub
+   DEPLOY/Stores/Common/ID/catalog.json
+   DEPLOY/Stores/Common/ID/ID.mhub
 
 Default ``store_server.py`` listen address: ``http://0.0.0.0:8080``
 (override with ``--port`` or ``MINIHUB_STORE_PORT``).
@@ -94,7 +97,8 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
      "id": "color_bulb",
      "name": "Color Bulb (simulated)",
      "version": "0.1.0",
-     "url": "/files/color_bulb.mhub",
+     "targets": ["ESP32S31"],
+     "url": "/files/Stores/ESP32S31/color_bulb/color_bulb.mhub",
      "adapter": "color_bulb",
      "size": 3762,
      "binary_size": 12000
@@ -103,6 +107,11 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
 * ``kind`` — ``module`` for L2/L3; L1 config-only packs may appear as ``pack``
   (``module``/``pack`` are interchangeable only for JSON-only items)
 * ``url`` — path or absolute HTTP URL of the ``.mhub``
+* ``targets`` — chip folder names, the same strings as ``Firmwares/<chip>/``
+  (for example ``ESP32S31``), or ``ALL`` for a JS module. Copied from
+  ``module.json``. An explicit list is kept. When the field is omitted, pack
+  writes ``["ALL"]`` for a JS module and ``["ESP32S31"]`` for every other
+  module
 * ``adapter`` — optional; Host creates an ``adapters.json`` slot on install
 * ``size`` — **outer zip** byte length (must match the ``.mhub`` on disk;
   ``pack`` rewrites this)

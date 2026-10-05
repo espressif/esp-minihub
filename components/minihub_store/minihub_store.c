@@ -15,9 +15,12 @@
 
 #include "minihub_paths.h"
 #include "minihub_pack.h"
+#include "minihub_net.h"
 #include "minihub_module.h"
 #include "minihub_module_abi.h"
+#include "minihub_module_abi_check.h"
 #include "minihub_config.h"
+#include "minihub_core.h"
 #include "hub_zip.h"
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
@@ -193,6 +196,22 @@ esp_err_t minihub_store_refresh_catalog(void)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+bool minihub_store_copy_base_url(char *out, size_t out_len)
+{
+    if (out && out_len) {
+        out[0] = '\0';
+    }
+    return false;
+}
+
+esp_err_t minihub_store_list_upgrades(cJSON **out)
+{
+    if (out) {
+        *out = NULL;
+    }
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 #else
 
 #define MINIHUB_STORE_CATALOG_PATH MINIHUB_STORE_MOUNT "/catalog.json"
@@ -345,6 +364,66 @@ static void store_base_url(char *out, size_t out_len)
     store_default_base_url(out, out_len);
 }
 
+static bool chip_token_eq(const char *a, const char *b)
+{
+    if (!a || !b) {
+        return false;
+    }
+    size_t i = 0;
+    for (; a[i] && b[i]; i++) {
+        char ca = a[i];
+        char cb = b[i];
+        if (ca >= 'a' && ca <= 'z') {
+            ca = (char)(ca - 'a' + 'A');
+        }
+        if (cb >= 'a' && cb <= 'z') {
+            cb = (char)(cb - 'a' + 'A');
+        }
+        if (ca != cb) {
+            return false;
+        }
+    }
+    return a[i] == '\0' && b[i] == '\0';
+}
+
+static bool catalog_entry_targets_chip(const cJSON *entry, const char *chip)
+{
+    const cJSON *targets = cJSON_GetObjectItem(entry, "targets");
+    if (!cJSON_IsArray(targets) || cJSON_GetArraySize(targets) == 0) {
+        return true; /* legacy entry without targets: passthrough */
+    }
+    const cJSON *t = NULL;
+    cJSON_ArrayForEach(t, targets) {
+        if (!cJSON_IsString(t) || !t->valuestring) {
+            continue;
+        }
+        if (strcmp(t->valuestring, "*") == 0 || chip_token_eq(t->valuestring, "ALL") ||
+            chip_token_eq(t->valuestring, chip)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Drop catalog entries built for another chip. The store server filters on
+ * ?chip= as well; this is defense in depth, like the per-plugin ABI block. */
+static void catalog_filter_by_chip(cJSON *arr)
+{
+    if (!cJSON_IsArray(arr)) {
+        return;
+    }
+    const char *chip = CONFIG_IDF_TARGET;
+    for (int i = cJSON_GetArraySize(arr) - 1; i >= 0; i--) {
+        cJSON *item = cJSON_GetArrayItem(arr, i);
+        if (item && !catalog_entry_targets_chip(item, chip)) {
+            cJSON *id = cJSON_GetObjectItem(item, "id");
+            ESP_LOGI(TAG, "catalog: skip %s (targets exclude %s)",
+                     (id && cJSON_IsString(id)) ? id->valuestring : "?", chip);
+            cJSON_DeleteItemFromArray(arr, i);
+        }
+    }
+}
+
 static cJSON *http_get_catalog_array(const char *base)
 {
     if (!base || !base[0]) {
@@ -352,8 +431,26 @@ static cJSON *http_get_catalog_array(const char *base)
     }
     char url[MINIHUB_STORE_ABS_URL_MAX];
     snprintf(url, sizeof(url), "%s/api/catalog", base);
+    char with_mac[MINIHUB_STORE_ABS_URL_MAX + 64];
+    const char *get_url = url;
+    if (minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
+        get_url = with_mac;
+    }
+    /* Advertise the device's baked ABI contract so the store server can filter
+       by compatibility and reject a stale / mismatched catalog. The per-plugin
+       catalog `abi` block is re-checked locally as defense in depth. */
+    char full[MINIHUB_STORE_ABS_URL_MAX + 256];
+    const char *chip = CONFIG_IDF_TARGET;
+    const char *sep = strchr(get_url, '?') ? "&" : "?";
+    int n = snprintf(full, sizeof(full),
+                     "%s%sabi_version=%u&abi_total_hash=%s&chip=%s",
+                     get_url, sep, (unsigned)MINIHUB_ABI_VERSION_BAKED,
+                     MINIHUB_ABI_TOTAL_HASH, chip);
+    if (n >= 0 && (size_t)n < sizeof(full)) {
+        get_url = full;
+    }
     char *body = NULL;
-    esp_err_t err = http_get_body(url, &body, NULL);
+    esp_err_t err = http_get_body(get_url, &body, NULL);
     if (err != ESP_OK || !body) {
         ESP_LOGW(TAG, "catalog fetch failed from %s: %s", url, esp_err_to_name(err));
         free(body);
@@ -361,12 +458,32 @@ static cJSON *http_get_catalog_array(const char *base)
     }
     cJSON *root = cJSON_Parse(body);
     free(body);
-    if (!root || !cJSON_IsArray(root)) {
+    if (!root) {
         ESP_LOGW(TAG, "invalid catalog JSON from %s", url);
-        cJSON_Delete(root);
         return NULL;
     }
-    return root;
+    /* The store server replies with either a bare plugin array (legacy) or an
+     * object {"status":"ok","plugins":[...]} (current, carrying ABI filtering).
+     * Hand the caller a plain array either way so the rest of the code is
+     * unchanged. */
+    cJSON *arr;
+    if (cJSON_IsArray(root)) {
+        arr = root;
+    } else {
+        cJSON *pl = cJSON_GetObjectItem(root, "plugins");
+        if (!pl || !cJSON_IsArray(pl)) {
+            ESP_LOGW(TAG, "invalid catalog JSON from %s", url);
+            cJSON_Delete(root);
+            return NULL;
+        }
+        arr = cJSON_Duplicate(pl, 1);
+        cJSON_Delete(root);
+        if (!arr) {
+            return NULL;
+        }
+    }
+    catalog_filter_by_chip(arr);
+    return arr;
 }
 
 static void catalog_rewrite_relative_urls(cJSON *arr, const char *base)
@@ -581,6 +698,10 @@ static esp_err_t http_get_body(const char *url, char **out_body, size_t *out_len
 
 static esp_err_t http_download_file(const char *url, const char *path)
 {
+    char with_mac[MINIHUB_STORE_ABS_URL_MAX + 32];
+    if (url && minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
+        url = with_mac;
+    }
     esp_http_client_config_t cfg = {
         .url = url,
         .timeout_ms = 120000,
@@ -1032,6 +1153,10 @@ static esp_err_t read_file_to_psram(const char *path, uint8_t **out, size_t *out
 
 static esp_err_t http_download_to_psram(const char *url, uint8_t **out, size_t *out_len, size_t max_len)
 {
+    char with_mac[MINIHUB_STORE_ABS_URL_MAX + 32];
+    if (url && minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
+        url = with_mac;
+    }
     esp_http_client_config_t cfg = {
         .url = url,
         .timeout_ms = 120000,
@@ -1371,6 +1496,20 @@ static esp_err_t install_module(const cJSON *item, bool upgrade)
         return ESP_ERR_INVALID_ARG;
     }
 
+    /* Offline ABI compatibility (defense in depth). The store server already
+     * filtered by the device's abi_version entry (per-version symbol set, optional
+     * per-version abi_total_hash) before serving this catalog; re-check against the
+     * baked host table so a sideloaded or stale package is also rejected locally.
+     * The catalog `abi` block is generated by tools/sync_store_catalog.py. */
+    const cJSON *abi_j = cJSON_GetObjectItem(item, "abi");
+    if (cJSON_IsObject(abi_j)) {
+        esp_err_t abi_err = minihub_module_abi_check_symbols(abi_j);
+        if (abi_err != ESP_OK) {
+            ESP_LOGE(TAG, "module %s abi symbols incompatible with this firmware; install denied", id);
+            return ESP_ERR_INVALID_VERSION;
+        }
+    }
+
     const char *rel = url_j->valuestring;
     size_t rel_n = strlen(rel);
     if (rel_n < 5 || strcmp(rel + rel_n - 5, ".mhub") != 0) {
@@ -1708,6 +1847,20 @@ static esp_err_t store_install_from_catalog(const char *kind, const char *id, bo
     }
 
     esp_err_t err = store_install_item(item, kind, upgrade, force);
+    if (err == ESP_OK) {
+        /* A freshly installed/upgraded module may reference device types whose
+         * icon or parameter style is not yet on the device. Notify the update
+         * layer so it kicks an asset sync immediately (instead of waiting for
+         * the next hourly pass); the subscription runs the sync on a separate
+         * task, so this publish never blocks the install HTTP request. */
+        cJSON *d = cJSON_CreateObject();
+        if (d) {
+            cJSON_AddStringToObject(d, "id", id);
+            cJSON_AddStringToObject(d, "kind", kind);
+            cJSON_AddBoolToObject(d, "upgrade", upgrade);
+            minihub_event_bus_publish("store.module.installed", d);
+        }
+    }
     cJSON_Delete(catalog);
     return err;
 }
@@ -1905,6 +2058,95 @@ cJSON *minihub_store_catalog_merged(void)
     }
     cJSON_Delete(remote);
     return merged;
+}
+
+bool minihub_store_copy_base_url(char *out, size_t out_len)
+{
+    if (!out || out_len == 0) {
+        return false;
+    }
+    store_base_url(out, out_len);
+    return out[0] != '\0';
+}
+
+static bool installed_item_version(const cJSON *item, char *out, size_t out_len)
+{
+    const cJSON *kind = cJSON_GetObjectItem(item, "kind");
+    const cJSON *id = cJSON_GetObjectItem(item, "id");
+    if (!cJSON_IsString(id) || !id->valuestring[0]) {
+        return false;
+    }
+    bool pack = catalog_item_config_only(item) ||
+                (cJSON_IsString(kind) && strcmp(kind->valuestring, "pack") == 0);
+    if (pack) {
+        return installed_pack_version(id->valuestring, out, out_len) != NULL;
+    }
+    if (cJSON_IsString(kind) && strcmp(kind->valuestring, "module") == 0) {
+#if CONFIG_MINIHUB_DYNAMIC_MODULES
+        return installed_module_version(id->valuestring, out, out_len) != NULL;
+#else
+        return false;
+#endif
+    }
+    return false;
+}
+
+esp_err_t minihub_store_list_upgrades(cJSON **out)
+{
+    if (!out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *out = NULL;
+    char base[MINIHUB_STORE_BASE_URL_MAX];
+    store_base_url(base, sizeof(base));
+    if (!base[0]) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    cJSON *catalog = http_get_catalog_array(base);
+    if (!catalog) {
+        return ESP_FAIL;
+    }
+    cJSON *arr = cJSON_CreateArray();
+    if (!arr) {
+        cJSON_Delete(catalog);
+        return ESP_ERR_NO_MEM;
+    }
+    const cJSON *item = NULL;
+    cJSON_ArrayForEach(item, catalog) {
+        char cur[32];
+        if (!installed_item_version(item, cur, sizeof(cur))) {
+            continue;
+        }
+        const cJSON *ver = cJSON_GetObjectItem(item, "version");
+        if (!cJSON_IsString(ver) || !ver->valuestring ||
+            version_compare(ver->valuestring, cur) <= 0) {
+            continue;
+        }
+        cJSON *row = cJSON_CreateObject();
+        if (!row) {
+            continue;
+        }
+        const cJSON *id = cJSON_GetObjectItem(item, "id");
+        const cJSON *name = cJSON_GetObjectItem(item, "name");
+        const cJSON *kind = cJSON_GetObjectItem(item, "kind");
+        if (cJSON_IsString(id) && id->valuestring) {
+            cJSON_AddStringToObject(row, "id", id->valuestring);
+        }
+        if (cJSON_IsString(name) && name->valuestring && name->valuestring[0]) {
+            cJSON_AddStringToObject(row, "name", name->valuestring);
+        } else if (cJSON_IsString(id) && id->valuestring) {
+            cJSON_AddStringToObject(row, "name", id->valuestring);
+        }
+        if (cJSON_IsString(kind) && kind->valuestring) {
+            cJSON_AddStringToObject(row, "kind", kind->valuestring);
+        }
+        cJSON_AddStringToObject(row, "installed", cur);
+        cJSON_AddStringToObject(row, "version", ver->valuestring);
+        cJSON_AddItemToArray(arr, row);
+    }
+    cJSON_Delete(catalog);
+    *out = arr;
+    return ESP_OK;
 }
 
 #endif /* CONFIG_MINIHUB_STORE */

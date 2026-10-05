@@ -146,7 +146,7 @@ static cJSON *seed_params_for_dev(const minihub_zigbee_device_t *dev, const char
     size_t mapped_n = minihub_zb_map_params_for_caps(dev->caps, mapped, MINIHUB_ZB_MAP_MAX_ATTRS);
 
     const minihub_device_widget_device_t *dw =
-        (dev->type[0]) ? minihub_device_widget_get(dev->type) : NULL;
+        (dev->type[0]) ? minihub_device_widget_get_or_fetch(NULL, dev->type) : NULL;
 
     if (dw && dw->entries && dw->count > 0) {
         for (size_t i = 0; i < dw->count; i++) {

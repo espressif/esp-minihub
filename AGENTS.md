@@ -69,6 +69,16 @@ Repo configs live in `.agent/mcp/` (`cursor.mcp.json`, `vscode.mcp.json`), symli
 - ESP-IDF **~6.2** + target **esp32s31** (`idf.py --preview`). IDF 5.x has no S31 toolchain.
 - Optional **on-device** MCP: `CONFIG_MINIHUB_MCP_SERVER=y` + `git submodule update --init components/esp-claw`. Unrelated to the plugin-author IDE MCP above.
 
+## Deploy root
+
+`MINIHUB_PLUGINS_DEPLOY_DIR` (default `~/workspace/minihub_store`) is one tree. One unit, one folder:
+
+- Plugins: concrete `targets` such as `ESP32S31` go to `Stores/ESP32S31/<id>/{catalog.json,<id>.mhub}` (folder name uppercase, same as `Firmwares/ESP32S31`). `targets: ["ALL"]` stays in `Stores/Common/<id>/`. Several chips get one copy each. `GET /api/catalog` aggregates the per-plugin `catalog.json` objects at request time; the per-plugin `catalog.json` is the only source of truth (no derived index file is written).
+- Firmware: `Firmwares/<chip>/<version>/{<name>.bin,release_notes.txt}`. No JSON in the version folder. `GET /api/firmware` derives version, chip, sha256, size, and the note.
+- Assets and web: the manifests (schema `minihub.deploy.index/1`, `base_url` `/files/Assets` or `/files/Webs`) are served dynamically by `store_server.py` as `GET /api/assets` and `GET /api/web`, built from `Assets/` and `Webs/<version>/` at request time — no static `index.json` is written. `tools/gen_deploy_index.py` emits only `Assets/device_widgets.json`, `Assets/parameters.json`, and `Assets/styles/<param>.css`. `GET /files/<path>` serves the tree and rejects `..`.
+
+Device side: plugins stay on `minihub_store` (the catalog `url` is `/files/Stores/ESP32S31/<id>/<id>.mhub` or `/files/Stores/Common/<id>/<id>.mhub`). Firmware, assets, and web use `components/minihub_update`. Catalog, package, firmware, asset, and web GETs append `mac`. Missing `mac` is still served; the server only logs it.
+
 ## Core data model (design)
 
 - MiniHub Core is **type-agnostic**: every device is **one** generic

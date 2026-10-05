@@ -12,14 +12,20 @@ Built artifacts go to:
   build/<id>.so                 — L3 MHMD+ELF intermediate (local only)
   MINIHUB_PLUGINS_DEPLOY_DIR          — default ~/workspace/minihub_store
 
-Layout under deploy (Store-facing only):
-  catalog.json
-  <id>/<id>.mhub   (zip upgrade package; may contain <id>.so inside the zip)
+Layout under the deploy root (one folder per plugin, bucket from targets):
+  Stores/ESP32S31/<id>/{catalog.json,<id>.mhub}  — concrete chip (uppercase)
+  Stores/Common/<id>/{catalog.json,<id>.mhub}    — targets ["ALL"] only
+  Several concrete chips: one copy under each Stores/<CHIP>/.
+
+Firmware, asset, and web siblings (Firmwares/, Assets/, Webs/) share this
+root. store_server.py serves the whole root.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -129,8 +135,119 @@ def iter_module_source_dirs(*, root: Path = ROOT) -> list[Path]:
     return dirs
 
 
-def module_deploy_dir(module_id: str, deploy: Path | None = None) -> Path:
-    return (deploy or default_deploy_dir()) / module_id
+def store_buckets(targets: list[str]) -> list[str]:
+    """Folder names under ``Stores/``.
+
+    Any ``ALL`` (case-insensitive) selects ``Common`` only. Concrete chips
+    each get their own folder, uppercased to match ``Firmwares/ESP32S31``.
+    """
+    chips: list[str] = []
+    for raw in targets:
+        if not isinstance(raw, str):
+            continue
+        name = raw.strip()
+        if not name:
+            continue
+        if name.upper() == "ALL":
+            return ["Common"]
+        folder = name.upper()
+        if folder not in chips:
+            chips.append(folder)
+    return chips or ["Common"]
+
+
+def module_deploy_dirs(
+    module_id: str,
+    targets: list[str],
+    deploy: Path | None = None,
+) -> list[Path]:
+    """One ``<deploy>/Stores/<bucket>/<id>`` per :func:`store_buckets` entry."""
+    root = deploy or default_deploy_dir()
+    return [root / "Stores" / bucket / module_id for bucket in store_buckets(targets)]
+
+
+def module_deploy_dir(
+    module_id: str,
+    deploy: Path | None = None,
+    *,
+    targets: list[str] | None = None,
+) -> Path:
+    """Primary plugin folder. Without ``targets``, that is ``Stores/Common/<id>``."""
+    if targets is None:
+        root = deploy or default_deploy_dir()
+        return root / "Stores" / "Common" / module_id
+    return module_deploy_dirs(module_id, targets, deploy)[0]
+
+
+def module_mhub_file(
+    module_id: str,
+    *,
+    deploy: Path,
+    module_dir: Path | None = None,
+) -> Path:
+    """``.mhub`` path for this module's ``targets`` (CMake modstore copy)."""
+    from sync_store_catalog import plugin_targets
+
+    src = module_dir if module_dir is not None else module_source_dir(module_id)
+    manifest: dict = {}
+    manifest_path = src / "module.json"
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    mid = manifest.get("id") if isinstance(manifest.get("id"), str) else None
+    mid = mid or module_id
+    chosen = plugin_targets(manifest, src if manifest_path.is_file() else None)
+    return module_deploy_dirs(mid, chosen, deploy)[0] / f"{mid}.mhub"
+
+
+def iter_store_plugin_dirs(deploy: Path) -> list[Path]:
+    """``Stores/<bucket>/<id>/`` directories. Skips the derived catalog file."""
+    stores = deploy / "Stores"
+    if not stores.is_dir():
+        return []
+    out: list[Path] = []
+    buckets = sorted(
+        p for p in stores.iterdir() if p.is_dir() and not p.name.startswith(".")
+    )
+    for bucket in buckets:
+        for child in sorted(bucket.iterdir()):
+            if child.is_dir() and not child.name.startswith("."):
+                out.append(child)
+    return out
+
+
+def find_deploy_mhubs(module_id: str, deploy: Path) -> list[Path]:
+    out: list[Path] = []
+    for child in iter_store_plugin_dirs(deploy):
+        if child.name != module_id:
+            continue
+        pkg = child / f"{module_id}.mhub"
+        if pkg.is_file():
+            out.append(pkg)
+    return out
+
+
+def catalog_preference(entry: dict) -> tuple[int, str]:
+    """Sort key: the catalog object whose ``url`` matches the primary bucket."""
+    raw = entry.get("targets")
+    names = [item for item in raw if isinstance(item, str)] if isinstance(raw, list) else []
+    primary = store_buckets(names)[0]
+    url = entry.get("url") if isinstance(entry.get("url"), str) else ""
+    hit = 0 if f"/Stores/{primary}/" in url else 1
+    return (hit, url)
+
+
+def prune_plugin_dirs(deploy: Path, module_id: str, keep_buckets: list[str]) -> None:
+    """Remove ``Stores/<other>/<id>/`` left behind by an older bucket choice."""
+    stores = deploy / "Stores"
+    if not stores.is_dir() or not module_id or module_id in (".", ".."):
+        return
+    keep = set(keep_buckets)
+    for bucket in stores.iterdir():
+        if not bucket.is_dir() or bucket.name.startswith(".") or bucket.name in keep:
+            continue
+        stale = bucket / module_id
+        if stale.is_dir():
+            shutil.rmtree(stale)
 
 
 def module_mhmd_path(module_id: str, *, root: Path = ROOT) -> Path:

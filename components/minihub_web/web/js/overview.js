@@ -913,6 +913,28 @@ async function renameDevice(pointId, ev) {
     }
 }
 
+/* A store action (install/enable/disable/upgrade/uninstall/reinstall) asks the
+ * device to reload the hub, but that reload runs on its own task and the HTTP
+ * call returns first. The immediate loadPoints() below therefore still sees the
+ * OLD point set, and removals publish no point.updated of their own, so without
+ * this the console kept showing adapters the reload had just unregistered.
+ * Normally the device's hub.reloaded event (over /ws/events) does the job; this
+ * is the fallback for when the WebSocket is down. */
+function refreshAfterHubReload() {
+    const pass = function () {
+        loadStoreData();
+        loadAdapters();
+        loadPoints();
+    };
+    /* Two passes: the reload unloads and re-registers every adapter, so its
+     * duration varies, and a module that is already gone from disk but still
+     * registered in RAM keeps appearing in /api/modules until a fetch lands
+     * after the reload finished. */
+    setTimeout(pass, 1200);
+    setTimeout(pass, 3200);
+    setTimeout(pass, 6000);
+}
+
 async function storeAct(kind, id, enabled) {
     const url = kind === 'module' ? '/api/modules' : '/api/packs';
     toast(enabled ? t('ov.enabling') : t('ov.disabling'));
@@ -932,6 +954,7 @@ async function storeAct(kind, id, enabled) {
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
+        refreshAfterHubReload();
     } catch (e) {
         toast(t('ov.network_error'));
     }
@@ -951,9 +974,11 @@ async function storeInstall(kind, id) {
             })
         });
         toast(r.ok ? t('ov.install_ok') : (r.status === 409 ? t('ov.already_installed') : t('ov.install_failed')));
+        if (r.ok && window.uninstalledIds) window.uninstalledIds.delete(id);
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
+        refreshAfterHubReload();
     } catch (e) {
         toast(t('ov.network_error'));
     }
@@ -976,6 +1001,7 @@ async function storeUpgrade(kind, id) {
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
+        refreshAfterHubReload();
     } catch (e) {
         toast(t('ov.network_error'));
     }
@@ -996,9 +1022,19 @@ async function storeUninstall(kind, id) {
             })
         });
         toast(r.ok ? t('ov.uninstalled') : t('ov.failed'));
+        if (r.ok) {
+            /* Optimistically hide it from the Installed list right away: the
+             * loader keeps the slot in RAM until the hub reload lands, so without
+             * this the row lingered and the page looked like it never refreshed.
+             * store.js keeps it dropped through the reload passes; a manual
+             * catalog refresh (or reinstall) clears the mask and re-shows it. */
+            if (!window.uninstalledIds) window.uninstalledIds = new Set();
+            window.uninstalledIds.add(id);
+        }
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
+        refreshAfterHubReload();
     } catch (e) {
         toast(t('ov.network_error'));
     }
@@ -1022,12 +1058,14 @@ async function storeReinstall(kind, id) {
             toast(t('ov.module_not_installed'));
         } else if (r.ok) {
             toast(t('ov.reinstalled'));
+            if (window.uninstalledIds) window.uninstalledIds.delete(id);
         } else {
             toast(t('ov.reinstall_failed'));
         }
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
+        refreshAfterHubReload();
     } catch (e) {
         toast(t('ov.network_error'));
     }
@@ -1054,6 +1092,7 @@ async function storeDel(kind, id) {
         await loadStoreData();
         await loadAdapters();
         await loadPoints();
+        refreshAfterHubReload();
     } catch (e) {
         toast(t('ov.network_error'));
     }

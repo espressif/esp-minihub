@@ -82,9 +82,16 @@ Step-by-step: create ``myhub``
    list them in ``CMakeLists.txt`` ``SRCS``. You usually leave bring-up as-is;
    stacks come from Kconfig.
 
-   The Web sidebar version (``v`` plus the string) is Kconfig
-   ``MINIHUB_PRODUCT_VERSION`` (default ``0.1.0``). Git describe stays on the
-   system page as the commit line, not as this product version.
+   The device "firmware version" (OTA comparison, ``Firmwares/<chip>/<ver>/``)
+   and the product/sidebar version (shown as ``v<ver>`` in the Web UI) are the
+   SAME value, ``MINIHUB_VERSION`` (default ``0.1.0``). Git describe still shows
+   separately as the commit line.
+
+   Only the Web bundle is versioned independently, via ``MINIHUB_WEB_VERSION``
+   (``Webs/v<ver>/`` and ``window.mhWebVersion``), because web and firmware
+   releases are usually not in sync; set it separately in ``menuconfig``
+   (defaults to ``MINIHUB_VERSION``). ``tools/deploy.sh`` reads both
+   ``MINIHUB_VERSION`` and ``MINIHUB_WEB_VERSION`` at publish time.
 
 6. **Build and flash**
 

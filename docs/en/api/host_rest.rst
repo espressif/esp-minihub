@@ -436,6 +436,23 @@ GET /api/events
 Recent Hub event log (HTTP pull; not WebSocket). Same ``event_type`` names as
 ``GET /ws/events``.
 
+GET /api/update/notes
+---------------------
+
+.. container:: mh-api-block mh-api-command
+
+   ``GET /api/update/notes``
+
+Authenticated read of the local Host firmware version, firmware note, Web
+version, and Web note. Does not contact the deploy server. A missing cache
+or file is ``""`` and the response is still **HTTP 200**.
+
+.. container:: mh-api-block mh-api-returns
+
+   **Returns**
+
+   * **HTTP 200** — ``firmware_version``, ``firmware_note``, ``web_version``, ``web_note``
+
 GET /api/ota · POST /api/ota · POST /api/ota/upload
 ---------------------------------------------------
 

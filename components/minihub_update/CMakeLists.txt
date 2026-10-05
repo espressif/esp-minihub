@@ -1,0 +1,20 @@
+idf_component_register(
+    SRCS
+        "minihub_update.c"
+        "update_index.c"
+        "update_fetch.c"
+        "update_assets.c"
+    INCLUDE_DIRS "include"
+    REQUIRES
+        minihub_ota
+        minihub_core
+        minihub_device_widget
+        minihub_config
+        minihub_store
+        minihub_net
+        esp_http_client
+        app_update
+        freertos
+        mbedtls
+        espressif__cjson
+)

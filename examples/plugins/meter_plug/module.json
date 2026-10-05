@@ -2,6 +2,7 @@
   "id": "meter_plug",
   "name": "Metering Outlet (simulated)",
   "version": "0.1.0",
+  "targets": ["ESP32S31"],
   "kind": "module",
   "runtime": "native",
   "adapter": "meter_plug",

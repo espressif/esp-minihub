@@ -45,7 +45,7 @@ Or IDE MCP: `scaffold_plugin` with `tier=l1` (`python3 tools/minihub_plugin_mcp.
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product under `application/` |
-| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Catalog + `.mhub` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | `Stores/ESP32S31/<id>/` for chip targets; `Stores/Common/<id>/` when `targets` is `["ALL"]` |
 | `MINIHUB_PLUGIN_DIRS` | (empty) | Extra source trees (`:`/`;`). Vendor plugins are not in the Host tree |
 
 No firmware compile. Packer zips `module.json` only (no `main.js`, no `.so`).

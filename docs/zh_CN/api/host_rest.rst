@@ -419,6 +419,22 @@ GET /api/events
 近期 Hub 事件日志（HTTP 拉取；非 WebSocket）。``event_type`` 与
 ``GET /ws/events`` 相同。
 
+GET /api/update/notes
+---------------------
+
+.. container:: mh-api-block mh-api-command
+
+   ``GET /api/update/notes``
+
+已登录可读。返回本机 Host 固件版本、固件说明、Web 版本和 Web 说明。
+不访问部署服务器。没有缓存或本地文件时，对应字段为 ``""`` ，响应仍是 **HTTP 200** 。
+
+.. container:: mh-api-block mh-api-returns
+
+   **Returns**
+
+   * **HTTP 200** — ``firmware_version`` 、 ``firmware_note`` 、 ``web_version`` 、 ``web_note``
+
 GET /api/ota · POST /api/ota · POST /api/ota/upload
 ---------------------------------------------------
 

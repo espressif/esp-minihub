@@ -53,7 +53,7 @@ L3 模块在外层 ``.mhub`` zip 内携带 **原生 ELF** ``.so`` 。加载器�
    export MINIHUB_PLUGIN_DIRS="$PWD"
    python3 /path/to/module_sdk/pack_store_module.py pack my_native
 
-   # 4. 按 store 里每个 DEPLOY/ID/ID.mhub 重写 catalog.json（不需要插件源码）。
+   # 4. 按 store 里每个 Stores/ESP32S31 或 Stores/Common 的 ID.mhub 重写 catalog.json（不需要插件源码）。
    #    sync_store_catalog.py 与 pack_store_module.py 一起在 module_sdk.zip 里。
    python3 /path/to/module_sdk/sync_store_catalog.py --from-store \
      --deploy ~/workspace/minihub_store

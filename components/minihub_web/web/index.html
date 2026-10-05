@@ -8,57 +8,73 @@
 <link rel="stylesheet" href="/web/css/device_widgets.css">
 </head>
 <body class="i18n-pending">
-<div class="app"><aside class="sidebar" id="sidebar">  <div class="sb-brand"><div class="logo">M</div><div><div class="sb-title">MiniHub</div>    <div class="sb-sub" id="hub-ver">v0.1.0</div></div></div>  <nav class="nav">    <button class="nav-item active" data-view="overview"><span class="nav-ico">&#8962;</span><span data-i18n="title.overview">概览</span></button>    <button class="nav-item" data-view="map"><span class="nav-ico">&#128205;</span><span data-i18n="title.map">地图</span></button>    <button class="nav-item" data-view="rules"><span class="nav-ico">&#8644;</span><span data-i18n="title.rules">规则</span></button>    <button class="nav-item" data-view="scenes"><span class="nav-ico">&#9733;</span><span data-i18n="title.scenes">场景</span></button>    <button class="nav-item" data-view="store"><span class="nav-ico">&#11015;</span><span data-i18n="title.store">MiniHub Store</span></button>    <button class="nav-item" data-view="system"><span class="nav-ico">&#9881;</span><span data-i18n="title.system">系统</span></button>  </nav>  <div class="sb-foot" id="user-row" data-i18n-title="ov.name_tip" title="点击设置本地名称">    <div class="user-row"><div class="user-ava" id="user-ava">用</div>    <div><div class="user-name" id="user-name" data-i18n="ov.user">用户</div>    <div class="user-sub" data-i18n="ov.user_local">本地账户</div></div></div></div></aside><div class="main">  <header class="topbar">    <button class="menu-btn" id="menu-btn">&#9776;</button>    <h2 id="page-title" data-i18n="title.overview">概览</h2>    <div class="topbar-right"><select class="lang-sel" id="lang-sel" onchange="setLang(this.value)"></select><div style="font-size:.75rem;color:var(--dim)" id="foot">--</div></div>  </header>  <div class="page">    <div id="view-overview" class="view">      <div class="stats">        <div class="stat"><div class="stat-lbl" data-i18n="ov.stat_points">能力点</div><div class="stat-val" id="s-total">-</div></div>        <div class="stat"><div class="stat-lbl" data-i18n="ov.stat_online">在线</div><div class="stat-val" id="s-online">-</div></div>        <div class="stat"><div class="stat-lbl" data-i18n="ov.stat_adapters">适配器</div><div class="stat-val" id="s-adapters">-</div></div>      </div>      <div class="toolbar"><div id="chips"></div><select class="ov-select" id="filter-room" onchange="onRoomFilterChange(this.value)"><option value="" data-i18n="ov.all_rooms">全部房间</option></select><select class="ov-select" id="filter-type" onchange="onTypeFilterChange(this.value)"><option value="" data-i18n="ov.all_types">全部类型</option></select><input class="search" id="q" data-i18n-ph="ov.search_ph" placeholder="搜索设备..." /></div>      <div id="content"><div class="skel"></div></div>    </div>
+<div class="app"><aside class="sidebar" id="sidebar">  <div class="sb-brand"><div class="logo">M</div><div><div class="sb-title">MiniHub</div>    <div class="sb-sub" id="hub-ver">v0.1.0</div></div></div>  <nav class="nav">    <button class="nav-item active" data-view="overview"><span class="nav-ico">&#8962;</span><span data-i18n="title.overview">概览</span></button>    <button class="nav-item" data-view="map"><span class="nav-ico">&#128205;</span><span data-i18n="title.map">地图</span></button>    <button class="nav-item" data-view="rules"><span class="nav-ico">&#8644;</span><span data-i18n="title.rules">规则</span></button>    <button class="nav-item" data-view="scenes"><span class="nav-ico">&#9733;</span><span data-i18n="title.scenes">场景</span></button>    <button class="nav-item" data-view="store"><span class="nav-ico">&#11015;</span><span data-i18n="title.store">MiniHub Store</span></button>    <button class="nav-item" data-view="system"><span class="nav-ico">&#9881;</span><span data-i18n="title.system">系统</span></button>  </nav>  <div class="sb-foot" id="user-row" data-i18n-title="ov.name_tip" title="点击设置本地名称">    <div class="user-row"><div class="user-ava" id="user-ava">用</div>    <div><div class="user-name" id="user-name" data-i18n="ov.user">用户</div>    <div class="user-sub" data-i18n="ov.user_local">本地账户</div></div></div></div></aside><div class="main">  <header class="topbar">    <button class="menu-btn" id="menu-btn">&#9776;</button>    <h2 id="page-title" data-i18n="title.overview">概览</h2>    <div class="topbar-right"><button class="lang-sel" id="lang-sel" type="button" onclick="switchLangSel()" aria-label="Language"></button><div style="font-size:.75rem;color:var(--dim)" id="foot">--</div></div>  </header>  <div id="update-hint" class="update-hint" hidden><span class="update-hint-text" id="update-hint-text"></span><button type="button" class="update-hint-x" id="update-hint-x" data-i18n="mdl.close">关闭</button></div>  <div class="page">    <div id="view-overview" class="view">      <div class="stats">        <div class="stat"><div class="stat-lbl" data-i18n="ov.stat_points">能力点</div><div class="stat-val" id="s-total">-</div></div>        <div class="stat"><div class="stat-lbl" data-i18n="ov.stat_online">在线</div><div class="stat-val" id="s-online">-</div></div>        <div class="stat"><div class="stat-lbl" data-i18n="ov.stat_adapters">适配器</div><div class="stat-val" id="s-adapters">-</div></div>      </div>      <div class="toolbar"><div id="chips"></div><select class="ov-select" id="filter-room" onchange="onRoomFilterChange(this.value)"><option value="" data-i18n="ov.all_rooms">全部房间</option></select><select class="ov-select" id="filter-type" onchange="onTypeFilterChange(this.value)"><option value="" data-i18n="ov.all_types">全部类型</option></select><input class="search" id="q" data-i18n-ph="ov.search_ph" placeholder="搜索设备..." /></div>      <div id="content"><div class="skel"></div></div>    </div>
     <div id="view-system" class="view" hidden>
-      <div class="sys-grid" id="sys-info-grid"></div>
-      <div class="sys-net">
-        <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.net_title">网络</h3>
-        <div class="seg" id="sys-if-seg">
-          <button type="button" id="sys-if-eth" class="on" onclick="sysSelectIface('eth')" data-i18n="mdl.net_iface_eth">以太网</button>
-          <button type="button" id="sys-if-wifi" onclick="sysSelectIface('wifi')">Wi-Fi</button>
-        </div>
-        <div id="sys-if-note" class="modal-hint"></div>
-        <label for="sys-dhcp" data-i18n="mdl.net_dhcp_mode">DHCP 模式</label>
-        <select id="sys-dhcp" onchange="sysToggleDhcp()">
-          <option value="1" data-i18n="mdl.opt_auto">自动</option>
-          <option value="0" data-i18n="mdl.opt_manual">手动</option>
-        </select>
-        <div id="sys-static-fields">
-          <div class="row2">
-            <div><label for="sys-ip">IP</label><input id="sys-ip" /></div>
-            <div><label for="sys-mask" data-i18n="mdl.net_mask">掩码</label><input id="sys-mask" /></div>
+      <div class="sys-card sys-spec-frame" id="sys-spec-frame">
+        <div class="sys-grid" id="sys-info-grid"></div>
+      </div>
+      <div class="sys-row2">
+        <div class="sys-net" id="sys-net-card">
+          <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.net_title">网络</h3>
+          <div class="seg" id="sys-if-seg">
+            <button type="button" id="sys-if-eth" class="on" onclick="sysSelectIface('eth')" data-i18n="mdl.net_iface_eth">以太网</button>
+            <button type="button" id="sys-if-wifi" onclick="sysSelectIface('wifi')">Wi-Fi</button>
           </div>
-          <div class="row2">
-            <div><label for="sys-gw" data-i18n="mdl.net_gw">网关</label><input id="sys-gw" /></div>
-            <div><label for="sys-dns1" data-i18n="mdl.net_dns1">DNS 主</label><input id="sys-dns1" /></div>
+          <div id="sys-if-note" class="modal-hint"></div>
+          <label for="sys-dhcp" data-i18n="mdl.net_dhcp_mode">DHCP 模式</label>
+          <select id="sys-dhcp" onchange="sysToggleDhcp()">
+            <option value="1" data-i18n="mdl.opt_auto">自动</option>
+            <option value="0" data-i18n="mdl.opt_manual">手动</option>
+          </select>
+          <div id="sys-static-fields">
+            <div class="row2">
+              <div><label for="sys-ip">IP</label><input id="sys-ip" /></div>
+              <div><label for="sys-mask" data-i18n="mdl.net_mask">掩码</label><input id="sys-mask" /></div>
+            </div>
+            <div class="row2">
+              <div><label for="sys-gw" data-i18n="mdl.net_gw">网关</label><input id="sys-gw" /></div>
+              <div><label for="sys-dns1" data-i18n="mdl.net_dns1">DNS 主</label><input id="sys-dns1" /></div>
+            </div>
+            <label for="sys-dns2" data-i18n="mdl.net_dns2">DNS 备</label><input id="sys-dns2" />
           </div>
-          <label for="sys-dns2" data-i18n="mdl.net_dns2">DNS 备</label><input id="sys-dns2" />
-        </div>
-        <div id="sys-wifi-cred" hidden>
-          <label>SSID</label>
-          <input id="sys-wifi-ssid" maxlength="32" autocomplete="off" placeholder="热点名称" data-i18n-ph="mdl.net_ssid_ph" />
-          <label for="sys-wifi-pass" data-i18n="mdl.net_password">密码</label>
-          <div class="secret-field">
-            <input id="sys-wifi-pass" type="password" maxlength="64" autocomplete="new-password" placeholder="留空则沿用已保存密码" data-i18n-ph="mdl.net_pass_ph" />
-            <button type="button" class="secret-toggle" aria-label="显示密码" data-i18n-aria="mdl.aria_show_password" onclick="toggleSecret(this)" data-i18n="mdl.show">显示</button>
+          <div id="sys-wifi-cred" hidden>
+            <label>SSID</label>
+            <input id="sys-wifi-ssid" maxlength="32" autocomplete="off" placeholder="热点名称" data-i18n-ph="mdl.net_ssid_ph" />
+            <label for="sys-wifi-pass" data-i18n="mdl.net_password">密码</label>
+            <div class="secret-field">
+              <input id="sys-wifi-pass" type="password" maxlength="64" autocomplete="new-password" placeholder="留空则沿用已保存密码" data-i18n-ph="mdl.net_pass_ph" />
+              <button type="button" class="secret-toggle" aria-label="显示密码" data-i18n-aria="mdl.aria_show_password" onclick="toggleSecret(this)" data-i18n="mdl.show">显示</button>
+            </div>
+            <label class="sys-check" for="sys-wifi-open">
+              <input id="sys-wifi-open" type="checkbox" />
+              <span data-i18n="mdl.net_open_network">开放网络（无密码）</span>
+            </label>
+            <div class="modal-actions" style="margin-top:8px;justify-content:flex-start">
+              <button class="btn-sm on" type="button" onclick="sysApplyWifi()" data-i18n="mdl.net_save_wifi">保存 Wi-Fi</button>
+            </div>
+            <div class="sys-hint" data-i18n="mdl.net_wifi_hint">写入本机 NVS 并重连。页面只显示 SSID，不回显密码。改到别的网络后，请用新地址打开控制台。</div>
           </div>
-          <label class="sys-check" for="sys-wifi-open">
-            <input id="sys-wifi-open" type="checkbox" />
-            <span data-i18n="mdl.net_open_network">开放网络（无密码）</span>
-          </label>
-          <div class="modal-actions" style="margin-top:8px;justify-content:flex-start">
-            <button class="btn-sm on" type="button" onclick="sysApplyWifi()" data-i18n="mdl.net_save_wifi">保存 Wi-Fi</button>
+          <div class="modal-actions" style="margin-top:14px;justify-content:flex-start">
+            <button class="btn-sm on" type="button" onclick="sysApplyNet()" data-i18n="mdl.apply">应用</button>
+            <button class="btn-sm" type="button" onclick="loadSystem()" data-i18n="mdl.refresh">刷新</button>
           </div>
-          <div class="sys-hint" data-i18n="mdl.net_wifi_hint">写入本机 NVS 并重连。页面只显示 SSID，不回显密码。改到别的网络后，请用新地址打开控制台。</div>
+          <div class="sys-hint" data-i18n="mdl.net_ip_hint">修改 IP 后请用新地址打开页面；配置已写入 NVS，重启仍生效。</div>
         </div>
-        <div class="modal-actions" style="margin-top:14px;justify-content:flex-start">
-          <button class="btn-sm on" type="button" onclick="sysApplyNet()" data-i18n="mdl.apply">应用</button>
-          <button class="btn-sm" type="button" onclick="loadSystem()" data-i18n="mdl.refresh">刷新</button>
+        <div class="sys-card sys-ver-card" id="sys-ver-card">
+          <div class="ver-head">
+            <button class="btn-sm" type="button" onclick="sysUpdateCheck()" data-i18n="sys.check_update">检查更新</button>
+          </div>
+          <div id="sys-ver-rows"></div>
+          <div id="sys-relnotes">
+            <div class="sys-note-label" data-i18n="sys.channel_web">Web</div>
+            <div class="sys-note" id="sys-web-note" data-i18n="sys.none">暂无</div>
+            <div class="sys-note-label" data-i18n="sys.channel_firmware">Host 固件</div>
+            <div class="sys-note" id="sys-fw-note" data-i18n="sys.none">暂无</div>
+          </div>
         </div>
-        <div class="sys-hint" data-i18n="mdl.net_ip_hint">修改 IP 后请用新地址打开页面；配置已写入 NVS，重启仍生效。</div>
       </div>
       <div class="sys-net" style="margin-top:16px" id="sys-ota">
-        <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.ota_title">固件升级</h3>
+        <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.ota_title">自定义固件升级</h3>
         <div id="sys-ota-status" class="modal-hint"></div>
         <div style="height:8px;background:var(--bg2);border-radius:4px;margin:8px 0;overflow:hidden">
           <div id="sys-ota-bar" style="height:100%;width:0%;background:var(--accent);transition:width .2s"></div>
@@ -74,7 +90,6 @@
           <button class="btn-sm on" type="button" onclick="sysOtaUpload()" data-i18n="mdl.ota_upload_start">上传并升级</button>
           <button class="btn-sm" type="button" onclick="sysOtaPoll()" data-i18n="mdl.ota_refresh_status">刷新状态</button>
         </div>
-        <div class="sys-hint" data-i18n="mdl.ota_hint">RainMaker 云升级请用 RainMaker APP 推送；与本地升级互斥。成功后设备将自动重启。</div>
       </div>
       <div class="sys-net" style="margin-top:16px" id="sys-reboot">
         <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.reboot">重启</h3>
@@ -214,7 +229,8 @@
       <button class="btn-sm on" type="button" id="auth-submit" onclick="submitAuthLogin()">登录</button>
     </div>
   </div>
-</div><div class="modal-overlay" id="home-picker-modal" hidden onclick="if(event.target===this)closeHomePicker()">  <div class="modal" role="dialog" aria-labelledby="home-picker-title">    <h3 id="home-picker-title">选择家庭</h3>    <p class="modal-hint" id="home-picker-hint">同步将导入该家庭下的设备名称与房间</p>    <div class="home-list" id="home-picker-list"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeHomePicker()" data-i18n="mdl.cancel">取消</button>      <button class="btn-sm on" type="button" id="home-picker-confirm" onclick="confirmHomePicker()">同步此家庭</button>    </div>  </div></div><div class="modal-overlay" id="matter-add-modal" hidden onclick="if(event.target===this)closeMatterAdd()">  <div class="modal matter-wide" role="dialog" aria-labelledby="matter-add-title">    <h3 id="matter-add-title" data-i18n="mdl.matter_title">添加 Matter 设备</h3>    <div class="modal-hint" id="matter-add-hint">默认经 BLE 发现，并同时使用 DNS-SD；不填 Wi-Fi 时写入 Hub Thread 数据集。</div>    <input type="hidden" id="matter-discovery" value="ble_thread" />    <label for="matter-code" data-i18n="mdl.matter_code_label">配对码 pairing_code</label>    <input id="matter-code" placeholder="1472-121-2614 或 MT:..." data-i18n-ph="mdl.matter_code_ph" autocomplete="off" />    <label for="matter-node" data-i18n="mdl.matter_node_label">节点 ID（可选，留空自动分配）</label>    <input id="matter-node" placeholder="2" inputmode="numeric" />    <label for="matter-eps" data-i18n="mdl.matter_eps_label">Endpoint（逗号分隔，默认 1）</label>    <input id="matter-eps" placeholder="1" value="1" />    <div class="matter-wifi-row" id="matter-wifi-row">      <label class="lbl" id="matter-wifi-toggle-label" for="matter-wifi-enable" data-i18n="mdl.matter_wifi_toggle">是否配置 Wi-Fi 信息</label>      <label class="toggle">        <input type="checkbox" id="matter-wifi-enable" onchange="onMatterWifiToggle()" aria-labelledby="matter-wifi-toggle-label" />        <span class="slider"></span>      </label>    </div>    <div id="matter-wifi-block" hidden>      <label for="matter-wifi-ssid">STA SSID</label>      <input id="matter-wifi-ssid" autocomplete="off" disabled />      <label for="matter-wifi-pass" data-i18n="mdl.matter_wifi_password">Wi-Fi 密码</label>      <div class="secret-field"><input id="matter-wifi-pass" type="password" autocomplete="off" placeholder="可留空沿用 Hub 已保存密码" disabled /><button type="button" class="secret-toggle" aria-label="显示密码" data-i18n-aria="mdl.aria_show_password" onclick="toggleSecret(this)" data-i18n="mdl.show">显示</button></div>    </div>    <div class="matter-spacer" aria-hidden="true"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeMatterAdd()" data-i18n="mdl.cancel">取消</button>      <button class="btn-sm on" type="button" id="matter-add-submit" onclick="submitMatterAdd()" data-i18n="mdl.matter_add">添加</button>    </div>  </div></div><div class="toast" id="toast"></div>
+</div><div class="modal-overlay" id="home-picker-modal" hidden onclick="if(event.target===this)closeHomePicker()">  <div class="modal" role="dialog" aria-labelledby="home-picker-title">    <h3 id="home-picker-title">选择家庭</h3>    <p class="modal-hint" id="home-picker-hint">同步将导入该家庭下的设备名称与房间</p>    <div class="home-list" id="home-picker-list"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeHomePicker()" data-i18n="mdl.cancel">取消</button>      <button class="btn-sm on" type="button" id="home-picker-confirm" onclick="confirmHomePicker()">同步此家庭</button>    </div>  </div></div><div class="modal-overlay" id="matter-add-modal" hidden onclick="if(event.target===this)closeMatterAdd()">  <div class="modal matter-wide" role="dialog" aria-labelledby="matter-add-title">    <h3 id="matter-add-title" data-i18n="mdl.matter_title">添加 Matter 设备</h3>    <div class="modal-hint" id="matter-add-hint">默认经 BLE 发现，并同时使用 DNS-SD；不填 Wi-Fi 时写入 Hub Thread 数据集。</div>    <input type="hidden" id="matter-discovery" value="ble_thread" />    <label for="matter-code" data-i18n="mdl.matter_code_label">配对码 pairing_code</label>    <input id="matter-code" placeholder="1472-121-2614 或 MT:..." data-i18n-ph="mdl.matter_code_ph" autocomplete="off" />    <label for="matter-node" data-i18n="mdl.matter_node_label">节点 ID（可选，留空自动分配）</label>    <input id="matter-node" placeholder="2" inputmode="numeric" />    <label for="matter-eps" data-i18n="mdl.matter_eps_label">Endpoint（逗号分隔，默认 1）</label>    <input id="matter-eps" placeholder="1" value="1" />    <div class="matter-wifi-row" id="matter-wifi-row">      <label class="lbl" id="matter-wifi-toggle-label" for="matter-wifi-enable" data-i18n="mdl.matter_wifi_toggle">是否配置 Wi-Fi 信息</label>      <label class="toggle">        <input type="checkbox" id="matter-wifi-enable" onchange="onMatterWifiToggle()" aria-labelledby="matter-wifi-toggle-label" />        <span class="slider"></span>      </label>    </div>    <div id="matter-wifi-block" hidden>      <label for="matter-wifi-ssid">STA SSID</label>      <input id="matter-wifi-ssid" autocomplete="off" disabled />      <label for="matter-wifi-pass" data-i18n="mdl.matter_wifi_password">Wi-Fi 密码</label>      <div class="secret-field"><input id="matter-wifi-pass" type="password" autocomplete="off" placeholder="可留空沿用 Hub 已保存密码" disabled /><button type="button" class="secret-toggle" aria-label="显示密码" data-i18n-aria="mdl.aria_show_password" onclick="toggleSecret(this)" data-i18n="mdl.show">显示</button></div>    </div>    <div class="matter-spacer" aria-hidden="true"></div>    <div class="modal-actions">      <button class="btn-sm" type="button" onclick="closeMatterAdd()" data-i18n="mdl.cancel">取消</button>      <button class="btn-sm on" type="button" id="matter-add-submit" onclick="submitMatterAdd()" data-i18n="mdl.matter_add">添加</button>    </div>  </div></div><div class="modal-overlay" id="update-notes-modal" hidden onclick="if(event.target===this)closeUpdateNotes()"><div class="modal" role="dialog" aria-labelledby="update-notes-title"><h3 id="update-notes-title">Release Notes</h3><div class="modal-hint" id="update-notes-meta"></div><pre class="release-notes" id="update-notes-body"></pre><div class="modal-actions"><button class="btn-sm" type="button" onclick="closeUpdateNotes()" data-i18n="mdl.close">关闭</button></div></div></div>
+<div class="toast" id="toast"></div>
 <script src="/web/js/i18n.js"></script>
 <script src="/web/js/app.js"></script>
 <script src="/web/js/system.js"></script>

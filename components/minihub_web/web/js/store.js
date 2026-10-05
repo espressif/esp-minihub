@@ -66,6 +66,10 @@ async function refreshStoreCatalog() {
         }
         storeCatalog = await r.json();
         storeCatalogOk = true;
+        /* A manual refresh re-syncs with the server: drop the optimistic
+         * "just uninstalled" mask so anything the server still offers (now as
+         * available, or re-installed) shows again. */
+        if (window.uninstalledIds) window.uninstalledIds.clear();
         const [p, m] = await Promise.all([fetch('/api/packs'), fetch('/api/modules')].map(x => x.catch(() => null)));
         packs = p && p.ok ? await p.json() : packs;
         modules = m && m.ok ? await m.json() : modules;
@@ -79,41 +83,67 @@ async function refreshStoreCatalog() {
 }
 
 function renderStore() {
+    if (!window.uninstalledIds) window.uninstalledIds = new Set();
     document.querySelectorAll('#store-tabs .chip').forEach(c => {
         c.classList.toggle('active', c.dataset.tab === storeTab);
     });
     const q = storeQ.toLowerCase();
     const filt = x => !q || (x.name && x.name.toLowerCase().includes(q)) || (x.id && x.id.toLowerCase().includes(q)) || (x.description && x.description.toLowerCase().includes(q)) || (x.vendor && x.vendor.toLowerCase().includes(q));
     const pl = packs.filter(filt),
-        ml = modules.filter(m => filt(m) && m.installed !== false);
+        ml = modules.filter(filt);
     const catById = {};
     storeCatalog.forEach(x => {
         if (x.id) catById[x.id] = x;
     });
-    const avail = storeCatalog.filter(x => !x.installed && (x.kind === 'pack' || x.kind === 'module')).filter(filt).sort((a, b) => (a.name || a.id || '').localeCompare(b.name || b.id || ''));
-    const installed = [...pl.map(p => {
-        const c = catById[p.id];
-        return {
-            ...p,
-            kind: (c && c.kind) || 'pack',
-            config_only: !!(c && c.config_only),
-            name: p.name || p.id
-        };
-    }), ...ml.map(m => ({
-        ...m,
-        kind: 'module',
-        name: m.name || m.id
-    }))].map(it => {
+    /* "已安装" is built from three sources because no single one is complete:
+     *   - storeCatalog items flagged installed: the on-disk truth (the firmware
+     *     answers with module_installed()/pack_installed()),
+     *   - /api/modules: every REGISTERED module, including builtin and factory
+     *     preinstalled ones. Those are not store-installed, so the catalog does
+     *     not flag them -- filtering this list by `installed` alone used to hide
+     *     them from BOTH tabs, which made the page look empty after an uninstall.
+     *   - /api/packs: installed config packs.
+     * actBtns() already degrades to a "builtin" label when managed === false, so
+     * an item with no store package shows up without install/uninstall actions. */
+    const installedById = {};
+    const addInstalled = (src, defaults) => {
+        (src || []).forEach(it => {
+            if (!it || !it.id) return;
+            installedById[it.id] = Object.assign({ kind: 'module' }, installedById[it.id], defaults, it);
+        });
+    };
+    addInstalled(storeCatalog.filter(x => x.installed && !window.uninstalledIds.has(x.id)), { installed: true });
+    addInstalled(pl, { kind: 'pack' });
+    /* /api/modules lists every slot in the loader's RAM table, and
+     * minihub_module_delete() deliberately keeps the slot there until the next
+     * hub reload rebuilds the table. Right after an uninstall it therefore still
+     * reports the module as managed and enabled -- indistinguishable from an
+     * installed one. minihub_module_list_json()'s own `installed` is a native
+     * binary check, so it cannot be the tie-breaker on its own (false for a
+     * JS-only module). The catalog's flag comes from module_installed(), a disk
+     * check, so for anything the catalog lists it wins. Builtins (managed ===
+     * false) have no store package that could go missing and stay listed, which
+     * is what keeps factory-preinstalled modules from vanishing off the page. */
+    const moduleKept = m => m.managed === false ||
+        (catById[m.id] ? catById[m.id].installed !== false : m.installed !== false);
+    addInstalled(ml.filter(moduleKept).filter(m => !window.uninstalledIds.has(m.id)), { kind: 'module' });
+    const installed = Object.values(installedById).map(it => {
         const c = catById[it.id];
         const up = !!(c && c.upgrade_available) || !!it.binary_stale;
-        return c ? {
-            ...it,
+        return Object.assign({}, it, c ? {
+            kind: c.kind || it.kind,
             upgrade_available: up,
             catalog_version: c.version,
             catalog_adapter_version: c.adapter_version,
             config_only: !!c.config_only
-        } : it;
+        } : {});
     }).sort((a, b) => (a.name || a.id || '').localeCompare(b.name || b.id || ''));
+    /* Already on the device (builtin, preinstall, or installed) -> not offered.
+     * Keyed on the union, not on the catalog's `installed` flag, which is false
+     * for a builtin. */
+    const avail = storeCatalog.filter(x => x.id && !installedById[x.id] &&
+        (x.kind === 'pack' || x.kind === 'module')).filter(filt)
+        .sort((a, b) => (a.name || a.id || '').localeCompare(b.name || b.id || ''));
     const kindLbl = (k, co) => co ? t('store.kind_config_module') : (k === 'module' ? t('store.kind_module') : t('store.kind_config_module'));
     const actBtns = (kind, id, enabled, managed, upgradeAvailable, configOnly) => {
         if (managed === false) return '<span style="color:var(--dim);font-size:.72rem">' + t('store.builtin') + '</span>';

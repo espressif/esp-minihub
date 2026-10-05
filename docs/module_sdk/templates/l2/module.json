@@ -2,6 +2,7 @@
   "id": "PLACEHOLDER_ID",
   "name": "PLACEHOLDER_NAME",
   "version": "0.1.0",
+  "targets": ["ALL"],
   "enabled": true,
   "kind": "module",
   "runtime": "js",

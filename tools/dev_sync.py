@@ -125,11 +125,17 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(404, b"not found", "text/plain; charset=utf-8")
 
+    def do_DELETE(self) -> None:
+        if urlparse(self.path).path.startswith(PROXY_PREFIX):
+            self._proxy("DELETE")
+            return
+        self._send(404, b"not found", "text/plain; charset=utf-8")
+
     def do_OPTIONS(self) -> None:
         # Same-origin UI; keep OPTIONS harmless for tooling.
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers",
                          "Authorization, Content-Type, X-MiniHub-Base")
         self.end_headers()

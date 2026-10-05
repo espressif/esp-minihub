@@ -3,13 +3,15 @@
 # This file is auto-loaded when minihub_bundle is in the build graph.
 menu "MiniHub"
 
-    config MINIHUB_PRODUCT_VERSION
-        string "Product version"
+    config MINIHUB_VERSION
+        string "Version (firmware / product / OTA)"
         default "0.1.0"
         help
-            Shown in the Web sidebar and on the system page as v<version>.
-            This is not the git describe string; that is reported separately
-            as the commit line.
+            Single version for the device: reported by the firmware as
+            firmware_version (OTA comparison), used by tools/deploy.sh as the
+            Firmwares/<chip>/<version>/ folder name, and shown in the Web
+            sidebar / system page as v<version>. This is not the git describe
+            string; that is reported separately as the commit line.
 
     rsource "../../components/minihub_core/Kconfig.minihub"
     rsource "../../components/minihub_auth/Kconfig.minihub"

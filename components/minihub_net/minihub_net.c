@@ -14,6 +14,7 @@
 #include "esp_check.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
@@ -718,4 +719,65 @@ esp_err_t minihub_net_set_wifi_sta(const char *ssid, const char *password, bool 
     }
     return ESP_OK;
 #endif
+}
+
+static bool mac_is_blank(const uint8_t mac[6])
+{
+    for (int i = 0; i < 6; i++) {
+        if (mac[i] != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+esp_err_t minihub_net_format_mac(char *out, size_t out_len)
+{
+    if (!out || out_len < 18) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    uint8_t mac[6] = {0};
+    esp_err_t err = esp_wifi_get_mac(WIFI_IF_STA, mac);
+    if (err != ESP_OK || mac_is_blank(mac)) {
+        err = esp_read_mac(mac, ESP_MAC_BASE);
+    }
+    if (err != ESP_OK || mac_is_blank(mac)) {
+        return err != ESP_OK ? err : ESP_ERR_NOT_FOUND;
+    }
+    int n = snprintf(out, out_len, "%02x:%02x:%02x:%02x:%02x:%02x",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    if (n < 0 || (size_t)n >= out_len) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    return ESP_OK;
+}
+
+esp_err_t minihub_net_copy_url_with_mac(const char *url, char *out, size_t out_len)
+{
+    if (!url || !out || out_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    char mac[18];
+    if (minihub_net_format_mac(mac, sizeof(mac)) != ESP_OK) {
+        size_t n = strlen(url);
+        if (n + 1 > out_len) {
+            return ESP_ERR_INVALID_SIZE;
+        }
+        memcpy(out, url, n + 1);
+        return ESP_OK;
+    }
+    const char *query = strchr(url, '?');
+    if (query && strstr(query, "mac=")) {
+        size_t n = strlen(url);
+        if (n + 1 > out_len) {
+            return ESP_ERR_INVALID_SIZE;
+        }
+        memcpy(out, url, n + 1);
+        return ESP_OK;
+    }
+    int n = snprintf(out, out_len, "%s%smac=%s", url, query ? "&" : "?", mac);
+    if (n < 0 || (size_t)n >= out_len) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    return ESP_OK;
 }

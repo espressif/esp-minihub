@@ -190,7 +190,8 @@ else()
     set(_MINIHUB_PLUGINS_DEPLOY_DIR "$ENV{HOME}/workspace/minihub_store")
 endif()
 # Catalog is copied AFTER packing below so size/binary_size match staged .mhub.
-# Stage /store/files from deploy/<id>/<id>.mhub (zip package)
+# Stage /store/files from the bucket selected by module.json targets
+# (Stores/ESP32S31/<id>/<id>.mhub, or Stores/Common when targets is ALL).
 minihub_store_preinstall_list(MINIHUB_STORE_PREINSTALL)
 message(STATUS "store_preinstall: ${MINIHUB_STORE_PREINSTALL}")
 # All Store modules (L1/L2/L3) for .mhub staging — includes runtime js/pack under
@@ -205,7 +206,21 @@ endforeach()
 foreach(_MOD_JSON ${_STORE_MOD_JSONS})
     get_filename_component(_MOD_DIR ${_MOD_JSON} DIRECTORY)
     get_filename_component(_MOD ${_MOD_DIR} NAME)
-    set(_DEPLOY_MOD ${_MINIHUB_PLUGINS_DEPLOY_DIR}/${_MOD})
+    execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c
+                "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); import store_paths; print(store_paths.module_mhub_file(sys.argv[2], deploy=Path(sys.argv[3]), module_dir=Path(sys.argv[4])).parent)"
+                "${MINIHUB_REPO_ROOT}/tools"
+                "${_MOD}"
+                "${_MINIHUB_PLUGINS_DEPLOY_DIR}"
+                "${_MOD_DIR}"
+        OUTPUT_VARIABLE _DEPLOY_MOD
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _DEPLOY_MOD_RC
+    )
+    if(NOT _DEPLOY_MOD_RC EQUAL 0 OR "${_DEPLOY_MOD}" STREQUAL "")
+        message(WARNING "modstore: could not resolve ${_MOD} deploy dir (rc=${_DEPLOY_MOD_RC})")
+        set(_DEPLOY_MOD ${_MINIHUB_PLUGINS_DEPLOY_DIR}/Stores/Common/${_MOD})
+    endif()
     set(_SO ${_DEPLOY_MOD}/${_MOD}.so)
     set(_SO_BUILD ${CMAKE_SOURCE_DIR}/build/${_MOD}.so)
     set(_LIBAD ${CMAKE_BINARY_DIR}/modules/libadapter_${_MOD}.so)
@@ -333,7 +348,9 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
     endif()
 endforeach()
 
-# Atomic with staged files/*.mhub: rewrite catalog sizes from deploy packages, then copy.
+# The deploy tree carries no derived index: /api/catalog aggregates the
+# per-plugin catalog.json objects at request time. The device's bundled local
+# store still needs a single array, so ask for one at an explicit path.
 execute_process(
     COMMAND ${CMAKE_COMMAND} -E env
             MINIHUB_PLUGINS_DEPLOY_DIR=${_MINIHUB_PLUGINS_DEPLOY_DIR}
@@ -341,17 +358,15 @@ execute_process(
             MINIHUB_APP=$ENV{MINIHUB_APP}
             ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/sync_store_catalog.py
             --catalog-only --deploy ${_MINIHUB_PLUGINS_DEPLOY_DIR}
+            --aggregate ${MINIHUB_MODSTORE_DIR}/catalog.json
     WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
     RESULT_VARIABLE _CATALOG_RC
 )
 if(NOT _CATALOG_RC EQUAL 0)
     message(WARNING "sync_store_catalog --catalog-only failed (rc=${_CATALOG_RC})")
 endif()
-if(EXISTS ${_MINIHUB_PLUGINS_DEPLOY_DIR}/catalog.json)
-    file(COPY ${_MINIHUB_PLUGINS_DEPLOY_DIR}/catalog.json DESTINATION ${MINIHUB_MODSTORE_DIR})
-    message(STATUS "modstore: staged catalog.json from ${_MINIHUB_PLUGINS_DEPLOY_DIR}")
-else()
-    message(WARNING "modstore: catalog.json missing under ${_MINIHUB_PLUGINS_DEPLOY_DIR}")
+if(NOT EXISTS ${MINIHUB_MODSTORE_DIR}/catalog.json)
+    message(WARNING "modstore: catalog.json not generated under ${MINIHUB_MODSTORE_DIR}")
 endif()
 
 minihub_resolve_config_asset(product_params _pp_modstore)

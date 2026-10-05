@@ -20,6 +20,7 @@ Out-of-tree L3 C sources should ``#include "minihub_plugin_sdk.h"``
    :caption: Host development API
 
    host_rest
+   deploy_index
    mcp
    net_api
    minihub_core

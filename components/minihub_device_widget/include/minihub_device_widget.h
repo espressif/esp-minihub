@@ -177,6 +177,27 @@ esp_err_t minihub_device_widget_flatten_stored_model(char *errbuf, size_t errbuf
 const minihub_device_widget_device_t *
 minihub_device_widget_get(const char *device);
 
+/* ---- Cloud fallback for unknown device types ----
+ *
+ * When a device type is not in the local registry (minihub_device_widget_get
+ * returns NULL), the data/update layer may fetch its icon + style + metadata from
+ * the deploy root (GET /api/assets/device/<id>) and cache them under /data. The
+ * fetcher is a weak symbol so this component stays decoupled from the HTTP stack:
+ * minihub_update supplies the real implementation; when it is not linked this
+ * returns ESP_ERR_NOT_SUPPORTED.
+ *
+ * @return ESP_OK if the assets were fetched (icons now under /data/images),
+ *         ESP_ERR_NOT_FOUND if the server has no such type (negative-cached),
+ *         ESP_ERR_NOT_SUPPORTED if no fetcher is linked. */
+esp_err_t minihub_dw_cloud_fetch_default(const char *base_url, const char *device_id);
+
+/* Like minihub_device_widget_get, but triggers a one-shot cloud fetch when the
+ * type is unknown (no-op if already known, or if a previous fetch already failed
+ * for this type). Returns the registry entry when locally known, otherwise NULL.
+ * `base_url` may be NULL to use the configured store URL. */
+const minihub_device_widget_device_t *
+minihub_device_widget_get_or_fetch(const char *base_url, const char *device);
+
 /* Indexed access to the loaded device list (0 <= index < device_count()).
  * Useful for enumeration / serialization (e.g. serving the UI catalog). */
 const minihub_device_widget_device_t *

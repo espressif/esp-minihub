@@ -1,5 +1,36 @@
 
-set(MOD_SRCS module_loader.c)
+set(MOD_SRCS module_loader.c module_abi_check.c)
+
+# Repository root (cheap path derivation; used by the generation step below and
+# again further down for the plugin SDK check).
+get_filename_component(_mh_repo_for_sdk "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+
+# Bake the host ABI symbol contract into firmware for offline module compatibility
+# checks (defense-in-depth; the store server already filters by abi_total_hash).
+# Guarded so the custom command is only emitted during the real configure pass,
+# not the ESP-IDF early-expansion (get-requirements) pass where add_custom_command
+# is not scriptable (CMAKE_BUILD_EARLY_EXPANSION == 1 there).
+if(NOT CMAKE_BUILD_EARLY_EXPANSION)
+set(_abi_gen "${CMAKE_CURRENT_BINARY_DIR}/minihub_abi_symbols.gen.h")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+add_custom_command(
+    OUTPUT "${_abi_gen}"
+    COMMAND python3 "${_mh_repo_for_sdk}/tools/gen_abi_contract.py"
+        --header "${_mh_repo_for_sdk}/components/minihub_module/include/minihub_module_abi.h"
+        --allowlist "${_mh_repo_for_sdk}/docs/module_sdk/host_export_allowlist.json"
+        --out-header "${_abi_gen}"
+    DEPENDS
+        "${_mh_repo_for_sdk}/tools/gen_abi_contract.py"
+        "${_mh_repo_for_sdk}/tools/abi_contract_lib.py"
+        "${_mh_repo_for_sdk}/components/minihub_module/include/minihub_module_abi.h"
+        "${_mh_repo_for_sdk}/docs/module_sdk/host_export_allowlist.json"
+    COMMENT "Bake host ABI symbol contract (minihub_abi_symbols.gen.h)"
+    VERBATIM
+)
+set_source_files_properties("${_abi_gen}" PROPERTIES GENERATED TRUE)
+list(APPEND MOD_SRCS "${_abi_gen}")
+endif()
+
 set(MOD_REQ
     minihub_core minihub_adapter minihub_config minihub_hub
     minihub_ble_mesh minihub_ble_gatt minihub_zigbee minihub_net
@@ -21,7 +52,6 @@ endif()
 set(_plugin_sdk_gen_dir "${CMAKE_BINARY_DIR}/minihub_plugin_sdk_check")
 set(_plugin_sdk_sizes_h "${_plugin_sdk_gen_dir}/plugin_sdk_sizes.h")
 set(_plugin_sdk_abi_c "${_plugin_sdk_gen_dir}/plugin_sdk_abi_check.c")
-get_filename_component(_mh_repo_for_sdk "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 set(_plugin_sdk_h "${_mh_repo_for_sdk}/docs/module_sdk/include/minihub_plugin_sdk.h")
 
 if(CONFIG_MINIHUB_DYNAMIC_MODULES)
@@ -58,7 +88,7 @@ endif()
 
 idf_component_register(
     SRCS ${MOD_SRCS}
-    INCLUDE_DIRS "include"
+    INCLUDE_DIRS "include" "${CMAKE_CURRENT_BINARY_DIR}"
     REQUIRES ${MOD_REQ}
 )
 

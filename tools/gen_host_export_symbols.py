@@ -324,7 +324,7 @@ def main() -> int:
     parser.add_argument(
         "--store-dir",
         type=Path,
-        help="optional deploy root — merge UND from */*.mhub",
+        help="optional deploy root — merge UND from Stores/<chip-or-Common>/<id>/<id>.mhub",
     )
     parser.add_argument("--out", required=True, type=Path, help="output .c path")
     parser.add_argument(
@@ -358,8 +358,13 @@ def main() -> int:
         import tempfile
 
         tmpdir = Path(tempfile.mkdtemp(prefix="mhub_syms_"))
-        mhubs = sorted(args.store_dir.glob("*.mhub"))
-        mhubs.extend(sorted(args.store_dir.glob("*/*.mhub")))
+        seen_ids: set[str] = set()
+        mhubs: list[Path] = []
+        for mhub in sorted(args.store_dir.glob("Stores/*/*/*.mhub")):
+            if mhub.stem in seen_ids:
+                continue
+            seen_ids.add(mhub.stem)
+            mhubs.append(mhub)
         for mhub in mhubs:
             if not mhub.is_file():
                 continue

@@ -2,6 +2,7 @@
   "id": "color_bulb_js",
   "name": "Color bulb JS (L2 demo)",
   "version": "0.1.0",
+  "targets": ["ALL"],
   "enabled": true,
   "kind": "module",
   "runtime": "js",

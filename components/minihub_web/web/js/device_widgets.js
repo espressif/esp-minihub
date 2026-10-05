@@ -619,13 +619,30 @@ async function openDeviceDetail(id, ev) {
     refreshDeviceDetail();
 }
 
+/* Icons live in the device's own /data/images tree, which the deploy server
+ * fills on demand. A type with no artwork shipped (meter_plug), or a storage
+ * tree that has not been synced yet, must degrade to the glyph badge instead of
+ * showing a broken-image box. */
+function dwIconFallback(el) {
+    if (!el || el.dataset.fallback) return;
+    el.dataset.fallback = '1';
+    const m = /\/img\/devices\/([^/.]+)\.svg/.exec(el.getAttribute('src') || '');
+    const type = m ? m[1] : '';
+    const glyph = (typeof TYPE_ICON !== 'undefined' && TYPE_ICON[type]) ||
+        (type ? type.charAt(0).toUpperCase() : '·');
+    const span = document.createElement('span');
+    span.className = 'dw-device-icon-fallback';
+    span.textContent = glyph;
+    if (el.parentNode) el.parentNode.replaceChild(span, el);
+}
+
 function dwDeviceIconHtml(imageUrl, powerOn) {
     if (!imageUrl) return '';
     let cls = 'dw-device-icon';
     if (powerOn === true) cls += ' is-on';
     else if (powerOn === false) cls += ' is-off';
     return '<img class="' + cls + '" src="' + escAttr(imageUrl) +
-        '" alt="" decoding="async" draggable="false">';
+        '" alt="" decoding="async" draggable="false" onerror="dwIconFallback(this)">';
 }
 
 function dwTypeImageUrl(type) {
