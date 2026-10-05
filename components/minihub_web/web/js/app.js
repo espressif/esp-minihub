@@ -631,6 +631,10 @@ function updateCardEl(existing, p) {
     /* Reuse the existing <img> when its src is unchanged so the browser keeps
      * the decoded image instead of re-requesting it (the flicker source). */
     if (oldImg && newImg && oldImg.getAttribute('src') === newImg.getAttribute('src')) {
+        /* The class carries the on/off dim state (dw-device-icon is-on / is-off).
+         * Copy it onto the kept node: otherwise a device that was just toggled
+         * keeps the previous icon brightness until the next full rebuild. */
+        oldImg.className = newImg.className;
         newImg.parentNode.replaceChild(oldImg, newImg);
     }
     existing.replaceWith(newCard);
