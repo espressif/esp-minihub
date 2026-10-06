@@ -1169,6 +1169,8 @@ async function dwSend(device, parameter, value, pointId) {
         if (!r.ok) {
             const j = await r.json().catch(function () { return {}; });
             toast(t('dw.control_failed', { error: (j.error || r.status) }));
+        } else if (typeof refreshAfterCommand === 'function') {
+            refreshAfterCommand();
         } else if (typeof loadPoints === 'function') {
             loadPoints();
         }

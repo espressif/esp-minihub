@@ -27,12 +27,18 @@ Document shape
            "point_id": "sim.color_bulb",
            "parameter": "brightness",
            "op": "gt",
-           "value": "50"
+           "value": "50",
+           "delay_sec": 0
          },
          "if": [ { "point_id": "sim.meter_plug", "parameter": "power", "op": "eq", "value": "on" } ],
          "then": [
-           { "type": "command", "point_id": "sim.color_bulb", "cmd": "turn_on" },
-           { "type": "notify", "message": "Door opened" }
+           {
+             "actions": [
+               { "type": "command", "point_id": "sim.color_bulb", "cmd": "turn_on" },
+               { "type": "notify", "message": "Door opened" }
+             ],
+             "delay_after": 5
+           }
          ]
        }
      ]
@@ -53,6 +59,10 @@ Document shape
        matches the point summary ``value``.
    * - ``time``
      - Fire once per day at ``at`` (``HH:MM``). Needs SNTP.
+
+Both ``point`` and ``time`` accept an optional ``delay_sec``: the rule waits
+that many seconds after the trigger before the first step runs. A value of 0
+means "run immediately" and is the default.
 
 ``if`` is an array of extra conditions. Each item uses the same shape as a
 point ``when`` (all must match).
@@ -88,13 +98,39 @@ Normalized in ``normalize_op``. Unknown tokens become ``eq``.
      - ``>=`` ``≧``
      - Greater or equal
 
-``then``
---------
+``then`` — steps
+--------------------
 
-Object or array. **Only** these four ``type`` values are executed. There is no
-``scene`` action and no direct ``minihub_point_set``. Commands go through
-``minihub_command_invoke`` (same path as ``POST /api/command``). Run a scene
-with ``POST /api/scenes/invoke``, not from a rule ``then``.
+``then`` is an **ordered list of steps**. Each step is an object with:
+
+* ``actions`` — array of action objects executed together (max 4 per step).
+* ``delay_after`` — seconds to wait **after** this step before the next step.
+  Ignored on the last step; 0 means no delay.
+
+Steps run serially: step 0 runs after ``when.delay_sec`` (if any), then each
+next step starts after the previous step’s ``delay_after``. This replaces the
+old inline ``delay`` action — a delay now belongs to the *preceding* step, never
+as a standalone action. A legacy flat ``then`` (a bare action object or array,
+optionally with inline ``delay`` actions) is still parsed into steps by the
+firmware.
+
+.. code-block:: text
+
+   when (trigger) --[when.delay_sec]--> step0 actions --[delay_after]--> step1 actions --> ...
+
+In the Web editor the wait is picked from a step’s action-type dropdown
+(``Delay``), not from a separate field: the delay always settles as the trailing
+wait of the step it belongs to, and a step carries at most one. Because a delay
+is what separates two moments, ``+ Add step`` is offered only once the last step
+ends with a delay.
+
+Actions (``type``)
+~~~~~~~~~~~~~~~~~~~
+
+Only these three ``type`` values are executed (no ``scene`` action, no
+``minihub_point_set``). Commands go through ``minihub_command_invoke`` (same
+path as ``POST /api/command``). Run a scene with ``POST /api/scenes/invoke``,
+not from a rule ``then``.
 
 .. list-table::
    :header-rows: 1
@@ -104,20 +140,25 @@ with ``POST /api/scenes/invoke``, not from a rule ``then``.
      - Fields
    * - ``command``
      - ``point_id`` + ``cmd`` (same names as REST; power uses ``turn_on`` /
-       ``turn_off`` / ``toggle``).
+       ``turn_off`` / ``toggle``). Optional ``params`` for value commands
+       (``brightness``, ``color_temp``, ``color``).
    * - ``command_by_type``
      - ``cmd`` plus optional ``types`` CSV (default ``light,switch``). Each
        listed point must also pass Host’s light/plug filter (skips ``mock``,
-       PIR/motion-like names). Typical use: “turn all lights off”.
-   * - ``delay``
-     - ``seconds``. Implemented with ``vTaskDelay`` on the **rule task**, so
-       it **blocks** later ``then`` items and other rules on that task. Use
-       sparingly; prefer scene ``delay_ms`` for sequenced commands.
+       PIR/motion-like names). Typical use: “turn all lights off”. Still
+       executed, but the editor no longer offers this option — rules that
+       already use it stay editable and keep running.
    * - ``notify``
      - ``message``. Calls the product IM hook if linked; otherwise logs a
        warning.
 
 Unknown ``then.type`` is logged and skipped.
+
+Execution is **non-blocking**: delays use one-shot ``esp_timer`` callbacks that
+only enqueue a job on a dedicated executor task — commands never run inside the
+timer callback. A monotonic generation counter is bumped on every reload, so any
+delayed job armed before a re-import is dropped (no use-after-free after
+reload).
 
 Import and MCP
 --------------

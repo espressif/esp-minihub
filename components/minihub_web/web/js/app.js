@@ -323,6 +323,12 @@ function switchView(v) {
         loadSystem();
         sysOtaPoll();
     }
+    /* The device list paints from what is already cached — a synchronous render —
+     * and only then catches up over the network. Awaiting points here would hold
+     * the empty grid on screen for a whole round trip. */
+    if (v === 'overview' && (!pts.length || Date.now() - lastPtsAt > 2000)) {
+        loadPoints();
+    }
 }
 function renderLocalUser() {
     const n = localName();
@@ -390,32 +396,58 @@ async function loadMeta() {
         if (view === 'overview') renderOverview();
     } catch (e) {}
 }
-async function loadPoints() {
-    if (pointsLoading) return;
-    pointsLoading = true;
-    try {
-        const r = await fetch('/api/points');
-        if (!r.ok) throw new Error('points');
-        const next = await r.json();
-        const sig = pointsUiSig(next);
-        const changed = sig !== lastPtsSig;
-        lastPtsSig = sig;
-        pts = next;
-        const foot = document.getElementById('foot');
-        if (foot) foot.textContent = t('foot.updated', { time: new Date().toLocaleTimeString(window.mhLocale()) });
-        if (changed) {
-            if (view === 'overview') renderOverview();
-            if (view === 'map' && window.L) renderMap();
-
-            if (typeof refreshDeviceDetail === 'function') refreshDeviceDetail();
-        }
-    } catch (e) {
-        const c = document.getElementById('content');
-        if (c && !pts.length) c.innerHTML = '<div class="empty">' + t('app.load_failed') + '</div>';
-    } finally {
-        pointsLoading = false;
+let pointsPromise = null;
+let lastPtsAt = 0;   /* successful /api/points; tells the view switch whether the cache is fresh */
+async function loadPoints(forceRender) {
+    /* A caller arriving mid-load must await that run instead of returning early:
+     * returning early left `pts` stale (usually empty), which made e.g. the rule
+     * editor render with no trigger devices to choose from. */
+    if (pointsLoading && pointsPromise) {
+        return pointsPromise;
     }
+    pointsLoading = true;
+    pointsPromise = (async function () {
+        try {
+            const r = await fetch('/api/points');
+            if (!r.ok) throw new Error('points');
+            const next = await r.json();
+            const sig = pointsUiSig(next);
+            const changed = sig !== lastPtsSig;
+            lastPtsSig = sig;
+            pts = next;
+            const foot = document.getElementById('foot');
+            lastPtsAt = Date.now();
+            if (foot) foot.textContent = t('foot.updated', { time: new Date().toLocaleTimeString(window.mhLocale()) });
+            if (changed || forceRender) {
+                if (view === 'overview') renderOverview();
+                if (view === 'map' && window.L) renderMap();
+
+                if (typeof refreshDeviceDetail === 'function') refreshDeviceDetail();
+            }
+        } catch (e) {
+            const c = document.getElementById('content');
+            if (c && !pts.length) c.innerHTML = '<div class="empty">' + t('app.load_failed') + '</div>';
+        } finally {
+            pointsLoading = false;
+        }
+    })();
+    return pointsPromise;
 }
+
+/* A command just changed a device, so the on-screen snapshot must reflect it.
+ * A plain loadPoints() can reuse an in-flight poll that STARTED before the
+ * command — i.e. a pre-command snapshot — and then the UI would not re-render
+ * until the next poll (seconds later). Wait for any in-flight load to settle,
+ * then fetch fresh (no overlapping requests, so the small httpd is not hit). */
+async function refreshAfterCommand() {
+    if (pointsLoading && pointsPromise) {
+        try { await pointsPromise; } catch (e) {}
+    }
+    /* forceRender: always re-draw, so a failed command reverts any optimistic
+     * state instead of leaving the card stuck on the flipped value. */
+    return loadPoints(true);
+}
+
 async function loadRtspCamStatusSafe() {
     if (rtspStatusLoading) return;
     rtspStatusLoading = true;

@@ -342,6 +342,11 @@ function pointsUiSig(list) {
         return JSON.stringify(list);
     }
 }
+function rulesToggleHtml(id, enabled) {
+    const on = enabled !== false;
+    return '<button class="switch ' + (on ? 'on' : '') + '" type="button" title="' + (on ? t('rules.disable') : t('rules.enable')) + '" onclick="event.stopPropagation();rulesToggleEnabled(\'' + escAttr(id) + '\')"><span class="switch-knob"></span></button>';
+}
+
 function renderRules() {
     const list = document.getElementById('rules-list');
     const detail = document.getElementById('rules-detail');
@@ -375,6 +380,7 @@ function renderRules() {
         const th = thenPlain(rule.then);
         detail.innerHTML = '<button class="btn-sm" type="button" onclick="rulesBack()">' + t('ov.back_to_list') + '</button>' +
             '<button class="btn-sm on" type="button" style="margin-left:8px" onclick="rulesEditOpen(\'' + escAttr(rule.id) + '\')">' + t('ov.edit') + '</button>' +
+            rulesToggleHtml(rule.id, rule.enabled) +
             '<div class="dcard" style="margin-top:12px">' +
             '<div class="card-top"><div class="card-name">' + esc(rule.name || rule.id || t('ov.rule')) + '</div>' + (dis ? '' : '<span class="badge sensor">' + t('ov.enabled_badge') + '</span>') + '</div>' +
             (dis ? '<div class="card-meta"><span>' + t('ov.disabled') + '</span></div>' : '') +
@@ -398,7 +404,11 @@ function renderRules() {
     list.innerHTML = arr.map(function(r) {
         const dis = r.enabled === false;
         return '<div class="dcard" style="cursor:pointer" data-rule-id="' + escAttr(r.id || '') + '">' +
-            '<div class="card-top"><div class="card-name">' + esc(r.name || r.id || '(unnamed)') + '</div>' + (dis ? '' : '<span class="badge sensor">' + t('ov.enabled_badge') + '</span>') + '</div>' +
+            '<div class="card-top"><div class="card-name">' + esc(r.name || r.id || '(unnamed)') + '</div>' +
+            (dis ? '' : '<span class="badge sensor">' + t('ov.enabled_badge') + '</span>') +
+            rulesToggleHtml(r.id, r.enabled) +
+            '<button class="btn-sm bad" type="button" title="' + escAttr(t('ov.delete')) + '" onclick="event.stopPropagation();rulesDelete(\'' + escAttr(r.id || '') + '\')">' + t('ov.delete') + '</button>' +
+            '</div>' +
             '<div class="card-meta"><span>' + esc(whenSummary(r.when)) + ' → ' + esc(thenSummary(r.then)) + '</span>' + (dis ? '<span>' + t('ov.disabled_short') + '</span>' : '') + '</div></div>';
     }).join('');
     list.onclick = function(ev) {
@@ -2612,11 +2622,43 @@ try {
 } catch (e) {
     console.warn('ha-parity controls', e);
 }
+/* Optimistic power feedback for the overview toggle: flip the card right away so
+ * a slow round-trip (or a missed refresh) is not felt as lag. The post-command
+ * snapshot reconciles it, and reverts if the command fails. */
+function cardPowerOn(p) {
+    if (!p) return false;
+    const v = pointParamVal(p, 'power');
+    return v === 'on' || v === 'true' || v === true ||
+        p.value === 'on' || p.value === 'true' || p.value === 'open';
+}
+function cardSetPower(id, on) {
+    const p = pts.find(x => x.point_id === id);
+    if (!p) return false;
+    const val = on ? 'on' : 'off';
+    const pr = p.props;
+    if (pr && pr.params && typeof pr.params === 'object' && !Array.isArray(pr.params)) {
+        if (!pr.params.power || typeof pr.params.power !== 'object') pr.params.power = {};
+        pr.params.power.value = val;
+    } else if (pr && Array.isArray(pr.params)) {
+        const ent = pr.params.find(e => e && e.name === 'power');
+        if (ent) ent.value = val;
+        else pr.params.push({ name: 'power', value: val });
+    } else {
+        p.value = val;
+    }
+    return true;
+}
+
 async function cmd(id, c, params) {
     const p = pts.find(x => x.point_id === id);
     if (p && !p.online) {
         toast(t('ov.device_offline'));
         return;
+    }
+    /* Power toggles get instant local feedback; the snapshot that follows reconciles. */
+    if (c === 'turn_on' || c === 'turn_off' || c === 'toggle') {
+        const on = c === 'turn_on' ? true : (c === 'turn_off' ? false : !cardPowerOn(p));
+        if (cardSetPower(id, on)) renderOverview();
     }
     try {
         const body = {
@@ -2644,7 +2686,7 @@ async function cmd(id, c, params) {
             }
             toast(String(msg).slice(0, 120));
         }
-        loadPoints();
+        refreshAfterCommand();
     } catch (e) {
         toast(t('ov.network_error'));
     }

@@ -94,15 +94,32 @@ function toggleSecret(btn) {
             return r;
         });
     };
-    checkSession();
-    setInterval(checkSession, 10000);
+    /* This endpoint sometimes takes seconds to answer on the Hub and holds an
+     * httpd slot the whole time, pushing /api/points behind it. A dead session
+     * already surfaces as a 401 on the next polled request (guard above) or as the
+     * events socket closing, so this check only has to cover a console nobody is
+     * touching. Focus and pageshow arrive in bursts; one check per interval is
+     * plenty for those too. */
+    const SESSION_CHECK_MS = 30000;
+    const SESSION_CHECK_MIN_GAP_MS = 5000;
+    let lastSessionCheckAt = 0;
+    function checkSessionThrottled() {
+        const now = Date.now();
+        if (now - lastSessionCheckAt < SESSION_CHECK_MIN_GAP_MS) {
+            return;
+        }
+        lastSessionCheckAt = now;
+        checkSession();
+    }
+    checkSessionThrottled();
+    setInterval(checkSessionThrottled, SESSION_CHECK_MS);
     document.addEventListener('visibilitychange', function () {
         if (!document.hidden) {
-            checkSession();
+            checkSessionThrottled();
         }
     });
-    window.addEventListener('pageshow', checkSession);
-    window.addEventListener('focus', checkSession);
+    window.addEventListener('pageshow', checkSessionThrottled);
+    window.addEventListener('focus', checkSessionThrottled);
 })();
 
 document.querySelectorAll('.nav-item').forEach(n => n.onclick = () => switchView(n.dataset.view));
@@ -149,10 +166,48 @@ function bootConsole() {
 /* Wait for the dictionary before the first render, otherwise the console paints in
  * one language and swaps a frame later. A rejected dictionary still boots: the
  * helper falls back to the key text and the page is already visible by then. */
+/* Requests to the Hub queue behind each other: with a /api/points fired every
+ * second and the events WebSocket permanently holding one httpd slot, Chrome
+ * measured 0.9–2.6 s of "stalled" time per request, so device cards painted
+ * seconds after the state actually changed. The events socket stays silent for
+ * most adapters, so this timer is effectively how device state reaches the
+ * screen — the period below is a latency/load trade-off, not a fallback delay.
+ * Measured on a Hub (round trip of an unrelated request while this timer runs):
+ * a request every 1 s put every other request behind it — p50 1012 ms, p90 1403;
+ * at 3 s and above p50 drops to ~50 ms. 6 s was the best point: p90 1364 ms and
+ * no queueing, against p90 5470 ms at 3 s and 10 s outliers at 15 s. */
+const POINTS_POLL_WS_UP_MS = 6000;
+const POINTS_POLL_WS_DOWN_MS = 3000;
+/* Right after login the Hub often answers /api/points with an empty list — the
+ * device rows simply have not been registered yet, and an empty list publishes no
+ * event either. Keep asking briskly until the first devices land (and through the
+ * same window at every console start). */
+const POINTS_POLL_EMPTY_MS = 2000;
+const POINTS_POLL_WARMUP_MS = 12000;
+let eventsWsOpen = false;
+let pointsPollTimer = null;
+let consoleBootAt = Date.now();
+function pointsPollPeriod() {
+    if (!eventsWsOpen) return POINTS_POLL_WS_DOWN_MS;
+    if (!pts.length) return POINTS_POLL_EMPTY_MS;
+    if (Date.now() - consoleBootAt < POINTS_POLL_WARMUP_MS) return POINTS_POLL_WS_DOWN_MS;
+    return POINTS_POLL_WS_UP_MS;
+}
+/* Self-rescheduling on purpose: a fixed interval would re-fire while the Hub is
+ * still answering, which is exactly what piled sockets up in the first place. */
+function schedulePointsPoll(delay) {
+    if (pointsPollTimer) return;
+    pointsPollTimer = setTimeout(async function () {
+        pointsPollTimer = null;
+        try {
+            await loadPoints();
+        } catch (e) {}
+        schedulePointsPoll(pointsPollPeriod());
+    }, typeof delay === 'number' ? delay : pointsPollPeriod());
+}
 function startConsolePolling() {
-    /* 1 s: drives the 更新 stamp and is also the fast path for noticing a session
-     * that a newer login replaced (single-slot session → 401 → guard → /login). */
-    setInterval(loadPoints, 1000);
+    consoleBootAt = Date.now();
+    schedulePointsPoll();
     setInterval(loadRtspCamStatusSafe, 12000);
     setInterval(() => loadAdapters().then(async () => {
         await loadModulesForAuth();
@@ -220,7 +275,12 @@ function connectEventsWs() {
             setTimeout(connect, retryMs);
             return;
         }
-        ws.onopen = function () { retryMs = 2000; };
+        ws.onopen = function () {
+            retryMs = 2000;
+            eventsWsOpen = true;
+            /* Everything published while the socket was down never reached us. */
+            scheduleLoadPoints();
+        };
         ws.onmessage = function (ev) {
             try {
                 const msg = JSON.parse(ev.data);
@@ -243,8 +303,16 @@ function connectEventsWs() {
             } catch (e) {}
         };
         ws.onclose = function () {
+            eventsWsOpen = false;
             setTimeout(connect, retryMs);
             if (retryMs < 15000) retryMs *= 1.5;
+            /* The socket was carrying the fast updates; drop the long wait it
+             * had queued and switch to the short period from here on. */
+            if (pointsPollTimer) {
+                clearTimeout(pointsPollTimer);
+                pointsPollTimer = null;
+            }
+            schedulePointsPoll();
         };
         ws.onerror = function () {
             try { ws.close(); } catch (e) {}
