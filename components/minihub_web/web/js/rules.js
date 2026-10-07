@@ -48,7 +48,8 @@ function rulesAiSystemPrompt(pointIds) {
         '  Legacy also ok: {"type":"point","point_id":"...","equals":"..."}.\n' +
         'when time: {"type":"time","at":"HH:MM"}.\n' +
         'if item: same shape as when point (point_id + parameter + op + value). Empty if ok.\n' +
-        'then: {"type":"command","point_id":"...","cmd":"..."} OR {"type":"delay","seconds":N}. One then only.\n' +
+        'then: one action {"type":"command","point_id":"...","cmd":"..."} or an ordered array of them ' +
+        '(e.g. [{"type":"delay","seconds":5},{"type":"command","point_id":"...","cmd":"turn_on"}]; max 4).\n' +
         'Prefer these device point_id values when relevant: ' + JSON.stringify(pointIds.slice(0, 80)) + '\n' +
         'Common cmds: turn_on, turn_off, toggle. Chinese user input is ok.';
 }
@@ -84,21 +85,24 @@ function rulesAiValidate(file) {
             ok: false,
             error: t('rules.err_rule_when_type', { n: i + 1 })
         };
-        const th = r.then;
-        if (th.type === 'command') {
-            if (!th.point_id || !th.cmd) return {
+        const ths = rulesThenList(r.then);
+        for (let k = 0; k < ths.length; k++) {
+            const th = ths[k];
+            if (th.type === 'command') {
+                if (!th.point_id || !th.cmd) return {
+                    ok: false,
+                    error: t('rules.err_rule_then_incomplete', { n: i + 1 })
+                };
+            } else if (th.type === 'delay') {
+                if (!(th.seconds > 0)) return {
+                    ok: false,
+                    error: t('rules.err_rule_then_delay', { n: i + 1 })
+                };
+            } else return {
                 ok: false,
-                error: t('rules.err_rule_then_incomplete', { n: i + 1 })
+                error: t('rules.err_rule_then_type', { n: i + 1 })
             };
-        } else if (th.type === 'delay') {
-            if (!(th.seconds > 0)) return {
-                ok: false,
-                error: t('rules.err_rule_then_delay', { n: i + 1 })
-            };
-        } else return {
-            ok: false,
-            error: t('rules.err_rule_then_type', { n: i + 1 })
-        };
+        }
         if (r.if != null && !Array.isArray(r.if)) return {
             ok: false,
             error: t('rules.err_rule_if_array', { n: i + 1 })
@@ -352,14 +356,29 @@ function whenSummary(w) {
     return w.type || '-';
 }
 
-function thenSummary(th) {
-    if (!th || typeof th !== 'object') return '-';
-    if (th.type === 'delay') {
-        const n = th.ms != null ? th.ms : (th.seconds != null ? th.seconds * 1000 : '');
+/* Short, one-line description of a single action (used by the list/detail views,
+ * which now render the steps form: each step is a group of actions + delay_after). */
+function thenActionSummary(a) {
+    if (!a || typeof a !== 'object') return '';
+    if (a.type === 'delay') {
+        const n = a.delay_sec != null ? a.delay_sec :
+            (a.seconds != null ? a.seconds : (a.ms != null ? Math.round(a.ms / 1000) : '?'));
         return t('rules.summary_delay', { n: n });
     }
-    if (th.type === 'command') return (th.cmd || '') + ' → ' + rulesDeviceLabel(th.point_id || '');
-    return th.type || '-';
+    if (a.type === 'command') return (a.cmd || '?') + ' → ' + rulesDeviceLabel(a.point_id || '?');
+    if (a.type === 'command_by_type') return (a.cmd || '?') + ' → ' + (a.types || '?');
+    if (a.type === 'notify') return t('rules.opt_notify') + (a.message ? ': ' + a.message : '');
+    return a.type || '-';
+}
+
+function thenSummary(th) {
+    const steps = rulesThenList(th);
+    return steps.map(function(st, i) {
+        const acts = (st.actions || []).map(thenActionSummary);
+        let s = acts.join(' › ');
+        if (st.delay_after > 0) s += ' › ' + t('rules.summary_delay', { n: st.delay_after });
+        return (steps.length > 1 ? ((i + 1) + '. ') : '') + s;
+    }).join('<br>');
 }
 
 function whenPlain(w) {
@@ -370,6 +389,10 @@ function whenPlain(w) {
     if (w.type === 'time') return {
         title: t('rules.when_time'),
         body: t('rules.when_time_body', { at: esc(w.at || '??:??') })
+    };
+    if (w.type === 'delay') return {
+        title: t('rules.when_delay_type'),
+        body: t('rules.when_delay_body', { n: (w.delay_sec > 0 ? w.delay_sec : '?') })
     };
     if (w.type === 'point') {
         const dev = rulesDeviceLabel(w.point_id);
@@ -414,20 +437,17 @@ function thenPlain(th) {
         title: t('rules.then_unknown'),
         body: t('rules.then_unconfigured')
     };
-    if (th.type === 'delay') {
-        const n = th.ms != null ? th.ms : (th.seconds != null ? th.seconds * 1000 : null);
-        return {
-            title: t('rules.then_delay'),
-            body: t('rules.then_delay_body', { n: esc(n != null ? String(n) : '?') })
-        };
-    }
-    if (th.type === 'command') return {
-        title: t('rules.send_command'),
-        body: t('rules.then_command_body', { dev: esc(rulesDeviceLabel(th.point_id || '?')), cmd: esc(th.cmd || '?') })
+    const steps = rulesThenList(th);
+    const stepOne = function(st, i) {
+        const parts = (st.actions || []).map(thenActionSummary);
+        let body = parts.join(' › ');
+        if (st.delay_after > 0) body += ' › ' + t('rules.summary_delay', { n: st.delay_after });
+        return (steps.length > 1 ? ('<b>' + (i + 1) + '.</b> ') : '') + body;
     };
+    const body = steps.map(stepOne).join('<br>');
     return {
-        title: esc(th.type || t('rules.action')),
-        body: esc(JSON.stringify(th))
+        title: t('rules.then_steps'),
+        body: body
     };
 }
 
@@ -452,7 +472,6 @@ async function loadRules() {
     }
 }
 
-const RULE_CMDS = ['turn_on', 'turn_off', 'toggle', 'set', 'set_brightness'];
 const RULE_OPS = [
     { op: 'lt', label: '<' },
     { op: 'le', label: '≦' },
@@ -460,6 +479,151 @@ const RULE_OPS = [
     { op: 'gt', label: '>' },
     { op: 'ge', label: '≧' }
 ];
+
+/* Bool parameters (toggle/power/...) only make sense with equality, so the editor
+ * hides the ordering operators for them. */
+const RULE_OPS_BOOL = [
+    { op: 'eq', label: '=' },
+    { op: 'ne', label: '!=' }
+];
+
+/* Clamp a numeric value to the parameter's [min, max] range. Non-numeric or
+ * range-less values pass through untouched. */
+function rulesClampValue(meta, raw) {
+    if (!meta || meta.min == null || meta.max == null) return raw;
+    const v = (raw == null ? '' : String(raw)).trim();
+    if (v === '') return raw;
+    const n = Number(v);
+    if (isNaN(n)) return raw;
+    let c = n;
+    if (c < meta.min) c = meta.min;
+    if (c > meta.max) c = meta.max;
+    return String(c);
+}
+
+/* Snap a numeric <input> into its own [min,max] range in place.
+ * `which` picks the bound to enforce: 'max' (upper only — safe to run on every
+ * keystroke, since typing can only overshoot above), 'min', or undefined for
+ * both (run on change/blur). This lets an over-range entry settle at the bound
+ * immediately (brightness 100000 -> 100) while a below-range entry waits until
+ * the field is left, so mid-type digits are never clamped (temperature 500 ->
+ * 2700 only on blur). Reads the bounds straight from the element's attributes. */
+function rulesClampInput(el, which) {
+    if (!el || el.type !== 'number') return;
+    const raw = String(el.value == null ? '' : el.value).trim();
+    if (raw === '') return;
+    const n = Number(raw);
+    if (isNaN(n)) return;
+    const min = (el.min !== '') ? Number(el.min) : null;
+    const max = (el.max !== '') ? Number(el.max) : null;
+    let c = n;
+    if (which !== 'max' && min != null && !isNaN(min) && c < min) c = min;
+    if (which !== 'min' && max != null && !isNaN(max) && c > max) c = max;
+    if (String(c) !== raw) el.value = String(c);
+}
+
+// Per device-type action commands. `value:true` means the command needs a
+// parameter value; `param` is the key the adapter expects inside `params`
+// (e.g. set_brightness -> params.brightness). `unit`/`min`/`max` shape the input.
+const RULE_TYPE_CMDS = {
+    light: [
+        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
+        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
+        { cmd: 'toggle', labelKey: 'rules.opt_toggle' },
+        { cmd: 'set_brightness', labelKey: 'rules.set_brightness', value: true, param: 'brightness', unit: '%', min: 1, max: 100 },
+        { cmd: 'set_color_temp', labelKey: 'rules.set_color_temp', value: true, param: 'color_temp', unit: 'K', min: 2700, max: 6500 },
+        { cmd: 'set_color', labelKey: 'rules.set_color', value: true, param: 'color' }
+    ],
+    switch: [
+        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
+        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
+        { cmd: 'toggle', labelKey: 'rules.opt_toggle' }
+    ],
+    plug: [
+        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
+        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
+        { cmd: 'toggle', labelKey: 'rules.opt_toggle' }
+    ],
+    cover: [
+        { cmd: 'open', labelKey: 'rules.opt_open' },
+        { cmd: 'close', labelKey: 'rules.opt_close' },
+        { cmd: 'stop', labelKey: 'rules.opt_stop' },
+        { cmd: 'set_position', labelKey: 'rules.set_position', value: true, param: 'position', unit: '%', min: 0, max: 100 }
+    ],
+    curtain: [
+        { cmd: 'open', labelKey: 'rules.opt_open' },
+        { cmd: 'close', labelKey: 'rules.opt_close' },
+        { cmd: 'stop', labelKey: 'rules.opt_stop' },
+        { cmd: 'set_position', labelKey: 'rules.set_position', value: true, param: 'position', unit: '%', min: 0, max: 100 }
+    ],
+    airer: [
+        { cmd: 'open', labelKey: 'rules.opt_open' },
+        { cmd: 'close', labelKey: 'rules.opt_close' },
+        { cmd: 'stop', labelKey: 'rules.opt_stop' },
+        { cmd: 'set_position', labelKey: 'rules.set_position', value: true, param: 'position', unit: '%', min: 0, max: 100 }
+    ],
+    air_conditioner: [
+        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
+        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
+        { cmd: 'set_temperature', labelKey: 'rules.set_temperature', value: true, param: 'temperature', unit: '°C', min: 16, max: 30 },
+        { cmd: 'set_mode', labelKey: 'rules.set_mode', value: true, param: 'mode' },
+        { cmd: 'set_fan_level', labelKey: 'rules.set_fan_level', value: true, param: 'fan_level' }
+    ],
+    fan: [
+        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
+        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
+        { cmd: 'toggle', labelKey: 'rules.opt_toggle' },
+        { cmd: 'set_fan_level', labelKey: 'rules.set_fan_level', value: true, param: 'fan_level' }
+    ],
+    speaker: [
+        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
+        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
+        { cmd: 'set_volume', labelKey: 'rules.set_volume', value: true, param: 'volume', unit: '%', min: 0, max: 100 }
+    ],
+    television: [
+        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
+        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
+        { cmd: 'set_volume', labelKey: 'rules.set_volume', value: true, param: 'volume', unit: '%', min: 0, max: 100 }
+    ]
+};
+
+/* Labels must be resolved at render time (not baked into the table above): the
+ * i18n dictionaries load asynchronously, so a module-scope t() call runs before
+ * `strings`/`base` are populated and would freeze every label as a raw key. */
+function rulesCmdLabel(d) {
+    if (!d) return '';
+    return d.labelKey ? t(d.labelKey) : (d.label || d.cmd || '');
+}
+
+function rulesCmdDefsForType(type) {
+    if (type && RULE_TYPE_CMDS[type]) return RULE_TYPE_CMDS[type];
+    return [
+        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
+        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
+        { cmd: 'toggle', labelKey: 'rules.opt_toggle' }
+    ];
+}
+
+function rulesCmdDefFor(cmd, type) {
+    return rulesCmdDefsForType(type).find(function(d) {
+        return d.cmd === cmd;
+    }) || null;
+}
+
+/* Range/unit for a command's value input. Prefer what the SELECTED DEVICE
+ * actually reports (props.params.<param>.min/max — a real light publishes its
+ * own range, e.g. 1-100 or 1-80); otherwise fall back to the per-type defaults
+ * in RULE_TYPE_CMDS. Without this the action row showed a hardcoded 1-100 while
+ * the WHEN condition row used the device's own range, so the same brightness
+ * looked like two different limits on the same rule. */
+function rulesActionValueRange(pid, param, def) {
+    const meta = (pid && param) ? rulesParamMeta(pid, param) : null;
+    return {
+        min: (meta && meta.min != null) ? meta.min : ((def && def.min != null) ? def.min : null),
+        max: (meta && meta.max != null) ? meta.max : ((def && def.max != null) ? def.max : null),
+        unit: (meta && meta.unit) ? meta.unit : ((def && def.unit) ? def.unit : '')
+    };
+}
 
 let dwRuleCatalog = null;
 
@@ -664,9 +828,10 @@ function rulesParamOptionsHtml(pointId, selected) {
     }).join('');
 }
 
-function rulesOpOptionsHtml(selected) {
-    const sel = selected || 'eq';
-    return RULE_OPS.map(function(o) {
+function rulesOpOptionsHtml(selected, boolOnly) {
+    const list = boolOnly ? RULE_OPS_BOOL : RULE_OPS;
+    const sel = selected || (boolOnly ? 'eq' : 'eq');
+    return list.map(function(o) {
         return '<option value="' + o.op + '"' + (o.op === sel ? ' selected' : '') + '>' +
             esc(o.label) + '</option>';
     }).join('');
@@ -705,7 +870,8 @@ function rulesValueInputHtml(id, pointId, parameter, value) {
         const unit = meta.unit ? (' <span class="rule-ed-unit">' + esc(meta.unit) + '</span>') : '';
         return '<input type="number" id="' + id + '" min="' + escAttr(String(min)) +
             '" max="' + escAttr(String(max)) + '" step="' + escAttr(String(step)) +
-            '" value="' + escAttr(String(num)) + '" />' + unit;
+            '" value="' + escAttr(String(num)) +
+            '" oninput="rulesClampInput(this,\'max\')" onchange="rulesClampInput(this)" />' + unit;
     }
     return '<input type="text" id="' + id + '" value="' + escAttr(v) + '" placeholder="' + t('rules.field_value') + '" />';
 }
@@ -720,13 +886,15 @@ function rulesPointCondFields(prefix, cond, onDevChange, onParamChange) {
     const parameter = c.parameter || '';
     const op = rulesCondOp(c);
     const value = rulesCondValue(c);
+    const meta = (pointId && parameter) ? rulesParamMeta(pointId, parameter) : null;
+    const boolOnly = !!(meta && (meta.widget === 'toggle' || meta.widget === 'bool' || parameter === 'power'));
     return '<div class="row2">' +
         '<div><label>' + t('rules.field_device') + '</label>' + rulesSelectHtml(prefix + '-dev', rulesDeviceOptionsHtml(pointId), onDevChange) + '</div>' +
         '<div><label>' + t('rules.field_parameter') + '</label>' + rulesSelectHtml(prefix + '-param', rulesParamOptionsHtml(pointId, parameter), onParamChange) + '</div>' +
         '</div>' +
         '<div class="row2 rule-ed-opval">' +
-        '<div><label>' + t('rules.field_condition') + '</label>' + rulesSelectHtml(prefix + '-op', rulesOpOptionsHtml(op)) + '</div>' +
-        '<div><label>' + t('rules.field_value') + '</label><div class="rule-ed-val">' + rulesValueInputHtml(prefix + '-val', pointId, parameter, value) + '</div></div>' +
+        '<div><label>' + t('rules.field_condition') + '</label>' + rulesSelectHtml(prefix + '-op', rulesOpOptionsHtml(op, boolOnly)) + '</div>' +
+        '<div><label>' + t('rules.field_value') + '</label><div class="rule-ed-val">' + rulesValueInputHtml(prefix + '-val', pointId, parameter, value) + (meta && meta.min != null && meta.max != null ? '<span class="rule-ed-range">' + esc(meta.min + '–' + meta.max + (meta.unit || '')) + '</span>' : '') + '</div></div>' +
         '</div>';
 }
 
@@ -743,6 +911,7 @@ function rulesCollectPointCond(prefix) {
         if (valEl.type === 'checkbox') value = valEl.checked ? 'on' : 'off';
         else value = String(valEl.value != null ? valEl.value : '').trim();
     }
+    value = rulesClampValue(rulesParamMeta(point_id, parameter), value);
     const out = {
         point_id: point_id,
         parameter: parameter,
@@ -801,10 +970,11 @@ function rulesEditWhenFields(when) {
     const w = when && typeof when === 'object' ? when : {
         type: 'point'
     };
-    const typ = w.type === 'time' ? 'time' : 'point';
+    const typ = w.type === 'time' ? 'time' : (w.type === 'delay' ? 'delay' : 'point');
     let html = '<label>' + t('rules.trigger_type') + '</label><select id="re-when-type" onchange="rulesEditSyncWhenType()">' +
         '<option value="point"' + (typ === 'point' ? ' selected' : '') + '>' + t('rules.device_state_change') + '</option>' +
-        '<option value="time"' + (typ === 'time' ? ' selected' : '') + '>' + t('rules.opt_time_type') + '</option></select>';
+        '<option value="time"' + (typ === 'time' ? ' selected' : '') + '>' + t('rules.opt_time_type') + '</option>' +
+        '<option value="delay"' + (typ === 'delay' ? ' selected' : '') + '>' + t('rules.when_delay_type') + '</option></select>';
     if (typ === 'point') {
         const first = rulesDeviceInstances()[0];
         const cond = {
@@ -820,33 +990,382 @@ function rulesEditWhenFields(when) {
         if (!cond.value && cond.parameter === 'power') cond.value = 'on';
         html += '<div id="re-when-point">' + rulesPointCondFields('re-when', cond,
             'rulesEditSyncWhenDevice()', 'rulesEditSyncWhenParam()') + '</div>';
-    } else {
+    } else if (typ === 'time') {
         html += '<label>' + t('rules.field_time_at') + '</label><input type="time" id="re-when-at" value="' + escAttr(w.at || '23:00') + '" />';
+    } else {
+        html += '<div class="rule-ed-when-delay"><label>' + t('rules.delay_seconds') + '</label>' +
+            '<input type="number" id="re-when-delay-sec" min="0" value="' + (w.delay_sec > 0 ? w.delay_sec : '') + '" placeholder="0" />' +
+            '<span class="rule-ed-unit">s</span></div>';
     }
     return html;
 }
 
-function rulesEditThenFields(th) {
-    const act = th && typeof th === 'object' ? th : {
-        type: 'command'
-    };
-    const typ = act.type === 'delay' ? 'delay' : 'command';
-    let html = '<label>' + t('rules.action_type') + '</label><select id="re-then-type" onchange="rulesEditSyncThenType()">' +
-        '<option value="command"' + (typ === 'command' ? ' selected' : '') + '>' + t('rules.opt_cmd_type') + '</option>' +
-        '<option value="delay"' + (typ === 'delay' ? ' selected' : '') + '>' + t('rules.opt_delay_type') + '</option></select>';
-    if (typ === 'command') {
-        const cmd = act.cmd || 'turn_on';
-        const cmdOpts = RULE_CMDS.map(function(c) {
-            return '<option value="' + c + '"' + (c === cmd ? ' selected' : '') + '>' + c + '</option>';
-        }).join('');
-        const extra = (RULE_CMDS.indexOf(cmd) < 0) ? '<option value="' + escAttr(cmd) + '" selected>' + esc(cmd) + '</option>' : '';
-        html += '<div class="row2"><div><label>' + t('rules.target_device') + '</label>' +
-            rulesSelectHtml('re-then-pid', rulesDeviceOptionsHtml(act.point_id || '')) + '</div>' +
-            '<div><label>' + t('rules.field_cmd') + '</label><select id="re-then-cmd">' + extra + cmdOpts + '</select></div></div>';
-    } else {
-        html += '<label>' + t('rules.field_seconds') + '</label><input type="number" id="re-then-sec" min="1" value="' + (act.seconds > 0 ? act.seconds : 5) + '" />';
+/* THEN is modelled as an ordered sequence of "steps". A step runs its actions
+ * together, then (if not the last step and delay_after > 0) waits before the
+ * next step. Each step carries at most one delay, which is exactly what separates
+ * the moments. The firmware executes steps non-blocking (esp_timer chain). */
+const MAX_STEPS_WEB = 5;
+const MAX_ACTIONS_PER_STEP_WEB = 4;
+
+/* Normalize any `then` payload into the step form:
+ *   [ { actions:[...], delay_after:N }, ... ]
+ * Also handles the legacy flat form (a bare action object, or an array of actions
+ * where a `delay` action becomes the preceding step's delay_after and opens a new
+ * step), so existing rules keep loading and editing. */
+function rulesThenList(then) {
+    const steps = [];
+    const isSteps = Array.isArray(then) && then.length > 0 &&
+        then[0] && typeof then[0] === 'object' && then[0].actions;
+    if (isSteps) {
+        then.forEach(function (s) {
+            if (!s || typeof s !== 'object') return;
+            const actions = Array.isArray(s.actions) ? s.actions.filter(function (a) {
+                return a && typeof a === 'object';
+            }) : [];
+            const raw = (s.delay_after != null) ? s.delay_after : (s.delay != null ? s.delay : 0);
+            steps.push({ actions: actions, delay_after: (raw > 0 ? raw : 0) });
+        });
+    } else if (Array.isArray(then)) {
+        let cur = 0;
+        then.forEach(function (a) {
+            if (!a || typeof a !== 'object') return;
+            if (a.type === 'delay') {
+                if (steps.length <= cur) {
+                    if (steps.length < MAX_STEPS_WEB) steps.push({ actions: [], delay_after: 0 });
+                    else return;
+                }
+                steps[cur].delay_after = (a.delay_sec > 0 ? a.delay_sec : (a.seconds > 0 ? a.seconds : 0));
+                cur++;
+            } else {
+                if (steps.length <= cur) {
+                    if (steps.length < MAX_STEPS_WEB) steps.push({ actions: [], delay_after: 0 });
+                    else return;
+                }
+                steps[cur].actions.push(a);
+            }
+        });
+    } else if (then && typeof then === 'object') {
+        steps.push({ actions: [then], delay_after: 0 });
     }
+    if (steps.length === 0) {
+        steps.push({ actions: [{ type: 'command', point_id: '', cmd: 'turn_on' }], delay_after: 0 });
+    }
+    return steps;
+}
+
+function rulesEditActionHtml(si, aj, a) {
+    const act = (a && typeof a === 'object') ? a : { type: 'command' };
+    const typ = (act.type === 'command_by_type' || act.type === 'notify' || act.type === 'delay') ? act.type : 'command';
+    const idx = String(si);
+    const j = String(aj);
+    const sel = function (v) { return typ === v ? ' selected' : ''; };
+    let html = '<div class="rule-then-row" data-step-i="' + idx + '" data-act-j="' + j + '">' +
+        '<div class="rule-then-row-top"><label>' + t('rules.action_type') + '</label>' +
+        '<select id="re-step-' + idx + '-act-' + j + '-type" onchange="rulesEditRerenderThen()">' +
+        '<option value="command"' + sel('command') + '>' + t('rules.opt_cmd_type') + '</option>' +
+        /* `command_by_type` is no longer offered; keep it visible (unselectable) only
+         * for rules that already carry one, so editing them cannot silently rewrite it. */
+        (typ === 'command_by_type' ?
+            '<option value="command_by_type" selected disabled>' + t('rules.opt_cmd_by_type') + '</option>' : '') +
+        '<option value="notify"' + sel('notify') + '>' + t('rules.opt_notify') + '</option>' +
+        '<option value="delay"' + sel('delay') + '>' + t('rules.opt_delay') + '</option></select>';
+    /* The row is always removable: emptying a step is a normal intermediate state
+     * (the card then shows “no action yet” and can be refilled). */
+    html += '<button class="btn-sm bad" type="button" onclick="rulesEditRemoveStepAction(' + idx + ',' + j + ')">' + t('rules.delete') + '</button>';
+    html += '</div><div class="rule-then-fields">';
+    if (typ === 'command') {
+        const pid = act.point_id || '';
+        const type = (rulesFindPoint(pid) || {}).type || '';
+        const defs = rulesCmdDefsForType(type);
+        const cmd = act.cmd || (defs[0] && defs[0].cmd) || 'turn_on';
+        const cmdOpts = defs.map(function (d) {
+            return '<option value="' + d.cmd + '"' + (d.cmd === cmd ? ' selected' : '') + '>' + esc(rulesCmdLabel(d)) + '</option>';
+        }).join('');
+        const extra = (rulesCmdDefFor(cmd, type) == null) ?
+            '<option value="' + escAttr(cmd) + '" selected>' + esc(cmd) + '</option>' : '';
+        html += '<div><label>' + t('rules.target_device') + '</label>' +
+            rulesSelectHtml('re-step-' + idx + '-act-' + j + '-pid', rulesDeviceOptionsHtml(pid), 'rulesEditRerenderThen()') + '</div>';
+        html += '<div><label>' + t('rules.field_cmd') + '</label>' +
+            '<select id="re-step-' + idx + '-act-' + j + '-cmd" onchange="rulesEditRerenderThen()">' + extra + cmdOpts + '</select></div>';
+        const active = rulesCmdDefFor(cmd, type);
+        if (active && active.value) {
+            const curVal = (active.param && act.params && act.params[active.param] != null) ? act.params[active.param] : '';
+            /* Resolved exactly like the WHEN row: the device picked in this row
+             * decides the range, so both rows of the same rule agree. */
+            const rng = rulesActionValueRange(pid, active.param, active);
+            const unit = rng.unit ? ' (' + rng.unit + ')' : '';
+            const min = (rng.min != null) ? ' min="' + rng.min + '"' : '';
+            const max = (rng.max != null) ? ' max="' + rng.max + '"' : '';
+            const rngHint = (rng.min != null && rng.max != null)
+                ? '<span class="rule-ed-range">' + esc(rng.min + '–' + rng.max + (rng.unit || '')) + '</span>'
+                : '';
+            html += '<div><label>' + t('rules.field_value') + esc(unit) + '</label>' +
+                '<div class="rule-ed-val">' +
+                '<input type="number" id="re-step-' + idx + '-act-' + j + '-value"' + min + max +
+                ' value="' + escAttr(curVal) + '" placeholder="' + escAttr(active.param || '') +
+                '" oninput="rulesClampInput(this,\'max\')" onchange="rulesClampInput(this)" />' +
+                rngHint + '</div></div>';
+        }
+    } else if (typ === 'command_by_type') {
+        const cmd = act.cmd || 'turn_on';
+        const types = act.types || 'light,switch';
+        html += '<div><label>' + t('rules.field_cmd') + '</label>' +
+            '<input type="text" id="re-step-' + idx + '-act-' + j + '-cmd" value="' + escAttr(cmd) + '" /></div>';
+        html += '<div><label>' + t('rules.target_types') + '</label>' +
+            '<input type="text" id="re-step-' + idx + '-act-' + j + '-types" value="' + escAttr(types) + '" /></div>';
+    } else if (typ === 'delay') {
+        const sec = (a.delay_sec > 0 || a.seconds > 0) ? (a.delay_sec || a.seconds) : '';
+        html += '<div><label>' + t('rules.delay_seconds') + '</label>' +
+            /* Typing the seconds must reveal “+ add step” right away, but a full
+             * re-render would steal the focus — only the footer is refreshed. */
+            '<input type="number" id="re-step-' + idx + '-act-' + j + '-sec" min="0" value="' + escAttr(sec) + '" placeholder="0" oninput="rulesEditSyncThenFoot()" />' +
+            '<span class="rule-ed-unit">s</span></div>';
+    } else {
+        const msg = act.message || '';
+        html += '<div><label>' + t('rules.field_message') + '</label>' +
+            '<input type="text" id="re-step-' + idx + '-act-' + j + '-msg" value="' + escAttr(msg) + '" /></div>';
+    }
+    html += '</div></div>';
     return html;
+}
+
+/* Editor view of THEN: every moment is one step, and the wait before the next
+ * moment lives inside the step as its trailing `delay` action — i.e. the delay is
+ * picked from the action-type dropdown instead of a separate field.
+ * Idempotent: inline `delay` rows and a `delay_after` both normalize to at most
+ * one trailing wait, so a re-render never duplicates or loses rows. A zero-second
+ * wait stays where it is (it is only being typed in). */
+function rulesEditSteps(then) {
+    return rulesThenList(then).map(function (m) {
+        const actions = [];
+        let wait = (m.delay_after > 0) ? m.delay_after : 0;
+        (m.actions || []).forEach(function (a) {
+            if (a && a.type === 'delay') {
+                const sec = parseInt(a.delay_sec || a.seconds || 0, 10) || 0;
+                if (sec > 0) wait = sec;
+                else actions.push({ type: 'delay', delay_sec: 0 });
+            } else {
+                actions.push(a);
+            }
+        });
+        if (wait > 0) actions.push({ type: 'delay', delay_sec: wait });
+        return { actions: actions };
+    });
+}
+
+/* Actions that the firmware actually stores; a wait row is not one of them. */
+function rulesEditRealActionCount(step) {
+    return ((step && step.actions) || []).filter(function (a) {
+        return !a || a.type !== 'delay';
+    }).length;
+}
+
+/* The next moment only makes sense once the current one ends with a wait, so
+ * "+ add step" stays hidden until the last step carries a delay action. */
+function rulesEditLastHasDelay(steps) {
+    const last = steps[steps.length - 1];
+    if (!last) return false;
+    const acts = last.actions || [];
+    const tail = acts[acts.length - 1];
+    if (!tail || tail.type !== 'delay') return false;
+    return ((tail.delay_sec > 0) || (tail.seconds > 0));
+}
+
+function rulesEditStepHtml(si, step, totalSteps) {
+    const idx = String(si);
+    const actions = Array.isArray(step.actions) ? step.actions : [];
+    let html = '<div class="rule-step-card" data-step-i="' + idx + '">';
+    if (totalSteps > 1) {
+        html += '<div class="rule-step-head"><button class="btn-sm bad" type="button" onclick="rulesEditRemoveStep(' + idx + ')">' + t('rules.delete') + '</button></div>';
+    }
+    html += '<div class="rule-step-actions" data-step-actions="' + idx + '">';
+    if (actions.length === 0) {
+        html += '<div class="rule-step-empty">' + t('rules.step_no_action') + '</div>';
+    } else {
+        actions.forEach(function (a, aj) {
+            if (aj > 0) html += '<div class="rule-then-sep"></div>';
+            html += rulesEditActionHtml(si, aj, a, actions.length);
+        });
+    }
+    html += '</div>';
+    if (rulesEditRealActionCount(step) < MAX_ACTIONS_PER_STEP_WEB) {
+        html += '<button class="btn-sm" type="button" onclick="rulesEditAddStepAction(' + idx + ')">' + t('rules.add_action') + '</button>';
+    }
+    html += '</div>';
+    return html;
+}
+
+/* Footer under all step cards: “+ add step” appears only once the last step ends
+ * with a real wait, otherwise a hint tells the user what is still missing. */
+function rulesEditThenFootHtml(steps) {
+    if (steps.length >= MAX_STEPS_WEB) return '';
+    return rulesEditLastHasDelay(steps) ?
+        '<button class="btn-sm on" type="button" onclick="rulesEditAddStep()">' + t('rules.add_step') + '</button>' :
+        '<div class="rules-ai-hint">' + t('rules.hint_step_need_delay') + '</div>';
+}
+
+function rulesEditThenFields(then) {
+    const steps = rulesEditSteps(then);
+    let html = steps.map(function (s, i) {
+        return rulesEditStepHtml(i, s, steps.length);
+    }).join('');
+    html += '<div id="re-then-foot">' + rulesEditThenFootHtml(steps) + '</div>';
+    return html;
+}
+
+/* Refresh only the footer: typing a delay's seconds must reveal “+ add step”
+ * immediately, but re-rendering the box would rebuild the input and blur it. */
+function rulesEditSyncThenFoot() {
+    const foot = document.getElementById('re-then-foot');
+    if (!foot) return;
+    foot.innerHTML = rulesEditThenFootHtml(rulesEditSteps(rulesEditCollectThen()));
+}
+
+function rulesEditCollectThen() {
+    const box = document.getElementById('re-then-box');
+    if (!box) return [{ actions: [{ type: 'command', point_id: '', cmd: 'turn_on' }], delay_after: 0 }];
+    const steps = [];
+    /* Only step cards carry `.rule-step-card`; action rows also set data-step-i,
+     * so selecting by that attribute would count every action as its own step. */
+    box.querySelectorAll('.rule-step-card').forEach(function (card) {
+        const si = card.getAttribute('data-step-i');
+        const actions = [];
+        /* A `delay` row in a step is the wait before the NEXT moment, so it is not
+         * kept as an action: the last delay in the step becomes its `delay_after`.
+         * That also means picking "delay" anywhere in the list always settles as the
+         * trailing wait of that step. */
+        let delaySec = 0;
+        card.querySelectorAll('[data-act-j]').forEach(function (row) {
+            const j = row.getAttribute('data-act-j');
+            const typEl = document.getElementById('re-step-' + si + '-act-' + j + '-type');
+            const ttype = (typEl && typEl.value) || 'command';
+            if (ttype === 'delay') {
+                const secEl = document.getElementById('re-step-' + si + '-act-' + j + '-sec');
+                let sec = parseInt((secEl && secEl.value) || '0', 10);
+                if (isNaN(sec) || sec < 0) sec = 0;
+                if (sec > 0) {
+                    delaySec = sec;
+                } else {
+                    /* An empty wait is still being typed in: keep the row visible
+                     * instead of dropping it on the next re-render. It is stripped
+                     * from the saved rule (see rulesThenForSave). */
+                    actions.push({ type: 'delay', delay_sec: 0 });
+                }
+            } else if (ttype === 'notify') {
+                const msgEl = document.getElementById('re-step-' + si + '-act-' + j + '-msg');
+                actions.push({ type: 'notify', message: ((msgEl && msgEl.value) || '').trim() });
+            } else if (ttype === 'command_by_type') {
+                const cmdEl = document.getElementById('re-step-' + si + '-act-' + j + '-cmd');
+                const typesEl = document.getElementById('re-step-' + si + '-act-' + j + '-types');
+                actions.push({
+                    type: 'command_by_type',
+                    cmd: ((cmdEl && cmdEl.value) || '').trim(),
+                    types: ((typesEl && typesEl.value) || '').trim()
+                });
+            } else {
+                const pidEl = document.getElementById('re-step-' + si + '-act-' + j + '-pid');
+                const cmdEl = document.getElementById('re-step-' + si + '-act-' + j + '-cmd');
+                const pid = ((pidEl && pidEl.value) || '').trim();
+                const cmd = ((cmdEl && cmdEl.value) || '').trim();
+                const entry = { type: 'command', point_id: pid, cmd: cmd };
+                const type = (rulesFindPoint(pid) || {}).type || '';
+                const def = rulesCmdDefFor(cmd, type);
+                if (def && def.value && def.param) {
+                    const vEl = document.getElementById('re-step-' + si + '-act-' + j + '-value');
+                    const v = ((vEl && vEl.value) || '').trim();
+                    if (v !== '') {
+                        /* Same range the row rendered, so save-time clamping
+                         * matches what the user saw. */
+                        const rng = rulesActionValueRange(pid, def.param, def);
+                        /* Whether the value is a number is a property of the
+                         * command, not of the device, so keep judging it by the
+                         * command def; only the bounds come from the device. */
+                        const numeric = (def.unit === '%' || def.unit === 'K' || def.unit === '°C' || def.kind === 'int');
+                        if (numeric) {
+                            let n = parseInt(v, 10);
+                            if (isNaN(n)) n = 0;
+                            if (rng.min != null) n = Math.max(rng.min, n);
+                            if (rng.max != null) n = Math.min(rng.max, n);
+                            const params = {};
+                            params[def.param] = n;
+                            entry.params = params;
+                        } else {
+                            const params = {};
+                            params[def.param] = v;
+                            entry.params = params;
+                        }
+                    }
+                }
+                actions.push(entry);
+            }
+        });
+        steps.push({ actions: actions, delay_after: delaySec });
+    });
+    if (steps.length === 0) {
+        steps.push({ actions: [{ type: 'command', point_id: '', cmd: 'turn_on' }], delay_after: 0 });
+    }
+    return steps;
+}
+
+function rulesEditRerenderThenList(list) {
+    const box = document.getElementById('re-then-box');
+    if (!box) return;
+    box.innerHTML = rulesEditThenFields(list);
+}
+
+function rulesEditRerenderThen() {
+    rulesEditRerenderThenList(rulesEditCollectThen());
+}
+
+function rulesEditAddStep() {
+    const steps = rulesEditSteps(rulesEditCollectThen());
+    if (steps.length >= MAX_STEPS_WEB) {
+        toast(t('rules.err_step_max', { n: MAX_STEPS_WEB }));
+        return;
+    }
+    if (!rulesEditLastHasDelay(steps)) {
+        toast(t('rules.hint_step_need_delay'));
+        rulesEditSyncThenFoot();
+        return;
+    }
+    const first = (rulesDeviceInstances()[0] || {}).point_id || '';
+    steps.push({ actions: [{ type: 'command', point_id: first, cmd: 'turn_on' }] });
+    rulesEditRerenderThenList(steps);
+}
+
+function rulesEditRemoveStep(i) {
+    const steps = rulesEditSteps(rulesEditCollectThen());
+    if (steps.length <= 1) return;
+    steps.splice(i, 1);
+    rulesEditRerenderThenList(steps);
+}
+
+/* All row level edits work on the *editor* shape (delay rows included), because
+ * the collected step form folds the wait into `delay_after` — counting rows there
+ * made a step of one action plus one wait look like a single action, so neither
+ * row could be deleted. */
+function rulesEditAddStepAction(i) {
+    const steps = rulesEditSteps(rulesEditCollectThen());
+    const step = steps[i];
+    if (!step) return;
+    if (rulesEditRealActionCount(step) >= MAX_ACTIONS_PER_STEP_WEB) {
+        toast(t('rules.err_action_max', { n: MAX_ACTIONS_PER_STEP_WEB }));
+        return;
+    }
+    const first = (rulesDeviceInstances()[0] || {}).point_id || '';
+    /* Insert before a trailing wait so the card reads in execution order. */
+    const tail = step.actions[step.actions.length - 1];
+    const at = (tail && tail.type === 'delay') ? step.actions.length - 1 : step.actions.length;
+    step.actions.splice(at, 0, { type: 'command', point_id: first, cmd: 'turn_on' });
+    rulesEditRerenderThenList(steps);
+}
+
+function rulesEditRemoveStepAction(i, j) {
+    const steps = rulesEditSteps(rulesEditCollectThen());
+    const step = steps[i];
+    if (!step) return;
+    step.actions.splice(j, 1);
+    rulesEditRerenderThenList(steps);
 }
 
 function rulesEditIfRows(iff) {
@@ -896,11 +1415,10 @@ function rulesEditRender(rule) {
             value: 'on'
         },
         if: [],
-        then: {
-            type: 'command',
-            point_id: defaultPid,
-            cmd: 'turn_on'
-        }
+        then: [{
+            actions: [{ type: 'command', point_id: defaultPid, cmd: 'turn_on' }],
+            delay_after: 0
+        }]
     };
 
     edit.innerHTML = '<div class="rule-ed">' +
@@ -933,6 +1451,23 @@ function rulesEditCollectIf() {
     return out;
 }
 
+/* Saved payload: drop the placeholder waits kept for editing (a wait with 0
+ * seconds is not a real step separator) and drop steps that ended up empty. */
+function rulesThenForSave(steps) {
+    const out = [];
+    (steps || []).forEach(function (s) {
+        const actions = (s && Array.isArray(s.actions)) ? s.actions.filter(function (a) {
+            return !(a && a.type === 'delay');
+        }) : [];
+        const delay = (s && s.delay_after > 0) ? s.delay_after : 0;
+        if (actions.length === 0 && delay === 0) return;
+        const entry = { actions: actions };
+        if (delay > 0) entry.delay_after = delay;
+        out.push(entry);
+    });
+    return out;
+}
+
 function rulesEditSnapshot() {
     const nameEl = document.getElementById('re-name');
     const idEl = document.getElementById('re-id');
@@ -947,33 +1482,16 @@ function rulesEditSnapshot() {
         const atEl = document.getElementById('re-when-at');
         let at = ((atEl && atEl.value) || '23:00').trim();
         if (at.length === 4 && at.indexOf(':') === 1) at = '0' + at;
-        when = {
-            type: 'time',
-            at: at
-        };
+        when = { type: 'time', at: at };
+    } else if (wtype === 'delay') {
+        const dEl = document.getElementById('re-when-delay-sec');
+        let d = parseInt((dEl && dEl.value) || '0', 10);
+        if (isNaN(d) || d < 0) d = 0;
+        when = { type: 'delay', delay_sec: d };
     } else {
-        when = Object.assign({
-            type: 'point'
-        }, rulesCollectPointCond('re-when'));
+        when = Object.assign({ type: 'point' }, rulesCollectPointCond('re-when'));
     }
-    const ttypeEl = document.getElementById('re-then-type');
-    const ttype = (ttypeEl && ttypeEl.value) || 'command';
-    let then;
-    if (ttype === 'delay') {
-        const secEl = document.getElementById('re-then-sec');
-        then = {
-            type: 'delay',
-            seconds: Math.max(1, parseInt(((secEl && secEl.value) || '5'), 10) || 5)
-        };
-    } else {
-        const pidEl = document.getElementById('re-then-pid');
-        const cmdEl = document.getElementById('re-then-cmd');
-        then = {
-            type: 'command',
-            point_id: ((pidEl && pidEl.value) || '').trim(),
-            cmd: ((cmdEl && cmdEl.value) || '').trim()
-        };
-    }
+    const then = rulesThenForSave(rulesEditCollectThen());
     return {
         id: id,
         name: name,
@@ -984,6 +1502,25 @@ function rulesEditSnapshot() {
     };
 }
 
+/* True when at least one real action remains. Checked on the raw payload (the
+ * snapshot already dropped empty steps and wait rows) because rulesThenList()
+ * injects a placeholder action for an empty list, which would otherwise be
+ * reported as a half-filled action instead of “nothing to do”. */
+function rulesEditHasAction(then) {
+    const list = Array.isArray(then) ? then : (then ? [then] : []);
+    const isSteps = list.some(function (s) {
+        return s && s.actions;
+    });
+    if (!isSteps) {
+        return list.some(function (a) {
+            return a && a.type && a.type !== 'delay';
+        });
+    }
+    return list.some(function (s) {
+        return s && Array.isArray(s.actions) && s.actions.length > 0;
+    });
+}
+
 function rulesEditValidate(r) {
     if (!r.name) return t('rules.err_name');
     if (r.when.type === 'point') {
@@ -992,12 +1529,28 @@ function rulesEditValidate(r) {
         if (r.when.value == null || r.when.value === '') return t('rules.err_trigger_value');
     } else if (r.when.type === 'time') {
         if (!/^\d{2}:\d{2}$/.test(r.when.at || '')) return t('rules.err_time_hhmm');
+    } else if (r.when.type === 'delay') {
+        if (!(r.when.delay_sec > 0)) return t('rules.err_trigger_delay');
     } else return t('rules.err_trigger_type');
-    if (r.then.type === 'command') {
-        if (!r.then.point_id || !r.then.cmd) return t('rules.err_action_fields');
-    } else if (r.then.type === 'delay') {
-        if (!(r.then.seconds > 0)) return t('rules.err_delay_seconds');
-    } else return t('rules.err_action_type');
+    const steps = rulesThenList(r.then);
+    /* Any row can be deleted, so a rule could end up with nothing to do. */
+    if (!rulesEditHasAction(r.then)) return t('rules.err_action_none');
+    for (let s = 0; s < steps.length; s++) {
+        const step = steps[s];
+        const actions = (step && Array.isArray(step.actions)) ? step.actions : [];
+        for (let k = 0; k < actions.length; k++) {
+            const th = actions[k];
+            if (th.type === 'command') {
+                if (!th.point_id || !th.cmd) return t('rules.err_action_fields');
+            } else if (th.type === 'command_by_type') {
+                if (!th.cmd) return t('rules.err_action_fields');
+            } else if (th.type === 'notify') {
+                /* message is optional */
+            } else if (th.type === 'delay') {
+                /* wait inside a step: kept while editing, stripped before saving */
+            } else return t('rules.err_action_type');
+        }
+    }
     return null;
 }
 
@@ -1005,7 +1558,9 @@ function rulesEditSyncWhenType() {
     const box = document.getElementById('re-when-box');
     if (!box) return;
     const typ = document.getElementById('re-when-type').value;
-    if (typ === 'time') {
+    if (typ === 'delay') {
+        box.innerHTML = rulesEditWhenFields({ type: 'delay', delay_sec: 0 });
+    } else if (typ === 'time') {
         box.innerHTML = rulesEditWhenFields({
             type: 'time',
             at: '23:00'
@@ -1060,24 +1615,6 @@ function rulesEditSyncIfDevice(i) {
 
 function rulesEditSyncIfParam(i) {
     rulesEditSyncIfDevice(i);
-}
-
-function rulesEditSyncThenType() {
-    const typ = document.getElementById('re-then-type').value;
-    const box = document.getElementById('re-then-box');
-    if (!box) return;
-    if (typ === 'delay') box.innerHTML = rulesEditThenFields({
-        type: 'delay',
-        seconds: 5
-    });
-    else {
-        const first = rulesDeviceInstances()[0];
-        box.innerHTML = rulesEditThenFields({
-            type: 'command',
-            point_id: (first && first.point_id) || '',
-            cmd: 'turn_on'
-        });
-    }
 }
 
 function rulesEditAddIf() {
@@ -1143,6 +1680,26 @@ async function rulesSaveAll(nextRules) {
     return j;
 }
 
+/* Flip a single rule's enabled flag and re-import the whole table (same hot
+ * reload as the editor). Optimistic local update keeps the UI instant. */
+async function rulesToggleEnabled(id) {
+    const rules = (rulesCfg.rules || []).map(function (r) {
+        if (r.id === id) {
+            return Object.assign({}, r, { enabled: r.enabled === false ? true : false });
+        }
+        return r;
+    });
+    try {
+        await rulesSaveAll(rules);
+    } catch (e) {
+        toast(t('rules.save_failed', { err: (e && e.message) ? e.message : '' }));
+        return;
+    }
+    rulesCfg.rules = rules;
+    toast(t('rules.saved'));
+    if (typeof renderRules === 'function') renderRules();
+}
+
 function rulesNextId() {
     const used = {};
     (rulesCfg.rules || []).forEach(function(r) {
@@ -1199,6 +1756,23 @@ async function rulesEditDelete() {
         toast(t('rules.deleted'));
         rulesEditMode = null;
         rulesSel = null;
+        await loadRules();
+    } catch (e) {
+        toast(t('rules.delete_failed', { err: (e.message || e) }));
+    }
+}
+
+/* Delete a rule straight from its list card (the editor has its own path). */
+async function rulesDelete(id) {
+    if (!id) return;
+    if (!confirm(t('rules.confirm_delete', { id: id }))) return;
+    const next = (rulesCfg.rules || []).filter(function(r) {
+        return r.id !== id;
+    });
+    try {
+        await rulesSaveAll(next);
+        toast(t('rules.deleted'));
+        if (rulesSel === id) rulesSel = null;
         await loadRules();
     } catch (e) {
         toast(t('rules.delete_failed', { err: (e.message || e) }));

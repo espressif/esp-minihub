@@ -511,6 +511,8 @@ typedef struct {
     struct ifreq *if_name;
 #if MH_SDK_HTTP_CLIENT_HTTPS
     const char **alpn_protos;
+    const int *ciphersuites_list;
+    const uint16_t *groups_list;
 #endif
 #if MH_SDK_HTTP_CLIENT_DS
     void *ds_data;

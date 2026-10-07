@@ -137,7 +137,6 @@ build:app:
       - application/$MINIHUB_APP/build/partition_table/*.bin
       - application/$MINIHUB_APP/build/flasher_args.json
       - $MINIHUB_PLUGINS_DEPLOY_DIR/**/*.mhub
-      - $MINIHUB_PLUGINS_DEPLOY_DIR/catalog.json
       - application/$MINIHUB_APP/dependencies.lock
       - application/$MINIHUB_APP/sdkconfig
   rules:

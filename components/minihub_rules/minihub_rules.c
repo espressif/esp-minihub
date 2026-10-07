@@ -9,14 +9,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <time.h>
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_sntp.h"
+#include "esp_timer.h"
 #include "minihub_core.h"
 #include "minihub_task.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 
 static const char *TAG = "minihub_rules";
 
@@ -26,9 +29,23 @@ static const char *TAG = "minihub_rules";
 #define TIME_CHECK_INTERVAL_MS 30000
 
 #define MAX_IF_CONDITIONS 4
-#define MAX_THEN_ACTIONS 4
 #define RULE_PARAM_MAX 32
 #define RULE_OP_MAX 8
+
+/* `then` is modelled as a sequence of up to MAX_STEPS "moments". Each step runs
+ * its actions together, then (if not the last step and delay_after_sec > 0) waits
+ * before the next step. A delay therefore separates steps, and a step may carry at
+ * most one delay. Legacy flat `then` (a bare action array, possibly with inline
+ * `delay` actions) is converted into this step form on parse (see parse_rule). */
+#define MAX_STEPS 5
+#define MAX_ACTIONS_PER_STEP 4
+
+/* Pool of one-shot timers used to implement non-blocking delays. Each pending
+ * delay occupies one slot; the callback only enqueues an execution job — it must
+ * never run a command inline, because adapter command handlers perform blocking
+ * I/O that would stall the esp_timer service task. */
+#define RULE_TIMER_POOL 8
+#define RULE_EXEC_QUEUE_LEN 16
 
 typedef struct {
     char point_id[MINIHUB_POINT_ID_MAX];
@@ -44,7 +61,14 @@ typedef struct {
     char types[48];
     char message[128];
     int delay_sec;
+    cJSON *params; /* optional command parameters (e.g. {"brightness": 50}); owned by the rule */
 } then_action_t;
+
+typedef struct {
+    then_action_t actions[MAX_ACTIONS_PER_STEP];
+    size_t action_count;
+    int delay_after_sec; /* wait this long AFTER this step, before the next step; ignored on last step */
+} rule_step_t;
 
 typedef struct {
     char id[32];
@@ -58,8 +82,9 @@ typedef struct {
     char time_at[8];
     if_condition_t if_cond[MAX_IF_CONDITIONS];
     size_t if_count;
-    then_action_t then[MAX_THEN_ACTIONS];
-    size_t then_count;
+    rule_step_t steps[MAX_STEPS];
+    size_t step_count;
+    int when_delay_sec; /* when.delay_sec: delay between trigger and first step */
     int last_fired_yday;
     char last_fired_at[8];
 } rule_t;
@@ -68,8 +93,34 @@ EXT_RAM_BSS_ATTR static rule_t s_rules[MAX_RULES];
 static size_t s_rule_count;
 static uint8_t s_rule_buckets[RULE_BUCKETS][MAX_RULES_PER_BUCKET];
 static uint8_t s_rule_bucket_len[RULE_BUCKETS];
+
+/* Monotonic generation counter. Bumped on every load/reload so that delayed
+ * executions armed against an older ruleset are recognised as stale and dropped,
+ * preventing use-after-free of rule data after a reload. */
+static uint32_t s_rules_gen;
+
+typedef struct {
+    uint32_t gen;
+    int rule_idx;
+    int step;
+    int act_idx; /* action index within the step; 0 starts the step */
+} exec_job_t;
+
+typedef struct {
+    esp_timer_handle_t handle;
+    bool pending;
+    uint32_t gen;
+    int rule_idx;
+    int step;
+    int act_idx;
+} rule_timer_slot_t;
+
+static rule_timer_slot_t s_timers[RULE_TIMER_POOL];
+static QueueHandle_t s_exec_queue;
 static TaskHandle_t s_time_task;
 static volatile bool s_time_task_run;
+static TaskHandle_t s_exec_task;
+static volatile bool s_exec_run;
 
 static uint32_t hash_point_id(const char *point_id)
 {
@@ -446,11 +497,6 @@ static void execute_one_then(const rule_t *rule, const then_action_t *act,
         return;
     }
 
-    if (strcmp(act->type, "delay") == 0) {
-        vTaskDelay(pdMS_TO_TICKS(act->delay_sec * 1000));
-        return;
-    }
-
     if (strcmp(act->type, "notify") == 0) {
         char msg[160];
         if (act->message[0]) {
@@ -485,6 +531,7 @@ static void execute_one_then(const rule_t *rule, const then_action_t *act,
     minihub_command_t cmd = {0};
     strncpy(cmd.point_id, act->point_id, sizeof(cmd.point_id) - 1);
     strncpy(cmd.cmd, act->cmd, sizeof(cmd.cmd) - 1);
+    cmd.params = act->params;
     esp_err_t err = minihub_command_invoke(&cmd);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "rule '%s' command failed: %s", rule->id, esp_err_to_name(err));
@@ -493,11 +540,133 @@ static void execute_one_then(const rule_t *rule, const then_action_t *act,
     }
 }
 
-static void execute_then(const rule_t *rule, const char *point_id, const char *new_value)
+/* Forward declarations so the sequential executor can schedule the next action
+ * via the timer pool defined just below. */
+static void arm_step(int rule_idx, int step, int act_idx, uint32_t gen, int delay_sec);
+static void execute_step_continue(int rule_idx, int step, int act_idx, uint32_t gen);
+
+/* Run a step's actions in order. A `delay` action waits (non-blocking, via
+ * arm_step) before the next action; when the last action is done, delay_after
+ * advances to the next step. Each continuation is re-checked against the
+ * generation counter by the executor task, so a reload discards stale steps. */
+static void execute_step_continue(int rule_idx, int step, int act_idx, uint32_t gen)
 {
-    for (size_t i = 0; i < rule->then_count; i++) {
-        execute_one_then(rule, &rule->then[i], point_id, new_value);
+    if (rule_idx < 0 || (size_t)rule_idx >= s_rule_count) {
+        return;
     }
+    if (step < 0 || (size_t)step >= s_rules[rule_idx].step_count) {
+        return;
+    }
+    rule_t *rule = &s_rules[rule_idx];
+    rule_step_t *st = &rule->steps[step];
+    if (act_idx >= (int)st->action_count) {
+        if ((size_t)(step + 1) < rule->step_count) {
+            arm_step(rule_idx, step + 1, 0, gen, st->delay_after_sec);
+        }
+        return;
+    }
+    then_action_t *act = &st->actions[act_idx];
+    if (strcmp(act->type, "delay") == 0) {
+        if (act->delay_sec > 0) {
+            arm_step(rule_idx, step, act_idx + 1, gen, act->delay_sec);
+        } else {
+            execute_step_continue(rule_idx, step, act_idx + 1, gen);
+        }
+        return;
+    }
+    execute_one_then(rule, act, rule->point_id, rule->equals);
+    execute_step_continue(rule_idx, step, act_idx + 1, gen);
+}
+
+/** Enqueue (or, for a positive delay, schedule via a one-shot timer) the
+ * execution of a rule step. The timer callback never runs commands itself — it
+ * only pushes a job onto the executor queue. */
+static void arm_step(int rule_idx, int step, int act_idx, uint32_t gen, int delay_sec)
+{
+    if (rule_idx < 0 || (size_t)rule_idx >= s_rule_count) {
+        return;
+    }
+    exec_job_t job = { .gen = gen, .rule_idx = rule_idx, .step = step, .act_idx = act_idx };
+    if (delay_sec <= 0) {
+        if (s_exec_queue) {
+            xQueueSend(s_exec_queue, &job, 0);
+        }
+        return;
+    }
+    for (int i = 0; i < RULE_TIMER_POOL; i++) {
+        if (!s_timers[i].handle || s_timers[i].pending) {
+            continue;
+        }
+        s_timers[i].pending = true;
+        s_timers[i].gen = gen;
+        s_timers[i].rule_idx = rule_idx;
+        s_timers[i].step = step;
+        s_timers[i].act_idx = act_idx;
+        esp_timer_stop(s_timers[i].handle);
+        esp_timer_start_once(s_timers[i].handle, (uint64_t)delay_sec * 1000000ULL);
+        return;
+    }
+    ESP_LOGW(TAG, "rule timer pool exhausted, running step without delay");
+    if (s_exec_queue) {
+        xQueueSend(s_exec_queue, &job, 0);
+    }
+}
+
+static void rule_timer_cb(void *arg)
+{
+    int idx = (int)(intptr_t)arg;
+    if (idx < 0 || idx >= RULE_TIMER_POOL) {
+        return;
+    }
+    rule_timer_slot_t *slot = &s_timers[idx];
+    if (!slot->pending) {
+        return;
+    }
+    slot->pending = false;
+    exec_job_t job = { .gen = slot->gen, .rule_idx = slot->rule_idx, .step = slot->step, .act_idx = slot->act_idx };
+    if (s_exec_queue) {
+        xQueueSend(s_exec_queue, &job, 0);
+    }
+}
+
+static void rules_exec_task(void *arg)
+{
+    (void)arg;
+    exec_job_t job;
+    for (;;) {
+        /* Poll with a timeout so the task can observe s_exec_run and exit on stop. */
+        if (xQueueReceive(s_exec_queue, &job, pdMS_TO_TICKS(200)) == pdTRUE) {
+            /* Stale generation: the ruleset was reloaded after this job was armed. */
+            if (job.gen != s_rules_gen) {
+                continue;
+            }
+            if (job.rule_idx < 0 || (size_t)job.rule_idx >= s_rule_count) {
+                continue;
+            }
+            rule_t *rule = &s_rules[job.rule_idx];
+            if (!rule->enabled) {
+                continue;
+            }
+            if (job.step < 0 || (size_t)job.step >= rule->step_count) {
+                continue;
+            }
+            execute_step_continue(job.rule_idx, job.step, job.act_idx, job.gen);
+        }
+        if (!s_exec_run) {
+            break;
+        }
+    }
+    s_exec_task = NULL;
+    vTaskDelete(NULL);
+}
+
+
+static void schedule_rule(size_t rule_idx)
+{
+    if (rule_idx >= s_rule_count) {
+        return;
+    }
+    arm_step((int)rule_idx, 0, 0, s_rules_gen, s_rules[rule_idx].when_delay_sec);
 }
 
 static void match_rules_for_point(const char *point_id, const char *new_value)
@@ -507,7 +676,8 @@ static void match_rules_for_point(const char *point_id, const char *new_value)
     }
     uint32_t bucket = hash_point_id(point_id) % RULE_BUCKETS;
     for (uint8_t i = 0; i < s_rule_bucket_len[bucket]; i++) {
-        const rule_t *rule = &s_rules[s_rule_buckets[bucket][i]];
+        uint8_t ridx = s_rule_buckets[bucket][i];
+        rule_t *rule = &s_rules[ridx];
         if (strcmp(rule->point_id, point_id) != 0) {
             continue;
         }
@@ -519,7 +689,7 @@ static void match_rules_for_point(const char *point_id, const char *new_value)
             matched = compare_values(new_value ? new_value : "", rule->op, rule->equals);
         }
         if (matched && if_conditions_match(rule)) {
-            execute_then(rule, point_id, new_value);
+            schedule_rule(ridx);
         }
     }
 }
@@ -560,7 +730,7 @@ static void check_time_rules(void)
         strncpy(rule->last_fired_at, now_hm, sizeof(rule->last_fired_at) - 1);
         ESP_LOGI(TAG, "time rule '%s' fired at %s", rule->name, now_hm);
         if (if_conditions_match(rule)) {
-            execute_then(rule, rule->point_id, rule->equals);
+            schedule_rule(i);
         }
     }
 }
@@ -600,10 +770,151 @@ static void on_point_updated(const minihub_event_t *event, void *user_data)
     match_rules_for_point(point->point_id, event->new_value);
 }
 
+static void parse_then_action(const cJSON *el, then_action_t *act)
+{
+    memset(act, 0, sizeof(*act));
+    const cJSON *type = cJSON_GetObjectItem(el, "type");
+    if (cJSON_IsString(type) && type->valuestring) {
+        strncpy(act->type, type->valuestring, sizeof(act->type) - 1);
+    }
+    const cJSON *pid = cJSON_GetObjectItem(el, "point_id");
+    if (cJSON_IsString(pid) && pid->valuestring) {
+        strncpy(act->point_id, pid->valuestring, sizeof(act->point_id) - 1);
+    }
+    const cJSON *cmd = cJSON_GetObjectItem(el, "cmd");
+    if (cJSON_IsString(cmd) && cmd->valuestring) {
+        strncpy(act->cmd, cmd->valuestring, sizeof(act->cmd) - 1);
+    }
+    const cJSON *params = cJSON_GetObjectItem(el, "params");
+    if (cJSON_IsObject(params)) {
+        act->params = cJSON_Duplicate(params, 1);
+    }
+    const cJSON *delay = cJSON_GetObjectItem(el, "delay_sec");
+    if (!cJSON_IsNumber(delay)) {
+        delay = cJSON_GetObjectItem(el, "seconds");
+    }
+    if (cJSON_IsNumber(delay)) {
+        act->delay_sec = delay->valueint;
+    }
+    const cJSON *msg = cJSON_GetObjectItem(el, "message");
+    if (cJSON_IsString(msg) && msg->valuestring) {
+        strncpy(act->message, msg->valuestring, sizeof(act->message) - 1);
+    }
+    const cJSON *types = cJSON_GetObjectItem(el, "types");
+    if (cJSON_IsString(types) && types->valuestring) {
+        strncpy(act->types, types->valuestring, sizeof(act->types) - 1);
+    }
+}
+
+/** Parse a `then` value (legacy flat action array / single action, or the new
+ * steps array) into the rule's step sequence. */
+static void parse_then(const cJSON *then, rule_t *rule)
+{
+    if (!cJSON_IsArray(then) && !cJSON_IsObject(then)) {
+        rule->step_count = 1; /* empty placeholder step */
+        return;
+    }
+
+    /* New steps form: an array whose first element has an "actions" key. */
+    bool is_steps = false;
+    if (cJSON_IsArray(then) && cJSON_GetArraySize(then) > 0) {
+        const cJSON *first = cJSON_GetArrayItem(then, 0);
+        if (cJSON_IsObject(first) && cJSON_GetObjectItem(first, "actions")) {
+            is_steps = true;
+        }
+    }
+
+    if (is_steps) {
+        size_t n = (size_t)cJSON_GetArraySize(then);
+        if (n > MAX_STEPS) {
+            ESP_LOGW(TAG, "rule '%s' then steps truncated to %d", rule->id, MAX_STEPS);
+            n = MAX_STEPS;
+        }
+        for (size_t s = 0; s < n; s++) {
+            const cJSON *step = cJSON_GetArrayItem(then, (int)s);
+            rule_step_t *st = &rule->steps[rule->step_count];
+            const cJSON *acts = cJSON_GetObjectItem(step, "actions");
+            if (cJSON_IsArray(acts)) {
+                size_t an = (size_t)cJSON_GetArraySize(acts);
+                if (an > MAX_ACTIONS_PER_STEP) {
+                    an = MAX_ACTIONS_PER_STEP;
+                }
+                for (size_t a = 0; a < an; a++) {
+                    parse_then_action(cJSON_GetArrayItem(acts, (int)a), &st->actions[st->action_count]);
+                    st->action_count++;
+                }
+            }
+            const cJSON *da = cJSON_GetObjectItem(step, "delay_after");
+            if (!cJSON_IsNumber(da)) {
+                da = cJSON_GetObjectItem(step, "delay");
+            }
+            if (cJSON_IsNumber(da)) {
+                st->delay_after_sec = da->valueint;
+            }
+            rule->step_count++;
+        }
+        return;
+    }
+
+    /* Legacy flat form: a single action object or an array of action objects,
+     * where a `delay` action becomes the preceding step's delay_after and opens
+     * a new step for the following actions. */
+    if (cJSON_IsObject(then)) {
+        then_action_t act;
+        parse_then_action(then, &act);
+        rule->steps[0].actions[0] = act;
+        rule->steps[0].action_count = 1;
+        rule->step_count = 1;
+        return;
+    }
+
+    cJSON *el = NULL;
+    size_t cur = 0;
+    cJSON_ArrayForEach(el, then) {
+        if (!cJSON_IsObject(el)) {
+            continue;
+        }
+        then_action_t act;
+        parse_then_action(el, &act);
+        if (strcmp(act.type, "delay") == 0) {
+            if (rule->step_count <= cur) {
+                if (rule->step_count < MAX_STEPS) {
+                    rule->step_count++;
+                } else {
+                    continue;
+                }
+            }
+            rule->steps[cur].delay_after_sec = act.delay_sec;
+            cur++;
+            if (cur >= MAX_STEPS) {
+                cur = MAX_STEPS - 1;
+            }
+        } else {
+            if (rule->step_count <= cur) {
+                if (rule->step_count < MAX_STEPS) {
+                    rule->step_count++;
+                } else {
+                    continue;
+                }
+            }
+            rule_step_t *st = &rule->steps[cur];
+            if (st->action_count < MAX_ACTIONS_PER_STEP) {
+                st->actions[st->action_count++] = act;
+            } else {
+                ESP_LOGW(TAG, "rule '%s' step actions truncated", rule->id);
+            }
+        }
+    }
+    if (rule->step_count == 0) {
+        rule->step_count = 1;
+    }
+}
+
 static void parse_rule(const cJSON *item, rule_t *rule)
 {
     memset(rule, 0, sizeof(*rule));
     rule->last_fired_yday = -1;
+    rule->step_count = 0; /* parse_then fills steps; guarantees >=1 on success */
     const cJSON *id = cJSON_GetObjectItem(item, "id");
     const cJSON *name = cJSON_GetObjectItem(item, "name");
     const cJSON *enabled = cJSON_GetObjectItem(item, "enabled");
@@ -652,6 +963,14 @@ static void parse_rule(const cJSON *item, rule_t *rule)
         if (cJSON_IsString(at)) {
             strncpy(rule->time_at, at->valuestring, sizeof(rule->time_at) - 1);
         }
+        /* when.delay_sec: delay between trigger and first step. */
+        const cJSON *wd = cJSON_GetObjectItem(when, "delay_sec");
+        if (!cJSON_IsNumber(wd)) {
+            wd = cJSON_GetObjectItem(when, "delay");
+        }
+        if (cJSON_IsNumber(wd)) {
+            rule->when_delay_sec = wd->valueint;
+        }
     }
 
     if (cJSON_IsArray(if_arr)) {
@@ -688,52 +1007,35 @@ static void parse_rule(const cJSON *item, rule_t *rule)
         }
     }
 
-    if (cJSON_IsObject(then) || cJSON_IsArray(then)) {
-        const cJSON *items[MAX_THEN_ACTIONS];
-        size_t n = 0;
-        if (cJSON_IsObject(then)) {
-            items[n++] = then;
-        } else {
-            cJSON *el = NULL;
-            cJSON_ArrayForEach(el, then) {
-                if (n >= MAX_THEN_ACTIONS) {
-                    ESP_LOGW(TAG, "rule '%s' then[] truncated to %d", rule->id, MAX_THEN_ACTIONS);
-                    break;
-                }
-                if (cJSON_IsObject(el)) {
-                    items[n++] = el;
-                }
-            }
-        }
-        for (size_t i = 0; i < n; i++) {
-            then_action_t *act = &rule->then[rule->then_count];
-            const cJSON *type = cJSON_GetObjectItem(items[i], "type");
-            if (cJSON_IsString(type)) {
-                strncpy(act->type, type->valuestring, sizeof(act->type) - 1);
-            }
-            const cJSON *pid = cJSON_GetObjectItem(items[i], "point_id");
-            if (cJSON_IsString(pid)) {
-                strncpy(act->point_id, pid->valuestring, sizeof(act->point_id) - 1);
-            }
-            const cJSON *cmd = cJSON_GetObjectItem(items[i], "cmd");
-            if (cJSON_IsString(cmd)) {
-                strncpy(act->cmd, cmd->valuestring, sizeof(act->cmd) - 1);
-            }
-            const cJSON *delay = cJSON_GetObjectItem(items[i], "seconds");
-            if (cJSON_IsNumber(delay)) {
-                act->delay_sec = delay->valueint;
-            }
-            const cJSON *msg = cJSON_GetObjectItem(items[i], "message");
-            if (cJSON_IsString(msg) && msg->valuestring) {
-                strncpy(act->message, msg->valuestring, sizeof(act->message) - 1);
-            }
-            const cJSON *types = cJSON_GetObjectItem(items[i], "types");
-            if (cJSON_IsString(types) && types->valuestring) {
-                strncpy(act->types, types->valuestring, sizeof(act->types) - 1);
-            }
-            rule->then_count++;
-        }
+    parse_then(then, rule);
+}
+
+static esp_err_t ensure_timers(void)
+{
+    if (s_timers[0].handle) {
+        return ESP_OK;
     }
+    s_exec_queue = xQueueCreate(RULE_EXEC_QUEUE_LEN, sizeof(exec_job_t));
+    if (!s_exec_queue) {
+        return ESP_ERR_NO_MEM;
+    }
+    for (int i = 0; i < RULE_TIMER_POOL; i++) {
+        esp_timer_handle_t h = NULL;
+        const esp_timer_create_args_t args = {
+            .callback = &rule_timer_cb,
+            .arg = (void *)(intptr_t)i,
+            .name = "rule_step"
+        };
+        if (esp_timer_create(&args, &h) != ESP_OK) {
+            return ESP_ERR_NO_MEM;
+        }
+        s_timers[i].handle = h;
+        s_timers[i].pending = false;
+        s_timers[i].gen = 0;
+        s_timers[i].rule_idx = -1;
+        s_timers[i].step = -1;
+    }
+    return ESP_OK;
 }
 
 static esp_err_t start_time_task(void)
@@ -750,9 +1052,45 @@ static esp_err_t start_time_task(void)
     return ESP_OK;
 }
 
+static esp_err_t start_exec_task(void)
+{
+    if (s_exec_task != NULL) {
+        return ESP_OK;
+    }
+    s_exec_run = true;
+    BaseType_t ok = minihub_task_create_psram(rules_exec_task, "rules_exec", 4096, NULL, 3, &s_exec_task);
+    if (ok != pdPASS) {
+        s_exec_run = false;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
 static esp_err_t load_rules(const cJSON *rules_cfg)
 {
+    /* Invalidate any delayed executions from the previous generation: bump the
+     * generation and stop all pending timers. Jobs that were already queued or
+     * fire afterwards carry the old generation and are dropped by the executor. */
+    s_rules_gen++;
+    for (int i = 0; i < RULE_TIMER_POOL; i++) {
+        if (s_timers[i].handle) {
+            esp_timer_stop(s_timers[i].handle);
+        }
+        s_timers[i].pending = false;
+    }
+
+    for (size_t i = 0; i < s_rule_count; i++) {
+        for (size_t s = 0; s < MAX_STEPS; s++) {
+            for (size_t k = 0; k < MAX_ACTIONS_PER_STEP; k++) {
+                if (s_rules[i].steps[s].actions[k].params) {
+                    cJSON_Delete(s_rules[i].steps[s].actions[k].params);
+                    s_rules[i].steps[s].actions[k].params = NULL;
+                }
+            }
+        }
+    }
     s_rule_count = 0;
+
     if (!rules_cfg) {
         rebuild_rule_index();
         return ESP_OK;
@@ -770,7 +1108,15 @@ static esp_err_t load_rules(const cJSON *rules_cfg)
             break;
         }
         parse_rule(item, &s_rules[s_rule_count]);
-        ESP_LOGI(TAG, "loaded rule '%s' (%s)", s_rules[s_rule_count].name, s_rules[s_rule_count].id);
+        ESP_LOGI(TAG, "loaded rule '%s' (%s), %u steps", s_rules[s_rule_count].name,
+                 s_rules[s_rule_count].id, (unsigned)s_rules[s_rule_count].step_count);
+        if (s_rules[s_rule_count].enabled &&
+            strcmp(s_rules[s_rule_count].when_type, "delay") == 0) {
+            /* Delay trigger: fire once this many seconds after the ruleset loads
+             * (re-arms on each import). Carries the fresh generation so a later
+             * reload invalidates it. */
+            arm_step((int)s_rule_count, 0, 0, s_rules_gen, s_rules[s_rule_count].when_delay_sec);
+        }
         s_rule_count++;
     }
     rebuild_rule_index();
@@ -779,7 +1125,11 @@ static esp_err_t load_rules(const cJSON *rules_cfg)
 
 esp_err_t minihub_rules_init(const cJSON *rules_cfg)
 {
-    esp_err_t err = load_rules(rules_cfg);
+    esp_err_t err = ensure_timers();
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = load_rules(rules_cfg);
     if (err != ESP_OK) {
         return err;
     }
@@ -787,7 +1137,11 @@ esp_err_t minihub_rules_init(const cJSON *rules_cfg)
     if (err != ESP_OK) {
         return err;
     }
-    return start_time_task();
+    err = start_time_task();
+    if (err != ESP_OK) {
+        return err;
+    }
+    return start_exec_task();
 }
 
 esp_err_t minihub_rules_reload(const cJSON *rules_cfg)
@@ -802,8 +1156,16 @@ esp_err_t minihub_rules_reload(const cJSON *rules_cfg)
 esp_err_t minihub_rules_stop(void)
 {
     s_time_task_run = false;
-    if (s_time_task != NULL) {
-        vTaskDelay(pdMS_TO_TICKS(TIME_CHECK_INTERVAL_MS + 100));
+    s_exec_run = false;
+    for (int i = 0; i < RULE_TIMER_POOL; i++) {
+        if (s_timers[i].handle) {
+            esp_timer_stop(s_timers[i].handle);
+        }
+        s_timers[i].pending = false;
+    }
+    if (s_exec_task != NULL) {
+        /* Allow the executor to observe s_exec_run and exit (it polls every 200ms). */
+        vTaskDelay(pdMS_TO_TICKS(400));
     }
     return ESP_OK;
 }
