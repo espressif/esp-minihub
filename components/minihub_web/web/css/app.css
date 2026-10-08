@@ -134,6 +134,7 @@ body.i18n-pending{visibility:hidden}
 .rule-tech summary{cursor:pointer;color:var(--muted);font-size:.78rem;user-select:none}
 .rule-tech summary:hover{color:var(--text)}
 .rule-tech[open] summary{color:var(--text);margin-bottom:8px}
+.rule-at-note{font-size:.75rem;color:var(--muted);margin:6px 0 0;line-height:1.4}
 
 .rules-ai{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:14px}
 .rules-ai h3{font-size:.9rem;font-weight:700;margin-bottom:8px}

@@ -26,7 +26,12 @@ static const char *TAG = "minihub_rules";
 #define MAX_RULES 16
 #define RULE_BUCKETS 16
 #define MAX_RULES_PER_BUCKET 8
-#define TIME_CHECK_INTERVAL_MS 30000
+/* Poll cadence for time-triggered rules. Matching is minute-resolution
+ * (HH:MM), so the rule fires at the first poll inside the target minute.
+ * 30s made rules fire up to ~30s late (observed ~10s); 1s keeps the firing
+ * within ~1s of the minute boundary, which is imperceptible for a wall-clock
+ * timer. The per-poll cost is a cheap string compare over the rule set. */
+#define TIME_CHECK_INTERVAL_MS 1000
 
 #define MAX_IF_CONDITIONS 4
 #define RULE_PARAM_MAX 32

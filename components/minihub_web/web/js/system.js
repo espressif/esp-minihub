@@ -168,7 +168,7 @@ function sysOtaRender(j) {
     st.textContent = line;
     bar.style.width = (prog != null && prog >= 0) ? (prog + '%') : (state === 1 ? '15%' : '0%');
     if (state === 1) {
-        if (!otaTimer) otaTimer = setInterval(sysOtaPoll, 1000);
+        if (!otaTimer) otaTimer = setInterval(sysOtaPoll, ONE_SECOND_MS);
     } else if (otaTimer) {
         clearInterval(otaTimer);
         otaTimer = null;
@@ -492,7 +492,7 @@ async function sysApplyWifi() {
             document.getElementById('sys-wifi-pass').value = '';
             /* GOT_IP is often 3–5 s after reconnect; one early refresh stays blank. */
             for (let i = 0; i < 12; i++) {
-                await new Promise(res => setTimeout(res, 1000));
+                await new Promise(res => setTimeout(res, ONE_SECOND_MS));
                 await loadSystem();
                 const st = sysSnap && sysSnap.net && sysSnap.net.wifi;
                 if (st && st.ip) {

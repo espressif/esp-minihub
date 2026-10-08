@@ -145,7 +145,10 @@ function rulesAiRenderDraft(file) {
             '<div class="card-meta"><span>' + esc(rule.id || '') + '</span></div>' +
             '<div class="rule-flow">' + ruleStepHtml(t('rules.trigger_when'), w) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('rules.condition_if'), i) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('rules.action_then'), th) + '</div></div>';
     });
-    html += '<details class="rule-tech"><summary>' + t('rules.tech_details') + '</summary><pre class="rule-pre">' + esc(JSON.stringify(file, null, 2)) + '</pre></details>';
+    const timeRule = rules.find(function (rule) { return rule && rule.when && rule.when.type === 'time'; });
+    html += '<details class="rule-tech"><summary>' + t('rules.tech_details') + '</summary>' +
+        rulesAtUtcNoteHtml(timeRule && timeRule.when) +
+        '<pre class="rule-pre">' + esc(JSON.stringify(file, null, 2)) + '</pre></details>';
     body.innerHTML = html;
     box.hidden = false;
 }
@@ -342,9 +345,43 @@ function rulesDeviceLabel(pointId) {
     return pointId;
 }
 
+/* The hub's localtime_r runs in UTC (no timezone is configured on the device),
+ * so time rules are stored and matched in UTC. The <input type="time"> control
+ * yields the user's *local* wall-clock, so we convert to UTC on save and back
+ * to local for display. Without this, a rule set for 07:30 Beijing only matches
+ * at 23:30 UTC (= 07:30 Beijing next day offset) and appears to never fire. */
+function rulesLocalHMToUtc(hm) {
+    if (!hm || typeof hm !== 'string' || hm.indexOf(':') < 0) return hm;
+    const p = hm.split(':');
+    const h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    if (isNaN(h) || isNaN(m)) return hm;
+    let total = (h * 60 + m) + new Date().getTimezoneOffset();
+    total = ((total % 1440) + 1440) % 1440;
+    return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+}
+function rulesUtcHMToLocal(hm) {
+    if (!hm || typeof hm !== 'string' || hm.indexOf(':') < 0) return hm;
+    const p = hm.split(':');
+    const h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    if (isNaN(h) || isNaN(m)) return hm;
+    let total = (h * 60 + m) - new Date().getTimezoneOffset();
+    total = ((total % 1440) + 1440) % 1440;
+    return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+}
+
+/* Display only. The stored and exported at stays HH:MM so the hub's strcmp still matches. */
+function rulesAtUtcNoteHtml(when) {
+    if (!when || when.type !== 'time') return '';
+    const utc = (when.at != null && String(when.at)) || '';
+    return '<p class="rule-at-note">' + t('rules.at_utc_note', {
+        utc: esc(utc || '??:??'),
+        local: esc(rulesUtcHMToLocal(utc) || '??:??')
+    }) + '</p>';
+}
+
 function whenSummary(w) {
     if (!w || typeof w !== 'object') return '-';
-    if (w.type === 'time') return t('rules.summary_time', { at: (w.at || '') });
+    if (w.type === 'time') return t('rules.summary_time', { at: rulesUtcHMToLocal(w.at || '') });
     if (w.type === 'point') {
         const dev = rulesDeviceLabel(w.point_id);
         const param = w.parameter ? String(w.parameter) : '';
@@ -388,7 +425,7 @@ function whenPlain(w) {
     };
     if (w.type === 'time') return {
         title: t('rules.when_time'),
-        body: t('rules.when_time_body', { at: esc(w.at || '??:??') })
+        body: t('rules.when_time_body', { at: esc(rulesUtcHMToLocal(w.at || '??:??')) })
     };
     if (w.type === 'delay') return {
         title: t('rules.when_delay_type'),
@@ -991,7 +1028,8 @@ function rulesEditWhenFields(when) {
         html += '<div id="re-when-point">' + rulesPointCondFields('re-when', cond,
             'rulesEditSyncWhenDevice()', 'rulesEditSyncWhenParam()') + '</div>';
     } else if (typ === 'time') {
-        html += '<label>' + t('rules.field_time_at') + '</label><input type="time" id="re-when-at" value="' + escAttr(w.at || '23:00') + '" />';
+        html += '<label>' + t('rules.field_time_at') + '</label><input type="time" id="re-when-at" value="' + escAttr(rulesUtcHMToLocal(w.at) || '23:00') + '" />' +
+            '<p class="rule-at-note">' + t('rules.field_time_hint') + '</p>';
     } else {
         html += '<div class="rule-ed-when-delay"><label>' + t('rules.delay_seconds') + '</label>' +
             '<input type="number" id="re-when-delay-sec" min="0" value="' + (w.delay_sec > 0 ? w.delay_sec : '') + '" placeholder="0" />' +
@@ -1482,6 +1520,8 @@ function rulesEditSnapshot() {
         const atEl = document.getElementById('re-when-at');
         let at = ((atEl && atEl.value) || '23:00').trim();
         if (at.length === 4 && at.indexOf(':') === 1) at = '0' + at;
+        /* Store in UTC: the hub matches time rules against its (UTC) localtime. */
+        at = rulesLocalHMToUtc(at);
         when = { type: 'time', at: at };
     } else if (wtype === 'delay') {
         const dEl = document.getElementById('re-when-delay-sec');
