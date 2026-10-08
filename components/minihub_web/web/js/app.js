@@ -153,7 +153,8 @@ function authModules() {
 
 function authStatus(ad) {
     return authStatusByAdapter[ad] || {
-        logged_in: false
+        logged_in: false,
+        loaded: false
     };
 }
 
@@ -356,16 +357,19 @@ async function loadMeta() {
             const ad = mod.adapter;
             if (!adapterEnabled(ad) || mod.has_rpc === false) {
                 next[ad] = {
-                    logged_in: false
+                    logged_in: false,
+                    loaded: true
                 };
                 continue;
             }
             const st = await moduleRpc(mod.id, 'status');
             if (st.json && st.json.logged_in != null) {
+                st.json.loaded = true;
                 next[ad] = st.json;
             } else {
                 next[ad] = {
-                    logged_in: false
+                    logged_in: false,
+                    loaded: true
                 };
             }
         }
@@ -522,17 +526,23 @@ function renderOverview() {
         if (!(hasModAction(mod, 'login') && hasCredLogin(mod)) && !hasModAction(mod, 'session')) return;
         const st = authStatus(ad);
         if (!st.logged_in) {
-            const canLogin = hasModAction(mod, 'login') && hasCredLogin(mod);
-            const canSession = hasModAction(mod, 'session');
-            let ctaBtns = '';
-            if (canLogin) {
-                ctaBtns += '<button class="btn-primary" type="button" onclick="openModuleLogin(\'' + mod.id + '\')">' + esc(lbl(mod, 'cta_logged_out_button', lbl(mod, 'login', t('app.login')))) + '</button>';
+            if (!st.loaded) {
+                /* Status not yet known (first paint / right after reboot) — do not
+                 * show a false "not logged in" banner; show a neutral checking state. */
+                html += '<div class="cta"><div style="font-weight:700">' + esc('登录状态检查中…') + '</div></div>';
+            } else {
+                const canLogin = hasModAction(mod, 'login') && hasCredLogin(mod);
+                const canSession = hasModAction(mod, 'session');
+                let ctaBtns = '';
+                if (canLogin) {
+                    ctaBtns += '<button class="btn-primary" type="button" onclick="openModuleLogin(\'' + mod.id + '\')">' + esc(lbl(mod, 'cta_logged_out_button', lbl(mod, 'login', t('app.login')))) + '</button>';
+                }
+                if (canSession) {
+                    ctaBtns += '<button class="btn-sm" type="button" style="margin-left:8px" onclick="openModuleSession(\'' + mod.id + '\')">' + esc(lbl(mod, 'session', t('app.import_session'))) + '</button>';
+                }
+                if (!ctaBtns) return;
+                html += '<div class="cta"><div style="font-weight:700">' + esc(lbl(mod, 'cta_logged_out_title', t('app.not_logged_in', { adapter: adapterLabel(ad) }))) + '</div>' + '<p style="color:var(--muted);margin:12px 0">' + esc(lbl(mod, 'cta_logged_out_body', '')) + '</p>' + '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center">' + ctaBtns + '</div></div>';
             }
-            if (canSession) {
-                ctaBtns += '<button class="btn-sm" type="button" style="margin-left:8px" onclick="openModuleSession(\'' + mod.id + '\')">' + esc(lbl(mod, 'session', t('app.import_session'))) + '</button>';
-            }
-            if (!ctaBtns) return;
-            html += '<div class="cta"><div style="font-weight:700">' + esc(lbl(mod, 'cta_logged_out_title', t('app.not_logged_in', { adapter: adapterLabel(ad) }))) + '</div>' + '<p style="color:var(--muted);margin:12px 0">' + esc(lbl(mod, 'cta_logged_out_body', '')) + '</p>' + '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center">' + ctaBtns + '</div></div>';
         } else if (!pts.filter(p => p.adapter === ad).length && hasModAction(mod, 'sync')) {
             const ctaFn = hasModAction(mod, 'homes') ? 'openHomePicker' : 'syncModule';
             html += '<div class="cta"><div style="font-weight:700">' + esc(fillTpl(lbl(mod, 'cta_empty_title', adapterLabel(ad) + ' · {user}'), {
