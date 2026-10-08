@@ -2420,6 +2420,60 @@ static esp_err_t handle_api_device_widgets(httpd_req_t *req)
         cJSON_AddItemToObject(dj, "params", params);
         cJSON_AddItemToArray(devs, dj);
     }
+
+    /* Global parameter catalog: how a bare parameter NAME is rendered,
+     * independent of any device type (auto-binding). Lets the UI style controls
+     * for device types that are NOT in the local registry: when the type is
+     * unknown the web falls back per-parameter to this map instead of showing
+     * unlabeled raw values. Entries are keyed by parameter name; the first
+     * occurrence wins (the model is global-by-name, so a parameter renders the
+     * same everywhere it appears). */
+    cJSON *params = cJSON_CreateObject();
+    if (params) {
+        for (size_t i = 0; i < ndev; i++) {
+            const minihub_device_widget_device_t *d = minihub_device_widget_device_at(i);
+            if (!d) {
+                continue;
+            }
+            for (size_t j = 0; j < d->count; j++) {
+                const minihub_device_widget_entry_t *e = &d->entries[j];
+                if (!e->parameter || cJSON_GetObjectItem(params, e->parameter)) {
+                    continue;
+                }
+                cJSON *pj = cJSON_CreateObject();
+                if (!pj) {
+                    continue;
+                }
+                char wbuf[32];
+                char lbuf[64];
+                dw_style_describe(e->style_json, lang, wbuf, sizeof(wbuf), lbuf, sizeof(lbuf));
+                cJSON_AddStringToObject(pj, "parameter", e->parameter);
+                cJSON_AddStringToObject(pj, "label", lbuf[0] ? lbuf : e->label);
+                cJSON_AddStringToObject(pj, "widget", wbuf);
+                /* Controls are CSS widgets; do not resolve /img/parameters mockups. */
+                cJSON_AddStringToObject(pj, "image", "");
+                cJSON_AddStringToObject(pj, "style", e->style_json ? e->style_json : "{}");
+                cJSON_AddItemToObject(params, e->parameter, pj);
+            }
+        }
+        /* Fold in the full global parameter catalog (parameters.csv) so params
+         * reported only by unknown device types (absent from devices.csv) are
+         * also localized. Device entries already present win on first occurrence. */
+        cJSON *gp = minihub_device_widget_global_params_json(lang);
+        if (gp) {
+            const cJSON *p = gp->child;
+            while (p) {
+                const cJSON *next = p->next;
+                if (!cJSON_GetObjectItem(params, p->string)) {
+                    cJSON_AddItemToObject(params, p->string, cJSON_Duplicate(p, true));
+                }
+                p = next;
+            }
+            cJSON_Delete(gp);
+        }
+        cJSON_AddItemToObject(root, "parameters", params);
+    }
+
     err = send_json(req, root);
     cJSON_Delete(root);
     return err;

@@ -337,6 +337,15 @@ function rulesCondOp(c) {
 
 function rulesDeviceLabel(pointId) {
     if (!pointId) return '?';
+    const pt = rulesFindPoint(pointId);
+    if (pt) {
+        if (typeof pointDisplayName === 'function') {
+            const n = pointDisplayName(pt);
+            if (n) return n;
+        }
+        const n = pt.props && pt.props.name;
+        if (n && String(n).trim()) return String(n).trim();
+    }
     const segs = String(pointId).split('.');
     if (segs.length >= 2) return segs[segs.length - 1];
     return pointId;
@@ -397,9 +406,10 @@ function whenPlain(w) {
     if (w.type === 'point') {
         const dev = rulesDeviceLabel(w.point_id);
         const param = w.parameter ? String(w.parameter) : '';
+        const paramLabel = param ? (rulesParamMeta(w.point_id, param).label || param) : '';
         const op = rulesOpLabel(rulesCondOp(w));
         const val = rulesCondValue(w);
-        const target = param ? (esc(dev) + ' · <b>' + esc(param) + '</b>') : ('<b>' + esc(dev) + '</b>');
+        const target = paramLabel ? (esc(dev) + ' · <b>' + esc(paramLabel) + '</b>') : ('<b>' + esc(dev) + '</b>');
         return {
             title: t('rules.device_state_change'),
             body: t('rules.when_device_body', { target: target, op: esc(op), val: esc(val || '?') })
@@ -421,9 +431,10 @@ function ifPlain(iff) {
         if (!c || typeof c !== 'object') return (i + 1) + '. ' + t('rules.if_invalid');
         const dev = rulesDeviceLabel(c.point_id);
         const param = c.parameter ? String(c.parameter) : '';
+        const paramLabel = param ? (rulesParamMeta(c.point_id, param).label || param) : '';
         const op = rulesOpLabel(rulesCondOp(c));
         const val = rulesCondValue(c);
-        const target = param ? (esc(dev) + ' · <b>' + esc(param) + '</b>') : ('<b>' + esc(dev) + '</b>');
+        const target = paramLabel ? (esc(dev) + ' · <b>' + esc(paramLabel) + '</b>') : ('<b>' + esc(dev) + '</b>');
         return (i + 1) + '. ' + target + ' ' + esc(op) + ' <b>' + esc(val || '?') + '</b>';
     }).join('<br>');
     return {
@@ -655,10 +666,20 @@ function rulesCatalogForType(type) {
 
 function rulesCatalogParam(type, parameter) {
     const d = rulesCatalogForType(type);
-    if (!d || !Array.isArray(d.params)) return null;
-    for (let i = 0; i < d.params.length; i++) {
-        const p = d.params[i];
-        if (p && p.parameter === parameter) return p;
+    if (d && Array.isArray(d.params)) {
+        for (let i = 0; i < d.params.length; i++) {
+            const p = d.params[i];
+            if (p && p.parameter === parameter) return p;
+        }
+    }
+    /* Unknown device type (not in the local registry): fall back to the global
+     * parameter catalog so a known parameter still renders with its localized
+     * label / widget instead of the raw key. e.g. device_ss4401 /
+     * xiaomi_pro_632157 are absent from devices.csv but their parameters live in
+     * parameters.csv. */
+    const pc = dwRuleCatalog && dwRuleCatalog.parameters;
+    if (pc && Object.prototype.hasOwnProperty.call(pc, parameter)) {
+        return pc[parameter];
     }
     return null;
 }

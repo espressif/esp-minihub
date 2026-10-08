@@ -662,6 +662,18 @@ function dwCatalogForType(byType, type) {
 }
 
 function dwFallbackCatalogParam(pname) {
+    const pc = dwCatalog && dwCatalog.parameters;
+    if (pc && Object.prototype.hasOwnProperty.call(pc, pname)) {
+        const base = pc[pname];
+        return {
+            parameter: pname,
+            label: base.label != null ? base.label : pname,
+            widget: base.widget || '',
+            style: base.style || '{}',
+            image: base.image || '',
+            _fallback: true
+        };
+    }
     return { parameter: pname, label: pname, widget: '', style: '{}', _fallback: true };
 }
 

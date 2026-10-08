@@ -667,6 +667,84 @@ static cJSON *dw_build_style(const dw_csv_table_t *params, int row, const dw_par
     return style;
 }
 
+/* Global parameter catalog: every row of parameters.csv keyed by parameter
+ * name. Unlike the per-device widget entries (which only exist for device types
+ * listed in devices.csv), this covers parameters that are only reported by
+ * device types absent from devices.csv - e.g. a speaker's `volume` / `mute` or a
+ * button's `key_press`. The web falls back to this map for unknown device types
+ * so their controls still render with the localized label / widget instead of
+ * the raw key (Athena SGVAXfjc: rules / device pages showed English parameter
+ * names). Returns a cJSON object the caller owns; empty (never NULL) when the
+ * model parameters.csv is unavailable, so callers can fall back to the device
+ * entries. */
+cJSON *minihub_device_widget_global_params_json(const char *lang)
+{
+    cJSON *out = cJSON_CreateObject();
+    if (!out) {
+        return NULL;
+    }
+    char *par_buf = NULL;
+    size_t par_len = 0;
+    esp_err_t e = dw_read_file(MINIHUB_DW_MODEL_PARAMETERS_PATH, &par_buf, &par_len);
+    if (e != ESP_OK) {
+        free(par_buf);
+        return out;   /* no model parameters.csv: empty map, device entries win */
+    }
+    dw_csv_table_t par_t;
+    dw_param_cols_t pc_dummy;
+    char errbuf[128];
+    if (dw_csv_parse_table(par_buf, par_len, &par_t, errbuf, sizeof(errbuf)) != ESP_OK) {
+        free(par_buf);
+        return out;
+    }
+    dw_param_cols_resolve(&par_t, &pc_dummy);
+    for (int r = 0; r < par_t.nrows; r++) {
+        const char *pname = dw_cell(&par_t, r, pc_dummy.parameter);
+        if (!pname || !pname[0]) {
+            continue;
+        }
+        cJSON *style = dw_build_style(&par_t, r, &pc_dummy);
+        if (!style) {
+            continue;
+        }
+        char wbuf[32];
+        char lbuf[64];
+        wbuf[0] = '\0';
+        lbuf[0] = '\0';
+        cJSON *w = cJSON_GetObjectItemCaseSensitive(style, "widget");
+        if (cJSON_IsString(w) && w->valuestring) {
+            snprintf(wbuf, sizeof(wbuf), "%s", w->valuestring);
+        }
+        cJSON *labels = cJSON_GetObjectItemCaseSensitive(style, "labels");
+        if (labels) {
+            cJSON *l = cJSON_GetObjectItemCaseSensitive(labels, lang);
+            if (!cJSON_IsString(l) || !l->valuestring || !l->valuestring[0]) {
+                l = cJSON_GetObjectItemCaseSensitive(labels, "zh");
+            }
+            if (cJSON_IsString(l) && l->valuestring && l->valuestring[0]) {
+                snprintf(lbuf, sizeof(lbuf), "%s", l->valuestring);
+            }
+        }
+        cJSON *pj = cJSON_CreateObject();
+        if (!pj) {
+            cJSON_Delete(style);
+            break;
+        }
+        cJSON_AddStringToObject(pj, "parameter", pname);
+        cJSON_AddStringToObject(pj, "label", lbuf[0] ? lbuf : pname);
+        cJSON_AddStringToObject(pj, "widget", wbuf);
+        cJSON_AddStringToObject(pj, "image", "");
+        char *style_s = cJSON_PrintUnformatted(style);
+        cJSON_AddStringToObject(pj, "style", style_s ? style_s : "{}");
+        free(style_s);
+        cJSON_AddItemToObject(out, pname, pj);
+        cJSON_Delete(style);
+    }
+    dw_csv_table_free(&par_t);
+    free(par_buf);
+    return out;
+}
+
 static int dw_find_param_row(const dw_csv_table_t *params, int pcol, const char *name);
 
 static esp_err_t dw_check_requires_name(const dw_csv_table_t *par, int c_p, const char *key,
