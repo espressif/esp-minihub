@@ -43,6 +43,7 @@ bool ble_mesh_stack_rf_critical(void);
 #include "ezbee/secur.h"
 #include "ezbee/zha.h"
 #include "ezbee/platform/log.h"
+#include "ezbee/zdo/zdo_nwk_mgmt.h"
 
 #include <stdarg.h>
 
@@ -305,15 +306,53 @@ static esp_timer_handle_t s_disc_defer_timer;
 static discover_job_t *s_disc_defer_job;
 static disc_defer_action_t s_disc_defer_action;
 
+static zigbee_stack_device_left_cb_t s_on_left = NULL;
+
 void zigbee_stack_set_hooks(minihub_zigbee_device_cb_t on_device,
                             minihub_zigbee_attr_cb_t on_attr,
                             zigbee_stack_ready_cb_t on_ready,
+                            zigbee_stack_device_left_cb_t on_left,
                             void *ctx)
 {
     s_on_device = on_device;
     s_on_attr = on_attr;
     s_on_ready = on_ready;
+    s_on_left = on_left;
     s_cb_ctx = ctx;
+}
+
+static void remove_leave_cb(const ezb_zdo_nwk_mgmt_leave_req_result_t *result, void *user_ctx)
+{
+    (void)user_ctx;
+    if (!result) {
+        ESP_LOGW(TAG, "mgmt_leave: no result");
+        return;
+    }
+    ESP_LOGI(TAG, "mgmt_leave result err=%d zdp=%d", (int)result->error,
+             result->rsp ? (int)result->rsp->status : -1);
+}
+
+esp_err_t zigbee_stack_remove_device(uint16_t short_addr, uint64_t ieee)
+{
+    if (!s_stack_ready) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    ESP_LOGI(TAG, "mgmt_leave short=0x%04x ieee=0x%016llx (no rejoin)", short_addr,
+             (unsigned long long)ieee);
+    ezb_zdo_nwk_mgmt_leave_req_t req = {
+        .dst_nwk_addr = short_addr,
+        .field = {
+            .device_addr = {.u64 = ieee},
+            .remove_children = false,
+            .rejoin = false,
+        },
+        .cb = remove_leave_cb,
+        .user_ctx = NULL,
+    };
+    esp_zigbee_lock_acquire(portMAX_DELAY);
+    ezb_err_t e = ezb_zdo_nwk_mgmt_leave_req(&req);
+    esp_zigbee_lock_release();
+    return esp_zigbee_err_to_esp(e);
 }
 
 void zigbee_stack_notify_device(const minihub_zigbee_device_t *dev)
@@ -1663,6 +1702,9 @@ static bool app_signal_handler(const ezb_app_signal_t *app_signal)
                      upddev_status_str(p->status), (unsigned)p->tc_action, p->parent_short);
             if (p->status == EZB_ZDO_UPDDEV_DEVICE_LEFT) {
                 meter_sub_remove_short(p->short_addr);
+                if (s_on_left) {
+                    s_on_left(p->device_addr.u64, p->short_addr, s_cb_ctx);
+                }
             }
             if (p->status == EZB_ZDO_UPDDEV_UNSECURE_JOIN && p->tc_action == EZB_ZDO_TC_ACTION_ACCEPT &&
                 p->short_addr != 0 && p->short_addr != 0xfffe) {
@@ -1692,6 +1734,9 @@ static bool app_signal_handler(const ezb_app_signal_t *app_signal)
             ESP_LOGI(TAG, "leave indication short=0x%04x ieee=0x%016llx type=%u", p->short_addr,
                      (unsigned long long)p->device_addr.u64, (unsigned)p->leave_type);
             meter_sub_remove_short(p->short_addr);
+            if (s_on_left) {
+                s_on_left(p->device_addr.u64, p->short_addr, s_cb_ctx);
+            }
         }
         break;
     }

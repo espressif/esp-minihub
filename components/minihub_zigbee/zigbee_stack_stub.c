@@ -94,12 +94,21 @@ esp_err_t zigbee_stack_move_to_level(uint16_t short_addr, uint8_t endpoint, uint
 }
 
 void zigbee_stack_set_hooks(minihub_zigbee_device_cb_t on_device, minihub_zigbee_attr_cb_t on_attr,
-                            zigbee_stack_ready_cb_t on_ready, void *ctx)
+                            zigbee_stack_ready_cb_t on_ready, zigbee_stack_device_left_cb_t on_left,
+                            void *ctx)
 {
     (void)on_device;
     (void)on_attr;
     (void)on_ready;
+    (void)on_left;
     (void)ctx;
+}
+
+esp_err_t zigbee_stack_remove_device(uint16_t short_addr, uint64_t ieee)
+{
+    (void)short_addr;
+    (void)ieee;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 void zigbee_stack_notify_device(const minihub_zigbee_device_t *dev)
