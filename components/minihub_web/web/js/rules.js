@@ -973,6 +973,7 @@ async function rulesEditOpen(id) {
 
 function rulesEditCancel() {
     rulesEditMode = null;
+    rulesSel = null;
     renderRules();
 }
 
