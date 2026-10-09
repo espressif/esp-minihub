@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include "esp_log.h"
 #include "esp_littlefs.h"
@@ -514,15 +515,30 @@ esp_err_t minihub_config_save_rules(cJSON *rules_root)
         return ESP_ERR_NO_MEM;
     }
 
-    FILE *f = fopen(s_rules_path, "w");
+    /* Write to a temp file then rename so a failed/partial write never
+     * truncates the live rules file (which would silently drop rules and make
+     * it look like only a couple of them were kept). */
+    char tmp[sizeof(s_rules_path) + 8];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", s_rules_path);
+    FILE *f = fopen(tmp, "w");
     if (!f) {
         free(json);
-        ESP_LOGE(TAG, "cannot write %s", s_rules_path);
+        ESP_LOGE(TAG, "cannot write %s", tmp);
         return ESP_FAIL;
     }
-    fputs(json, f);
+    if (fputs(json, f) == EOF) {
+        fclose(f);
+        free(json);
+        unlink(tmp);
+        return ESP_FAIL;
+    }
     fclose(f);
     free(json);
+    if (rename(tmp, s_rules_path) != 0) {
+        unlink(tmp);
+        ESP_LOGE(TAG, "rename %s failed", s_rules_path);
+        return ESP_FAIL;
+    }
 
     if (rules_root == s_rules_cfg) {
         ESP_LOGI(TAG, "saved %s", s_rules_path);

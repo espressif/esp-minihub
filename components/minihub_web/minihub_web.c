@@ -2737,7 +2737,7 @@ static esp_err_t handle_api_devices_ota(httpd_req_t *req)
     return err;
 }
 
-#define RULES_JSON_MAX_BYTES (32 * 1024)
+#define RULES_JSON_MAX_BYTES (128 * 1024)
 #define RULES_IMPORT_URL_MAX 512
 
 static esp_err_t rules_http_get_body(const char *url, char **out_body, size_t *out_len)
