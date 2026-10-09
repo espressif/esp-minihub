@@ -33,6 +33,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <esp_err.h>
+#include "cJSON.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -210,6 +211,16 @@ minihub_device_widget_find(const char *device, const char *parameter);
 /* Total number of devices / entries in the table (for enumeration). */
 size_t minihub_device_widget_device_count(void);
 size_t minihub_device_widget_entry_count(void);
+
+/* Global parameter catalog: a cJSON object keyed by parameter name covering
+ * EVERY known parameter (the whole parameters.csv), not just those attached to a
+ * registered device type. The web falls back to this map for unknown device
+ * types so their controls still render with the localized label / widget
+ * instead of the raw key (Athena SGVAXfjc: rules / device pages showed English
+ * parameter names for devices absent from devices.csv). The returned object is
+ * owned by the caller; it is empty (never NULL) when the model parameters.csv is
+ * unavailable, so callers can fall back to the per-device entries. */
+cJSON *minihub_device_widget_global_params_json(const char *lang);
 
 /* Build the transport key for a (device, parameter).
  *   minihub_device_widget_path("thread", "light", "on_off", buf, n)
