@@ -31,13 +31,27 @@ static size_t s_kept_radio_count;
 /** Recursive: hub_reload may lock then call stop_all/soft_reload which also lock. */
 static SemaphoreHandle_t s_lifecycle_mu;
 
+static void cmd_router_lock_take(void) { (void)minihub_adapter_lifecycle_lock(portMAX_DELAY); }
+static void cmd_router_lock_give(void) { minihub_adapter_lifecycle_unlock(); }
+
+/* Per-registered-adapter owner (module id), parallel to s_registered. Lets us
+ * tag a module's event subscriptions and reap them on unload (UAF guard). */
+static char s_owner_by_name[16][28];
+
 static esp_err_t ensure_lifecycle_mu(void)
 {
     if (s_lifecycle_mu) {
         return ESP_OK;
     }
     s_lifecycle_mu = xSemaphoreCreateRecursiveMutex();
-    return s_lifecycle_mu ? ESP_OK : ESP_ERR_NO_MEM;
+    if (!s_lifecycle_mu) {
+        return ESP_ERR_NO_MEM;
+    }
+    /* Share this same recursive lock with the command router so a command
+     * dispatched during an install/uninstall reload cannot jump into a
+     * module's dlclosed .text. */
+    minihub_command_set_lifecycle_lock(cmd_router_lock_take, cmd_router_lock_give);
+    return ESP_OK;
 }
 
 esp_err_t minihub_adapter_lifecycle_lock(uint32_t timeout_ms)
@@ -116,11 +130,26 @@ static bool adapter_name_is(const minihub_adapter_t *adapter, const char *name)
     return adapter && adapter->name && name && strcmp(adapter->name, name) == 0;
 }
 
+/* Owner (module id) recorded at registration for a given adapter, or "" for core. */
+static const char *owner_of_adapter(const minihub_adapter_t *adapter)
+{
+    if (!adapter) {
+        return "";
+    }
+    for (size_t i = 0; i < s_registered_count; i++) {
+        if (s_registered[i] == adapter) {
+            return s_owner_by_name[i];
+        }
+    }
+    return "";
+}
+
 esp_err_t minihub_adapter_registry_init(void)
 {
     s_registered_count = 0;
     s_active_count = 0;
     s_kept_radio_count = 0;
+    memset(s_owner_by_name, 0, sizeof(s_owner_by_name));
     return ensure_lifecycle_mu();
 }
 
@@ -145,6 +174,11 @@ esp_err_t minihub_adapter_register(const minihub_adapter_t *adapter)
     if (s_registered_count >= 16) {
         return ESP_ERR_NO_MEM;
     }
+    /* Tag this adapter with the module id active during registration (set by the
+     * module loader around entry), so the adapter's event subscriptions can be
+     * reaped when the owning module is unloaded. */
+    strncpy(s_owner_by_name[s_registered_count], minihub_event_bus_current_owner(),
+            sizeof(s_owner_by_name[0]) - 1);
     s_registered[s_registered_count++] = adapter;
     return ESP_OK;
 }
@@ -164,7 +198,9 @@ esp_err_t minihub_adapter_unregister(const minihub_adapter_t *adapter)
             found = true;
             continue;
         }
-        s_registered[write++] = s_registered[i];
+        s_registered[write] = s_registered[i];
+        strncpy(s_owner_by_name[write], s_owner_by_name[i], sizeof(s_owner_by_name[0]) - 1);
+        write++;
     }
     s_registered_count = write;
 
@@ -265,7 +301,9 @@ esp_err_t minihub_adapter_load_all(const cJSON *config)
             continue;
         }
         if (adapter->init && adapter_cfg) {
+            minihub_event_bus_set_current_owner(owner_of_adapter(adapter));
             esp_err_t err = adapter->init(adapter_cfg);
+            minihub_event_bus_set_current_owner("");
             if (err != ESP_OK) {
                 ESP_LOGW(TAG, "radio-host '%s' config refresh failed: %s",
                          adapter->name, esp_err_to_name(err));
@@ -311,7 +349,9 @@ esp_err_t minihub_adapter_load_all(const cJSON *config)
 
         esp_err_t err = ESP_OK;
         if (adapter->init) {
+            minihub_event_bus_set_current_owner(owner_of_adapter(adapter));
             err = adapter->init(adapter_cfg);
+            minihub_event_bus_set_current_owner("");
             if (err != ESP_OK) {
                 ESP_LOGE(TAG, "adapter '%s' init failed: %s", adapter->name, esp_err_to_name(err));
                 continue;
@@ -403,7 +443,9 @@ esp_err_t minihub_adapter_start_all(void)
             }
             continue;
         }
+        minihub_event_bus_set_current_owner(owner_of_adapter(adapter));
         esp_err_t err = adapter->start();
+        minihub_event_bus_set_current_owner("");
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "adapter '%s' start failed: %s", adapter->name, esp_err_to_name(err));
             continue;
@@ -500,9 +542,11 @@ esp_err_t minihub_adapter_soft_reload(const char *name, const cJSON *adapters_ro
     minihub_point_unregister_by_adapter(name);
 
     esp_err_t err = ESP_OK;
+    minihub_event_bus_set_current_owner(owner_of_adapter(adapter));
     if (adapter->init) {
         err = adapter->init(adapter_cfg);
         if (err != ESP_OK) {
+            minihub_event_bus_set_current_owner("");
             minihub_adapter_lifecycle_unlock();
             return err;
         }
@@ -510,10 +554,12 @@ esp_err_t minihub_adapter_soft_reload(const char *name, const cJSON *adapters_ro
     if (adapter->start) {
         err = adapter->start();
         if (err != ESP_OK) {
+            minihub_event_bus_set_current_owner("");
             minihub_adapter_lifecycle_unlock();
             return err;
         }
     }
+    minihub_event_bus_set_current_owner("");
     if (adapter->handle_command) {
         minihub_command_register_adapter(name, adapter->handle_command);
     }

@@ -91,14 +91,27 @@ static esp_err_t hub_soft_reload_locked(const char *adapter_name)
 
 static esp_err_t hub_reload_locked(void)
 {
+    /* Hold the lifecycle lock across config reload + stop → dlclose → load/start.
+     * minihub_config_reload() frees and replaces s_adapters_cfg; without the lock
+     * a concurrent reader (e.g. the web /api/modules overview) can dereference the
+     * freed tree and crash. Racing the lock here, not after config reload, keeps
+     * that free atomic against every lifecycle-locked reader. */
+    minihub_js_unload_all();
+    if (minihub_adapter_lifecycle_lock(60000) != ESP_OK) {
+        ESP_LOGE(TAG, "adapter lifecycle lock timeout");
+        return ESP_ERR_TIMEOUT;
+    }
+
     esp_err_t err = minihub_config_reload();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "config reload failed: %s", esp_err_to_name(err));
+        minihub_adapter_lifecycle_unlock();
         return err;
     }
 
     cJSON *adapters = minihub_config_get_adapters();
     if (!adapters) {
+        minihub_adapter_lifecycle_unlock();
         return ESP_FAIL;
     }
 
@@ -109,12 +122,6 @@ static esp_err_t hub_reload_locked(void)
 
     /* Hold lifecycle lock across stop → dlclose → load/start so adapter_poll
      * cannot execute inside a dynamic module that is being freed. */
-    minihub_js_unload_all();
-    if (minihub_adapter_lifecycle_lock(60000) != ESP_OK) {
-        ESP_LOGE(TAG, "adapter lifecycle lock timeout");
-        return ESP_ERR_TIMEOUT;
-    }
-
     err = minihub_adapter_stop_all();
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "adapter stop failed: %s", esp_err_to_name(err));

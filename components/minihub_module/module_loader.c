@@ -16,6 +16,7 @@
 #include "minihub_paths.h"
 #include "minihub_config.h"
 #include "minihub_hub.h"
+#include "minihub_adapter.h"
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
@@ -213,6 +214,10 @@ static void detach_all_module_adapters(void)
         if (s_modules[i].adapter == NULL) {
             continue;
         }
+        /* Reap this module's event subscriptions (their handlers live in the .so
+         * we are about to dlclose) so a later point.updated dispatch can't jump
+         * into freed code. Core/JS subscribers have an empty owner and survive. */
+        minihub_event_bus_unsubscribe_owner(s_modules[i].info.id);
         (void)minihub_adapter_unregister(s_modules[i].adapter);
         s_modules[i].adapter = NULL;
         s_modules[i].info.loaded = false;
@@ -791,7 +796,9 @@ static esp_err_t load_builtin_module(module_slot_t *slot, const cJSON *adapter_c
     }
 
     const minihub_adapter_t *adapter = NULL;
+    minihub_event_bus_set_current_owner(slot->info.id);
     esp_err_t err = entry(&s_host_api, adapter_cfg, &adapter);
+    minihub_event_bus_set_current_owner("");
     if (err != ESP_OK || !adapter) {
         ESP_LOGE(TAG, "builtin '%s' entry failed: %s", slot->builtin_id, esp_err_to_name(err));
         return err != ESP_OK ? err : ESP_FAIL;
@@ -884,7 +891,7 @@ static esp_err_t try_load_binary(module_slot_t *slot, const cJSON *adapter_cfg)
     void *handle = NULL;
     const minihub_adapter_t *adapter = NULL;
     esp_err_t err = minihub_module_dl_load_and_enter(slot->binary_path, &s_host_api, adapter_cfg,
-                                                     &adapter, &rpc, &handle);
+                                                     &adapter, &rpc, &handle, slot->info.id);
     if (err != ESP_OK || !adapter) {
         /* Soft failure: clear guard so a later retry (disk free, new package) can proceed. */
         load_guard_clear_slot(slot);
@@ -1320,6 +1327,16 @@ cJSON *minihub_module_overview_adapters_json(void)
     const char *names[OVERVIEW_ADAPTER_CAP];
     size_t n = 0;
 
+    /* Reads the live module/adapter/config trees; must not race hub_reload,
+     * which frees and replaces s_adapters_cfg (minihub_config_reload) and tears
+     * down s_modules / the adapter registry under this same lock. Without it a
+     * concurrent reload can swap the config tree mid-iteration and crash us in
+     * cJSON_GetObjectItem (freed child->string). */
+    if (minihub_adapter_lifecycle_lock(1000) != ESP_OK) {
+        ESP_LOGW(TAG, "overview adapters: lifecycle lock timeout");
+        return cJSON_CreateObject();
+    }
+
     /* adapters.json keys (show chips even when .mhub failed to dlopen). */
     cJSON *cfg = minihub_config_get_adapters();
     if (cfg) {
@@ -1364,6 +1381,7 @@ cJSON *minihub_module_overview_adapters_json(void)
 
         cJSON_AddItemToObject(root, name, entry);
     }
+    minihub_adapter_lifecycle_unlock();
     return root;
 }
 
@@ -1562,13 +1580,24 @@ esp_err_t minihub_module_invoke_rpc(const char *module_id, const char *method,
     }
     *out = NULL;
     module_slot_t *slot = find_module(module_id);
-    if (!slot || !slot->info.loaded || !slot->rpc) {
+    if (!slot) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    /* Re-check and dereference the module's rpc function under the adapter
+     * lifecycle lock so a concurrent reload (detach -> dlclose) cannot free
+     * the module code between the check and the call. */
+    if (minihub_adapter_lifecycle_lock(1000) != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!slot->info.loaded || !slot->rpc) {
+        minihub_adapter_lifecycle_unlock();
         return ESP_ERR_INVALID_STATE;
     }
     esp_err_t err = slot->rpc(method, params, out);
     if (err == ESP_ERR_NOT_FOUND && slot->rpc_fallback) {
         err = slot->rpc_fallback(method, params, out);
     }
+    minihub_adapter_lifecycle_unlock();
     return err;
 }
 
