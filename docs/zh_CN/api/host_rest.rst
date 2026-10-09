@@ -407,7 +407,9 @@ GET /api/scenes · POST /api/scenes/import · POST /api/scenes/invoke
    ``GET /api/scenes · POST /api/scenes/import · POST /api/scenes/invoke``
 
 GET 返回 scenes.json。import 同规则。invoke 请求体 scene_id（必填，见 :doc:`../data_model`），
-按场景 commands 依次等价 POST /api/command；成功 **HTTP 200**。
+按场景 ``steps`` 串行执行：步内动作按顺序下发（等价 POST /api/command），每步可
+``loop`` 重复并带 ``delay_after_ms`` 延时；``max_duration_ms`` 为安全上限。场景在
+独立 worker 任务里运行，新的 invoke 或配置重载会取消正在执行的场景；成功 **HTTP 200**。
 
 GET /api/events
 ---------------
