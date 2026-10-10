@@ -12,3 +12,4 @@ features:
   - modbus
   - factory_reset_gpio61
   - main_task_stack
+  - web
