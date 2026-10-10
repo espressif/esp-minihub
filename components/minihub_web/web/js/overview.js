@@ -1289,6 +1289,31 @@ function showAuthCaptcha(b64, mime) {
     }
 }
 
+async function refreshAuthCaptcha() {
+    if (!activeAuthModule) {
+        return;
+    }
+    try {
+        /* Re-request the 2FA challenge; the plugin returns a fresh captcha when
+         * one is required, so the user can change it instead of being stuck with
+         * the first image (issue #11). */
+        const r = await moduleRpc(activeAuthModule, 'verify_send', {});
+        const j = r.json;
+        if (j && j.captcha_b64) {
+            showAuthCaptcha(j.captcha_b64, j.captcha_mime);
+            const hint = document.getElementById('auth-login-hint');
+            if (hint && j.hint) hint.textContent = j.hint;
+        } else if (r.ok && j && j.result === 'ok') {
+            const hint = document.getElementById('auth-login-hint');
+            if (hint && j.message) hint.textContent = j.message;
+        } else {
+            toast(t('ov.network_error'));
+        }
+    } catch (e) {
+        toast(t('ov.network_error'));
+    }
+}
+
 function revealAuthChallenge(opts) {
     opts = opts || {};
     const two = document.getElementById('auth-2fa-block');
