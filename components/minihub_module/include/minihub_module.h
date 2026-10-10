@@ -90,7 +90,7 @@ bool minihub_module_pick_auth_adapter(char *out, size_t out_len);
 bool minihub_module_ui_label(const char *adapter_name, const char *key,
                              char *out, size_t out_len);
 
-/** Per-adapter overview visibility map (caller cJSON_Delete) */
+/** Per-adapter overview visibility map (caller cJSON_Delete). NULL if the lifecycle lock is busy. */
 cJSON *minihub_module_overview_adapters_json(void);
 
 /** Enable/disable a manifest module */

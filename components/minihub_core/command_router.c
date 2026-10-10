@@ -23,11 +23,19 @@ static const char *TAG = "command_router";
  * recursively. */
 static void (*s_lock_take)(void) = NULL;
 static void (*s_lock_give)(void) = NULL;
+static void (*s_call_enter)(void) = NULL;
+static void (*s_call_leave)(void) = NULL;
 
 void minihub_command_set_lifecycle_lock(void (*take)(void), void (*give)(void))
 {
     s_lock_take = take;
     s_lock_give = give;
+}
+
+void minihub_command_set_lifecycle_call(void (*enter)(void), void (*leave)(void))
+{
+    s_call_enter = enter;
+    s_call_leave = leave;
 }
 
 static inline void cmd_lock(void) { if (s_lock_take) s_lock_take(); }
@@ -105,10 +113,20 @@ esp_err_t minihub_command_invoke(const minihub_command_t *cmd)
         return err;
     }
 
+    /* Pin first so a reload waits until handler() returns, then drop the
+     * mutex before the handler. MIoT commands do LAN/cloud I/O; holding the
+     * mutex across that blocked /api/adapters. The handler table is stable
+     * for the pin's lifetime because reload drains s_external before dlclose. */
+    if (s_call_enter) {
+        s_call_enter();
+    }
     cmd_lock();
     minihub_command_handler_t handler = find_handler(snapshot.adapter);
     if (!handler) {
         cmd_unlock();
+        if (s_call_leave) {
+            s_call_leave();
+        }
         if (snapshot.props) cJSON_Delete(snapshot.props);
         ESP_LOGE(TAG, "no handler for adapter '%s'", snapshot.adapter);
         return ESP_ERR_NOT_FOUND;
@@ -120,12 +138,14 @@ esp_err_t minihub_command_invoke(const minihub_command_t *cmd)
     minihub_event_bus_publish("command.invoked", invoke_data);
     cJSON_Delete(invoke_data);
 
-    /* Hold the (shared) lifecycle lock across the call so a concurrent reload
-     * cannot clear this handler table and dlclose the module's .text beneath
-     * us (use-after-free crash when the Web issues a command during an
-     * install/uninstall cycle). */
-    err = handler(cmd);
-    cmd_unlock();
+    if (s_call_enter && s_call_leave) {
+        cmd_unlock();
+        err = handler(cmd);
+        s_call_leave();
+    } else {
+        err = handler(cmd);
+        cmd_unlock();
+    }
 
     if (snapshot.props) cJSON_Delete(snapshot.props);
     if (err != ESP_OK) {

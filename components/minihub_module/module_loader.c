@@ -1334,7 +1334,9 @@ cJSON *minihub_module_overview_adapters_json(void)
      * cJSON_GetObjectItem (freed child->string). */
     if (minihub_adapter_lifecycle_lock(1000) != ESP_OK) {
         ESP_LOGW(TAG, "overview adapters: lifecycle lock timeout");
-        return cJSON_CreateObject();
+        /* NULL, not {}. The console keeps the previous adapter list on a
+         * non-200; an empty object is what made already-loaded devices vanish. */
+        return NULL;
     }
 
     /* adapters.json keys (show chips even when .mhub failed to dlopen). */
