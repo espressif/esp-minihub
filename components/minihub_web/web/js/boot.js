@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-10-02-no-window-stop-keepalive';
+window.mhWebBuild = '2026-10-10-18:27:10';
 window.mhWebVersion = '0.1.0';
 
 function toggleSecret(btn) {
@@ -166,17 +166,8 @@ function bootConsole() {
 /* Wait for the dictionary before the first render, otherwise the console paints in
  * one language and swaps a frame later. A rejected dictionary still boots: the
  * helper falls back to the key text and the page is already visible by then. */
-/* Requests to the Hub queue behind each other: with a /api/points fired every
- * second and the events WebSocket permanently holding one httpd slot, Chrome
- * measured 0.9–2.6 s of "stalled" time per request, so device cards painted
- * seconds after the state actually changed. The events socket stays silent for
- * most adapters, so this timer is effectively how device state reaches the
- * screen — the period below is a latency/load trade-off, not a fallback delay.
- * Measured on a Hub (round trip of an unrelated request while this timer runs):
- * a request every 1 s put every other request behind it — p50 1012 ms, p90 1403;
- * at 3 s and above p50 drops to ~50 ms. 6 s was the best point: p90 1364 ms and
- * no queueing, against p90 5470 ms at 3 s and 10 s outliers at 15 s. */
-const POINTS_POLL_WS_UP_MS = 6000;
+/* WS up: poll every 1 s (self-rescheduling, so no request pile-up). */
+const POINTS_POLL_WS_UP_MS = ONE_SECOND_MS;
 const POINTS_POLL_WS_DOWN_MS = 3000;
 /* Right after login the Hub often answers /api/points with an empty list — the
  * device rows simply have not been registered yet, and an empty list publishes no
