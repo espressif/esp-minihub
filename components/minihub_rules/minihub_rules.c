@@ -669,25 +669,142 @@ static void schedule_rule(size_t rule_idx)
     arm_step((int)rule_idx, 0, 0, s_rules_gen, s_rules[rule_idx].when_delay_sec);
 }
 
+/* Edge detection: a point-triggered rule should fire on a *change* of its
+ * parameter value, not on every redundant point.updated (e.g. after a restart
+ * or a device re-sync that re-publishes the current state). Cache the last seen
+ * value per (point_id, parameter); on an unchanged value we skip the rule. */
+#define EDGE_CACHE_MAX 256
+typedef struct {
+    char point_id[MINIHUB_POINT_ID_MAX];
+    char parameter[RULE_PARAM_MAX];
+    char value[MINIHUB_VALUE_MAX];
+} edge_entry_t;
+static edge_entry_t s_edge[EDGE_CACHE_MAX];
+static size_t s_edge_count = 0;
+
+static const char *edge_lookup(const char *point_id, const char *parameter)
+{
+    const char *key_param = parameter ? parameter : "";
+    for (size_t i = 0; i < s_edge_count; i++) {
+        if (strcmp(s_edge[i].point_id, point_id) == 0 &&
+            strcmp(s_edge[i].parameter, key_param) == 0) {
+            return s_edge[i].value;
+        }
+    }
+    return NULL;
+}
+
+static void edge_store(const char *point_id, const char *parameter, const char *value)
+{
+    const char *key_param = parameter ? parameter : "";
+    for (size_t i = 0; i < s_edge_count; i++) {
+        if (strcmp(s_edge[i].point_id, point_id) == 0 &&
+            strcmp(s_edge[i].parameter, key_param) == 0) {
+            strncpy(s_edge[i].value, value ? value : "", sizeof(s_edge[i].value) - 1);
+            s_edge[i].value[sizeof(s_edge[i].value) - 1] = '\0';
+            return;
+        }
+    }
+    if (s_edge_count >= EDGE_CACHE_MAX) {
+        return; /* cache full: this entry may re-fire once on next change */
+    }
+    strncpy(s_edge[s_edge_count].point_id, point_id, sizeof(s_edge[s_edge_count].point_id) - 1);
+    strncpy(s_edge[s_edge_count].parameter, key_param, sizeof(s_edge[s_edge_count].parameter) - 1);
+    strncpy(s_edge[s_edge_count].value, value ? value : "", sizeof(s_edge[s_edge_count].value) - 1);
+    s_edge[s_edge_count].point_id[sizeof(s_edge[s_edge_count].point_id) - 1] = '\0';
+    s_edge[s_edge_count].parameter[sizeof(s_edge[s_edge_count].parameter) - 1] = '\0';
+    s_edge[s_edge_count].value[sizeof(s_edge[s_edge_count].value) - 1] = '\0';
+    s_edge_count++;
+}
+
+/** Seed the edge cache from the current point values so a freshly booted hub
+ *  does not immediately re-fire rules whose state already matches. */
+static void seed_edge_cache(void)
+{
+    s_edge_count = 0;
+    for (size_t i = 0; i < s_rule_count; i++) {
+        const rule_t *rule = &s_rules[i];
+        if (rule->point_id[0] == '\0') {
+            continue;
+        }
+        const char *param = rule->parameter[0] ? rule->parameter : NULL;
+        char lhs[MINIHUB_VALUE_MAX];
+        bool have = false;
+        minihub_point_t snap = {0};
+        if (minihub_point_get_snapshot(rule->point_id, &snap) == ESP_OK) {
+            if (param) {
+                have = resolve_compare_lhs(&snap, param, lhs, sizeof(lhs));
+            } else {
+                strncpy(lhs, snap.value, sizeof(lhs) - 1);
+                lhs[sizeof(lhs) - 1] = '\0';
+                have = true;
+            }
+            if (snap.props) {
+                cJSON_Delete(snap.props);
+            }
+        }
+        /* Only seed with a concrete value. Seeding an empty/"not-yet-synced"
+         * value plants a wrong baseline, so the first real data sync (which
+         * carries the actual value) would look like an edge and fire the rule.
+         * Points that have not synced yet stay unseeded and become baseline on
+         * their first observed sync instead (see match_rules_for_point). */
+        if (have && lhs[0] != '\0') {
+            edge_store(rule->point_id, param, lhs);
+        }
+    }
+}
+
 static void match_rules_for_point(const char *point_id, const char *new_value)
 {
     if (!point_id) {
         return;
     }
     uint32_t bucket = hash_point_id(point_id) % RULE_BUCKETS;
+    char lhs[MINIHUB_VALUE_MAX];
     for (uint8_t i = 0; i < s_rule_bucket_len[bucket]; i++) {
         uint8_t ridx = s_rule_buckets[bucket][i];
         rule_t *rule = &s_rules[ridx];
         if (strcmp(rule->point_id, point_id) != 0) {
             continue;
         }
-        bool matched;
-        if (rule->parameter[0] != '\0') {
-            matched = condition_matches_snapshot(point_id, rule->parameter, rule->op, rule->equals);
+
+        /* Resolve the rule's trigger parameter to its current value. */
+        const char *param = rule->parameter[0] ? rule->parameter : NULL;
+        bool have_lhs = false;
+        if (param) {
+            minihub_point_t snap = {0};
+            if (minihub_point_get_snapshot(point_id, &snap) == ESP_OK) {
+                have_lhs = resolve_compare_lhs(&snap, param, lhs, sizeof(lhs));
+                if (snap.props) {
+                    cJSON_Delete(snap.props);
+                }
+            }
         } else {
-            /* Legacy: equals against the event summary value. */
-            matched = compare_values(new_value ? new_value : "", rule->op, rule->equals);
+            strncpy(lhs, new_value ? new_value : "", sizeof(lhs) - 1);
+            lhs[sizeof(lhs) - 1] = '\0';
+            have_lhs = true;
         }
+        if (!have_lhs) {
+            continue;
+        }
+
+        /* Edge trigger: the very first observed value of a (point, parameter)
+         * pair is the baseline established by the initial data sync. We record
+         * it but do not fire the rule, so a freshly booted / re-synced hub does
+         * not trigger rules just because the current state was published.
+         * Only a *change* since that baseline (or since the last published value)
+         * actually fires the rule. */
+        const char *prev = edge_lookup(point_id, param);
+        if (prev == NULL) {
+            edge_store(point_id, param, lhs);
+            continue; /* first sync -> establish baseline, no trigger */
+        }
+        if (strcmp(prev, lhs) == 0) {
+            continue; /* value unchanged -> not an edge */
+        }
+        edge_store(point_id, param, lhs);
+
+        bool matched = compare_values(lhs, rule->op, rule->equals);
         if (matched && if_conditions_match(rule)) {
             schedule_rule(ridx);
         }
@@ -1120,6 +1237,7 @@ static esp_err_t load_rules(const cJSON *rules_cfg)
         s_rule_count++;
     }
     rebuild_rule_index();
+    seed_edge_cache();
     return ESP_OK;
 }
 
