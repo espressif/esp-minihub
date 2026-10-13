@@ -31,6 +31,105 @@ static size_t s_kept_radio_count;
 /** Recursive: hub_reload may lock then call stop_all/soft_reload which also lock. */
 static SemaphoreHandle_t s_lifecycle_mu;
 
+/* Poll and command handlers do network I/O. Holding s_lifecycle_mu across that
+ * blocks /api/adapters (1 s) and the overview drops every device. The mutex
+ * only covers the registry. In-flight calls are counted in s_external and
+ * drained by lock_quiesced before anything is stopped or dlclosed. */
+static bool s_quiesce;
+static int s_external;
+#define LIFECYCLE_PIN_SLOTS 8
+static TaskHandle_t s_pin_task[LIFECYCLE_PIN_SLOTS];
+static uint8_t s_pin_depth[LIFECYCLE_PIN_SLOTS];
+
+static int pin_find_locked(TaskHandle_t self)
+{
+    for (int i = 0; i < LIFECYCLE_PIN_SLOTS; i++) {
+        if (s_pin_task[i] == self) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int pin_alloc_locked(TaskHandle_t self)
+{
+    for (int i = 0; i < LIFECYCLE_PIN_SLOTS; i++) {
+        if (s_pin_task[i] == NULL) {
+            s_pin_task[i] = self;
+            s_pin_depth[i] = 1;
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* Caller does not hold the mutex. Nested calls on the same task do not wait
+ * for quiesce, so a poll/command may re-enter command_invoke. */
+static void lifecycle_external_enter(void)
+{
+    TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    for (;;) {
+        if (minihub_adapter_lifecycle_lock(portMAX_DELAY) != ESP_OK) {
+            return;
+        }
+        int slot = pin_find_locked(self);
+        if (slot >= 0) {
+            if (s_pin_depth[slot] < UINT8_MAX) {
+                s_pin_depth[slot]++;
+            }
+            s_external++;
+            minihub_adapter_lifecycle_unlock();
+            return;
+        }
+        if (!s_quiesce) {
+            if (pin_alloc_locked(self) < 0) {
+                ESP_LOGW(TAG, "lifecycle pin table full");
+            }
+            s_external++;
+            minihub_adapter_lifecycle_unlock();
+            return;
+        }
+        minihub_adapter_lifecycle_unlock();
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+static void lifecycle_external_leave(void)
+{
+    TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    if (minihub_adapter_lifecycle_lock(portMAX_DELAY) != ESP_OK) {
+        return;
+    }
+    int slot = pin_find_locked(self);
+    if (slot >= 0) {
+        if (s_pin_depth[slot] > 1) {
+            s_pin_depth[slot]--;
+        } else {
+            s_pin_task[slot] = NULL;
+            s_pin_depth[slot] = 0;
+        }
+    }
+    if (s_external > 0) {
+        s_external--;
+    }
+    minihub_adapter_lifecycle_unlock();
+}
+
+/* Already holding the mutex. Used by the poll task after it has decided to run. */
+static void lifecycle_external_enter_locked(void)
+{
+    TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    int slot = pin_find_locked(self);
+    if (slot >= 0) {
+        if (s_pin_depth[slot] < UINT8_MAX) {
+            s_pin_depth[slot]++;
+        }
+    } else if (pin_alloc_locked(self) < 0) {
+        ESP_LOGW(TAG, "lifecycle pin table full; unload will still wait on s_external");
+    }
+    s_external++;
+}
+
 static void cmd_router_lock_take(void) { (void)minihub_adapter_lifecycle_lock(portMAX_DELAY); }
 static void cmd_router_lock_give(void) { minihub_adapter_lifecycle_unlock(); }
 
@@ -51,7 +150,42 @@ static esp_err_t ensure_lifecycle_mu(void)
      * dispatched during an install/uninstall reload cannot jump into a
      * module's dlclosed .text. */
     minihub_command_set_lifecycle_lock(cmd_router_lock_take, cmd_router_lock_give);
+    minihub_command_set_lifecycle_call(lifecycle_external_enter, lifecycle_external_leave);
     return ESP_OK;
+}
+
+esp_err_t minihub_adapter_lifecycle_lock_quiesced(uint32_t timeout_ms)
+{
+    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
+    if (minihub_adapter_lifecycle_lock(timeout_ms) != ESP_OK) {
+        return ESP_ERR_TIMEOUT;
+    }
+    s_quiesce = true;
+    while (s_external > 0) {
+        if ((int32_t)(deadline - xTaskGetTickCount()) <= 0) {
+            s_quiesce = false;
+            minihub_adapter_lifecycle_unlock();
+            return ESP_ERR_TIMEOUT;
+        }
+        minihub_adapter_lifecycle_unlock();
+        vTaskDelay(pdMS_TO_TICKS(20));
+        if (minihub_adapter_lifecycle_lock(timeout_ms) != ESP_OK) {
+            /* We already set s_quiesce. Take the mutex without a timeout so it
+             * cannot stay set after this function returns unlocked. */
+            if (minihub_adapter_lifecycle_lock(portMAX_DELAY) == ESP_OK) {
+                s_quiesce = false;
+                minihub_adapter_lifecycle_unlock();
+            }
+            return ESP_ERR_TIMEOUT;
+        }
+    }
+    return ESP_OK;
+}
+
+void minihub_adapter_lifecycle_unlock_quiesced(void)
+{
+    s_quiesce = false;
+    minihub_adapter_lifecycle_unlock();
 }
 
 esp_err_t minihub_adapter_lifecycle_lock(uint32_t timeout_ms)
@@ -512,24 +646,24 @@ esp_err_t minihub_adapter_soft_reload(const char *name, const cJSON *adapters_ro
     if (!name || !adapters_root) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (minihub_adapter_lifecycle_lock(60000) != ESP_OK) {
+    if (minihub_adapter_lifecycle_lock_quiesced(60000) != ESP_OK) {
         return ESP_ERR_TIMEOUT;
     }
 
     const minihub_adapter_t *adapter = minihub_adapter_find(name);
     if (!adapter) {
-        minihub_adapter_lifecycle_unlock();
+        minihub_adapter_lifecycle_unlock_quiesced();
         return ESP_ERR_NOT_FOUND;
     }
     if (adapter_is_radio_host(adapter)) {
-        minihub_adapter_lifecycle_unlock();
+        minihub_adapter_lifecycle_unlock_quiesced();
         return ESP_ERR_NOT_SUPPORTED;
     }
 
     const cJSON *adapters = cJSON_GetObjectItem(adapters_root, "adapters");
     const cJSON *adapter_cfg = adapters ? cJSON_GetObjectItem(adapters, name) : NULL;
     if (!adapter_cfg) {
-        minihub_adapter_lifecycle_unlock();
+        minihub_adapter_lifecycle_unlock_quiesced();
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -547,7 +681,7 @@ esp_err_t minihub_adapter_soft_reload(const char *name, const cJSON *adapters_ro
         err = adapter->init(adapter_cfg);
         if (err != ESP_OK) {
             minihub_event_bus_set_current_owner("");
-            minihub_adapter_lifecycle_unlock();
+            minihub_adapter_lifecycle_unlock_quiesced();
             return err;
         }
     }
@@ -555,7 +689,7 @@ esp_err_t minihub_adapter_soft_reload(const char *name, const cJSON *adapters_ro
         err = adapter->start();
         if (err != ESP_OK) {
             minihub_event_bus_set_current_owner("");
-            minihub_adapter_lifecycle_unlock();
+            minihub_adapter_lifecycle_unlock_quiesced();
             return err;
         }
     }
@@ -564,7 +698,7 @@ esp_err_t minihub_adapter_soft_reload(const char *name, const cJSON *adapters_ro
         minihub_command_register_adapter(name, adapter->handle_command);
     }
     ESP_LOGI(TAG, "soft-reloaded adapter '%s'", name);
-    minihub_adapter_lifecycle_unlock();
+    minihub_adapter_lifecycle_unlock_quiesced();
     return ESP_OK;
 }
 
@@ -630,16 +764,30 @@ static void adapter_poll_task(void *arg)
 {
     (void)arg;
     while (true) {
-        if (minihub_adapter_lifecycle_lock(60000) == ESP_OK) {
-            for (size_t i = 0; i < s_active_count; i++) {
-                const minihub_adapter_t *adapter = s_active[i];
-                if (adapter && adapter->poll) {
-                    adapter->poll();
+        const minihub_adapter_t *batch[16];
+        size_t n = 0;
+        /* Snapshot under the mutex, then poll outside it. LAN/cloud reads
+         * inside poll() take seconds; holding the mutex that long made
+         * /api/adapters time out and the overview hide every device. */
+        if (minihub_adapter_lifecycle_lock(1000) == ESP_OK) {
+            if (!s_quiesce) {
+                for (size_t i = 0; i < s_active_count && n < 16; i++) {
+                    const minihub_adapter_t *adapter = s_active[i];
+                    if (adapter && adapter->poll) {
+                        batch[n++] = adapter;
+                    }
+                }
+                if (n > 0) {
+                    lifecycle_external_enter_locked();
                 }
             }
             minihub_adapter_lifecycle_unlock();
-        } else {
-            ESP_LOGW(TAG, "adapter poll skipped — lifecycle lock busy");
+        }
+        for (size_t i = 0; i < n; i++) {
+            batch[i]->poll();
+        }
+        if (n > 0) {
+            lifecycle_external_leave();
         }
         vTaskDelay(pdMS_TO_TICKS(5000));
     }

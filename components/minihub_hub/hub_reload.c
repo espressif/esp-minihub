@@ -97,7 +97,7 @@ static esp_err_t hub_reload_locked(void)
      * freed tree and crash. Racing the lock here, not after config reload, keeps
      * that free atomic against every lifecycle-locked reader. */
     minihub_js_unload_all();
-    if (minihub_adapter_lifecycle_lock(60000) != ESP_OK) {
+    if (minihub_adapter_lifecycle_lock_quiesced(60000) != ESP_OK) {
         ESP_LOGE(TAG, "adapter lifecycle lock timeout");
         return ESP_ERR_TIMEOUT;
     }
@@ -105,13 +105,13 @@ static esp_err_t hub_reload_locked(void)
     esp_err_t err = minihub_config_reload();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "config reload failed: %s", esp_err_to_name(err));
-        minihub_adapter_lifecycle_unlock();
+        minihub_adapter_lifecycle_unlock_quiesced();
         return err;
     }
 
     cJSON *adapters = minihub_config_get_adapters();
     if (!adapters) {
-        minihub_adapter_lifecycle_unlock();
+        minihub_adapter_lifecycle_unlock_quiesced();
         return ESP_FAIL;
     }
 
@@ -135,19 +135,19 @@ static esp_err_t hub_reload_locked(void)
 
     err = minihub_adapter_load_all(adapters);
     if (err != ESP_OK) {
-        minihub_adapter_lifecycle_unlock();
+        minihub_adapter_lifecycle_unlock_quiesced();
         ESP_LOGE(TAG, "adapter load failed: %s", esp_err_to_name(err));
         return err;
     }
 
     err = minihub_adapter_start_all();
     if (err != ESP_OK) {
-        minihub_adapter_lifecycle_unlock();
+        minihub_adapter_lifecycle_unlock_quiesced();
         ESP_LOGE(TAG, "adapter start failed: %s", esp_err_to_name(err));
         return err;
     }
 
-    minihub_adapter_lifecycle_unlock();
+    minihub_adapter_lifecycle_unlock_quiesced();
 
 #if CONFIG_MINIHUB_MATTER_ADAPTER && CONFIG_MINIHUB_THREAD_ADAPTER
     /* Boot path attaches in main/bringup; reload must re-bind CHIP→OT after

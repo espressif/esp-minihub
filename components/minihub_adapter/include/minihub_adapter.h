@@ -156,6 +156,19 @@ esp_err_t minihub_adapter_lifecycle_lock(uint32_t timeout_ms);
 void minihub_adapter_lifecycle_unlock(void);
 
 /**
+ * @brief Lock, then wait until in-flight poll/command calls finish.
+ *
+ * Returns with the lock held and new poll/command calls blocked. Use this
+ * before stop/dlclose. Pair with minihub_adapter_lifecycle_unlock_quiesced().
+ */
+esp_err_t minihub_adapter_lifecycle_lock_quiesced(uint32_t timeout_ms);
+
+/**
+ * @brief Clear the quiesce flag and release the lock from lock_quiesced().
+ */
+void minihub_adapter_lifecycle_unlock_quiesced(void);
+
+/**
  * @brief Find adapter by name
  *
  * @return Adapter pointer, or NULL if not found

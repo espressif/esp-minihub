@@ -475,6 +475,15 @@ esp_err_t minihub_command_invoke(const minihub_command_t *cmd);
 void minihub_command_set_lifecycle_lock(void (*take)(void), void (*give)(void));
 
 /**
+ * @brief Pin a command handler so reload waits for it, without holding the
+ *        lifecycle mutex across the handler. enter() runs before the mutex
+ *        is taken to look up the handler; leave() runs after the handler
+ *        returns. Either may be NULL (then the mutex stays held across the
+ *        call, which is the previous behaviour).
+ */
+void minihub_command_set_lifecycle_call(void (*enter)(void), void (*leave)(void));
+
+/**
  * @brief Initialize Core subsystems
  */
 esp_err_t minihub_core_init(void);

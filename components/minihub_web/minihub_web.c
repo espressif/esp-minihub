@@ -1492,6 +1492,9 @@ static esp_err_t handle_api_adapters(httpd_req_t *req)
         return err;
     }
     cJSON *root = adapters_enabled_json();
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "busy");
+    }
     err = send_json(req, root);
     cJSON_Delete(root);
     return err;
