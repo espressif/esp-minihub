@@ -260,6 +260,20 @@ esp_err_t minihub_point_resolve_by_type_param(const char *type, const char *para
                                               char *out, size_t size);
 
 /**
+ * @brief Check whether a registered point carries a given parameter
+ *
+ * True when ``props.params`` contains ``parameter``. Used by the control
+ * endpoint to authorize a command by the live device point rather than the
+ * static device_widgets catalog — the latter may omit plugin-exposed
+ * parameters (e.g. miot ``indicator``) and must not 404 legitimate controls.
+ *
+ * @param point_id    Target point id
+ * @param parameter   Parameter name (data-model)
+ * @return true if the point exists and carries the parameter
+ */
+bool minihub_point_has_param(const char *point_id, const char *parameter);
+
+/**
  * @brief Update point value and publish change events
  *
  * @param point_id Target point id

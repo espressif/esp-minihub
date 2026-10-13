@@ -431,9 +431,9 @@ async function dwTriggerDeviceOta(pointId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ point_id: pointId })
         });
-        const j = await r.json().catch(function () { return null; });
+        const raw = await r.text().catch(function () { return ''; });
         if (!r.ok) {
-            const msg = (j && (j.error || j.message)) ? (j.error || j.message) : ('HTTP ' + r.status);
+            const msg = t('dw.control_failed', { error: mhHttpErrorText(r.status, raw) });
             if (typeof toast === 'function') toast(msg);
             else alert(msg);
             return;
@@ -1179,8 +1179,8 @@ async function dwSend(device, parameter, value, pointId) {
             body: JSON.stringify(body)
         });
         if (!r.ok) {
-            const j = await r.json().catch(function () { return {}; });
-            toast(t('dw.control_failed', { error: (j.error || r.status) }));
+            const raw = await r.text().catch(function () { return ''; });
+            toast(t('dw.control_failed', { error: mhHttpErrorText(r.status, raw) }));
         } else if (typeof refreshAfterCommand === 'function') {
             refreshAfterCommand();
         } else if (typeof loadPoints === 'function') {

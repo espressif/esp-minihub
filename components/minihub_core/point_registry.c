@@ -396,6 +396,18 @@ static bool point_props_has_param(const cJSON *props, const char *parameter)
     return false;
 }
 
+bool minihub_point_has_param(const char *point_id, const char *parameter)
+{
+    if (!point_id || !parameter || parameter[0] == '\0') {
+        return false;
+    }
+    minihub_point_t *pt = minihub_point_get(point_id);
+    if (!pt) {
+        return false;
+    }
+    return point_props_has_param(pt->props, parameter);
+}
+
 esp_err_t minihub_point_resolve_by_type_param(const char *type, const char *parameter,
                                               char *out, size_t size)
 {

@@ -2711,15 +2711,8 @@ async function cmd(id, c, params) {
         if (r.ok) {
             toast(t('ov.sent'));
         } else {
-            let msg = t('ov.failed');
-            try {
-                const j = await r.json();
-                msg = (j && (j.error || j.message || j.result)) || ('HTTP ' + r.status);
-                if (typeof msg === 'object') msg = JSON.stringify(msg);
-            } catch (e) {
-                msg = 'HTTP ' + r.status;
-            }
-            toast(String(msg).slice(0, 120));
+            const raw = await r.text().catch(function () { return ''; });
+            toast(t('dw.control_failed', { error: mhHttpErrorText(r.status, raw) }));
         }
         refreshAfterCommand();
     } catch (e) {

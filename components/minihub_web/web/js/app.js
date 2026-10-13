@@ -286,6 +286,56 @@ function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 }
 
+/* Control and command failures arrive as plain text from httpd_resp_send_err
+ * (or occasionally JSON). The status code alone ("404") is what the toast used
+ * to show. Map the known phrases to a sentence; keep any other specific text. */
+function mhHttpErrorText(status, raw) {
+    let detail = '';
+    const text = (raw == null) ? '' : String(raw).trim();
+    if (text && text.charAt(0) !== '<') {
+        try {
+            const j = JSON.parse(text);
+            if (j && typeof j === 'object') {
+                detail = j.error || j.message || '';
+                if (detail && typeof detail === 'object') detail = JSON.stringify(detail);
+            }
+        } catch (e) {
+            detail = text;
+        }
+    }
+    detail = String(detail || '').trim();
+    const key = mhHttpErrorKey(detail, status);
+    if (key) return t(key);
+    if (detail && !/^\d+$/.test(detail) && !/^HTTP\s+\d+$/i.test(detail)) {
+        return detail.slice(0, 160);
+    }
+    return t('dw.err_http', { status: status || '' });
+}
+
+function mhHttpErrorKey(detail, status) {
+    const d = String(detail || '').toLowerCase();
+    if (d === 'device not registered' || d === 'point not found') return 'dw.err_not_found';
+    if (d === 'esp_err_not_found') return 'dw.err_no_handler';
+    if (d === 'missing device/parameter/value' || d === 'missing point_id/cmd' || d === 'missing point_id') {
+        return 'dw.err_missing_fields';
+    }
+    if (d === 'invalid json' || d === 'empty body' || d === 'bad body' || d === 'body too large') {
+        return 'dw.err_bad_request';
+    }
+    if (d === 'value too long' || d === 'payload too long') return 'dw.err_value_too_long';
+    if (d === 'oom' || d === 'esp_err_no_mem') return 'dw.err_no_mem';
+    if (d === 'esp_err_not_supported') return 'dw.err_not_supported';
+    if (d === 'esp_err_invalid_arg') return 'dw.err_invalid_arg';
+    if (d === 'esp_err_invalid_state') return 'dw.err_invalid_state';
+    if (d === 'esp_err_timeout') return 'dw.err_timeout';
+    if (d === 'esp_fail' || d === 'esp_err_invalid_response') return 'dw.err_rejected';
+    if (!d) {
+        if (status === 404) return 'dw.err_not_found';
+        if (status === 400) return 'dw.err_bad_request';
+    }
+    return '';
+}
+
 function switchView(v) {
 
     if (v === 'devices') v = 'overview';
