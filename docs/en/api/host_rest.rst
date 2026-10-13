@@ -559,8 +559,11 @@ GET /ws/events
 
 WebSocket subscription to the Hub event bus. Each frame is JSON with
 ``event_type`` (string) plus payload fields. The socket forwards **any** name
-published on the bus (``minihub_event_bus_publish`` / L3
-``event_publish``). Plugins and OEM firmware may add their own types.
+published on the bus (``minihub_event_bus_publish``). Plugins and OEM firmware may add their own types.
+
+.. only:: not hide_l3
+
+   L3 modules publish with ``event_publish``.
 
 Host-published ``event_type`` values:
 

@@ -9,8 +9,11 @@ L2 JS Host API
 Store **L2** 模块（``runtime: js``，``main.js``）通过 QuickJS 绑定访问 Host 能力。
 实现位于 ``components/minihub_js/minihub_js.c``；需要 ``CONFIG_MINIHUB_JS_PLUGINS``。
 
-REST 安装与 RPC 见 :doc:`plugin_rest`；C 侧点位/命令模型见 :doc:`module_abi` 与
-:doc:`minihub_core`。
+REST 安装与 RPC 见 :doc:`plugin_rest`。C 侧点位/命令模型见 :doc:`minihub_core`。
+
+.. only:: not hide_l3
+
+   L3 使用 :doc:`module_abi` 中的虚表。
 
 模块入口
 --------
@@ -218,6 +221,45 @@ Returns
      }
    });
 
+方法 — host.timer
+-----------------
+
+定时器在 Host worker 任务上运行 JS 回调（QuickJS 为单线程）。这是 JS 模块做
+周期/延时任务的唯一手段，适合轮询或去抖。同样这四个函数也注入为全局
+（``setTimeout`` / ``clearTimeout`` / ``setInterval`` / ``clearInterval``）。
+
+host.timer.setTimeout(fn, ms) / host.timer.setInterval(fn, ms)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: javascript
+
+   var id = host.timer.setTimeout(function () { host.log.info("只触发一次"); }, 1000);
+   var poll = host.timer.setInterval(function () { /* 读传感器 */ }, 5000);
+   host.timer.clearTimeout(id);
+   host.timer.clearInterval(poll);
+
+Parameters
+^^^^^^^^^^
+
+``fn`` （function，必填）
+    无参回调，运行在 JS worker 任务上。
+
+``ms`` （number，必填）
+    延时毫秒（``setInterval`` 为周期）。``<= 0`` 按 ``1`` ms 处理。
+    参数顺序 ``(fn, ms)`` 或 ``(ms, fn)`` 均可。
+
+Returns
+^^^^^^^
+
+整数 id（从 1 起）。每个模块最多 16 个存活定时器，超出 **抛异常**。
+
+说明
+^^^^
+
+* ``setup`` 内可启动定时器；在 ``clear*`` 或重载前持续有效。
+* 长时间运行的回调会阻塞其它定时器与任务——保持回调简短。
+* ``POST /api/hub/reload`` 会清除所有定时器并再次运行 ``setup``。
+
 方法 — host.command
 -------------------
 
@@ -401,8 +443,10 @@ host.module.registerRpc(method, handler)
 为本模块 id 注册 RPC（仅可在 ``setup`` 内调用）。Web UI 与
 ``POST /api/modules/<id>/rpc`` 会调用 ``handler(method, params)``。
 
-在 **hybrid** 模块上，JS 处理器为 RPC 主路径；未在 JS 注册的方法会回落到
-原生 ``minihub_module_rpc``。
+.. only:: not hide_l3
+
+   在 **hybrid** 模块上，JS 处理器为 RPC 主路径；未在 JS 注册的方法会回落到
+   原生 ``minihub_module_rpc``。
 
 Parameters
 ^^^^^^^^^^

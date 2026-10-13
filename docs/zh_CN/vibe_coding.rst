@@ -19,7 +19,7 @@ Vibe coding
 * 射频与接入： :doc:`radios`
 * 编译烧录： :doc:`getting_started`
 * OEM Host： :doc:`host_customization` 、 :doc:`production`
-* Store 插件： :doc:`plugins/overview` （L1 / L2 / L3 选型后再进对应章）
+* Store 插件： :doc:`plugins/overview` （先选 L1 或 L2，再进对应章）
 * REST / MCP 工具列表： :doc:`api/host_rest` 、 :doc:`api/mcp`
 * 贡献与 Git： :doc:`contributing`
 
@@ -61,6 +61,9 @@ MCP ``hub.reload`` 限速 5 秒。完整工具与 ``hub.api`` 白名单见 :doc:
 ------------
 
 1. 先让助手读本章与任务对应的 RST，再改代码
-2. L3 未定义符号须在 ``host_export_allowlist.json`` 内，声明来自
-   ``minihub_plugin_sdk.h`` — :doc:`plugins/develop_l3`
-3. 在设备上验证：串口日志、``GET /api/modules`` 、必要时 ``POST /api/hub/reload``
+2. 在设备上验证：串口日志、``GET /api/modules`` 、必要时 ``POST /api/hub/reload``
+
+.. only:: not hide_l3
+
+   L3 未定义符号须在 ``host_export_allowlist.json`` 内，声明来自
+   ``minihub_plugin_sdk.h`` — :doc:`plugins/develop_l3` 。

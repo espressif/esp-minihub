@@ -292,10 +292,9 @@ Information（cluster ``0x0028``，尽力而为；失败不阻断配网）：
 身份只 ``minihub_point_merge_props``，**不** 写进 ``adapters.json``。同一
 node 的多个 endpoint 点合并同一份 Basic Information。
 
-厂商插件（L2/L3）按 ``props.manufacturer`` 匹配，写在同一 ``point_id`` 上：
+厂商插件（L2）按 ``props.manufacturer`` 匹配，写在同一 ``point_id`` 上：
 
-* **认领** — ``props.owner`` = 插件 ``adapter`` 名（演示
-  ``examples/plugins/matter_ota``）。**不需要** 云端目录。
+* **认领** — ``props.owner`` = 插件 ``adapter`` 名。**不需要** 云端目录。
 * **OTA 标记** — 仅在 GET ``catalog_url`` 成功后 merge ``props.ota``。
 
 启动 OTA 用适配器命令 ``ota`` / ``start_ota``（``path`` / ``file_path`` /
@@ -308,8 +307,7 @@ Matter OTA 文件（CSA 头 ``0x1BEEF11E``）。本地文件由 Hub 在 loopback
 ``CONFIG_ESP_MATTER_OTA_PROVIDER_ENABLED``（``matter.defaults`` 已打开）。
 Matter-over-Thread 终端也走 **Matter** 点，见 :doc:`thread`。
 
-``MINIHUB_PLUGIN_DIRS`` 含 ``examples/plugins`` 时才打包 ``matter_ota``；
-不要写进公开 Host ``store_preinstall``。
+``MINIHUB_PLUGIN_DIRS`` 含该插件目录时才打包。
 
 Wi-Fi 由谁管理？
 ----------------

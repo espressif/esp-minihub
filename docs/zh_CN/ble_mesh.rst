@@ -108,13 +108,12 @@ Zigbee 入网或 BLE Mesh 配网是否进行中，以及表示射频关键窗口
 ``value``，**不得** ``minihub_point_set`` 整份替换 ``props``，否则会冲掉
 uuid / 厂商 / ``owner`` / ``ota``。
 
-厂商插件（L2/L3）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
+厂商插件（L2）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
 ``catalog.json``），写在同一 ``point_id`` 上：
 
 * **认领** — 写入 ``props.owner`` = 插件 ``adapter`` 名。该槽在
-  ``adapters.json`` 为 ``enabled`` 时，总览把卡片挪到厂商分组（演示
-  ``examples/plugins/ble_mesh_ota``，文案见 ``ui.json`` ``filter_label``）。
-  **不需要** 云端目录。
+  ``adapters.json`` 为 ``enabled`` 时，总览把卡片挪到厂商分组（文案见
+  ``meta.json`` ``filter_label``）。**不需要** 云端目录。
 * **OTA 标记** — 仅在 GET ``catalog_url`` 成功后 merge ``props.ota``
   （``available``、``version``，可选 ``url`` / ``file`` / ``size``）。示例::
 
@@ -123,7 +122,7 @@ uuid / 厂商 / ``owner`` / ``ota``。
          "available": true,
          "version": "1.2.3",
          "url": "https://vendor.example/fw.bin",
-         "file": "/data/ble_mesh_ota/aabbccddeeff0011.bin",
+         "file": "/data/ota/aabbccddeeff0011.bin",
          "size": 524288
        }
      }
@@ -134,5 +133,4 @@ uuid / 厂商 / ``owner`` / ``ota``。
 接口返回 ``ESP_ERR_NOT_SUPPORTED`` 并打清晰日志 — 插件现在仍可发布
 ``props.ota``。
 
-``MINIHUB_PLUGIN_DIRS`` 含 ``examples/plugins`` （或该插件目录）时才会打包
-``.mhub``；不要把 ``ble_mesh_ota`` 写进公开 Host ``store_preinstall``。
+``MINIHUB_PLUGIN_DIRS`` 含该插件目录时才会打包 ``.mhub``。

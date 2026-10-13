@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .ids import INJECT_ADAPTERS, JS_FORBIDDEN, KIND_VALUES, RUNTIME_VALUES, check_module_id
+from .ids import INJECT_ADAPTERS, JS_FORBIDDEN, RUNTIME_VALUES, TYPE_VALUES, check_module_id
 
 
 def _issue(path: str, message: str, *, level: str = "error") -> dict[str, str]:
@@ -22,9 +22,9 @@ def validate_module_json(manifest: dict[str, Any], *, source: str = "module.json
     if err:
         issues.append(_issue(source, err))
 
-    kind = manifest.get("kind")
-    if kind is not None and kind not in KIND_VALUES:
-        issues.append(_issue(source, f"kind must be {KIND_VALUES}, got {kind!r}"))
+    kind = manifest.get("type")
+    if kind is not None and kind not in TYPE_VALUES:
+        issues.append(_issue(source, f"type must be {TYPE_VALUES}, got {kind!r}"))
 
     runtime = manifest.get("runtime")
     if runtime is not None and runtime not in RUNTIME_VALUES:
@@ -45,9 +45,9 @@ def validate_module_json(manifest: dict[str, Any], *, source: str = "module.json
             )
 
     if runtime == "js" and kind == "pack":
-        issues.append(_issue(source, 'L2 JS should use kind "module", not "pack"'))
+        issues.append(_issue(source, 'L2 JS should use type "module", not "pack"'))
     if runtime == "pack" and kind == "module":
-        issues.append(_issue(source, 'L1 pack should use kind "pack"', level="warning"))
+        issues.append(_issue(source, 'L1 pack should use type "pack"', level="warning"))
 
     return issues
 

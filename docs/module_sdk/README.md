@@ -34,7 +34,7 @@ This checkout already lists it in `.cursor/mcp.json` and `.vscode/mcp.json`.
 |------|---------|
 | `plugin_guide` | L1 / L2 / L3 / `host.*` / pack rules |
 | `scaffold_plugin` | Template files (optional write to `out_dir`) |
-| `validate_plugin` | `module.json` id/kind/inject + L2 JS bans |
+| `validate_plugin` | `module.json` id/type/inject + L2 JS bans |
 | `pack_plugin` | Zip L1/L2 into `.mhub` (L3 needs an existing `.so`) |
 
 Plugin-only workspace (no Host clone): still run this script from an `esp-minihub` tree (or copy `tools/plugin_mcp/` + `docs/module_sdk/templates/` + `tools/minihub_plugin_mcp.py`), then `scaffold_plugin` with `out_dir` pointing at the customer's folder.

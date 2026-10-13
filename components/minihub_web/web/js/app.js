@@ -158,6 +158,15 @@ function authStatus(ad) {
     };
 }
 
+/* True when `ad` is an auth module whose login state is known and is logged
+ * out. Its previously-synced device points must not show as if they were live. */
+function adapterLoggedOut(ad) {
+    const mod = authModuleFor(ad);
+    if (!mod) return false;
+    const st = authStatus(ad);
+    return !!(st && st.loaded && !st.logged_in);
+}
+
 let _syncPollTimer = null;
 function pollAuthSyncWhileBusy() {
     if (_syncPollTimer) return;
@@ -538,7 +547,7 @@ function renderOverview() {
      * Otherwise legacy per-param points (thread.color_bulb.brightness …)
      * inflate 能力点 and render a fake toggle per parameter. */
     /* Keep unscoped ids (switch/bm_000a) even when their adapter is off, so 全部 can list them. */
-    let base = overviewCollapsePoints(pts.filter(p => p && (adapterEnabled(p.adapter) || !pointIdScoped(p.point_id))));
+    let base = overviewCollapsePoints(pts.filter(p => p && (adapterEnabled(p.adapter) || !pointIdScoped(p.point_id)) && !adapterLoggedOut(pointGroup(p))));
     refreshOverviewFilterOptions(base);
     let list = base.filter(p => (filter === 'all' || pointInAdapter(p, filter)) && pointMatchesQuery(p, q) && (!roomFilter || pointRoomName(p) === roomFilter) && (!typeFilter || p.type === typeFilter));
     document.getElementById('s-total').textContent = list.length;

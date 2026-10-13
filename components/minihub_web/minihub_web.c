@@ -3434,7 +3434,7 @@ static esp_err_t handle_api_update_apply(httpd_req_t *req)
     if (!root) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
     }
-    const cJSON *kind = cJSON_GetObjectItem(root, "kind");
+    const cJSON *kind = cJSON_GetObjectItem(root, "type");
     const cJSON *force = cJSON_GetObjectItem(root, "force");
     bool force_b = (force && cJSON_IsBool(force)) ? cJSON_IsTrue(force) : false;
     minihub_update_kind_t k = MINIHUB_UPDATE_FIRMWARE;
@@ -3446,7 +3446,7 @@ static esp_err_t handle_api_update_apply(httpd_req_t *req)
     }
     cJSON_Delete(root);
     if (!known) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "unknown kind");
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "unknown type");
     }
     char base[MINIHUB_STORE_BASE_URL_MAX];
     if (!minihub_store_copy_base_url(base, sizeof(base))) {
@@ -4177,7 +4177,7 @@ static esp_err_t handle_api_store_install(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
     }
 
-    const cJSON *kind = cJSON_GetObjectItem(root, "kind");
+    const cJSON *kind = cJSON_GetObjectItem(root, "type");
     const cJSON *id = cJSON_GetObjectItem(root, "id");
     const cJSON *reload = cJSON_GetObjectItem(root, "reload");
     const cJSON *upgrade = cJSON_GetObjectItem(root, "upgrade");
@@ -4186,7 +4186,7 @@ static esp_err_t handle_api_store_install(httpd_req_t *req)
 
     if (!cJSON_IsString(kind) || !cJSON_IsString(id)) {
         cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing kind/id");
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing type/id");
     }
 
     err = do_upgrade ? minihub_store_upgrade(kind->valuestring, id->valuestring)
@@ -4232,14 +4232,14 @@ static esp_err_t handle_api_store_upgrade(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
     }
 
-    const cJSON *kind = cJSON_GetObjectItem(root, "kind");
+    const cJSON *kind = cJSON_GetObjectItem(root, "type");
     const cJSON *id = cJSON_GetObjectItem(root, "id");
     const cJSON *reload = cJSON_GetObjectItem(root, "reload");
     bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
 
     if (!cJSON_IsString(kind) || !cJSON_IsString(id)) {
         cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing kind/id");
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing type/id");
     }
 
     err = minihub_store_upgrade(kind->valuestring, id->valuestring);
@@ -4284,14 +4284,14 @@ static esp_err_t handle_api_store_reinstall(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
     }
 
-    const cJSON *kind = cJSON_GetObjectItem(root, "kind");
+    const cJSON *kind = cJSON_GetObjectItem(root, "type");
     const cJSON *id = cJSON_GetObjectItem(root, "id");
     const cJSON *reload = cJSON_GetObjectItem(root, "reload");
     bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
 
     if (!cJSON_IsString(kind) || !cJSON_IsString(id)) {
         cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing kind/id");
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing type/id");
     }
 
     err = minihub_store_reinstall(kind->valuestring, id->valuestring);
@@ -4333,14 +4333,14 @@ static esp_err_t handle_api_store_uninstall(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
     }
 
-    const cJSON *kind = cJSON_GetObjectItem(root, "kind");
+    const cJSON *kind = cJSON_GetObjectItem(root, "type");
     const cJSON *id = cJSON_GetObjectItem(root, "id");
     const cJSON *reload = cJSON_GetObjectItem(root, "reload");
     bool do_reload = !cJSON_IsBool(reload) || cJSON_IsTrue(reload);
 
     if (!cJSON_IsString(kind) || !cJSON_IsString(id)) {
         cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing kind/id");
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing type/id");
     }
 
     err = minihub_store_uninstall(kind->valuestring, id->valuestring);

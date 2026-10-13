@@ -17,7 +17,7 @@ INJECT_ADAPTERS = (
     "thread",
 )
 
-KIND_VALUES = ("module", "pack")
+TYPE_VALUES = ("module", "pack")
 RUNTIME_VALUES = ("pack", "js", "native", "hybrid")
 
 JS_FORBIDDEN = (

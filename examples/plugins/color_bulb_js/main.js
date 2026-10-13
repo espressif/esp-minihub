@@ -7,7 +7,8 @@
  * Devices page shows power / brightness / hue / saturation widgets, and
  * handles POST /api/devices/control via host.command.on(adapter, fn).
  *
- * Companion to examples/plugins/color_bulb (L3 C). Does not replace it.
+ * This is the JS (L2) replacement for the old examples/plugins/color_bulb L3 C
+ * demo (removed from the tree). See meter_plug_js for the plug equivalent.
  *
  * Requires Host bindings in components/minihub_js/minihub_js.c:
  *   host.point.register({ ..., params|props })

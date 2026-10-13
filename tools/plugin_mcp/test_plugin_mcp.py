@@ -27,14 +27,14 @@ class PluginMcpTests(unittest.TestCase):
         self.assertIn("unknown topic", text)
 
     def test_id_hyphen_rejected(self) -> None:
-        issues = validate_module_json({"id": "foo-bar", "kind": "pack", "runtime": "pack"})
+        issues = validate_module_json({"id": "foo-bar", "type": "pack", "runtime": "pack"})
         self.assertTrue(any("hyphen" in i["message"] or "invalid id" in i["message"] for i in issues))
 
     def test_inject_unknown_adapter(self) -> None:
         issues = validate_module_json(
             {
                 "id": "my_pack",
-                "kind": "pack",
+                "type": "pack",
                 "runtime": "pack",
                 "inject": {"adapter": "new_radio"},
             }

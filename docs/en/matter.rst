@@ -310,8 +310,8 @@ Information.
 
 Vendor plugins match ``props.manufacturer`` on that ``point_id``:
 
-* **Claim** — ``props.owner`` = plugin ``adapter`` name (demo
-  ``examples/plugins/matter_ota``). Cloud catalog is **not** required.
+* **Claim** — ``props.owner`` = plugin ``adapter`` name. Cloud catalog is
+  **not** required.
 * **OTA flag** — only after GET ``catalog_url`` succeeds, merge ``props.ota``.
 
 Start OTA with adapter commands ``ota`` / ``start_ota`` (``path`` /
@@ -324,8 +324,7 @@ fetched directly. Requires ``CONFIG_CHIP_DEVICE_ENABLE_DYNAMIC_SERVER`` and
 ``CONFIG_ESP_MATTER_OTA_PROVIDER_ENABLED`` (on in ``matter.defaults``).
 Matter-over-Thread end-devices are **Matter** points; see :doc:`thread`.
 
-``.mhub`` packing needs ``MINIHUB_PLUGIN_DIRS``; do **not** add
-``matter_ota`` to public Host ``store_preinstall``.
+``.mhub`` packing needs ``MINIHUB_PLUGIN_DIRS``.
 
 Who owns Wi-Fi?
 ---------------

@@ -13,9 +13,12 @@ in ``props.params``; ``minihub_point_set`` publishes ``point.updated``.
 ``minihub_point_resolve_by_type_param`` maps catalog ``(type, parameter)`` to
 the first registered device of that type.
 
-Static Host adapters call these functions directly; Store **L3**
-modules must use the vtable in :doc:`module_abi` instead. Adapter registration and
+Static Host adapters call these functions directly. Adapter registration and
 ``poll`` / ``handle_command`` are documented in :doc:`minihub_adapter`.
+
+.. only:: not hide_l3
+
+   Store **L3** modules must use the vtable in :doc:`module_abi` instead.
 
 .. include-build-file:: inc/minihub_core.inc
 

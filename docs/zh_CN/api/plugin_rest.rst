@@ -6,10 +6,15 @@ Store 插件 REST API
 概述
 ----
 
-HTTP JSON API，用于 L1/L2/L3 Store 模块的开发、调试、安装与运维；插件 RPC 的 HTTP 入口。
+HTTP JSON API，用于 L1/L2 Store 模块的开发、调试、安装与运维；插件 RPC 的 HTTP 入口。
 
 实现：components/minihub_web + minihub_store + minihub_module。
-需 Kconfig：CONFIG_MINIHUB_STORE、CONFIG_MINIHUB_DYNAMIC_MODULES（L3）。
+需 Kconfig：CONFIG_MINIHUB_STORE、CONFIG_MINIHUB_DYNAMIC_MODULES。
+
+.. only:: not hide_l3
+
+   同一套 API 也覆盖 L3 原生模块。加载它们需要
+   ``CONFIG_MINIHUB_DYNAMIC_MODULES``。
 
 Host 通用 REST 见 :doc:`host_rest`。
 
@@ -17,7 +22,12 @@ Host 通用 REST 见 :doc:`host_rest`。
 --------
 
 * 安装/升级/卸载不支持 multipart 上传 .mhub — 须先 POST /api/store/refresh，再从 catalog 安装。
-* kind 仅允许 module（L2/L3）或 pack（L1）。
+* type 仅允许 module（L2）或 pack（L1）。
+
+.. only:: not hide_l3
+
+   ``type: module`` 也覆盖 L3。
+
 * 默认 reload: true，成功后触发 :doc:`../architecture` 中的 Hub 软重载。
 
 
@@ -40,12 +50,14 @@ GET /api/modules
    ``runtime`` 取值：
 
    * ``js`` — L2 QuickJS （``main.js``）
-   * ``native`` — L3 ``.so``
-   * ``hybrid`` — 同时有原生与 ``main.js`` （可选 ``entry`` 为 ``js`` 或
-     ``native``）
 
    无法分类时省略该字段。L1 pack 在 ``GET /api/packs``，不是
    ``runtime: pack``。
+
+.. only:: not hide_l3
+
+   ``runtime`` 也可以是 ``native`` （L3 ``.so``）或 ``hybrid`` （同时有原生与
+   ``main.js`` ；可选 ``entry`` 为 ``js`` 或 ``native``）。
 
 POST /api/modules
 -----------------
@@ -70,7 +82,7 @@ POST /api/modules
        true 时卸载并删除 /store/modules/ID/。
 
    ``clear_load_guard`` (bool)
-       清除 .load_guard 后允许再次加载原生模块。
+       清除 .load_guard 后允许再次加载。
 
    ``reload`` (bool, optional)
        默认 true；操作成功后是否软重载 Hub。
@@ -90,7 +102,11 @@ POST /api/modules/ID/rpc
 
    ``POST /api/modules/ID/rpc``
 
-调用 L2/L3 模块的 minihub_module_rpc（若已实现）。
+调用 L2 模块的 RPC（若已实现）。
+
+.. only:: not hide_l3
+
+   L3 模块走 ``minihub_module_rpc`` 。
 
 .. container:: mh-api-block mh-api-parameters
 
@@ -148,7 +164,7 @@ GET /api/store/catalog
 
    **Returns**
 
-   * **HTTP 200** — JSON 数组；每项含 kind、id、version、url 等
+   * **HTTP 200** — JSON 数组；每项含 type、id、version、url 等
 
 POST /api/store/refresh
 -----------------------
@@ -179,7 +195,7 @@ POST /api/store/install
 
    **Parameters（JSON 请求体）**
 
-   ``kind`` (string, required)
+   ``type`` (string, required)
        module 或 pack。
 
    ``id`` (string, required)
@@ -196,7 +212,7 @@ POST /api/store/install
    **Returns**
 
    * **HTTP 200** — ``{"result":"ok"}``
-   * **HTTP 400** — 缺少 kind/id
+   * **HTTP 400** — 缺少 type/id
    * **HTTP 404** — catalog 或制品不存在
    * **HTTP 409** — 已安装且未走 upgrade
    * **HTTP 500** — 下载/解压/ABI 校验失败
@@ -208,7 +224,7 @@ POST /api/store/upgrade · POST /api/store/uninstall
 
    ``POST /api/store/upgrade · POST /api/store/uninstall``
 
-upgrade 用 catalog 新版本覆盖；uninstall 删除已安装条目。body：kind + id 必填；可选 reload，默认 true。
+upgrade 用 catalog 新版本覆盖；uninstall 删除已安装条目。body：type + id 必填；可选 reload，默认 true。
 
 GET / POST /api/store/config
 ----------------------------
@@ -232,5 +248,8 @@ GET 返回 custom_url、disable_default、当前 Store 基址。POST 写入 NVS�
 
 * 开发机打包：:doc:`../plugins/pack_and_catalog`
 * 工厂预装：:doc:`../production`
-* L3 ABI 不匹配时 install 失败 — 见 :doc:`module_abi`
+
+.. only:: not hide_l3
+
+   * L3 ABI 不匹配时 install 失败 — 见 :doc:`module_abi`
 

@@ -124,13 +124,12 @@ Install code
 遥测更新只通过 ``minihub_point_merge_params`` 合并 ``props.params``，因此同一
 点上的插件字段会保留。
 
-厂商插件（L2/L3）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
+厂商插件（L2）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
 ``catalog.json``），写在同一 ``point_id`` 上：
 
 * **认领** — 写入 ``props.owner`` = 插件 ``adapter`` 名。该槽在
-  ``adapters.json`` 为 ``enabled`` 时，总览把卡片挪到厂商分组（演示
-  ``examples/plugins/zigbee_ota``，文案见 ``ui.json`` ``filter_label``）。
-  **不需要** 云端目录。
+  ``adapters.json`` 为 ``enabled`` 时，总览把卡片挪到厂商分组（文案见
+  ``meta.json`` ``filter_label``）。**不需要** 云端目录。
 * **OTA 标记** — 仅在 GET ``catalog_url`` 成功后 merge ``props.ota``
   （``available``、``version``，可选 ``url`` / ``file`` / ``size``）。示例::
 
@@ -139,7 +138,7 @@ Install code
          "available": true,
          "version": "1.2.3",
          "url": "https://vendor.example/fw.bin",
-         "file": "/data/zigbee_ota/7c2c67fffe55d918.bin",
+         "file": "/data/ota/7c2c67fffe55d918.bin",
          "size": 524288
        }
      }

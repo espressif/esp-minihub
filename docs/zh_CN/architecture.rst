@@ -17,7 +17,7 @@
    |  MiniHub Host                                                    |
    |  minihub_web / minihub_mcp_*     Web 控制台、REST、MCP           |
    |  minihub_core / minihub_hub      点位、命令、规则、热重载        |
-   |  minihub_module                  Store .mhub (L2 JS / L3 .so)    |
+   |  minihub_module                  Store .mhub (L2 JS)             |
    +------------------------------------------------------------------+
                                   |
    +------------------------------------------------------------------+
@@ -35,6 +35,10 @@
 
    IP 上行：minihub_net — 见 :doc:`networking`。
 
+.. only:: not hide_l3
+
+   ``minihub_module`` 同时加载 L3 ``.so`` 包（以及 Hybrid）。
+
 设计原则
 --------
 
@@ -43,12 +47,16 @@ Matter、Thread、MQTT、Modbus）可以静态链入 Host。厂商云与 OEM 差
 插件或基于 Host 的二次开发交付。这样通用 Host 可以在不含第三方凭证的情况下编译。
 
 **点位是唯一的自动化 ABI。** 一台物理设备一条 point（``协议.设备``）。参数在
-``props.params``。适配器隐藏协议细节。规则对 ``sim.color_bulb`` 发
+``props.params``。适配器隐藏协议细节。规则对 ``sim.js_kitchen`` 发
 ``turn_on`` ，日后换成其它适配器只要沿用同一 ``point_id`` 即可。
 
 **软重载代替整机重启。** 改 ``adapters.json`` 、安装 ``.mhub`` 或开关模块都会走
-``minihub_hub_reload`` — 适配器停止、模块 ``dlclose`` ，再加载。Matter+Thread
+``minihub_hub_reload`` — 适配器停止后再加载。Matter+Thread
 可能重挂 CHIP；重载期间 MCP 可能返回 ``HUB_NOT_READY`` 。
+
+.. only:: not hide_l3
+
+   重载时也会 ``dlclose`` L3 模块，然后再加载。
 
 **两块可写 Flash 分区。** 通用 Host 把 ``storage`` 挂到 ``/data`` （Hub 配置），把
 ``modstore`` 挂到 ``/store`` （已装插件与 Web 控制台）。工装整机烧录会重写这两块；
@@ -65,7 +73,12 @@ JSON 编写：:doc:`data_model` （点位 / adapters / 规则）；类型目录�
 * ``minihub_config`` — 加载/保存 ``/data/config/*.json``
 * ``minihub_hub`` — 软重载编排
 * ``minihub_web`` — HTTP REST、Web 控制台、 ``/ws/events``
-* ``minihub_module`` — L2/L3 加载、ABI / Host 虚表
+* ``minihub_module`` — L2 加载
+
+.. only:: not hide_l3
+
+   ``minihub_module`` 也通过 ABI / Host 虚表加载 L3 模块。
+
 * ``minihub_pack`` — L1 配置包（ ``inject`` 合并）
 * ``minihub_store`` — 目录、安装/升级/卸载
 * ``minihub_net`` — 以太网 / Wi-Fi STA
@@ -89,9 +102,9 @@ JSON 编写：:doc:`data_model` （点位 / adapters / 规则）；类型目录�
      devices.csv        扁平化类型目录
      model/             可选上传的 devices.csv + parameters.csv
    /data/config/packs/  可选 L1 包暂存（因产品而异）
-   /store/modules/ID/   已安装 Store 模块（module.json、.so、main.js 等）
+   /store/modules/ID/   已安装 Store 模块（module.json、main.js 等）
    /data/web/           Host Web 控制台（index.html、login.html 等）
-   /data/tmp/           MHMD 解压 / 临时目录（模块加载器）
+   /data/tmp/           临时目录（模块加载器）
 
 NVS 保存 Wi-Fi 凭据、Store URL 覆盖、OTA 元数据等 — 完整 ``adapters.json`` 在
 LittleFS 上。
@@ -120,13 +133,17 @@ Hub 软重载
 
 1. ``minihub_config_reload()`` — 从 Flash 重读 JSON
 2. ``minihub_pack_reload()`` — 合并 L1 包到 adapters 视图
-3. 停止全部适配器； ``minihub_module_reload()`` — 卸载 L3、重扫 manifest
+3. 停止全部适配器； ``minihub_module_reload()`` — 重扫 manifest
 4. ``minihub_adapter_load_all()`` + ``start_all()``
 5. ``minihub_js_reload()`` — 重新执行 L2 ``setup(host)``
 6. ``minihub_rules_reload()`` + ``minihub_scenes_reload()``
 
-适配器生命周期锁防止在 ``dlclose`` 期间运行 ``adapter_poll`` 。Matter + Thread
+适配器生命周期锁避免重载期间运行 ``adapter_poll`` 。Matter + Thread
 构建可能在重载后重新将 CHIP 挂到 OpenThread。
+
+.. only:: not hide_l3
+
+   同一把锁也覆盖 L3 ``.so`` 的 ``dlclose`` 。
 
 数据流：命令
 ------------
@@ -144,7 +161,7 @@ Hub 软重载
 
 .. code-block:: text
 
-   POST /api/store/install { kind, id }
+   POST /api/store/install { type, id }
         → 下载 .mhub → 解压到 /store/modules/ID/
         → 可选 hub reload
         → minihub_module_load_all → minihub_module_entry → 注册适配器
@@ -194,15 +211,24 @@ Hub 软重载
      - :doc:`api/mcp`
    * - L2 JS host 对象
      - :doc:`api/js_host`
-   * - L3 模块与适配器 C API
-     - :doc:`api/module_abi`、:doc:`api/minihub_core`、:doc:`api/minihub_adapter`
-   * - L3 链接符号
-     - ``docs/module_sdk/host_export_allowlist.json``
    * - Store 打包 / 目录
      - :doc:`plugins/pack_and_catalog`
    * - 工厂 / OTA
      - :doc:`production`
 
-ABI 稳定性：L3 原生模块在 ``module.json`` 中声明 ``abi_version`` 、
-``core_api_min`` 与 ``core_api_max`` 。每次发布应配套固件与 mhub 包（见 :doc:`production`）。
-Host 导出符号变更须更新 allowlist 并重新生成符号（:doc:`plugins/develop_l3`）。
+.. only:: not hide_l3
+
+   .. list-table::
+      :header-rows: 1
+      :widths: 28 72
+
+      * - 接口
+        - 章节 / 产物
+      * - L3 模块与适配器 C API
+        - :doc:`api/module_abi`、:doc:`api/minihub_core`、:doc:`api/minihub_adapter`
+      * - L3 链接符号
+        - ``docs/module_sdk/host_export_allowlist.json``
+
+   ABI 稳定性：L3 原生模块在 ``module.json`` 中声明 ``abi_version`` 、
+   ``core_api_min`` 与 ``core_api_max`` 。每次发布应配套固件与 mhub 包（见 :doc:`production`）。
+   Host 导出符号变更须更新 allowlist 并重新生成符号（:doc:`plugins/develop_l3`）。

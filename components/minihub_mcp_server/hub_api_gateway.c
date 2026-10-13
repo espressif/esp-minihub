@@ -1053,10 +1053,10 @@ static esp_err_t dispatch_store_op(store_op_t op, const char *body, cJSON **out)
 {
     cJSON *req = body && body[0] ? cJSON_Parse(body) : NULL;
     if (!req) {
-        *out = err_obj("INVALID_ARG", "JSON body with kind and id required");
+        *out = err_obj("INVALID_ARG", "JSON body with type and id required");
         return ESP_OK;
     }
-    const cJSON *kind = cJSON_GetObjectItem(req, "kind");
+    const cJSON *kind = cJSON_GetObjectItem(req, "type");
     const cJSON *id = cJSON_GetObjectItem(req, "id");
     const cJSON *reload = cJSON_GetObjectItem(req, "reload");
     const cJSON *upgrade = cJSON_GetObjectItem(req, "upgrade");
@@ -1065,7 +1065,7 @@ static esp_err_t dispatch_store_op(store_op_t op, const char *body, cJSON **out)
 
     if (!cJSON_IsString(kind) || !cJSON_IsString(id)) {
         cJSON_Delete(req);
-        *out = err_obj("INVALID_ARG", "kind and id required");
+        *out = err_obj("INVALID_ARG", "type and id required");
         return ESP_OK;
     }
 

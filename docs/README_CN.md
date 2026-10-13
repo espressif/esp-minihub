@@ -19,7 +19,7 @@ REST/MCP/C/JS 契约 — 目标是不阅读 Core C 即可完成集成与扩展�
 | 理解方案与优势 | [introduction.rst](zh_CN/introduction.rst) → [architecture.rst](zh_CN/architecture.rst) |
 | 编译烧录 | [getting_started.rst](zh_CN/getting_started.rst) |
 | OEM Host 产品 | [host_customization.rst](zh_CN/host_customization.rst) → [production.rst](zh_CN/production.rst) |
-| Store 插件 (L1/L2/L3) | [plugins/overview.rst](zh_CN/plugins/overview.rst) |
+| Store 插件 (L1/L2) | [plugins/overview.rst](zh_CN/plugins/overview.rst) |
 | 仅 REST / 自动化 | [type_catalog.rst](zh_CN/type_catalog.rst) → [data_model.rst](zh_CN/data_model.rst) → [api/](zh_CN/api/index.rst) |
 | 参与贡献 | [contributing.rst](zh_CN/contributing.rst) |
 
@@ -53,8 +53,10 @@ HTML 输出：`docs/_build/en/esp32s31/html/` 与 `docs/_build/zh_CN/esp32s31/ht
 
 构建 HTML 时，类型目录快照会随站点发布到 `_static/catalog/`（CSV、设备图标、
 `STANDARD_TYPES*.md`、示例 `devices.json`）及 `_static/catalog.zip`，源文件来自
-`components/minihub_device_widget/`（Sphinx 配置阶段复制）。L3 Plugin SDK 头文件
-打成 `_static/module_sdk.zip`，在 `api/plugin_host.html` 提供下载。
+`components/minihub_device_widget/`（Sphinx 配置阶段复制）。
+`docs/_extensions/omit_elf_plugin_docs.py` 里 ``HIDE_L3`` 为 true 时，HTML
+不收录 L3 章节，以及包在 ``.. only:: not hide_l3`` 里的段落。改成
+``HIDE_L3 = False`` 后重新发布。``.rst`` 源文件保留。
 
 本地浏览示例：`docs/_build/zh_CN/esp32s31/html/index.html`。
 

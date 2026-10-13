@@ -56,7 +56,7 @@ Host Core 的依赖。
 
    适配器（如 Zigbee、Matter、BLE Mesh）发现设备后，为每个设备注册
    **恰好一个** ``minihub_point_t`` （Matter 按 endpoint）。点 id 如
-   ``zigbee.zb_7d4b``、``thread.matter_n2_ep1``、``sim.color_bulb``。
+   ``zigbee.zb_7d4b``、``thread.matter_n2_ep1``、``sim.js_kitchen``。
    Thread 适配器只做 Border Router，**不** 登记设备点，见 :doc:`thread`。
    实时参数、访问权限、可见性、实例上下界都存放在该点上的结构化 JSON
    里——典型为 ``props.params.<name> = { "value", 可选 access / visible / min /
@@ -127,12 +127,15 @@ Host Core 的依赖。
    * **L1** ``minihub_pack`` —— 注入已有适配器（不引入新射频协议栈）。
    * **L2** ``minihub_module`` —— JavaScript 插件（``main.js``，经 ``minihub_js``
      的 QuickJS）；可附带 ``web/``，由 ``/modules/ID/web/…`` 提供。
+
+.. only:: not hide_l3
+
    * **L3** ``minihub_module`` —— 运行时加载的原生 ``.so``。
 
-   可安装模块的目录即 **Store** （``minihub_store``）。演示放在
-   ``examples/plugins/`` （经 ``MINIHUB_PLUGIN_DIRS``）；公开 Host 的
-   ``store_preinstall`` 默认留空，除非有意内置出厂模块。模块订阅事件、调用
-   Host API、注册点——但绝不在 Core 中写入厂商令牌。
+可安装模块的目录即 **Store** （``minihub_store``）。演示放在
+``examples/plugins/`` （经 ``MINIHUB_PLUGIN_DIRS``）；公开 Host 的
+``store_preinstall`` 默认留空，除非有意内置出厂模块。模块订阅事件、调用
+Host API、注册点——但绝不在 Core 中写入厂商令牌。
 
 类型目录的运行时约定
 --------------------
@@ -201,5 +204,5 @@ API 速查
 * :doc:`data_model` —— 点位模型与 adapters / 场景。
 * :doc:`rules` —— ``when`` / ``if`` / ``then`` 与比较 ``op``。
 * :doc:`web_console` —— 替换或换肤 Web 控制台。
-* :doc:`plugins/index` —— 编写 L1/L2/L3 Store 模块。
+* :doc:`plugins/index` —— 编写 L1/L2 Store 模块。
 * :doc:`api/index` —— 完整 REST / JS / MCP / C ABI 参考。

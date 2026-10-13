@@ -539,8 +539,12 @@ GET /ws/events
    ``GET /ws/events``
 
 WebSocket 长连接，订阅 Hub 事件总线。每帧为 JSON，含 ``event_type``（字符串）
-及载荷。总线（``minihub_event_bus_publish`` / L3 ``event_publish``）上发布的
+及载荷。总线（``minihub_event_bus_publish``）上发布的
 **任意** 名称都会转发。插件与 OEM 固件可自定义类型。
+
+.. only:: not hide_l3
+
+   L3 模块用 ``event_publish`` 发布。
 
 Host 发布的 ``event_type``：
 

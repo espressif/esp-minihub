@@ -128,13 +128,13 @@ adapter sets top-level identity (not catalog params / Devices sliders):
 Telemetry updates merge **only** ``props.params`` via
 ``minihub_point_merge_params``, so plugin keys on the same point survive.
 
-Vendor plugins (L2/L3) match ``props.manufacturer`` (local filter, e.g.
+Vendor plugins (L2) match ``props.manufacturer`` (local filter, e.g.
 packed ``catalog.json``) on that same ``point_id``:
 
 * **Claim** — set ``props.owner`` to the plugin ``adapter`` name. Overview
   moves the card under the vendor section when that adapter slot is
-  ``enabled`` (demo ``examples/plugins/zigbee_ota``, label from ``ui.json``
-  ``filter_label``). Cloud catalog is **not** required for the claim.
+  ``enabled`` (label from ``meta.json`` ``filter_label``). Cloud catalog is
+  **not** required for the claim.
 * **OTA flag** — only after GET ``catalog_url`` succeeds, merge
   ``props.ota`` (``available``, ``version``, optional ``url`` / ``file`` /
   ``size``). Example::
@@ -144,7 +144,7 @@ packed ``catalog.json``) on that same ``point_id``:
          "available": true,
          "version": "1.2.3",
          "url": "https://vendor.example/fw.bin",
-         "file": "/data/zigbee_ota/7c2c67fffe55d918.bin",
+         "file": "/data/ota/7c2c67fffe55d918.bin",
          "size": 524288
        }
      }

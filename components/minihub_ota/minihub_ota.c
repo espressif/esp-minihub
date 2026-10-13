@@ -8,8 +8,10 @@
 #include "minihub_net.h"
 #include "minihub_task.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "esp_app_desc.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -455,6 +457,22 @@ static void url_ota_task(void *arg)
     vTaskDelete(NULL);
 }
 
+/* Version currently running: CONFIG_MINIHUB_VERSION when set, else the app
+ * descriptor version. Static string, valid for the lifetime of the firmware. */
+static const char *ota_running_version(void)
+{
+#ifdef CONFIG_MINIHUB_VERSION
+    if (CONFIG_MINIHUB_VERSION[0]) {
+        return CONFIG_MINIHUB_VERSION;
+    }
+#endif
+    const esp_app_desc_t *app = esp_app_get_description();
+    if (app && app->version[0]) {
+        return app->version;
+    }
+    return NULL;
+}
+
 esp_err_t minihub_ota_start_url(const char *url)
 {
     if (!url || url[0] == '\0') {
@@ -476,21 +494,28 @@ esp_err_t minihub_ota_start_url(const char *url)
     set_error(NULL);
     unlock();
 
-    size_t cap = strlen(url) + 32;
+    /* mac= identifies the device; cur_version= tells the deploy server which
+     * firmware this device is updating from. Send both, as /api/firmware does. */
+    const char *ver = ota_running_version();
+    size_t cap = strlen(url) + 32 + (ver ? strlen(ver) : 0) + 16;
     char *url_copy = malloc(cap);
-    if (url_copy && minihub_net_copy_url_with_mac(url, url_copy, cap) != ESP_OK) {
-        free(url_copy);
-        url_copy = NULL;
-    }
-    if (!url_copy) {
-        url_copy = strdup(url);
-    }
     if (!url_copy) {
         lock();
         s_state = MINIHUB_OTA_FAILED;
         set_error("no mem");
         unlock();
         return ESP_ERR_NO_MEM;
+    }
+    if (minihub_net_copy_url_with_mac(url, url_copy, cap) != ESP_OK) {
+        snprintf(url_copy, cap, "%s", url); /* no MAC available: plain URL */
+    }
+    if (ver && ver[0]) {
+        const char *sep = strchr(url_copy, '?') ? "&" : "?";
+        size_t used = strlen(url_copy);
+        int n = snprintf(url_copy + used, cap - used, "%scur_version=%s", sep, ver);
+        if (n < 0 || (size_t)n >= cap - used) {
+            url_copy[used] = '\0'; /* out of room: drop the cur_version query */
+        }
     }
 
     BaseType_t ok = minihub_task_create_psram(url_ota_task, "minihub_ota", 8192, url_copy, 5, NULL);

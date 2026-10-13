@@ -9,41 +9,31 @@ Prerequisites
 -------------
 
 * L1 / L2 packing does not require a Host firmware build
-* L3 **out-of-tree** cross-compile: an MHMD ``.so`` is enough (see
-  :doc:`develop_l3`); no firmware build
-* L3 **in-tree** with the Host: the product must enable
-  ``CONFIG_MINIHUB_DYNAMIC_MODULES`` (``dynamic_modules`` in ``app.yml``),
-  or CMake will not emit ``libadapter_*.so``
-* The Hub **running** L2 / L3 must also have been flashed with that option
+* The Hub running L2 must also have been flashed with
+  ``CONFIG_MINIHUB_DYNAMIC_MODULES``
 * ``pip install pyyaml`` at the repo root if scripts fail on PyYAML
 * Optional: ``export MINIHUB_PLUGINS_DEPLOY_DIR=~/workspace/minihub_store``
+
+.. only:: not hide_l3
+
+   * L3 **out-of-tree** cross-compile: an MHMD ``.so`` is enough (see
+     :doc:`develop_l3`); no firmware build
+   * L3 **in-tree** with the Host: the product must enable
+     ``CONFIG_MINIHUB_DYNAMIC_MODULES`` (``dynamic_modules`` in ``app.yml``),
+     or CMake will not emit ``libadapter_*.so``
+   * The Hub **running** L3 must also have been flashed with that option
 
 Pack commands
 -------------
 
 .. code-block:: bash
 
-   # L3 in-tree: firmware build (packs .mhub on success)
-   ./tools/build_firmware.py -app minihub build
-
-   # Compile every in-tree native plugin .so (does not pack)
-   ./tools/build_firmware.py -app minihub modules
-
-   # Pack only when in-tree .so already exists (does not compile C)
-   ./tools/build_firmware.py -app minihub pack
-
-   # Any tier: zip only; does not compile C
+   # Any tier by id.
    python3 tools/pack_store_module.py pack ID
    python3 tools/pack_store_module.py pack all
 
-   # Manual MHMD wrap (usually done inside pack / standalone CMake)
-   python3 tools/pack_store_module.py mhmd in.so out.so
-
-   # No-IDF build for examples/plugins L3 demos
-   python3 tools/build_plugin_standalone.py color_bulb
-
    # After .mhub files are in the store directory, rewrite catalog.json.
-   # Default: walk Stores/ESP32S31/ID/ID.mhub and Stores/Common/ID/ID.mhub.
+   # Default: walk Stores/<bucket>/ID/ID.mhub (L1/L2 live under Stores/Common).
    python3 tools/sync_store_catalog.py
    python3 tools/sync_store_catalog.py --deploy ~/workspace/minihub_store
 
@@ -51,31 +41,52 @@ Pack commands
    python3 tools/sync_store_catalog.py all
    python3 tools/store_server.py
 
-``./tools/build_firmware.py … modules`` compiles every native plugin that has
-both ``module.json`` and ``CMakeLists.txt`` (``examples/plugins/*/``
-plus ``MINIHUB_PLUGIN_DIRS``). It does not pack. ``./tools/build_firmware.py …
-pack`` wraps an existing ``libadapter_ID.so`` into MHMD and
-``Stores/ESP32S31/ID/ID.mhub`` (or ``Stores/Common`` when ``targets`` is
-``["ALL"]``), then refreshes ``catalog.json`` **size**. A successful
-firmware ``build`` runs that pack step automatically when those sources are on
-the CMake path.
+.. only:: not hide_l3
+
+   .. code-block:: bash
+
+      # Compile every in-tree native plugin and pack its .mhub
+      ./tools/build_firmware.py -app minihub modules
+
+      # One native plugin
+      ./tools/build_firmware.py -app minihub module ID
+
+      # Pack only when in-tree .so already exists (does not compile C)
+      ./tools/build_firmware.py -app minihub pack
+
+      # Manual MHMD wrap (usually done inside pack / standalone CMake)
+      python3 tools/pack_store_module.py mhmd in.so out.so
+
+      # No-IDF build for examples/plugins L3 demos
+      python3 tools/build_plugin_standalone.py color_bulb
+
+   ``./tools/build_firmware.py … modules`` compiles every native plugin that has
+   both ``module.json`` and ``CMakeLists.txt`` (``examples/plugins/*/``
+   plus ``MINIHUB_PLUGIN_DIRS``) and wraps each MHMD ``.so`` in the build tree.
+   That compile does not create a store plugin folder. A Host firmware
+   ``build`` does not compile those plugins. ``./tools/build_firmware.py …
+   pack ID`` wraps an existing ``libadapter_ID.so`` into a local MHMD ``.so``
+   and does not write ``Stores/Common/ID/`` or ``Stores/<chip>/``.
 
 After the ``.mhub`` files are already in the store directory (for example
-``~/workspace/minihub_store/Stores/ESP32S31/ble_mesh_pack/ble_mesh_pack.mhub``), run
+``~/workspace/minihub_store/Stores/Common/ble_mesh_pack/ble_mesh_pack.mhub``), run
 ``sync_store_catalog.py`` (``--from-store`` is the default). It walks each
-``Stores/ESP32S31/ID/ID.mhub`` and ``Stores/Common/ID/ID.mhub``, reads ``module.json`` (and ``ui.json`` when the zip has
-one), and writes ``catalog.json`` beside that package. Plugin sources are not required. The same
-script is inside ``module_sdk.zip``. ``GET /api/catalog`` aggregates those objects;
+``Stores/Common/ID/ID.mhub``, reads ``module.json`` and ``meta.json`` (the latter
+holds ``ui`` + ``capabilities``), and writes ``catalog.json`` beside that package.
+Plugin sources are not required.
+``GET /api/catalog`` aggregates those objects;
 copying a zip alone does not update the catalog. Default deploy root is
 ``MINIHUB_PLUGINS_DEPLOY_DIR`` or ``~/workspace/minihub_store``.
+
+.. only:: not hide_l3
+
+   The same script is inside ``module_sdk.zip``.
 
 Deploy layout
 -------------
 
 .. code-block:: text
 
-   DEPLOY/Stores/ESP32S31/ID/catalog.json
-   DEPLOY/Stores/ESP32S31/ID/ID.mhub
    DEPLOY/Stores/Common/ID/catalog.json
    DEPLOY/Stores/Common/ID/ID.mhub
 
@@ -85,7 +96,9 @@ Default ``store_server.py`` listen address: ``http://0.0.0.0:8080``
 Outer container format: **zip** (``MHUB_PACK_FORMAT``, default ``zip``). Host
 unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
 
-**MHMD** is the inner native image magic (``0x4D484D44``), not the outer zip name.
+.. only:: not hide_l3
+
+   **MHMD** is the inner native image magic (``0x4D484D44``), not the outer zip name.
 
 ``catalog.json`` entry (generated by ``sync_store_catalog.py``)
 -----------------------------------------------------------------
@@ -93,29 +106,33 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
 .. code-block:: json
 
    {
-     "kind": "module",
-     "id": "color_bulb",
-     "name": "Color Bulb (simulated)",
+     "type": "module",
+     "id": "color_bulb_js",
+     "name": "Color Bulb (JS)",
      "version": "0.1.0",
-     "targets": ["ESP32S31"],
-     "url": "/files/Stores/ESP32S31/color_bulb/color_bulb.mhub",
-     "adapter": "color_bulb",
-     "size": 3762,
-     "binary_size": 12000
+     "targets": ["ALL"],
+     "url": "/files/Stores/Common/color_bulb_js/color_bulb_js.mhub",
+     "adapter": "color_bulb_js",
+     "size": 3762
    }
 
-* ``kind`` — ``module`` for L2/L3; L1 config-only packs may appear as ``pack``
+* ``type`` — ``module`` for L2; L1 config-only packs may appear as ``pack``
   (``module``/``pack`` are interchangeable only for JSON-only items)
 * ``url`` — path or absolute HTTP URL of the ``.mhub``
-* ``targets`` — chip folder names, the same strings as ``Firmwares/<chip>/``
-  (for example ``ESP32S31``), or ``ALL`` for a JS module. Copied from
-  ``module.json``. An explicit list is kept. When the field is omitted, pack
-  writes ``["ALL"]`` for a JS module and ``["ESP32S31"]`` for every other
-  module
+* ``targets`` — lowercase chip folder names, the same strings as the firmware
+  directories (for example ``esp32s31``), or ``ALL`` for a JS module. Copied
+  from ``module.json``. A concrete chip is lowercased; ``ALL`` stays ``ALL``.
+  When the field is omitted, pack writes ``["ALL"]`` for a JS module and
+  ``["esp32s31"]`` for every other module
 * ``adapter`` — optional; Host creates an ``adapters.json`` slot on install
 * ``size`` — **outer zip** byte length (must match the ``.mhub`` on disk;
   ``pack`` rewrites this)
-* ``binary_size`` — inner MHMD ``.so`` size (not the zip)
+
+.. only:: not hide_l3
+
+   * ``type`` is also ``module`` for L3
+   * ``binary_size`` — inner MHMD ``.so`` size (not the zip). An L3 catalog
+     id looks like ``color_bulb`` with ``targets: ["esp32s31"]``.
 
 Install on a running Hub
 ------------------------
@@ -135,11 +152,11 @@ Install on a running Hub
    curl -X POST http://$HUB/api/store/refresh
    curl -X POST http://$HUB/api/store/install \
      -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"color_bulb"}'
+     -d '{"type":"module","id":"color_bulb"}'
 
    curl -X POST http://$HUB/api/hub/reload
 
-L1 packs use ``{"kind":"pack","id":"my_pack"}``.
+L1 packs use ``{"type":"pack","id":"my_pack"}``.
 
 Verify installation
 -------------------
@@ -160,11 +177,11 @@ Upgrade:
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/upgrade -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"color_bulb"}'
+     -d '{"type":"module","id":"color_bulb"}'
 
 Uninstall:
 
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/uninstall -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"color_bulb"}'
+     -d '{"type":"module","id":"color_bulb"}'

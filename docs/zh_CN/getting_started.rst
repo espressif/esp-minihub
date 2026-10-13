@@ -90,18 +90,25 @@ Store 插件快速路径
 ------------------
 
 1. 新增 ``examples/plugins/ID/`` （或通过 ``MINIHUB_PLUGIN_DIRS``
-   指向厂商仓库；见 :doc:`plugins/develop_l1` 、
-   :doc:`plugins/develop_l2` 或 :doc:`plugins/develop_l3` ）
+   指向厂商仓库；见 :doc:`plugins/develop_l1` 或
+   :doc:`plugins/develop_l2` ）
 2. ``python3 tools/pack_store_module.py pack ID``
 3. 本机运行 ``python3 tools/store_server.py`` （Hub 通过局域网拉包，不是在设备上跑）
 4. Hub：``POST /api/store/config``，``custom_url`` 指向该服务
 5. ``POST /api/store/refresh``，再 ``POST /api/store/install``，body 为
-   ``{"kind":"module","id":"ID"}`` （L1 用 ``"kind":"pack"``；或 Web UI → Store）
+   ``{"type":"module","id":"ID"}`` （L1 用 ``"type":"pack"``；或 Web UI → Store）
+
+.. only:: not hide_l3
+
+   L3 原生模块见 :doc:`plugins/develop_l3` 。打包前先编译 ``.so`` 。
 
 新类型 / 控件：改 Host ``model/*.csv`` 后重编，或在已运行 Hub 上
 ``PUT /api/dev/catalog/…`` （:doc:`type_catalog`）。演示：L1
-``examples/plugins/ble_mesh_pack``，L2 ``color_bulb_js``，L3
-``color_bulb`` / ``meter_plug``。
+``examples/plugins/ble_mesh_pack``，L2 ``color_bulb_js``。
+
+.. only:: not hide_l3
+
+   L3 演示：``examples/plugins/color_bulb``、``examples/plugins/meter_plug``。
 
 OEM Host 产品见 :doc:`host_customization`。
 

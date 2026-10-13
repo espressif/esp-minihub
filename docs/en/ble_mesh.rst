@@ -115,13 +115,13 @@ Telemetry (including CTL temperature / lightness) uses
 the whole ``props`` object, or uuid / manufacturer / ``owner`` / ``ota`` are
 wiped.
 
-Vendor plugins (L2/L3) match ``props.manufacturer`` (local filter, e.g.
+Vendor plugins (L2) match ``props.manufacturer`` (local filter, e.g.
 packed ``catalog.json``) on that same ``point_id``:
 
 * **Claim** — set ``props.owner`` to the plugin ``adapter`` name. Overview
   moves the card under the vendor section when that adapter slot is
-  ``enabled`` (demo ``examples/plugins/ble_mesh_ota``, label from ``ui.json``
-  ``filter_label``). Cloud catalog is **not** required for the claim.
+  ``enabled`` (label from ``meta.json`` ``filter_label``). Cloud catalog is
+  **not** required for the claim.
 * **OTA flag** — only after GET ``catalog_url`` succeeds, merge
   ``props.ota`` (``available``, ``version``, optional ``url`` / ``file`` /
   ``size``). Example::
@@ -131,7 +131,7 @@ packed ``catalog.json``) on that same ``point_id``:
          "available": true,
          "version": "1.2.3",
          "url": "https://vendor.example/fw.bin",
-         "file": "/data/ble_mesh_ota/aabbccddeeff0011.bin",
+         "file": "/data/ota/aabbccddeeff0011.bin",
          "size": 524288
        }
      }
@@ -142,6 +142,5 @@ Start Mesh Firmware Update / BLOB with adapter commands ``ota`` or ``start_ota``
 wired, these return ``ESP_ERR_NOT_SUPPORTED`` with a clear log — plugins can
 still advertise ``props.ota`` now.
 
-``.mhub`` packing happens only when ``MINIHUB_PLUGIN_DIRS`` includes
-``examples/plugins`` (or that plugin dir). Do **not** add ``ble_mesh_ota`` to
-public Host ``store_preinstall``.
+``.mhub`` packing happens only when ``MINIHUB_PLUGIN_DIRS`` includes that
+plugin dir.

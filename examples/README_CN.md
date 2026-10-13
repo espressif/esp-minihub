@@ -23,16 +23,16 @@ Host 已有点（`owner` / `ota`）。
 
 ```bash
 export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"
-python3 tools/pack_store_module.py pack <id>    # 或 pack all
+python3 tools/pack_store_module.py pack <id>    # 或 pack all（默认跳过原生）
 python3 tools/sync_store_catalog.py
 python3 tools/store_server.py --port 8080
 ```
 
-Hub：Store `custom_url` → 刷新 → 安装。REST 的 `kind`：L1 为 `pack`，L2/L3 为
+Hub：Store `custom_url` → 刷新 → 安装。REST 的 `type`：L1 为 `pack`，L2/L3 为
 `module`。然后 `POST /api/hub/reload`。
 
-L3 还需要对应 `.so`。跟固件一起编：在 `./tools/build_firmware.py … build`
-**之前** 导出 `MINIHUB_PLUGIN_DIRS`。不编 IDF 工程（需要 `riscv32-esp-elf-gcc`
+L3 还需要对应 `.so`。仓库内编译：在 `./tools/build_firmware.py modules`
+**之前** 导出 `MINIHUB_PLUGIN_DIRS`。Host 的 `build` 不编译原生插件。不编 IDF 工程（需要 `riscv32-esp-elf-gcc`
 和 `cmake`；MHMD 文件在 `plugins/<id>/build/<id>.so`）：
 
 ```bash
@@ -40,7 +40,7 @@ python3 tools/build_plugin_standalone.py color_bulb
 ```
 
 然后再按上面打包。L1/L2 只打 zip，不必编固件。L3 需要 `.so`
-（`build_plugin_standalone.py` 或带 `MINIHUB_PLUGIN_DIRS` 的 Host 构建）。
+（`build_plugin_standalone.py` 或 `./tools/build_firmware.py modules`）。
 
 新建模块脚手架：`python3 tools/new_store_module.py --tier l1|l2|l3 --id …`
 (默认写到 `examples/plugins/`；厂商仓库用 `--out` / `MINIHUB_PLUGIN_DIRS`)。

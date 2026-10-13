@@ -40,7 +40,7 @@ Host 当前 BLE Mesh **客户端** 绑定 OnOff / Level / Lightness / CTL。这�
 
 | 文件 | 作用 |
 |------|------|
-| `module.json` | 清单（`kind`/`runtime`: `pack`）+ `inject` |
+| `module.json` | 清单（`type`/`runtime`: `pack`）+ `inject` |
 | `README.md` / `README_CN.md` | 本说明 |
 
 打包即 zip `module.json`。Store 安装后 Host 拷到
@@ -60,7 +60,7 @@ Hub：Store `custom_url` → 刷新 → 安装。REST：
 ```bash
 curl -X POST http://$HUB/api/store/install \
   -H 'Content-Type: application/json' \
-  -d '{"kind":"pack","id":"ble_mesh_pack"}'
+  -d '{"type":"pack","id":"ble_mesh_pack"}'
 curl -X POST http://$HUB/api/hub/reload
 ```
 

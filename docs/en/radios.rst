@@ -47,7 +47,7 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
        node one point
      - Basic 0x0004 / 0x0005, …
      - Stub (``NOT_SUPPORTED``)
-     - ``examples/plugins/zigbee_ota``
+     - —
    * - :doc:`ble_mesh`
      - ``ble_mesh.bm_XXXX``, one
        node one point
@@ -55,7 +55,7 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
        ``uuid``
      - Stub (Firmware Update /
        BLOB)
-     - ``examples/plugins/ble_mesh_ota``
+     - —
    * - :doc:`matter`
      - ``{transport}.matter_n{node}_ep{ep}``
        **per endpoint**
@@ -63,7 +63,7 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
        ``node_id``
      - CSA Provider ``0x0029`` +
        BDX
-     - ``examples/plugins/matter_ota``
+     - —
    * - :doc:`thread`
      - **no** device points
      - —

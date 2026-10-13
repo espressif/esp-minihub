@@ -74,18 +74,22 @@ ignored; see :ref:`store-preinstall`. Packing: :doc:`plugins/pack_and_catalog`.
 .. code-block:: yaml
 
    store_preinstall:
-     - color_bulb
-
-In-tree L3 needs ``CONFIG_MINIHUB_DYNAMIC_MODULES`` and ``build`` (emits the
-``.so`` and packs). When artifacts already exist:
-
-.. code-block:: bash
-
-   ./tools/build_firmware.py -app minihub pack
-   python3 tools/pack_store_module.py pack all
-   ./tools/build_firmware.py -app minihub -p PORT flash
+     - color_bulb_js
 
 Or flash ``minihub_merged.bin`` / ``storage-flash`` / ``modstore-flash`` on the jig.
+
+.. only:: not hide_l3
+
+   In-tree L3 needs ``CONFIG_MINIHUB_DYNAMIC_MODULES`` and ``build`` (emits the
+   ``.so`` and packs). When artifacts already exist:
+
+   .. code-block:: bash
+
+      ./tools/build_firmware.py -app minihub pack
+      ./tools/build_firmware.py -app minihub -p PORT flash
+
+   The JS id ``color_bulb_js`` above is listed under ``store_preinstall`` the
+   same way.
 
 Provisioning at scale
 ---------------------
@@ -124,12 +128,14 @@ the bootloader returns to the previous slot. Details: :doc:`ota`.
 Store vs Host
 -------------
 
-An L3 ``.so`` resolves Host symbols through the Plugin SDK and export
-allowlist; it is not tied to a particular firmware build. ``module.json``
-``abi_version`` and ``core_api_min`` / ``core_api_max`` must bracket the running
-Host, and the chip architecture must match. You do not rebuild modules for every
-firmware release. There is no separate Host-version table: a module fits when
-those three fields bracket the running Host. Contract: :doc:`api/module_abi`.
+.. only:: not hide_l3
+
+   An L3 ``.so`` resolves Host symbols through the Plugin SDK and export
+   allowlist; it is not tied to a particular firmware build. ``module.json``
+   ``abi_version`` and ``core_api_min`` / ``core_api_max`` must bracket the running
+   Host, and the chip architecture must match. You do not rebuild modules for every
+   firmware release. There is no separate Host-version table: a module fits when
+   those three fields bracket the running Host. Contract: :doc:`api/module_abi`.
 
 The field catalog is still ``catalog.json`` + ``.mhub``; factory preinstall is
 above.

@@ -14,5 +14,11 @@ Store 插件开发
    overview
    develop_l1
    develop_l2
-   develop_l3
    pack_and_catalog
+
+.. only:: not hide_l3
+
+   .. toctree::
+      :maxdepth: 2
+
+      develop_l3

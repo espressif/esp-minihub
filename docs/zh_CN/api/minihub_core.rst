@@ -13,8 +13,12 @@ Core **不按设备类型定义结构**：一台物理设备一条 ``minihub_poi
 ``minihub_point_resolve_by_type_param`` 把目录 ``(类型, 参数)`` 映到该类型
 最先登记的设备。
 
-Host 内静态适配器直接调用本页 API；Store **L3** 模块须改用 :doc:`module_abi` 虚表。
+Host 内静态适配器直接调用本页 API。
 适配器注册与 ``poll`` / ``handle_command`` 见 :doc:`minihub_adapter`。
+
+.. only:: not hide_l3
+
+   Store **L3** 模块须改用 :doc:`module_abi` 虚表。
 
 .. include-build-file:: inc/minihub_core.inc
 

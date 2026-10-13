@@ -23,16 +23,17 @@ point with `merge_props` (`owner` / `ota`).
 
 ```bash
 export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"
-python3 tools/pack_store_module.py pack <id>    # or: pack all
+python3 tools/pack_store_module.py pack <id>    # or: pack all (skips native)
 python3 tools/sync_store_catalog.py
 python3 tools/store_server.py --port 8080
 ```
 
-On the Hub: Store `custom_url` → refresh → install. REST `kind` is `pack` for
+On the Hub: Store `custom_url` → refresh → install. REST `type` is `pack` for
 L1, `module` for L2/L3. Then `POST /api/hub/reload`.
 
 L3 also needs a matching `.so`. In-tree: export `MINIHUB_PLUGIN_DIRS` **before**
-`./tools/build_firmware.py … build`. Without an IDF project (needs
+`./tools/build_firmware.py modules`. A Host `build` does not compile native
+plugins. Without an IDF project (needs
 `riscv32-esp-elf-gcc` and `cmake`; MHMD file is `plugins/<id>/build/<id>.so`):
 
 ```bash
@@ -40,7 +41,7 @@ python3 tools/build_plugin_standalone.py color_bulb
 ```
 
 Then pack as above. L1/L2 zip only — no firmware compile. L3 needs a
-`.so` (`build_plugin_standalone.py` or Host build with `MINIHUB_PLUGIN_DIRS`).
+`.so` (`build_plugin_standalone.py` or `./tools/build_firmware.py modules`).
 
 Scaffold for a new module: `python3 tools/new_store_module.py --tier l1|l2|l3 --id …`
 (default destination is `examples/plugins/`; vendor trees use `--out` / `MINIHUB_PLUGIN_DIRS`).

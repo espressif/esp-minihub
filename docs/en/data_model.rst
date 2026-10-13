@@ -14,7 +14,7 @@ MiniHub Core works on **points**, not on C structs for lamps or switches:
 
 * **One physical device = one** ``minihub_point_t`` (Matter is **one
   endpoint** — see :doc:`matter`)
-* ``point_id`` = ``protocol.device`` (e.g. ``sim.color_bulb``,
+* ``point_id`` = ``protocol.device`` (e.g. ``sim.js_kitchen``,
   ``zigbee.zb_7d4b``, ``thread.matter_n2_ep1``)
 * Live parameters live on that point under ``props.params.<name>``
 * ``type`` is a string (``light`` / ``switch`` / …) — **not** a closed Core enum
@@ -40,16 +40,16 @@ MiniHub Core works on **points**, not on C structs for lamps or switches:
           \                              /
            UI = catalog ∩ live props.params
 
-Do **not** split one device into many points (wrong: ``sim.color_bulb.brightness``).
+Do **not** split one device into many points (wrong: ``sim.js_kitchen.brightness``).
 
 Live point example (``GET /api/points``):
 
 .. code-block:: json
 
    {
-     "point_id": "sim.color_bulb",
+     "point_id": "sim.js_kitchen",
      "type": "light",
-     "adapter": "color_bulb",
+     "adapter": "color_bulb_js",
      "value": "on",
      "online": true,
      "props": {
@@ -274,9 +274,13 @@ Fields the Host reads per adapter:
     * ``writable`` — true allows writes
     * ``batch_as_props`` — true stores a register batch in point ``props``
 
-Store modules (L2/L3) add their own key, for example ``my_module``. Install creates
+Store modules (L2) add their own key, for example ``my_module``. Install creates
 the slot if missing. L1 packs **merge** ``inject`` into the named adapter block
 (see :doc:`plugins/develop_l1`).
+
+.. only:: not hide_l3
+
+   L3 modules add their own adapter key the same way.
 
 Do **not** put vendor cloud tokens in the generic Host factory JSON. Persist them via
 the module (NVS / module-private files) after the user logs in.
@@ -299,7 +303,7 @@ Scenes (``scenes.json``)
          "id": "all_off",
          "name": "All off",
          "commands": [
-           { "point_id": "sim.color_bulb", "cmd": "turn_off", "delay_ms": 0 }
+           { "point_id": "sim.js_kitchen", "cmd": "turn_off", "delay_ms": 0 }
          ]
        }
      ]
@@ -310,7 +314,7 @@ Invoke: ``POST /api/scenes/invoke`` with ``{"scene_id":"all_off"}``.
 Events
 ------
 
-Adapters and JS/native modules publish on the Hub event bus. The Web UI
+Adapters and JS modules publish on the Hub event bus. The Web UI
 subscribes at ``GET /ws/events``. Rules listen to ``point.updated``. Event
 type names: :doc:`api/host_rest` (``GET /ws/events``). You do not register
 WebSocket handlers in a plugin — publish points/commands and the Hub forwards
@@ -325,4 +329,7 @@ Related
 * End-to-end flow: :doc:`architecture_overview`
 * Matter commissioning REST: :doc:`matter`
 * L1 inject merge: :doc:`plugins/develop_l1`
-* L3 plugins: :doc:`plugins/develop_l3`
+
+.. only:: not hide_l3
+
+   * L3 plugins: :doc:`plugins/develop_l3`

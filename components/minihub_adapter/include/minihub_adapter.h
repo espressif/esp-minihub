@@ -137,6 +137,35 @@ esp_err_t minihub_adapter_reload_all(const cJSON *config);
 esp_err_t minihub_adapter_start_poll_task(void);
 
 /**
+ * @brief Framework poll hook type
+ *
+ * Hooks are invoked once per adapter_poll_task tick (~5 s), AFTER the lifecycle
+ * lock is released, so they must be non-blocking and must not take the lock
+ * (e.g. only notify another task). A blocking hook would delay adapter polling
+ * and hub reloads.
+ */
+typedef void (*minihub_adapter_poll_hook_t)(void);
+
+/**
+ * @brief Register a lightweight poll hook invoked every framework tick
+ *
+ * @param hook Non-blocking callback
+ *
+ * @return
+ *     - ESP_OK: registered / already registered
+ *     - ESP_ERR_INVALID_ARG: hook is NULL
+ *     - ESP_ERR_NO_MEM: hook table full
+ */
+esp_err_t minihub_adapter_register_poll_hook(minihub_adapter_poll_hook_t hook);
+
+/**
+ * @brief Unregister a previously registered poll hook
+ *
+ * @param hook Hook previously passed to minihub_adapter_register_poll_hook()
+ */
+esp_err_t minihub_adapter_unregister_poll_hook(minihub_adapter_poll_hook_t hook);
+
+/**
  * @brief Serialize adapter lifecycle with stop/load/unload
  *
  * Hub reload should hold this lock across stop_all → module_reload → load/start

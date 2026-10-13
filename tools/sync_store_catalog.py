@@ -3,10 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Write per-plugin ``catalog.json`` next to each packed ``.mhub``.
 
-A concrete chip (for example ``ESP32S31``) lives in ``Stores/ESP32S31/<id>/``.
-``targets`` of ``["ALL"]`` stays in ``Stores/Common/<id>/``. Several concrete
-chips get one copy in each chip directory. Comparison is case-insensitive;
-the directory name is the uppercase chip used by ``Firmwares/``.
+Every module lives under one ``Stores/<bucket>/<id>/`` folder. L1/L2 use
+``Common``; native and hybrid use the chip from ``targets`` (``ALL``
+collapses to ``Common``). ``targets`` is the chip filter for ``?chip=``.
 
 Default (no args, or ``--from-store``): scan ``DEPLOY/Stores/<bucket>/<id>/<id>.mhub``
 only — no plugin sources, no ``MINIHUB_PLUGIN_DIRS`` — and move a package
@@ -36,17 +35,17 @@ from store_paths import (  # noqa: E402
     ROOT,
     iter_module_source_dirs,
     iter_store_plugin_dirs,
-    module_deploy_dirs,
     module_mhmd_path,
     module_source_dir,
+    normalize_chip_folders,
     prune_plugin_dirs,
     resolve_deploy_dir,
-    store_buckets,
 )
 
-# Optional ABI contract: when present, every plugin catalog carries an ``abi``
-# block (abi_version + per-symbol host hashes). Missing tools/contract degrade
-# gracefully to a catalog without the block (server treats it as legacy).
+# Native and hybrid modules link Host symbols and must carry an ``abi`` block
+# (abi_version + the host symbol hashes this package links) for the server's
+# compatibility check. JS and config-only (``pack``) modules are ABI-independent
+# and omit the ``abi`` block entirely.
 try:
     from abi_contract_lib import build_host_symbols, parse_abi_version, plugin_symbol_block
 except Exception:  # pragma: no cover - optional
@@ -73,9 +72,7 @@ def _abi_block(mhub: Path) -> dict | None:
     syms = _host_symbols()
     if not syms or plugin_symbol_block is None:
         return None
-    block = plugin_symbol_block(mhub, syms)
-    if not block:
-        return None
+    block = plugin_symbol_block(mhub, syms) or {}
     version = parse_abi_version() if parse_abi_version else 1
     return {"abi_version": version, "symbols": block}
 
@@ -148,22 +145,29 @@ def binary_size_from_mhub(pkg: Path, module_id: str) -> int | None:
 
 # Same chip-folder string as Firmwares/<chip>/ and /api/firmware "targets".
 # JS modules are not tied to one chip image, so an omitted list is ALL.
-DEFAULT_PLUGIN_TARGETS = ["ESP32S31"]
+DEFAULT_PLUGIN_TARGETS = ["esp32s31"]
 DEFAULT_JS_PLUGIN_TARGETS = ["ALL"]
+
+
+def _normalize_target(item: str) -> str:
+    text = item.strip()
+    if text.upper() == "ALL" or text == "*":
+        return "ALL"
+    return text.lower()
 
 
 def plugin_targets(manifest: dict, module_dir: Path | None = None) -> list[str]:
     """Chip list for catalog.json and the packaged module.json.
 
-    ``targets`` is a list of chip folder names. A single string is wrapped.
-    An explicit list is kept as written. An omitted or empty value becomes
-    ``ALL`` for a JS module and ``ESP32S31`` for every other module.
+    ``targets`` is a list of lowercase chip folder names. A single string is
+    wrapped. ``ALL`` stays ``ALL``. An omitted or empty value becomes ``ALL``
+    for a JS module and ``esp32s31`` for every other module.
     """
     raw = manifest.get("targets")
     if isinstance(raw, str):
         raw = [raw]
     if isinstance(raw, list):
-        out = [item.strip() for item in raw if isinstance(item, str) and item.strip()]
+        out = [_normalize_target(item) for item in raw if isinstance(item, str) and item.strip()]
         if out:
             return out
     js = False
@@ -174,6 +178,27 @@ def plugin_targets(manifest: dict, module_dir: Path | None = None) -> list[str]:
     if js:
         return list(DEFAULT_JS_PLUGIN_TARGETS)
     return list(DEFAULT_PLUGIN_TARGETS)
+
+
+def store_buckets_for_module(manifest: dict, module_dir: Path) -> list[str]:
+    """L1 and L2 are stored under ``Stores/Common``.
+
+    A native or hybrid module is not a store package: it gets no plugin
+    folder, including ``Stores/Common`` and ``Stores/<chip>``.
+    """
+    if _module_is_native_package(manifest, module_dir):
+        return []
+    return ["Common"]
+
+
+def _module_is_native_package(manifest: dict, module_dir: Path) -> bool:
+    if is_hybrid_module(manifest) or manifest.get("runtime") == "native":
+        return True
+    if manifest.get("binary"):
+        return True
+    if is_config_only(manifest) or is_js_module(manifest, module_dir):
+        return False
+    return (module_dir / "CMakeLists.txt").is_file()
 
 
 def sha256_file(path: Path) -> str:
@@ -198,16 +223,18 @@ def catalog_entry(
     mid = manifest["id"]
     targets = plugin_targets(manifest, module_dir)
     if not bucket:
-        bucket = store_buckets(targets)[0]
+        chosen = store_buckets_for_module(manifest, module_dir)
+        bucket = chosen[0] if chosen else ""
     entry: dict = {
-        "kind": "module",
+        "type": "module",
         "id": mid,
         "name": manifest.get("name", mid),
         "version": manifest.get("version", "1.0.0"),
         "vendor": manifest.get("vendor", ""),
         "description": manifest.get("description") or manifest.get("comment", ""),
-        "url": f"/files/Stores/{bucket}/{mid}/{mid}.mhub",
     }
+    if bucket:
+        entry["url"] = f"/files/Stores/{bucket}/{mid}/{mid}.mhub"
     adapter = manifest.get("adapter")
     if not adapter and isinstance(manifest.get("inject"), dict):
         adapter = manifest["inject"].get("adapter")
@@ -220,9 +247,12 @@ def catalog_entry(
     if pkg.is_file():
         entry["size"] = pkg.stat().st_size
         entry["sha256"] = sha256_file(pkg)
-        abi_block = _abi_block(pkg)
-        if abi_block:
-            entry["abi"] = abi_block
+        # JS and config-only (pack) modules are ABI-independent: skip the abi
+        # block so the catalog states it plainly. Native/hybrid keep it.
+        if not (is_js_module(manifest, module_dir) or is_config_only(manifest)):
+            abi_block = _abi_block(pkg)
+            if abi_block:
+                entry["abi"] = abi_block
 
     so = module_mhmd_path(mid)
     if so.is_file():
@@ -255,46 +285,11 @@ def catalog_entry(
         av = manifest.get("adapter_version") or read_adapter_version(module_dir, mid)
         if av:
             entry["adapter_version"] = av
-        if isinstance(manifest.get("ui"), dict):
-            entry["ui"] = manifest["ui"]
-        else:
-            ui_name = manifest.get("ui_file") or "ui.json"
-            ui_path = module_dir / ui_name
-            if ui_path.is_file():
-                try:
-                    entry["ui"] = json.loads(ui_path.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError) as exc:
-                    print(f"WARN: bad {ui_path}: {exc}", file=sys.stderr)
-        if isinstance(manifest.get("capabilities"), list):
-            entry["capabilities"] = manifest["capabilities"]
     else:
         entry["runtime"] = manifest.get("runtime") or "native"
         av = manifest.get("adapter_version") or read_adapter_version(module_dir, mid)
         if av:
             entry["adapter_version"] = av
-        if isinstance(manifest.get("ui"), dict):
-            entry["ui"] = manifest["ui"]
-        else:
-            ui_name = manifest.get("ui_file") or "ui.json"
-            ui_path = module_dir / ui_name
-            if ui_path.is_file():
-                try:
-                    entry["ui"] = json.loads(ui_path.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError) as exc:
-                    print(f"WARN: bad {ui_path}: {exc}", file=sys.stderr)
-        if isinstance(manifest.get("capabilities"), list):
-            entry["capabilities"] = manifest["capabilities"]
-
-    if is_js_module(manifest, module_dir):
-        if isinstance(manifest.get("ui"), dict):
-            entry["ui"] = manifest["ui"]
-        elif (module_dir / "ui.json").is_file():
-            try:
-                entry["ui"] = json.loads((module_dir / "ui.json").read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                pass
-        if isinstance(manifest.get("capabilities"), list):
-            entry["capabilities"] = manifest["capabilities"]
 
     entry["targets"] = targets
 
@@ -318,22 +313,24 @@ def write_aggregate(path: Path, catalog: list[dict]) -> Path:
     return path
 
 
-def _read_mhub(pkg: Path) -> tuple[dict, dict | None] | None:
+def _read_mhub(pkg: Path) -> dict | None:
     try:
         with zipfile.ZipFile(pkg) as zf:
             if "module.json" not in zf.namelist():
                 print(f"WARN: {pkg} has no module.json", file=sys.stderr)
                 return None
             manifest = json.loads(zf.read("module.json"))
-            ui_blob = None
-            if "ui.json" in zf.namelist():
-                ui_blob = json.loads(zf.read("ui.json"))
     except (OSError, zipfile.BadZipFile, json.JSONDecodeError) as exc:
         print(f"WARN: skip {pkg}: {exc}", file=sys.stderr)
         return None
     if not isinstance(manifest, dict):
         return None
-    return manifest, ui_blob
+    return manifest
+
+
+def _drop_unpublished_plugin(deploy: Path, module_id: str) -> None:
+    """Remove an L3 package from every store folder. Do not recreate one."""
+    prune_plugin_dirs(deploy, module_id, [])
 
 
 def _place_catalogs(
@@ -342,13 +339,19 @@ def _place_catalogs(
     deploy: Path,
     *,
     move_packages: bool,
-    ui_blob: dict | None = None,
 ) -> dict | None:
-    """Write ``catalog.json`` in each bucket. Optionally move the ``.mhub``."""
+    """Write ``catalog.json`` in each bucket. Optionally move the ``.mhub``.
+
+    Native/hybrid modules are filed under ``Stores/<chip>/<id>/`` (``<chip>``
+    from ``targets``); L1/L2 use ``Stores/Common/<id>/``.
+    """
     mid = manifest["id"]
-    targets = plugin_targets(manifest, module_dir)
-    buckets = store_buckets(targets)
-    dirs = module_deploy_dirs(mid, targets, deploy)
+    buckets = store_buckets_for_module(manifest, module_dir)
+    if not buckets:
+        if move_packages:
+            _drop_unpublished_plugin(deploy, mid)
+        return None
+    dirs = [deploy / "Stores" / bucket / mid for bucket in buckets]
     src_pkg: Path | None = None
     blob: bytes | None = None
     if move_packages:
@@ -373,8 +376,6 @@ def _place_catalogs(
         packed = binary_size_from_mhub(pkg, mid)
         if packed is not None:
             entry["binary_size"] = packed
-        if ui_blob is not None:
-            entry["ui"] = ui_blob
         _write_plugin_catalog(deploy_mod, entry)
         if primary is None:
             primary = entry
@@ -389,6 +390,7 @@ def rebuild_catalog_from_store(deploy: Path) -> list[dict]:
     Moves a package into the folders selected by its ``targets``. Does not
     need plugin sources.
     """
+    normalize_chip_folders(deploy)
     stores = deploy / "Stores"
     if not stores.is_dir():
         raise FileNotFoundError(f"missing store dir {stores}")
@@ -399,10 +401,9 @@ def rebuild_catalog_from_store(deploy: Path) -> list[dict]:
             found[child.name] = pkg
     catalog: list[dict] = []
     for mid in sorted(found):
-        parsed = _read_mhub(found[mid])
-        if parsed is None:
+        manifest = _read_mhub(found[mid])
+        if manifest is None:
             continue
-        manifest, ui_blob = parsed
         if not manifest.get("id"):
             manifest["id"] = mid
         entry = _place_catalogs(
@@ -410,7 +411,6 @@ def rebuild_catalog_from_store(deploy: Path) -> list[dict]:
             found[mid].parent,
             deploy,
             move_packages=True,
-            ui_blob=ui_blob,
         )
         if entry is None:
             continue
@@ -456,8 +456,11 @@ def sync_module(module_id: str, deploy: Path) -> int:
         print(f"missing {manifest_path}", file=sys.stderr)
         return 1
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    targets = plugin_targets(manifest, module_dir)
-    pkg = module_deploy_dirs(module_id, targets, deploy)[0] / f"{module_id}.mhub"
+    buckets = store_buckets_for_module(manifest, module_dir)
+    if not buckets:
+        print(f"skip {module_id}: native module is not published to the store")
+        return 0
+    pkg = deploy / "Stores" / buckets[0] / module_id / f"{module_id}.mhub"
     if not manifest_path.is_file():
         print(f"missing {manifest_path}", file=sys.stderr)
         return 1

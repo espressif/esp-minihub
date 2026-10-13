@@ -1,4 +1,0 @@
-/* Generated from devices.json - DO NOT EDIT */
-#pragma once
-static const char DEVICE_DESC_JSON[] =
-"[{\"device\":\"kitchen_lamp\",\"type\":\"light\",\"params\":[{\"name\":\"power\",\"init\":false,\"access\":\"RW\"},{\"name\":\"brightness\",\"init\":\"80\",\"access\":\"RW\",\"max\":80,\"requires\":\"power\"},{\"name\":\"hue\",\"init\":\"0\",\"access\":\"RW\",\"requires\":{\"all\":[\"power\"]}},{\"name\":\"saturation\",\"init\":\"100\",\"access\":\"RW\",\"requires\":{\"any\":[\"power\"]}},{\"name\":\"cct\",\"init\":\"4000\",\"visible\":false,\"access\":\"RW\",\"requires\":\"power\"}]},{\"device\":\"living_lamp\",\"type\":\"light\",\"params\":[{\"name\":\"power\",\"init\":true,\"access\":\"RW\"},{\"name\":\"brightness\",\"init\":\"40\",\"access\":\"RW\",\"max\":80,\"requires\":\"power\"}]}]";

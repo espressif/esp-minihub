@@ -20,7 +20,9 @@ Upstream: https://docs.rainmaker.espressif.com/docs/dev/firmware/fw_usage_guides
 | switch | esp.device.switch | power, voltage_v, current_a, power_w, energy_wh | power | power |
 
 `esp.device.light` = `esp.device.lightbulb`. `name` is metadata only (not listed
-on these types).
+on these types). Catalog `speaker` (`power`, `volume`; primary `volume`) is not
+this table: RainMaker `esp.device.speaker` uses Power as the primary parameter
+and also has Media State, Media Control, and Mute.
 
 ## 2. Services
 
@@ -44,6 +46,7 @@ Reference in `model/services.csv` — not part of the widget registry.
 | Hue / 颜色 | hue | Int | Read, Write | 0, 360, 1 | ui.slider | Color (deg); label 颜色 |
 | Saturation | saturation | Int | Read, Write | 0, 100, 1 | ui.slider | Saturation % |
 | Intensity | intensity | Int | Read, Write | 0, 100, 1 | ui.slider | Intensity % |
+| Volume | volume | Int | Read, Write | 0, 100, 1 | ui.slider | Speaker volume; requires power |
 | Voltage | voltage_v | Float | Read | 0, 250, 0.1 | ui.text | Line voltage (V); read-only metering |
 | Current | current_a | Float | Read | 0, 16, 0.01 | ui.text | Current (A); read-only metering |
 | Active power | power_w | Float | Read | 0, 4000, 1 | ui.text | Power (W); not on/off `power`; read-only |
@@ -52,8 +55,9 @@ Reference in `model/services.csv` — not part of the widget registry.
 | Parameter | Devices |
 |-----------|---------|
 | name | — (metadata) |
-| power | light, switch |
+| power | light, switch, speaker |
 | brightness, cct, hue, saturation, intensity | light |
+| volume | speaker |
 | voltage_v, current_a, power_w, energy_wh | switch |
 
 Icons: device avatars under `images/devices/`; optional control icons under

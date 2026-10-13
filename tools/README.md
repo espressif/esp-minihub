@@ -9,7 +9,7 @@ Env used by several scripts:
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product folder under `application/` |
-| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Deploy root: `Stores/ESP32S31/<id>/` or `Stores/Common/<id>/`, `Firmwares/`, `Assets/`, `Webs/` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Deploy root: `Stores/Common/<id>/`, `Firmwares/`, `Assets/`, `Webs/` |
 
 ---
 
@@ -61,6 +61,8 @@ Stacks (optional): `ble_mesh`, `zigbee`, `matter`, `thread`. `thread` and `zigbe
 ./tools/build_firmware.py modules
 ./tools/build_firmware.py pack color_bulb
 ```
+
+`build` compiles the Host only. It does not compile native plugins. `modules` or `module <id>` compiles a native `.so` into the build tree and does not create a store plugin folder. `pack <id>` on a native module wraps the local MHMD `.so` and does not write `Stores/Common` or `Stores/<chip>`.
 
 ### `apply_sdkconfig_variant.sh`
 
@@ -143,6 +145,7 @@ python3 tools/pack_store_module.py mhmd build/foo.so build/foo_mhmd.so
 ```
 
 Host unpacks zip only (`hub_zip.c`). `--format` / `MHUB_PACK_FORMAT` reserved; only `zip` is implemented.
+`pack all` skips native and hybrid modules. A named native id wraps a local MHMD `.so` and is not written to the store.
 
 ### `build_store_modules.py`
 
@@ -157,7 +160,7 @@ Also: `./tools/build_firmware.py pack`.
 
 ### `sync_store_catalog.py`
 
-Rewrite `Stores/ESP32S31/<id>/catalog.json` or `Stores/Common/<id>/catalog.json`. No derived array is written to the deploy tree (`/api/catalog` aggregates per-plugin catalogs at request time); pass `--aggregate PATH` to emit one array at an explicit path. Chip targets use the uppercase chip folder; `["ALL"]` stays in `Common`. Default (no args): walk those `.mhub` files only — no sources, no `MINIHUB_PLUGIN_DIRS`. `--from-store` is the same. Pass `all` or an id to pack from sources first, then rewrite the catalogs the same way. The script is also copied into `module_sdk.zip`.
+Rewrite `Stores/Common/<id>/catalog.json` for L1 and L2. A native package found in the store is removed and is not moved under `Common` or a chip folder. No derived array is written to the deploy tree (`/api/catalog` aggregates per-plugin catalogs at request time); pass `--aggregate PATH` to emit one array at an explicit path. `targets` is only the chip filter. Default (no args): walk those `.mhub` files only — no sources, no `MINIHUB_PLUGIN_DIRS`. `--from-store` is the same. Pass `all` or an id to pack from sources first, then rewrite the catalogs the same way. The script is also copied into `module_sdk.zip`.
 
 ```bash
 python3 tools/sync_store_catalog.py

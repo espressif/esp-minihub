@@ -12,13 +12,13 @@ Built artifacts go to:
   build/<id>.so                 — L3 MHMD+ELF intermediate (local only)
   MINIHUB_PLUGINS_DEPLOY_DIR          — default ~/workspace/minihub_store
 
-Layout under the deploy root (one folder per plugin, bucket from targets):
-  Stores/ESP32S31/<id>/{catalog.json,<id>.mhub}  — concrete chip (uppercase)
-  Stores/Common/<id>/{catalog.json,<id>.mhub}    — targets ["ALL"] only
-  Several concrete chips: one copy under each Stores/<CHIP>/.
+Layout under the deploy root (one folder per L1/L2 plugin):
+  Stores/Common/<id>/{catalog.json,<id>.mhub}
 
-Firmware, asset, and web siblings (Firmwares/, Assets/, Webs/) share this
-root. store_server.py serves the whole root.
+A native module is published under ``Stores/<chip>/<id>/`` (``<chip>`` from
+``targets``); L1/L2 use ``Stores/Common/<id>/``. Firmware, asset,
+and web siblings (Firmwares/, Assets/, Webs/) share this root. store_server.py
+serves the whole root.
 """
 
 from __future__ import annotations
@@ -139,7 +139,8 @@ def store_buckets(targets: list[str]) -> list[str]:
     """Folder names under ``Stores/``.
 
     Any ``ALL`` (case-insensitive) selects ``Common`` only. Concrete chips
-    each get their own folder, uppercased to match ``Firmwares/ESP32S31``.
+    each get their own folder, lowercased to match ``Firmwares/esp32s31``
+    and the device query ``?chip=``.
     """
     chips: list[str] = []
     for raw in targets:
@@ -148,12 +149,40 @@ def store_buckets(targets: list[str]) -> list[str]:
         name = raw.strip()
         if not name:
             continue
-        if name.upper() == "ALL":
+        if name.upper() == "ALL" or name == "*":
             return ["Common"]
-        folder = name.upper()
+        folder = name.lower()
         if folder not in chips:
             chips.append(folder)
     return chips or ["Common"]
+
+
+def normalize_chip_folders(deploy: Path) -> None:
+    """Rename chip directories to lowercase. ``Common`` is left as written.
+
+    A case-only rename goes through a temporary name so it works on a
+    case-insensitive volume.
+    """
+    for parent_name in ("Stores", "Firmwares"):
+        parent = deploy / parent_name
+        if not parent.is_dir():
+            continue
+        for child in list(parent.iterdir()):
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            if child.name == "Common" or child.name == child.name.lower():
+                continue
+            dest = parent / child.name.lower()
+            try:
+                same = dest.exists() and dest.samefile(child)
+            except OSError:
+                same = False
+            # A different directory already owns the lowercase name.
+            if dest.exists() and not same:
+                continue
+            tmp = parent / f".{child.name.lower()}.case"
+            child.rename(tmp)
+            tmp.rename(dest)
 
 
 def module_deploy_dirs(
@@ -186,7 +215,7 @@ def module_mhub_file(
     module_dir: Path | None = None,
 ) -> Path:
     """``.mhub`` path for this module's ``targets`` (CMake modstore copy)."""
-    from sync_store_catalog import plugin_targets
+    from sync_store_catalog import store_buckets_for_module
 
     src = module_dir if module_dir is not None else module_source_dir(module_id)
     manifest: dict = {}
@@ -195,8 +224,10 @@ def module_mhub_file(
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     mid = manifest.get("id") if isinstance(manifest.get("id"), str) else None
     mid = mid or module_id
-    chosen = plugin_targets(manifest, src if manifest_path.is_file() else None)
-    return module_deploy_dirs(mid, chosen, deploy)[0] / f"{mid}.mhub"
+    buckets = store_buckets_for_module(manifest, src if manifest_path.is_file() else module_dir or src)
+    if not buckets:
+        raise FileNotFoundError(f"{mid} is not published to the store")
+    return deploy / "Stores" / buckets[0] / mid / f"{mid}.mhub"
 
 
 def iter_store_plugin_dirs(deploy: Path) -> list[Path]:
@@ -241,13 +272,18 @@ def prune_plugin_dirs(deploy: Path, module_id: str, keep_buckets: list[str]) -> 
     stores = deploy / "Stores"
     if not stores.is_dir() or not module_id or module_id in (".", ".."):
         return
-    keep = set(keep_buckets)
+    keep = {name.casefold() for name in keep_buckets}
     for bucket in stores.iterdir():
-        if not bucket.is_dir() or bucket.name.startswith(".") or bucket.name in keep:
+        if not bucket.is_dir() or bucket.name.startswith(".") or bucket.name.casefold() in keep:
             continue
         stale = bucket / module_id
         if stale.is_dir():
             shutil.rmtree(stale)
+        if bucket.name != "Common":
+            try:
+                next(bucket.iterdir())
+            except StopIteration:
+                bucket.rmdir()
 
 
 def module_mhmd_path(module_id: str, *, root: Path = ROOT) -> Path:

@@ -69,6 +69,7 @@ CSS）。数据源：`model/*.csv`。构建时嵌入扁平注册表；图标打�
 - **`light`** — `power`、`brightness`、`cct`、`hue`（标签「颜色」）、`saturation`、
   `intensity`
 - **`switch`** — `power`、`voltage_v`、`current_a`、`power_w`、`energy_wh`
+- **`speaker`** — `power`、`volume`（`volume` 依赖 `power`）
 - **`name`** — 在目录中；无设备列出 → 不成控件
 
 完整表见 [`STANDARD_TYPES_CN.md`](STANDARD_TYPES_CN.md)。

@@ -40,10 +40,10 @@ def _get(url: str) -> tuple[int, bytes]:
 def main() -> int:
     with TemporaryDirectory() as tmp:
         deploy = Path(tmp)
-        assert store_paths.store_buckets(["esp32s31"]) == ["ESP32S31"]
+        assert store_paths.store_buckets(["esp32s31"]) == ["esp32s31"]
         assert store_paths.store_buckets(["ALL"]) == ["Common"]
-        assert store_paths.store_buckets(["all", "ESP32S31"]) == ["Common"]
-        assert store_paths.store_buckets(["ESP32S31", "ESP32C6"]) == ["ESP32S31", "ESP32C6"]
+        assert store_paths.store_buckets(["all", "esp32s31"]) == ["Common"]
+        assert store_paths.store_buckets(["esp32s31", "esp32c6"]) == ["esp32s31", "esp32c6"]
 
         def _plant(mid: str, manifest: dict) -> None:
             folder = deploy / "Stores" / "Common" / mid
@@ -51,7 +51,8 @@ def main() -> int:
             with zipfile.ZipFile(folder / f"{mid}.mhub", "w") as zf:
                 zf.writestr("module.json", json.dumps(manifest))
 
-        # Plant every package under Common. Rebuild must move chip targets.
+        # L1/L2 stay under Stores/Common. A native package is removed and
+        # is not filed under Common or a chip folder.
         _plant(
             "demo",
             {
@@ -61,7 +62,7 @@ def main() -> int:
                 "runtime": "js",
                 "vendor": "lab",
                 "description": "demo",
-                "targets": ["ESP32S31"],
+                "targets": ["esp32s31"],
             },
         )
         _plant(
@@ -81,50 +82,51 @@ def main() -> int:
                 "name": "Multi",
                 "version": "1.0.0",
                 "runtime": "native",
-                "targets": ["esp32s31", "ESP32C6"],
+                "targets": ["esp32s31", "esp32c6"],
             },
+        )
+        leftover = deploy / "Stores" / "esp32s31" / "multi"
+        leftover.mkdir(parents=True)
+        (leftover / "multi.mhub").write_bytes(
+            (deploy / "Stores" / "Common" / "multi" / "multi.mhub").read_bytes()
         )
         catalog = sync_store_catalog.rebuild_catalog_from_store(deploy)
         by_id = {item["id"]: item for item in catalog}
-        assert set(by_id) == {"demo", "jsdemo", "multi"}, catalog
-        demo_pkg = deploy / "Stores" / "ESP32S31" / "demo" / "demo.mhub"
+        assert set(by_id) == {"demo", "jsdemo"}, catalog
+        demo_pkg = deploy / "Stores" / "Common" / "demo" / "demo.mhub"
         assert demo_pkg.is_file()
-        assert not (deploy / "Stores" / "Common" / "demo").exists()
-        assert not (deploy / "Stores" / "ESP32S31" / "jsdemo").exists()
-        assert (deploy / "Stores" / "Common" / "jsdemo" / "jsdemo.mhub").is_file()
-        assert (deploy / "Stores" / "ESP32S31" / "multi" / "multi.mhub").is_file()
-        assert (deploy / "Stores" / "ESP32C6" / "multi" / "multi.mhub").is_file()
+        assert not (deploy / "Stores" / "esp32s31").exists()
+        assert not (deploy / "Stores" / "esp32c6").exists()
         assert not (deploy / "Stores" / "Common" / "multi").exists()
-        assert by_id["demo"]["url"] == "/files/Stores/ESP32S31/demo/demo.mhub"
+        assert (deploy / "Stores" / "Common" / "jsdemo" / "jsdemo.mhub").is_file()
+        assert by_id["demo"]["url"] == "/files/Stores/Common/demo/demo.mhub"
         assert by_id["demo"]["sha256"] == _sha(demo_pkg.read_bytes())
         assert by_id["demo"]["size"] == demo_pkg.stat().st_size
-        assert by_id["demo"]["targets"] == ["ESP32S31"]
+        assert by_id["demo"]["targets"] == ["esp32s31"]
+        # JS plugins are ABI-independent: the catalog omits the abi block.
+        assert "abi" not in by_id["demo"]
+        assert "abi" not in by_id["jsdemo"]
+        assert "sha256:" not in by_id["demo"]["sha256"]
         assert by_id["jsdemo"]["url"] == "/files/Stores/Common/jsdemo/jsdemo.mhub"
         assert by_id["jsdemo"]["targets"] == ["ALL"]
-        assert by_id["multi"]["targets"] == ["esp32s31", "ESP32C6"]
-        assert by_id["multi"]["url"] == "/files/Stores/ESP32S31/multi/multi.mhub"
         per = json.loads(
-            (deploy / "Stores" / "ESP32S31" / "demo" / "catalog.json").read_text(encoding="utf-8")
+            (deploy / "Stores" / "Common" / "demo" / "catalog.json").read_text(encoding="utf-8")
         )
         assert per["id"] == "demo"
-        assert per["targets"] == ["ESP32S31"]
-        c6 = json.loads(
-            (deploy / "Stores" / "ESP32C6" / "multi" / "catalog.json").read_text(encoding="utf-8")
-        )
-        assert c6["url"] == "/files/Stores/ESP32C6/multi/multi.mhub"
-        plugin = deploy / "Stores" / "ESP32S31" / "demo"
+        assert per["targets"] == ["esp32s31"]
+        plugin = deploy / "Stores" / "Common" / "demo"
         kept = sync_store_catalog.catalog_entry(
             {
                 "id": "other",
                 "name": "Other",
                 "version": "1.0.0",
                 "runtime": "js",
-                "targets": ["ESP32C6"],
+                "targets": ["esp32c6"],
             },
             plugin,
             plugin,
         )
-        assert kept["targets"] == ["ESP32C6"]
+        assert kept["targets"] == ["esp32c6"]
         defaulted = sync_store_catalog.catalog_entry(
             {"id": "plain", "name": "Plain", "version": "1.0.0", "runtime": "js"},
             plugin,
@@ -136,9 +138,10 @@ def main() -> int:
             plugin,
             plugin,
         )
-        assert native_default["targets"] == ["ESP32S31"]
+        assert native_default["targets"] == ["esp32s31"]
+        assert "url" not in native_default
 
-        fw = deploy / "Firmwares" / "ESP32S31" / "0.1.0"
+        fw = deploy / "Firmwares" / "esp32s31" / "0.1.0"
         note = "first cut\n"
         bin_src = deploy / "src.bin"
         bin_src.write_bytes(b"firmware-bytes")
@@ -160,7 +163,7 @@ def main() -> int:
             "--bin",
             str(bin_src),
             "--chip",
-            "ESP32S31",
+            "esp32s31",
             "--version",
             "0.1.0",
             "--deploy",
@@ -182,7 +185,7 @@ def main() -> int:
                     "--bin",
                     str(note_deploy / "src.bin"),
                     "--chip",
-                    "ESP32S31",
+                    "esp32s31",
                     "--version",
                     "0.0.1",
                     "--note",
@@ -193,7 +196,7 @@ def main() -> int:
             )
             assert rc == 0
             written = (
-                note_deploy / "Firmwares" / "ESP32S31" / "0.0.1" / "release_notes.txt"
+                note_deploy / "Firmwares" / "esp32s31" / "0.0.1" / "release_notes.txt"
             ).read_text(encoding="utf-8")
             assert written == str(decoy) + "\n"
             assert "file body" not in written
@@ -341,18 +344,26 @@ def main() -> int:
         fw_api = store_server.load_firmware_catalog(deploy)
         assert len(fw_api) == 1
         assert fw_api[0]["version"] == "0.1.0"
-        assert fw_api[0]["targets"] == ["ESP32S31"]
+        assert fw_api[0]["targets"] == ["esp32s31"]
         assert fw_api[0]["url"] == (
-            "/files/Firmwares/ESP32S31/0.1.0/minihub-esp32s31-0.1.0.bin"
+            "/files/Firmwares/esp32s31/0.1.0/minihub-esp32s31-0.1.0.bin"
         )
         assert fw_api[0]["sha256"] == _sha((fw / "minihub-esp32s31-0.1.0.bin").read_bytes())
         assert fw_api[0]["release_note"] == note
         assert "json" not in fw_api[0]
+        (fw / "bootloader.bin").write_bytes(b"boot")
+        (fw / "merged.bin").write_bytes(b"merged")
+        (fw / "minihub.elf").write_bytes(b"elf")
+        fw_api = store_server.load_firmware_catalog(deploy)
+        assert len(fw_api) == 1
+        assert fw_api[0]["url"].endswith("/minihub-esp32s31-0.1.0.bin")
+        upgrade = store_server.build_firmware_upgrade(deploy, "esp32s31")
+        assert upgrade["firmware_url"].endswith("/minihub-esp32s31-0.1.0.bin")
 
         plugins = store_server.load_plugin_catalog(deploy)
-        assert [item["id"] for item in plugins] == ["demo", "jsdemo", "multi"]
+        assert [item["id"] for item in plugins] == ["demo", "jsdemo"]
         assert next(item for item in plugins if item["id"] == "demo")["url"].startswith(
-            "/files/Stores/ESP32S31/"
+            "/files/Stores/Common/"
         )
         assert next(item for item in plugins if item["id"] == "jsdemo")["url"].startswith(
             "/files/Stores/Common/"
@@ -362,7 +373,7 @@ def main() -> int:
         assert store_server.resolve_deploy_file(deploy, "/files/Stores/../../secret.txt") is None
         assert store_server.resolve_deploy_file(deploy, "/files/%2e%2e/secret.txt") is None
         got = store_server.resolve_deploy_file(
-            deploy, "/files/Firmwares/ESP32S31/0.1.0/minihub-esp32s31-0.1.0.bin"
+            deploy, "/files/Firmwares/esp32s31/0.1.0/minihub-esp32s31-0.1.0.bin"
         )
         assert got is not None and got.read_bytes() == b"firmware-bytes"
 
@@ -378,19 +389,53 @@ def main() -> int:
             assert store_server.request_mac("/api/catalog") == ""
             assert store_server.request_mac("/api/firmware?x=1&mac=" + mac) == mac
 
+            from abi_contract_lib import (
+                build_host_symbols,
+                compute_abi_total_hash,
+                parse_abi_version,
+            )
+
+            header = Path(__file__).resolve().parents[1] / "components/minihub_module/include/minihub_module_abi.h"
+            allowlist = Path(__file__).resolve().parents[1] / "docs/module_sdk/host_export_allowlist.json"
+            host_symbols = build_host_symbols(header, allowlist)
+            abi_version = parse_abi_version(header)
+            abi_total = compute_abi_total_hash(host_symbols)
+
             status, body = _get(base + "/api/catalog")
             assert status == 200, body
-            listed = {item["id"]: item for item in json.loads(body)["plugins"]}
-            assert listed["demo"]["targets"] == ["ESP32S31"]
+
+            status, body = _get(
+                base + f"/api/catalog?abi_version={abi_version + 9}&abi_total_hash={abi_total}"
+            )
+            assert json.loads(body)["reason"] == "abi_version_unknown"
+
+            status, body = _get(
+                base + f"/api/catalog?abi_version={abi_version}&abi_total_hash=nope"
+            )
+            assert json.loads(body)["reason"] == "abi_mismatch"
+
+            query = (
+                f"/api/catalog?abi_version={abi_version}&abi_total_hash={abi_total}"
+                f"&chip=esp32s31&mac={mac}"
+            )
+            status, body = _get(base + query)
+            assert status == 200, body
+            payload = json.loads(body)
+            assert payload["status"] == "ok"
+            listed = {item["id"]: item for item in payload["plugins"]}
+            assert listed["demo"]["targets"] == ["esp32s31"]
+            # JS plugins omit abi yet are still listed (ABI-independent).
+            assert "abi" not in listed["demo"]
             assert listed["jsdemo"]["targets"] == ["ALL"]
-            assert "multi" in listed
-            status_m, body_m = _get(base + "/api/catalog?mac=" + mac)
-            assert status_m == 200, body_m
-            assert json.loads(body_m) == json.loads(body)
+            assert "multi" not in listed
+            upgrade = payload["firmware_upgrade"]
+            assert upgrade["available"] is True
+            assert upgrade["version"] == "0.1.0"
+            assert upgrade["firmware_url"].startswith("/files/Firmwares/esp32s31/0.1.0/")
 
             status, body = _get(base + "/api/firmware")
             assert status == 200
-            assert json.loads(body)[0]["chip"] == "ESP32S31"
+            assert json.loads(body)[0]["chip"] == "esp32s31"
             status_m, body_m = _get(base + "/api/firmware?mac=" + mac)
             assert status_m == 200, body_m
             assert json.loads(body_m) == json.loads(body)
@@ -411,8 +456,8 @@ def main() -> int:
                 "/files/Assets/model/devices.csv",
                 "/files/Webs/0.1.0/index.html",
                 "/files/Webs/0.1.0/release_notes.txt",
-                "/files/Firmwares/ESP32S31/0.1.0/minihub-esp32s31-0.1.0.bin",
-                "/files/Stores/ESP32S31/demo/demo.mhub",
+                "/files/Firmwares/esp32s31/0.1.0/minihub-esp32s31-0.1.0.bin",
+                "/files/Stores/Common/demo/demo.mhub",
                 "/files/Stores/Common/jsdemo/jsdemo.mhub",
             ):
                 status_plain, body_plain = _get(base + path)
