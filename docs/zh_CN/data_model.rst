@@ -270,21 +270,62 @@ L1 包把 ``inject`` **合并** 进指定适配器块（见 :doc:`plugins/develo
 场景 (``scenes.json``)
 ----------------------
 
+场景是一组**步骤**，步骤内可含多条指令、可重复，用于一键跨设备编排。顶层是
+``scenes`` 数组，每项：
+
 .. code-block:: json
 
    {
      "scenes": [
        {
-         "id": "all_off",
-         "name": "全关",
-         "commands": [
-           { "point_id": "sim.color_bulb", "cmd": "turn_off", "delay_ms": 0 }
-         ]
+         "id": "good_night",
+         "name": "晚安",
+         "steps": [
+           {
+             "actions": [
+               { "point_id": "sim.color_bulb", "cmd": "turn_off" },
+               { "point_id": "sim.air_cond", "cmd": "set_temperature", "params": { "temperature": 26 } }
+             ],
+             "loop": 1,
+             "delay_after_ms": 0
+           },
+           {
+             "actions": [ { "point_id": "sim.curtain", "cmd": "close" } ],
+             "loop": 3,
+             "delay_after_ms": 1000
+           }
+         ],
+         "max_duration_ms": 0
        }
      ]
    }
 
-执行：``POST /api/scenes/invoke``，``{"scene_id":"all_off"}``。
+字段：
+
+* ``id`` — 场景标识（字符串）。Web 编辑器自动生成，用户不可见。
+* ``name`` — 展示名（必填）。
+* ``steps[]`` — 步骤序列，**依次** 串行执行：
+
+  * ``actions[]`` — 本步要下发的指令；步内动作按数组顺序下发
+    （``cmd`` 走 ``minihub_command_invoke``，与 ``POST /api/command`` 同一路径）。
+    每条 ``action``：``point_id`` （必填）、``cmd`` （必填）、可选 ``params``
+    （JSON 对象，如 ``set_brightness`` 的 ``{"brightness":80}``）。
+  * ``loop`` — 本步重复次数，≥ 1，缺省 1。
+  * ``delay_after_ms`` — 每轮循环结束后、进入下一步前的延时（毫秒），缺省 0。
+
+* ``max_duration_ms`` — 安全上限（毫秒）。Web 端会算出「预计总用时」
+  （``Σ(loop × delay_after_ms)``）并限制用户填入的值不超过它；为 ``0`` 表示不限。
+  运行时若超过该上限，执行会被强制停止。
+
+约束：单场景最多 **5** 个步骤（``MAX_SCENE_STEPS``）；单步 ``delay_after_ms``
+上限 **7200 秒（7,200,000 毫秒）**，超过会被截断。
+
+**向后兼容**：旧版 ``commands:[{point_id,cmd,delay_ms}]`` 平铺格式仍可被加载，
+每条命令被当作一个只含单条动作、``loop=1``、``delay_after_ms=delay_ms`` 的步骤，
+执行语义与旧版一致。Web 编辑器保存时统一改写为 ``steps`` 格式。
+
+执行：``POST /api/scenes/invoke``，``{"scene_id":"good_night"}``。场景在独立的
+worker 任务里运行，新的 invoke 或配置重载会取消正在执行的场景。
 
 事件
 ----

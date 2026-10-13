@@ -214,6 +214,12 @@ function handleCommand(host, cmd) {
             if (cname === "set_brightness") {
                 param = "brightness";
                 buf = jsonToStr(cmd.params.brightness);
+            } else if (cname === "set_color") {
+                param = "hue";
+                buf = jsonToStr(cmd.params.hue);
+                if (!buf) {
+                    buf = jsonToStr(cmd.params.color);
+                }
             } else if (cname === "toggle") {
                 param = param || "power";
                 var cur = summaryValue(params);

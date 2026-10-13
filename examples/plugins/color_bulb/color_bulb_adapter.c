@@ -319,6 +319,12 @@ static esp_err_t cb_handle_command(const minihub_command_t *cmd)
                     ct = cJSON_GetObjectItem(cmd->params, "temperature");
                 }
                 cb_json_to_point_str(ct, buf, sizeof(buf));
+            } else if (strcmp(cmd->cmd, "set_color") == 0) {
+                param = "hue";
+                cb_json_to_point_str(cJSON_GetObjectItem(cmd->params, "hue"), buf, sizeof(buf));
+                if (buf[0] == '\0') {
+                    cb_json_to_point_str(cJSON_GetObjectItem(cmd->params, "color"), buf, sizeof(buf));
+                }
             } else if (strcmp(cmd->cmd, "toggle") == 0) {
                 param = param ? param : "power";
                 char cur[MINIHUB_VALUE_MAX];

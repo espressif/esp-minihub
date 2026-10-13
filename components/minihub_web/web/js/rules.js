@@ -572,7 +572,12 @@ function rulesClampInput(el, which) {
 
 // Per device-type action commands. `value:true` means the command needs a
 // parameter value; `param` is the key the adapter expects inside `params`
-// (e.g. set_brightness -> params.brightness). `unit`/`min`/`max` shape the input.
+// (e.g. set_brightness -> params.brightness). For params that exist in the
+// device-widget catalog (hue, brightness, cct, position, volume, ...) the range,
+// unit and numeric type are resolved from the catalog by rulesActionValueRange, so
+// they need not be repeated here. `min`/`max`/`unit` are only required when the
+// COMMAND's accepted range differs from the catalog property range — e.g.
+// set_temperature uses 16-30 while the `temperature` property is a -40..125 sensor.
 const RULE_TYPE_CMDS = {
     light: [
         { cmd: 'turn_on', labelKey: 'rules.opt_on' },
@@ -580,7 +585,7 @@ const RULE_TYPE_CMDS = {
         { cmd: 'toggle', labelKey: 'rules.opt_toggle' },
         { cmd: 'set_brightness', labelKey: 'rules.set_brightness', value: true, param: 'brightness', unit: '%', min: 1, max: 100 },
         { cmd: 'set_color_temp', labelKey: 'rules.set_color_temp', value: true, param: 'color_temp', unit: 'K', min: 2700, max: 6500 },
-        { cmd: 'set_color', labelKey: 'rules.set_color', value: true, param: 'color' }
+        { cmd: 'set_color', labelKey: 'rules.set_color', value: true, param: 'hue' }
     ],
     switch: [
         { cmd: 'turn_on', labelKey: 'rules.opt_on' },
@@ -658,18 +663,21 @@ function rulesCmdDefFor(cmd, type) {
     }) || null;
 }
 
-/* Range/unit for a command's value input. Prefer what the SELECTED DEVICE
- * actually reports (props.params.<param>.min/max — a real light publishes its
- * own range, e.g. 1-100 or 1-80); otherwise fall back to the per-type defaults
- * in RULE_TYPE_CMDS. Without this the action row showed a hardcoded 1-100 while
- * the WHEN condition row used the device's own range, so the same brightness
- * looked like two different limits on the same rule. */
+/* Range/unit/numeric for a command's value input. These come from the SELECTED
+ * DEVICE's catalog property (props.params.<param> lives in the device-widget
+ * catalog: e.g. hue -> 0-360, brightness -> 1-100), resolved by rulesParamMeta.
+ * The per-type defaults in RULE_TYPE_CMDS are only a fallback for commands whose
+ * range is command-specific and not covered by the catalog (e.g. set_temperature
+ * 16-30 vs the temperature sensor range). This keeps the action row and the WHEN
+ * row consistent: both read the device's own range. */
 function rulesActionValueRange(pid, param, def) {
     const meta = (pid && param) ? rulesParamMeta(pid, param) : null;
+    const metaNum = !!(meta && (meta.type === 'Int' || meta.unit === '%' || meta.unit === 'K' || meta.unit === '°C' || meta.unit === '°'));
     return {
         min: (meta && meta.min != null) ? meta.min : ((def && def.min != null) ? def.min : null),
         max: (meta && meta.max != null) ? meta.max : ((def && def.max != null) ? def.max : null),
-        unit: (meta && meta.unit) ? meta.unit : ((def && def.unit) ? def.unit : '')
+        unit: (meta && meta.unit) ? meta.unit : ((def && def.unit) ? def.unit : ''),
+        numeric: metaNum || !!(def && def.kind === 'int')
     };
 }
 
@@ -845,6 +853,7 @@ function rulesParamMeta(pointId, parameter) {
         parameter: parameter,
         label: cat.label || style.label || parameter,
         widget: widget,
+        type: (style && style.type != null) ? style.type : null,
         min: live.min != null ? live.min : (style.min != null ? style.min : null),
         max: live.max != null ? live.max : (style.max != null ? style.max : null),
         step: live.step != null ? live.step : (style.step != null ? style.step : null),
@@ -1347,10 +1356,10 @@ function rulesEditCollectThen() {
                         /* Same range the row rendered, so save-time clamping
                          * matches what the user saw. */
                         const rng = rulesActionValueRange(pid, def.param, def);
-                        /* Whether the value is a number is a property of the
-                         * command, not of the device, so keep judging it by the
-                         * command def; only the bounds come from the device. */
-                        const numeric = (def.unit === '%' || def.unit === 'K' || def.unit === '°C' || def.kind === 'int');
+                        /* Whether the value is a number follows the resolved range
+                         * (catalog hue is type Int / unit °), with the command def's
+                         * kind as a fallback; only the bounds come from the device. */
+                        const numeric = rng.numeric;
                         if (numeric) {
                             let n = parseInt(v, 10);
                             if (isNaN(n)) n = 0;
