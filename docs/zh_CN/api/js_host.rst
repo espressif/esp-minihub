@@ -151,6 +151,22 @@ Returns
 
 ``undefined``。
 
+host.point.unregister(point_id)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+删除一个点位并发布 ``point.unregistered``。点位不存在时不报错。
+
+Parameters
+^^^^^^^^^^
+
+``point_id`` (string, required)
+    目标点位。
+
+Returns
+^^^^^^^
+
+``undefined``。
+
 host.point.mergeProps(point_id, props_patch, value?)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

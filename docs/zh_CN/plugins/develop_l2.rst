@@ -61,7 +61,8 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
   一台设备一条点（``协议.设备``）。``type`` 须是类型目录里的 ``device_id``
   （如 ``light`` / ``switch``），设备页才有标准控件；见 :doc:`../type_catalog`。
   传入 ``params``（简写）或完整 ``props``，使 ``props.params`` 到达 UI。
-* ``host.point.get(point_id)`` · ``host.point.set(point_id, value, props?)``
+* ``host.point.get(point_id)`` · ``host.point.set(point_id, value, props?)`` ·
+  ``host.point.unregister(point_id)``
 * ``host.event.subscribe(event_type, handler)`` — ``point.updated`` /
   ``point.registered`` （在同一 Host ``point_id`` 上补充字段）
 * ``host.command.on(adapter, handler)`` — 在 JS 中接收 UI/REST 命令

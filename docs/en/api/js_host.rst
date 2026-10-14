@@ -152,6 +152,23 @@ Returns
 
 ``undefined``.
 
+host.point.unregister(point_id)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Remove one point and publish ``point.unregistered``. A missing point is not
+an error.
+
+Parameters
+^^^^^^^^^^
+
+``point_id`` (string, required)
+    Target point.
+
+Returns
+^^^^^^^
+
+``undefined``.
+
 host.point.mergeProps(point_id, props_patch, value?)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
