@@ -105,18 +105,21 @@ Normalized in ``normalize_op``. Unknown tokens become ``eq``.
 
 * ``actions`` — array of action objects executed together (max 4 per step).
 * ``delay_after`` — seconds to wait **after** this step before the next step.
-  Ignored on the last step; 0 means no delay.
+  On the last step there is no next step, so the same value waits **before**
+  that step's actions. 0 means no delay.
 
 Steps run serially: step 0 runs after ``when.delay_sec`` (if any), then each
-next step starts after the previous step’s ``delay_after``. This replaces the
-old inline ``delay`` action — a delay now belongs to the *preceding* step, never
-as a standalone action. A legacy flat ``then`` (a bare action object or array,
-optionally with inline ``delay`` actions) is still parsed into steps by the
-firmware.
+next step starts after the previous step's ``delay_after``. A delay on the
+last step is applied before that step runs, so a one-step rule whose action
+is "turn on" with ``delay_after`` 30 turns the light on 30 seconds after the
+trigger. This replaces the old inline ``delay`` action. A legacy flat ``then``
+(a bare action object or array, optionally with inline ``delay`` actions) is
+still parsed into steps by the firmware.
 
 .. code-block:: text
 
    when (trigger) --[when.delay_sec]--> step0 actions --[delay_after]--> step1 actions --> ...
+   one step: when (trigger) --[when.delay_sec]--> [delay_after] --> that step's actions
 
 In the Web editor the wait is picked from a step’s action-type dropdown
 (``Delay``), not from a separate field: the delay always settles as the trailing
