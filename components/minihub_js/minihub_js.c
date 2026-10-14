@@ -14,6 +14,8 @@
  *   host.command.on(adapter, fn)  — route Core commands into JS
  *   host.command.invoke({ point_id, cmd, params? })
  *   host.event.subscribe(type, fn) — point.updated / point.registered / …
+ *   host.timer.setTimeout/setInterval/clearTimeout/clearInterval (also global)
+ *   host.adapter.poll(handler) / host.adapter.clearPoll() — framework 5s tick
  *   host.http.request({ url, method?, body?, headers?, timeout_ms? })
  *   host.net.udp.open/sendto/recvfrom/close
  *   host.crypto.md5/sha1/sha256/hmacSha256/aes128CbcEncrypt|Decrypt
@@ -43,6 +45,7 @@
 #include "minihub_module.h"
 #include "minihub_paths.h"
 #include "minihub_task.h"
+#include "minihub_adapter.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "minihub_js";
@@ -98,6 +101,34 @@ static js_rpc_module_t s_js_rpc_modules[MINIHUB_JS_RPC_MODULES_MAX];
 static size_t s_js_rpc_module_count;
 static char s_setup_module_id[32];
 
+/* Timers: setTimeout/setInterval exposed to JS. All JS (including timer
+ * callbacks) runs on js_worker, so this table is only touched from that one
+ * task — no extra locking needed. */
+#define MINIHUB_JS_TIMERS_MAX 16
+typedef struct {
+    bool active;
+    bool interval;     /* false = one-shot timeout, true = repeating */
+    uint32_t delay_ms; /* original period, for interval re-arm */
+    TickType_t due;    /* absolute tick when it next fires */
+    JSValue fn;
+} js_timer_slot_t;
+static js_timer_slot_t s_js_timers[MINIHUB_JS_TIMERS_MAX];
+
+/* Framework poll hooks: js_poll_tick is registered once with minihub_adapter and
+ * runs on adapter_poll_task every ~5 s. It is fire-and-forget (only notifies
+ * js_worker) so it never blocks the framework poll loop or a hub reload. The JS
+ * poll callbacks themselves run on js_worker, keeping QuickJS single-threaded. */
+#define MINIHUB_JS_POLLS_MAX 8
+typedef struct {
+    JSValue fn;
+    bool active;
+} js_poll_slot_t;
+static js_poll_slot_t s_js_polls[MINIHUB_JS_POLLS_MAX];
+static size_t s_js_poll_count;
+static volatile bool s_js_poll_pending;
+static volatile bool s_js_poll_inflight;
+static bool s_js_poll_hook_registered;
+
 /*
  * QuickJS is single-threaded and records the C stack pointer once in
  * JS_NewRuntime(). Every eval and call runs on this task so that snapshot
@@ -126,6 +157,11 @@ static TaskHandle_t s_js_task;
 
 static void js_worker(void *arg);
 static void js_bind_stack(void);
+static void js_polls_fire(void);
+static void js_timers_fire_due(void);
+static TickType_t js_timers_wait_ticks(void);
+static void js_timers_clear_all(JSContext *ctx);
+static void js_timer_install_global(JSContext *ctx);
 
 static void js_bind_stack(void)
 {
@@ -189,7 +225,21 @@ static void js_worker(void *arg)
     ESP_LOGI(TAG, "js worker ready (stack %u, budget %u)",
              (unsigned)JS_WORKER_STACK_BYTES, (unsigned)JS_WORKER_STACK_BUDGET);
     for (;;) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        js_bind_stack();
+        /* Fire any timers whose deadline passed — runs JS callbacks on this
+         * same task, keeping QuickJS single-threaded. */
+        js_timers_fire_due();
+
+        /* Wait for the next job, or until the nearest timer comes due. */
+        uint32_t notified = ulTaskNotifyTake(pdTRUE, js_timers_wait_ticks());
+        if (notified == 0) {
+            continue; /* timeout: a timer is due (handled at loop top) */
+        }
+        /* A notify may carry a framework poll tick, a normal job, or both. */
+        if (s_js_poll_pending) {
+            s_js_poll_pending = false;
+            js_polls_fire();
+        }
         js_job_t *job = s_js_job;
         if (!job || !job->fn) {
             continue;
@@ -312,6 +362,68 @@ static JSValue cjson_to_js(JSContext *ctx, const cJSON *cj)
 
 static void dump_exception(JSContext *ctx);
 static void js_event_dispatch(const minihub_event_t *event, void *user_data);
+
+/* Registered as a minihub_adapter poll hook; runs on adapter_poll_task every
+ * ~5 s. Must NOT block or take locks — only wake js_worker when a JS poll is
+ * due. A previous run that has not finished (JS still executing) is skipped to
+ * avoid piling up notifications. */
+static void js_poll_tick(void)
+{
+    if (!s_ctx || !s_js_task) {
+        return;
+    }
+    if (s_js_poll_count == 0) {
+        return;
+    }
+    if (s_js_poll_inflight) {
+        return; /* previous run still executing on js_worker — skip */
+    }
+    s_js_poll_pending = true;
+    s_js_poll_inflight = true;
+    xTaskNotifyGive(s_js_task);
+}
+
+/* Runs on js_worker; invokes every registered JS poll callback, then releases
+ * the in-flight guard so the next framework tick can wake us again. */
+static void js_polls_fire(void)
+{
+    if (!s_ctx) {
+        s_js_poll_inflight = false;
+        return;
+    }
+    for (size_t i = 0; i < MINIHUB_JS_POLLS_MAX; i++) {
+        if (!s_js_polls[i].active) {
+            continue;
+        }
+        if (!JS_IsFunction(s_ctx, s_js_polls[i].fn)) {
+            continue;
+        }
+        JSValue ret = JS_Call(s_ctx, s_js_polls[i].fn, JS_UNDEFINED, 0, NULL);
+        if (JS_IsException(ret)) {
+            dump_exception(s_ctx);
+        }
+        JS_FreeValue(s_ctx, ret);
+    }
+    s_js_poll_inflight = false;
+}
+
+static void js_polls_clear_all(JSContext *ctx)
+{
+    for (size_t i = 0; i < MINIHUB_JS_POLLS_MAX; i++) {
+        if (s_js_polls[i].active) {
+            s_js_polls[i].active = false;
+            if (ctx) {
+                JS_FreeValue(ctx, s_js_polls[i].fn);
+            }
+            s_js_polls[i].fn = JS_UNDEFINED;
+        }
+    }
+    s_js_poll_count = 0;
+    s_js_poll_pending = false;
+    s_js_poll_inflight = false;
+}
+static void js_poll_tick(void);
+static void js_polls_clear_all(JSContext *ctx);
 
 static void clear_js_cmd_handlers(JSContext *ctx)
 {
@@ -1454,6 +1566,197 @@ static JSValue js_event_subscribe(JSContext *ctx, JSValueConst this_val, int arg
     return JS_UNDEFINED;
 }
 
+/* ---- JS timers: setTimeout / setInterval ----------------------------------
+ * Only ever called on js_worker (all JS runs there), so s_js_timers needs no
+ * lock. Callbacks are invoked from js_timers_fire_due() on the same task.
+ * Accepts (fn, ms) or (ms, fn); returns an integer id (1-based). */
+
+static JSValue js_timer_set_impl(JSContext *ctx, int argc, JSValueConst *argv, bool interval)
+{
+    JSValue fn = JS_UNDEFINED;
+    JSValue ms_v = JS_UNDEFINED;
+    if (argc >= 1 && JS_IsFunction(ctx, argv[0])) {
+        fn = argv[0];
+        if (argc >= 2) {
+            ms_v = argv[1];
+        }
+    } else if (argc >= 2 && JS_IsFunction(ctx, argv[1])) {
+        fn = argv[1];
+        ms_v = argv[0];
+    }
+    if (JS_IsUndefined(fn)) {
+        return JS_ThrowTypeError(ctx, "expected (fn, ms) or (ms, fn)");
+    }
+    int32_t ms = 0;
+    if (!JS_IsUndefined(ms_v)) {
+        JS_ToInt32(ctx, &ms, ms_v);
+    }
+    if (ms <= 0) {
+        ms = 1;
+    }
+
+    int slot = -1;
+    for (int i = 0; i < MINIHUB_JS_TIMERS_MAX; i++) {
+        if (!s_js_timers[i].active) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        return JS_ThrowInternalError(ctx, "too many JS timers (max %d)", MINIHUB_JS_TIMERS_MAX);
+    }
+    s_js_timers[slot].active = true;
+    s_js_timers[slot].interval = interval;
+    s_js_timers[slot].delay_ms = (uint32_t)ms;
+    s_js_timers[slot].due = xTaskGetTickCount() + pdMS_TO_TICKS((TickType_t)ms);
+    s_js_timers[slot].fn = JS_DupValue(ctx, fn);
+    return JS_NewInt32(ctx, slot + 1);
+}
+
+static JSValue js_timer_clear(JSContext *ctx, int argc, JSValueConst *argv)
+{
+    if (argc < 1) {
+        return JS_UNDEFINED;
+    }
+    int32_t id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    if (id <= 0 || id > MINIHUB_JS_TIMERS_MAX) {
+        return JS_UNDEFINED;
+    }
+    js_timer_slot_t *s = &s_js_timers[id - 1];
+    if (s->active) {
+        s->active = false;
+        JS_FreeValue(ctx, s->fn);
+        s->fn = JS_UNDEFINED;
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_timer_set_timeout(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    return js_timer_set_impl(ctx, argc, argv, false);
+}
+static JSValue js_timer_set_interval(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    return js_timer_set_impl(ctx, argc, argv, true);
+}
+static JSValue js_timer_clear_timeout(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    return js_timer_clear(ctx, argc, argv);
+}
+static JSValue js_timer_clear_interval(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    return js_timer_clear(ctx, argc, argv);
+}
+
+static void js_timer_install_global(JSContext *ctx)
+{
+    JSValue global = JS_GetGlobalObject(ctx);
+    JS_SetPropertyStr(ctx, global, "setTimeout", JS_NewCFunction(ctx, js_timer_set_timeout, "setTimeout", 2));
+    JS_SetPropertyStr(ctx, global, "clearTimeout", JS_NewCFunction(ctx, js_timer_clear_timeout, "clearTimeout", 1));
+    JS_SetPropertyStr(ctx, global, "setInterval", JS_NewCFunction(ctx, js_timer_set_interval, "setInterval", 2));
+    JS_SetPropertyStr(ctx, global, "clearInterval", JS_NewCFunction(ctx, js_timer_clear_interval, "clearInterval", 1));
+    JS_FreeValue(ctx, global);
+}
+
+static void js_timers_fire_due(void)
+{
+    if (!s_ctx) {
+        return;
+    }
+    TickType_t now = xTaskGetTickCount();
+    for (int i = 0; i < MINIHUB_JS_TIMERS_MAX; i++) {
+        js_timer_slot_t *s = &s_js_timers[i];
+        if (!s->active) {
+            continue;
+        }
+        if ((int32_t)(s->due - now) > 0) {
+            continue; /* not due yet */
+        }
+        JSValue ret = JS_Call(s_ctx, s->fn, JS_UNDEFINED, 0, NULL);
+        if (JS_IsException(ret)) {
+            dump_exception(s_ctx);
+        }
+        JS_FreeValue(s_ctx, ret);
+        /* The callback may have cleared or re-armed this timer. */
+        if (s->active) {
+            if (s->interval) {
+                s->due = xTaskGetTickCount() + pdMS_TO_TICKS((TickType_t)s->delay_ms);
+            } else {
+                JS_FreeValue(s_ctx, s->fn);
+                s->fn = JS_UNDEFINED;
+                s->active = false;
+            }
+        }
+    }
+}
+
+static TickType_t js_timers_wait_ticks(void)
+{
+    TickType_t now = xTaskGetTickCount();
+    int32_t best = -1; /* smallest remaining ticks; -1 = no active timer */
+    for (int i = 0; i < MINIHUB_JS_TIMERS_MAX; i++) {
+        if (!s_js_timers[i].active) {
+            continue;
+        }
+        int32_t remaining = (int32_t)(s_js_timers[i].due - now);
+        if (remaining < 0) {
+            remaining = 0;
+        }
+        if (best < 0 || remaining < best) {
+            best = remaining;
+        }
+    }
+    if (best < 0) {
+        return portMAX_DELAY; /* nothing scheduled: block until a job arrives */
+    }
+    if (best == 0) {
+        return 1; /* already due: wake promptly, fire at loop top */
+    }
+    return (TickType_t)best;
+}
+
+static void js_timers_clear_all(JSContext *ctx)
+{
+    for (int i = 0; i < MINIHUB_JS_TIMERS_MAX; i++) {
+        if (s_js_timers[i].active) {
+            s_js_timers[i].active = false;
+            if (ctx) {
+                JS_FreeValue(ctx, s_js_timers[i].fn);
+            }
+            s_js_timers[i].fn = JS_UNDEFINED;
+        }
+    }
+}
+
+static JSValue js_adapter_poll(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+        return JS_ThrowTypeError(ctx, "poll(handler)");
+    }
+    if (s_js_poll_count >= MINIHUB_JS_POLLS_MAX) {
+        return JS_ThrowInternalError(ctx, "too many JS poll handlers");
+    }
+    js_poll_slot_t *slot = &s_js_polls[s_js_poll_count++];
+    slot->fn = JS_DupValue(ctx, argv[0]);
+    slot->active = true;
+    return JS_UNDEFINED;
+}
+
+static JSValue js_adapter_clear_poll(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+    js_polls_clear_all(ctx);
+    return JS_UNDEFINED;
+}
+
 static JSValue make_host_object(JSContext *ctx)
 {
     JSValue host = JS_NewObject(ctx);
@@ -1495,6 +1798,19 @@ static JSValue make_host_object(JSContext *ctx)
                       JS_NewCFunction(ctx, js_module_register_rpc, "registerRpc", 2));
     JS_SetPropertyStr(ctx, host, "module", module);
 
+    JSValue timer = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, timer, "setTimeout", JS_NewCFunction(ctx, js_timer_set_timeout, "setTimeout", 2));
+    JS_SetPropertyStr(ctx, timer, "clearTimeout", JS_NewCFunction(ctx, js_timer_clear_timeout, "clearTimeout", 1));
+    JS_SetPropertyStr(ctx, timer, "setInterval", JS_NewCFunction(ctx, js_timer_set_interval, "setInterval", 2));
+    JS_SetPropertyStr(ctx, timer, "clearInterval", JS_NewCFunction(ctx, js_timer_clear_interval, "clearInterval", 1));
+    JS_SetPropertyStr(ctx, host, "timer", timer);
+
+    JSValue adapter = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, adapter, "poll", JS_NewCFunction(ctx, js_adapter_poll, "poll", 1));
+    JS_SetPropertyStr(ctx, adapter, "clearPoll",
+                      JS_NewCFunction(ctx, js_adapter_clear_poll, "clearPoll", 0));
+    JS_SetPropertyStr(ctx, host, "adapter", adapter);
+
     minihub_js_attach_net_crypto(ctx, host);
     return host;
 }
@@ -1516,6 +1832,14 @@ static esp_err_t ensure_runtime(void)
     }
     /* JS_NewRuntime records a 1 MB budget. Re-bind to this task's real stack. */
     js_bind_stack();
+    /* Inject global setTimeout/clearTimeout/setInterval/clearInterval. */
+    js_timer_install_global(s_ctx);
+    /* Register the framework poll hook once (component lifetime). The hook is
+     * fire-and-forget; it only activates once a JS module calls host.adapter.poll. */
+    if (!s_js_poll_hook_registered) {
+        (void)minihub_adapter_register_poll_hook(js_poll_tick);
+        s_js_poll_hook_registered = true;
+    }
     return ESP_OK;
 }
 
@@ -1628,11 +1952,15 @@ static esp_err_t js_unload_job(void *arg)
         clear_js_cmd_handlers(s_ctx);
         clear_js_event_handlers(s_ctx);
         clear_js_rpc_handlers(s_ctx);
+        js_timers_clear_all(s_ctx);
+        js_polls_clear_all(s_ctx);
         JS_FreeContext(s_ctx);
         s_ctx = NULL;
     } else {
         clear_js_event_handlers(NULL);
         clear_js_rpc_handlers(NULL);
+        js_timers_clear_all(NULL);
+        js_polls_clear_all(NULL);
     }
     if (s_rt) {
         JS_FreeRuntime(s_rt);

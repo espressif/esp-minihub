@@ -21,7 +21,7 @@ Give it the repo root and the chapter for the task. Do not send it to Core
 * Radios and access: :doc:`radios`
 * Build and flash: :doc:`getting_started`
 * OEM Host: :doc:`host_customization`, :doc:`production`
-* Store plugins: :doc:`plugins/overview` (pick L1 / L2 / L3, then that chapter)
+* Store plugins: :doc:`plugins/overview` (pick L1 or L2, then that chapter)
 * REST / MCP tool list: :doc:`api/host_rest`, :doc:`api/mcp`
 * Git and contributions: :doc:`contributing`
 
@@ -71,7 +71,10 @@ Suggested loop
 --------------
 
 1. Have the assistant read this chapter and the RST for the task, then edit
-2. L3 undefined symbols must be on ``host_export_allowlist.json``; declarations
-   come from ``minihub_plugin_sdk.h`` — :doc:`plugins/develop_l3`
-3. Verify on device: serial logs, ``GET /api/modules``, ``POST /api/hub/reload``
+2. Verify on device: serial logs, ``GET /api/modules``, ``POST /api/hub/reload``
    if needed
+
+.. only:: not hide_l3
+
+   L3 undefined symbols must be on ``host_export_allowlist.json``; declarations
+   come from ``minihub_plugin_sdk.h`` — :doc:`plugins/develop_l3`.

@@ -109,11 +109,11 @@ function renderStore() {
     const addInstalled = (src, defaults) => {
         (src || []).forEach(it => {
             if (!it || !it.id) return;
-            installedById[it.id] = Object.assign({ kind: 'module' }, installedById[it.id], defaults, it);
+            installedById[it.id] = Object.assign({ type: 'module' }, installedById[it.id], defaults, it);
         });
     };
     addInstalled(storeCatalog.filter(x => x.installed && !window.uninstalledIds.has(x.id)), { installed: true });
-    addInstalled(pl, { kind: 'pack' });
+    addInstalled(pl, { type: 'pack' });
     /* /api/modules lists every slot in the loader's RAM table, and
      * minihub_module_delete() deliberately keeps the slot there until the next
      * hub reload rebuilds the table. Right after an uninstall it therefore still
@@ -126,12 +126,12 @@ function renderStore() {
      * is what keeps factory-preinstalled modules from vanishing off the page. */
     const moduleKept = m => m.managed === false ||
         (catById[m.id] ? catById[m.id].installed !== false : m.installed !== false);
-    addInstalled(ml.filter(moduleKept).filter(m => !window.uninstalledIds.has(m.id)), { kind: 'module' });
+    addInstalled(ml.filter(moduleKept).filter(m => !window.uninstalledIds.has(m.id)), { type: 'module' });
     const installed = Object.values(installedById).map(it => {
         const c = catById[it.id];
         const up = !!(c && c.upgrade_available) || !!it.binary_stale;
         return Object.assign({}, it, c ? {
-            kind: c.kind || it.kind,
+            type: c.type || it.type,
             upgrade_available: up,
             catalog_version: c.version,
             catalog_adapter_version: c.adapter_version,
@@ -142,7 +142,7 @@ function renderStore() {
      * Keyed on the union, not on the catalog's `installed` flag, which is false
      * for a builtin. */
     const avail = storeCatalog.filter(x => x.id && !installedById[x.id] &&
-        (x.kind === 'pack' || x.kind === 'module')).filter(filt)
+        (x.type === 'pack' || x.type === 'module')).filter(filt)
         .sort((a, b) => (a.name || a.id || '').localeCompare(b.name || b.id || ''));
     const kindLbl = (k, co) => co ? t('store.kind_config_module') : (k === 'module' ? t('store.kind_module') : t('store.kind_config_module'));
     const actBtns = (kind, id, enabled, managed, upgradeAvailable, configOnly) => {
@@ -159,7 +159,7 @@ function renderStore() {
         return html + '</div>';
     };
     const itemDesc = it => {
-        if (it.kind === 'pack' || it.config_only || it.inject_adapter) return (it.vendor ? esc(it.vendor) + ' → ' : '') + esc(it.description || (it.vendor ? it.id : '') || '-');
+        if (it.type === 'pack' || it.config_only || it.inject_adapter) return (it.vendor ? esc(it.vendor) + ' → ' : '') + esc(it.description || (it.vendor ? it.id : '') || '-');
         return esc(it.description || ('adapter: ' + (it.adapter || '-')));
     };
     const verCell = it => {
@@ -171,7 +171,7 @@ function renderStore() {
         return s;
     };
     const itemRow = (it, extra) => {
-        return '<div class="store-row"><div><div class="store-name">' + esc(it.name || it.id) + '</div>' + '<div class="store-desc">' + esc(it.id || '') + '</div></div>' + '<div class="store-ver">' + verCell(it) + '</div>' + '<div class="store-desc">' + itemDesc(it) + '</div>' + '<div>' + kindLbl(it.kind, it.config_only) + '</div>' + '<div>' + esc(it.inject_adapter || it.adapter || '-') + '</div>' + extra + '</div>';
+        return '<div class="store-row"><div><div class="store-name">' + esc(it.name || it.id) + '</div>' + '<div class="store-desc">' + esc(it.id || '') + '</div></div>' + '<div class="store-ver">' + verCell(it) + '</div>' + '<div class="store-desc">' + itemDesc(it) + '</div>' + '<div>' + kindLbl(it.type, it.config_only) + '</div>' + '<div>' + esc(it.inject_adapter || it.adapter || '-') + '</div>' + extra + '</div>';
     };
     let html = '';
     if (storeTab === 'avail') {
@@ -181,7 +181,7 @@ function renderStore() {
         } else {
             html += '<div class="store-list"><div class="store-row store-hdr"><div>' + t('store.name') + '</div><div>' + t('store.version') + '</div><div>' + t('store.description') + '</div>        <div>' + t('store.type') + '</div><div>' + t('store.adapter') + '</div><div></div><div>' + t('store.actions') + '</div></div>';
             avail.forEach(it => {
-                html += itemRow(it, '<div></div><div class="store-actions">        <button class="btn-sm on" onclick="storeInstall(\'' + esc(it.kind) + '\',\'' + esc(it.id) + '\')">' + t('store.install') + '</button>        </div>');
+                html += itemRow(it, '<div></div><div class="store-actions">        <button class="btn-sm on" onclick="storeInstall(\'' + esc(it.type) + '\',\'' + esc(it.id) + '\')">' + t('store.install') + '</button>        </div>');
             });
             html += '</div>';
         }
@@ -190,7 +190,7 @@ function renderStore() {
         html += '<div class="section"><div class="section-h">' + t('store.installed') + ' <span>' + installed.length + '</span></div>';
         html += '<div class="store-list"><div class="store-row store-hdr"><div>' + t('store.name') + '</div><div>' + t('store.version') + '</div><div>' + t('store.description') + '</div>      <div>' + t('store.type') + '</div><div>' + t('store.adapter') + '</div><div>' + t('store.status') + '</div><div>' + t('store.actions') + '</div></div>';
         installed.forEach(it => {
-            html += itemRow(it, '<div class="' + (it.enabled ? 'tag-on' : 'tag-off') + '">' + (it.enabled ? t('store.enabled') : t('store.disabled')) + '</div>' + actBtns(it.kind, it.id, it.enabled, it.managed !== false, it.upgrade_available, it.config_only));
+            html += itemRow(it, '<div class="' + (it.enabled ? 'tag-on' : 'tag-off') + '">' + (it.enabled ? t('store.enabled') : t('store.disabled')) + '</div>' + actBtns(it.type, it.id, it.enabled, it.managed !== false, it.upgrade_available, it.config_only));
         });
         if (!installed.length) html += '<div class="empty" style="padding:24px">' + t('store.no_installed_items') + '</div>';
         html += '</div></div>';

@@ -12,7 +12,10 @@ When to use L2
 
 * Lightweight automation, HTTP polling, or glue between REST and points
 * UI snippets under ``/modules/`` without native code
-* Prototypes before committing to L3
+
+.. only:: not hide_l3
+
+   * Prototypes before committing to L3
 
 Requirements: ``CONFIG_MINIHUB_DYNAMIC_MODULES`` and JS runtime enabled in the
 product sdkconfig (``dynamic_modules`` feature in ``app.yml``).
@@ -25,7 +28,7 @@ Directory layout
    examples/plugins/ID/
      module.json
      main.js              # required — must export setup(host)
-     ui.json              # optional — Web UI module panel
+     meta.json            # optional ui + capabilities
      web/                 # optional static assets
 
 ``module.json`` example
@@ -121,7 +124,7 @@ Pack, deploy, test
    curl -X POST http://$HUB/api/store/refresh
    curl -X POST http://$HUB/api/store/install \
      -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"demo_js"}'
+     -d '{"type":"module","id":"demo_js"}'
    curl -X POST http://$HUB/api/hub/reload
 
 Verify:
@@ -131,4 +134,7 @@ Verify:
 * Serial log: ``JS module 'demo_js' setup ok``
 
 Module RPC from L2 is optional; prefer ``host.command`` or REST. JS API: :doc:`../api/js_host`.
-For L3 RPC see :doc:`develop_l3`.
+
+.. only:: not hide_l3
+
+   For L3 RPC see :doc:`develop_l3`.

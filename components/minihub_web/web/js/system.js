@@ -530,7 +530,7 @@ async function sysUpdateApply(kind, force) {
         const r = await fetch('/api/update/apply', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ kind: kind, force: !!force })
+            body: JSON.stringify({ type: kind, force: !!force })
         });
         if (!r.ok) { toast(t('sys.failed')); return; }
         toast(t('sys.applied_update', { name: name }));

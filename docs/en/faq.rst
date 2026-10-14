@@ -18,7 +18,7 @@ manifest; you do not need to run ``sync_host_manifest.py`` yourself.
 Store install returns 400 / 404 / 409
 -------------------------------------
 
-* **400** — missing ``kind`` / ``id``. ``kind`` must be ``module`` or ``pack``
+* **400** — missing ``type`` / ``id``. ``type`` must be ``module`` or ``pack``
   (not ``adapter``). Multipart ``file=@*.mhub`` is **not** supported.
 * **404** — catalog entry or artifact missing; set ``custom_url`` then
   ``POST /api/store/refresh``
@@ -28,17 +28,19 @@ Store install returns 400 / 404 / 409
 Module fails to load (load_guard)
 ---------------------------------
 
-If a native module crashes during ``dlopen``, Host writes
-``/store/modules/ID/.load_guard`` and skips it on the next boot. Clear with
-``POST /api/modules``:
+.. only:: not hide_l3
 
-.. code-block:: json
+   If a native module crashes during ``dlopen``, Host writes
+   ``/store/modules/ID/.load_guard`` and skips it on the next boot. Clear with
+   ``POST /api/modules``:
 
-   { "id": "color_bulb", "clear_load_guard": true, "reload": true }
+   .. code-block:: json
 
-Check the serial log for ABI errors. L3 ``module.json`` ``abi_version`` and
-``core_api_*`` must bracket the Host (header ``MINIHUB_MODULE_ABI_VERSION``).
-See :doc:`api/module_abi`.
+      { "id": "color_bulb", "clear_load_guard": true, "reload": true }
+
+   Check the serial log for ABI errors. L3 ``module.json`` ``abi_version`` and
+   ``core_api_*`` must bracket the Host (header ``MINIHUB_MODULE_ABI_VERSION``).
+   See :doc:`api/module_abi`.
 
 Hub reload loops or MCP says HUB_NOT_READY
 ------------------------------------------

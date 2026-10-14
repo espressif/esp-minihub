@@ -24,17 +24,17 @@ Document shape
          "enabled": true,
          "when": {
            "type": "point",
-           "point_id": "sim.color_bulb",
+           "point_id": "sim.js_kitchen",
            "parameter": "brightness",
            "op": "gt",
            "value": "50",
            "delay_sec": 0
          },
-         "if": [ { "point_id": "sim.meter_plug", "parameter": "power", "op": "eq", "value": "on" } ],
+         "if": [ { "point_id": "sim.js_plug", "parameter": "power", "op": "eq", "value": "on" } ],
          "then": [
            {
              "actions": [
-               { "type": "command", "point_id": "sim.color_bulb", "cmd": "turn_on" },
+               { "type": "command", "point_id": "sim.js_kitchen", "cmd": "turn_on" },
                { "type": "notify", "message": "Door opened" }
              ],
              "delay_after": 5

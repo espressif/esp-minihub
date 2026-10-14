@@ -101,7 +101,7 @@ def _is_js_or_pack(d: Path) -> bool:
     runtime = info.get("runtime") or "native"
     if runtime in ("js", "pack") or info.get("config_only") is True:
         return True
-    if info.get("kind") == "pack":
+    if info.get("type") == "pack":
         return True
     return False
 

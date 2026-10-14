@@ -44,7 +44,7 @@ If `adapters.ble_mesh.enabled` is **false**, Host **skips** the pack (serial:
 
 | File | Role |
 |------|------|
-| `module.json` | Manifest (`kind`/`runtime`: `pack`) + `inject` |
+| `module.json` | Manifest (`type`/`runtime`: `pack`) + `inject` |
 | `README.md` / `README_CN.md` | This guide |
 
 Pack = zip of `module.json` only. After Store install, Host copies it to
@@ -64,7 +64,7 @@ On the Hub: Store `custom_url` → refresh → install. REST:
 ```bash
 curl -X POST http://$HUB/api/store/install \
   -H 'Content-Type: application/json' \
-  -d '{"kind":"pack","id":"ble_mesh_pack"}'
+  -d '{"type":"pack","id":"ble_mesh_pack"}'
 curl -X POST http://$HUB/api/hub/reload
 ```
 

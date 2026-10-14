@@ -176,18 +176,16 @@ def pack_one(
     root: Path = ROOT,
     deploy: Path | None = None,
 ) -> Path:
-    deploy = resolve_deploy_dir(deploy)
+    del deploy
     modules_dir = resolve_modules_dir(root=root)
     so_elf = modules_dir / f"libadapter_{module_id}.so"
     mhmd_build = module_mhmd_path(module_id, root=root)
-    deploy_mod = module_deploy_dir(module_id, deploy)
-    store_pkg = deploy_mod / f"{module_id}.mhub"
 
     if not so_elf.is_file():
         raise FileNotFoundError(
             f"Shared object not found: {so_elf}\n"
             f"(checked {modules_dir} and fallbacks under application/*/build/modules)\n"
-            f"Run a full firmware build first (e.g. ./tools/build_firmware.py --app minihub build)"
+            "Compile it with ./tools/build_firmware.py module <id>"
         )
 
     try:
@@ -213,22 +211,9 @@ def pack_one(
         check=True,
     )
     print(f"Built {module_id}: {mhmd_build} ({mhmd_build.stat().st_size} bytes)")
-    subprocess.run(
-        [
-            sys.executable,
-            str(root / "tools" / "pack_store_module.py"),
-            module_id,
-            "--deploy",
-            str(deploy),
-        ],
-        cwd=str(root),
-        check=True,
-    )
-    # Deploy is Store-facing: never leave MHMD .so beside the .mhub.
-    stray = deploy_mod / f"{module_id}.so"
-    if stray.is_file():
-        stray.unlink()
-    return store_pkg
+    print(f"skip {module_id}: native module is wrapped into a .mhub under "
+          f"Stores/<chip>/<id>/ (not left as a bare .so)")
+    return mhmd_build
 
 
 def host_elf_symbols_out(*, root: Path = ROOT) -> Path:
@@ -238,28 +223,37 @@ def host_elf_symbols_out(*, root: Path = ROOT) -> Path:
     return out
 
 
+# L3 adapters are not built or published. gen_host_export_symbols.py scans
+# libadapter_*.so and exits 1 when none exist, which fails a JS-only pack.
+# Set this true again when an L3 .so is part of the pack.
+REFRESH_HOST_ELF_SYMBOLS = False
+
+
 def refresh_host_and_catalog(*, root: Path = ROOT, deploy: Path | None = None) -> None:
     deploy = resolve_deploy_dir(deploy)
-    modules_dir = resolve_modules_dir(root=root)
-    mhmd_dir = app_build_dir(root=root)
-    gen_out = host_elf_symbols_out(root=root)
-    subprocess.run(
-        [
-            sys.executable,
-            str(root / "tools" / "gen_host_export_symbols.py"),
-            "--modules-dir",
-            str(modules_dir),
-            "--mhmd-dir",
-            str(mhmd_dir),
-            "--store-dir",
-            str(deploy),
-            "--out",
-            str(gen_out),
-            "--skip-allowlist",
-        ],
-        cwd=str(root),
-        check=True,
-    )
+    if REFRESH_HOST_ELF_SYMBOLS:
+        modules_dir = resolve_modules_dir(root=root)
+        mhmd_dir = app_build_dir(root=root)
+        gen_out = host_elf_symbols_out(root=root)
+        subprocess.run(
+            [
+                sys.executable,
+                str(root / "tools" / "gen_host_export_symbols.py"),
+                "--modules-dir",
+                str(modules_dir),
+                "--mhmd-dir",
+                str(mhmd_dir),
+                "--store-dir",
+                str(deploy),
+                "--out",
+                str(gen_out),
+                "--skip-allowlist",
+            ],
+            cwd=str(root),
+            check=True,
+        )
+    else:
+        print("skip gen_host_export_symbols: L3 adapters are not built", flush=True)
     # Default catalog rewrite scans deploy .mhub only (no plugin sources).
     subprocess.run(
         [
@@ -278,6 +272,7 @@ def pack_modules(
     *,
     root: Path = ROOT,
     deploy: Path | None = None,
+    skip_native: bool = False,
 ) -> int:
     deploy = resolve_deploy_dir(deploy)
     items = resolve_module_ids(requested)
@@ -288,6 +283,10 @@ def pack_modules(
     packed: list[str] = []
     skipped: list[tuple[str, str]] = []  # (id, reason)
     for mid, kind in items:
+        if kind != "js" and skip_native and packing_all:
+            print(f"SKIP {mid}: native module", flush=True)
+            skipped.append((mid, "native module"))
+            continue
         if kind == "js":
             pack_js_one(mid, root=root, deploy=deploy)
             packed.append(mid)
@@ -303,7 +302,7 @@ def pack_modules(
             raise FileNotFoundError(
                 f"Shared object not found: {so_elf}\n"
                 f"(checked {modules_dir} and fallbacks under application/*/build/modules)\n"
-                f"Run a full firmware build first (e.g. ./tools/build_firmware.py --app minihub build)"
+                "Compile it with ./tools/build_firmware.py module <id>"
             )
         pack_one(mid, root=root, deploy=deploy)
         packed.append(mid)
@@ -316,13 +315,15 @@ def pack_modules(
         print(f"Not packed: {len(skipped)}", flush=True)
         if packed:
             print("Packed .mhub:", flush=True)
-            kind_by_id = {mid: kind for mid, kind in items}
+            kind_by_id = {item: kind for item, kind in items}
             for mid in packed:
+                if kind_by_id.get(mid) != "js":
+                    print(f"  + {mid}  (native, not published to the store)", flush=True)
+                    continue
                 pkg = module_deploy_dir(mid, deploy) / f"{mid}.mhub"
-                tag = "js" if kind_by_id.get(mid) == "js" else "native"
                 if pkg.is_file():
                     print(
-                        f"  + {mid}.mhub  ({pkg.stat().st_size} bytes, {tag})  → {pkg}",
+                        f"  + {mid}.mhub  ({pkg.stat().st_size} bytes, js)  → {pkg}",
                         flush=True,
                     )
                 else:

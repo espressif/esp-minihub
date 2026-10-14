@@ -61,7 +61,7 @@ End-to-end data flow
    An adapter (e.g. Zigbee, Matter, BLE Mesh) discovers a device and
    registers exactly **one** ``minihub_point_t`` per device (Matter: per
    endpoint). Point ids look like ``zigbee.zb_7d4b``,
-   ``thread.matter_n2_ep1``, ``sim.color_bulb``. The Thread adapter is a
+   ``thread.matter_n2_ep1``, ``sim.js_kitchen``. The Thread adapter is a
    Border Router only and does **not** register device points — see
    :doc:`thread`. Live parameters, access, visibility, and instance bounds
    live in structured JSON on that point — typically
@@ -142,13 +142,16 @@ End-to-end data flow
      stack).
    * **L2** ``minihub_module`` — a JavaScript plugin (``main.js``, QuickJS via
      ``minihub_js``); may ship ``web/`` served at ``/modules/ID/web/…``.
+
+.. only:: not hide_l3
+
    * **L3** ``minihub_module`` — a native ``.so`` loaded at runtime.
 
-   The catalog of installable modules is the **Store** (``minihub_store``).
-   Demos live under ``examples/plugins/`` via ``MINIHUB_PLUGIN_DIRS``; the
-   public Host ``store_preinstall`` stays empty unless factory modules are
-   intentionally bundled. Modules subscribe to events, call Host APIs, and
-   register points — they never bake vendor tokens into Core.
+The catalog of installable modules is the **Store** (``minihub_store``).
+Demos live under ``examples/plugins/`` via ``MINIHUB_PLUGIN_DIRS``; the
+public Host ``store_preinstall`` stays empty unless factory modules are
+intentionally bundled. Modules subscribe to events, call Host APIs, and
+register points — they never bake vendor tokens into Core.
 
 Type-catalog runtime contract
 -----------------------------
@@ -221,5 +224,5 @@ Where to go next
 * :doc:`data_model` — the point model plus adapters / scenes.
 * :doc:`rules` — ``when`` / ``if`` / ``then`` and comparison ops.
 * :doc:`web_console` — replacing or skinning the Web console.
-* :doc:`plugins/index` — authoring L1/L2/L3 Store modules.
+* :doc:`plugins/index` — authoring L1/L2 Store modules.
 * :doc:`api/index` — full REST / JS / MCP / C ABI reference.

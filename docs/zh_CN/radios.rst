@@ -44,7 +44,7 @@ Wi-Fi、802.15.4、BLE Mesh 再其它适配器的顺序 start。互斥不改写
        点
      - Basic 0x0004/0x0005 等
      - 桩（``NOT_SUPPORTED``）
-     - ``examples/plugins/zigbee_ota``
+     - —
    * - :doc:`ble_mesh`
      - ``ble_mesh.bm_XXXX`` 一台一
        点
@@ -52,7 +52,7 @@ Wi-Fi、802.15.4、BLE Mesh 再其它适配器的顺序 start。互斥不改写
        ``uuid``
      - 桩（Firmware Update /
        BLOB）
-     - ``examples/plugins/ble_mesh_ota``
+     - —
    * - :doc:`matter`
      - ``{transport}.matter_n{node}_ep{ep}``
        **按 endpoint**
@@ -60,7 +60,7 @@ Wi-Fi、802.15.4、BLE Mesh 再其它适配器的顺序 start。互斥不改写
        ``node_id``
      - CSA Provider ``0x0029`` +
        BDX
-     - ``examples/plugins/matter_ota``
+     - —
    * - :doc:`thread`
      - **无** 设备点
      - —

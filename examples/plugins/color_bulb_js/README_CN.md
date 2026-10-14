@@ -6,13 +6,14 @@
 `application/minihub`）。注册 **三盏在线模拟灯**
 （`type=light`），带设备页控件与 JS 命令处理 —— **无真实硬件**。
 
-与 [`color_bulb`](../color_bulb/)（L3 C，厨房/客厅）配套，**不**替代 C 插件。
+与 [`meter_plug_js`](../meter_plug_js/)（同一 JS 思路的插座版）配套，替代已删除的
+`color_bulb` L3 C 演示。
 
 ## 何时使用
 
 | 需求 | 选择 |
 |------|------|
-| 原生 `.so` + 嵌入 `devices.json` | **L3** `color_bulb` |
+| 原生 `.so` + 嵌入 `devices.json` | **L3** 原生插件 |
 | 用 QuickJS 做同样体验（原型/教学） | **L2** 本演示 |
 | 驱动已有 Zigbee/L3 点位 | **L2** `auto_off` |
 
@@ -72,5 +73,5 @@ Hub：Store `custom_url` → 刷新 → 安装 `color_bulb_js` →
 
 | | |
 |--|--|
-| **能** | 显示控件；控制开关/亮度/色相/饱和度；与 L3 `color_bulb` 共存 |
+| **能** | 显示控件；控制开关/亮度/色相/饱和度；与 L2 兄弟 `meter_plug_js` 共存 |
 | **不能** | 定时/事件订阅；运行时加载外部 `devices.json` |

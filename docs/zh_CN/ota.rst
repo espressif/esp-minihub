@@ -18,7 +18,19 @@ NVS 恢复出厂（按住配置的 GPIO）**不会** 清空 LittleFS ``/data`` �
 下载写入空闲槽，再重启切过去。镜像必须装得进槽。Matter 构建需要大槽；链接报装不下时
 放大 ``ota_0`` / ``ota_1`` （见 :doc:`production` 与 :doc:`host_customization` ）。
 
-URL OTA 须使用设备能访问的 **HTTPS** （上行见 :doc:`networking` ）。
+从 Store 拉取
+--------------
+
+自动升级不走 ``POST /api/ota`` 。 ``minihub_update_check()`` 与
+``minihub_update_apply()`` 请求部署根的 ``GET /api/firmware?mac=&version=`` 。
+响应是全部芯片的 JSON 数组，字段与判定见 :doc:`api/deploy_index` 。设备按本机芯片名选出
+版本号最高的一项，高于 ``CONFIG_MINIHUB_VERSION`` 时调用 ``minihub_ota_start_url()``
+下载该项的 ``url`` （附带 ``mac`` 与 ``version`` ），并用 64 位十六进制 ``sha256`` 核对。
+``/api/catalog`` 的 ``firmware_upgrade`` 只报告该芯片已发布的最高固件版本，
+这条安装路径不读它。
+
+下面的 URL OTA 与上传是手动路径。 URL OTA 须使用设备能访问的 **HTTPS**
+（上行见 :doc:`networking` ）。 Store 拉取使用设备上配置的 Store 地址。
 
 查询状态
 --------

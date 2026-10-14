@@ -10,7 +10,7 @@ release_notes.txt with --notes.
 
   python3 tools/publish_firmware.py \\
       --bin application/minihub/build/minihub.bin \\
-      --chip ESP32S31 --version v0.1.0 \\
+      --chip esp32s31 --version v0.1.0 \\
       --notes release_notes.txt \\
       --deploy ~/workspace/minihub_website_internal
 """
@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from store_paths import resolve_deploy_dir  # noqa: E402
+from store_paths import normalize_chip_folders, resolve_deploy_dir  # noqa: E402
 
 
 def release_note_text(*, note: str | None, notes: Path | None) -> str:
@@ -56,12 +56,13 @@ def publish_firmware(
 ) -> Path:
     if not blob.is_file():
         raise FileNotFoundError(f"missing firmware bin {blob}")
-    chip_name = chip.strip().upper()
+    chip_name = chip.strip().lower()
     version_name = version.strip()
     if not chip_name or not version_name or "/" in chip_name or "/" in version_name:
         raise ValueError("chip and version must be single path segments")
     if ".." in chip_name or ".." in version_name:
         raise ValueError("chip and version must not contain '..'")
+    normalize_chip_folders(deploy)
     dest_dir = deploy / "Firmwares" / chip_name / version_name
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_name = name.strip() if name else blob.name
@@ -79,7 +80,7 @@ def publish_firmware(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bin", type=Path, required=True, help="firmware .bin to publish")
-    parser.add_argument("--chip", required=True, help="chip folder, e.g. ESP32S31")
+    parser.add_argument("--chip", required=True, help="chip folder, e.g. esp32s31")
     parser.add_argument("--version", required=True, help="version folder name")
     parser.add_argument(
         "--note",

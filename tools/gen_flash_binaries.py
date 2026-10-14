@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Publish full flashable images into <deploy>/Binaries/<chip>/<version>/.
+"""Publish the full flash set into <deploy>/Firmwares/<chip>/<version>/.
 
-The OTA path publishes only the app image
-(Firmwares/<chip>/<version>/<app>.bin, served by GET /api/firmware). A flashing
-tool instead wants the *whole* device written in one shot, so this copies every
-image listed in the build's ``flash_args`` (bootloader, partition table, ota
-data, storage, modstore, app, ...) alongside a merged.bin produced by esptool,
-plus the app debug ELF (the ``.elf`` next to the app ``.bin`` referenced by
-``app-flash_args``, e.g. minihub.elf), under:
+That folder already holds the OTA app image and release_notes.txt. A flashing
+tool wants the whole device written in one shot, so this copies every image
+listed in the build's ``flash_args`` (bootloader, partition table, ota data,
+storage, modstore, app, ...) alongside a merged.bin produced by esptool, plus
+the app debug ELF (the ``.elf`` next to the app ``.bin`` referenced by
+``app-flash_args``, e.g. minihub.elf):
 
-  <deploy>/Binaries/<chip>/<version>/
+  <deploy>/Firmwares/<chip>/<version>/
+      <app>.bin
+      release_notes.txt
       <every flash_args image, by basename>
       merged.bin
       <app>.elf
       flash_command.txt   # esptool write_flash command (offsets + flags from flash_args)
 
+GET /api/firmware lists the app image only, not the flash parts. A leftover
+Binaries/<chip>/<version>/ from an older deploy is removed.
+
 Usage:
   python3 tools/gen_flash_binaries.py --deploy ~/workspace/minihub_store \
-      --chip ESP32S31 --version v1.2.3 --app minihub
+      --chip esp32s31 --version v1.2.3 --app minihub
 """
 from __future__ import annotations
 
@@ -88,6 +92,22 @@ def _flash_command(build: Path, chip: str, app: str) -> str:
     return "\n".join(lines)
 
 
+def _remove_legacy_binaries(deploy: Path, chip: str, version: str) -> None:
+    """Drop Binaries/<chip>/<version> left by older deploys."""
+    root = deploy / "Binaries"
+    if not root.is_dir():
+        return
+    for name in {chip, chip.upper()}:
+        legacy = root / name / version
+        if legacy.is_dir():
+            shutil.rmtree(legacy)
+        parent = root / name
+        if parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+    if not any(root.iterdir()):
+        root.rmdir()
+
+
 def _ensure_merged(build: Path, app: str) -> bool:
     """Make sure build/<app>_merged.bin exists; generate it if missing."""
     merged = build / f"{app}_merged.bin"
@@ -104,7 +124,7 @@ def _ensure_merged(build: Path, app: str) -> bool:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--deploy", required=True, type=Path, help="deploy root")
-    ap.add_argument("--chip", default="ESP32S31", help="chip folder, e.g. ESP32S31")
+    ap.add_argument("--chip", default="esp32s31", help="chip folder, e.g. esp32s31")
     ap.add_argument("--version", required=True, help="version folder name")
     ap.add_argument("--app", default=None, help="application folder (default: MINIHUB_APP or minihub)")
     args = ap.parse_args(argv)
@@ -120,8 +140,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    bin_dir = (args.deploy.expanduser() / "Binaries" / args.chip / args.version)
+    chip = args.chip.strip().lower()
+    deploy = args.deploy.expanduser()
+    bin_dir = deploy / "Firmwares" / chip / args.version
     bin_dir.mkdir(parents=True, exist_ok=True)
+    _remove_legacy_binaries(deploy, chip, args.version)
 
     merged = build / f"{app}_merged.bin"
 
@@ -169,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     (bin_dir / "flash_command.txt").write_text(
-        _flash_command(build, args.chip, app), encoding="utf-8"
+        _flash_command(build, chip, app), encoding="utf-8"
     )
 
     if not copied:

@@ -12,7 +12,7 @@ stay in Core. Vendor clouds and OEM differences can ship in two ways: as Store
 plugins (factory preinstall per SKU, or field install/upgrade when the ABI
 matches) without maintaining Host code; or as a Host-based product fork, which
 uses less RAM and can call Plugin SDK and ESP-IDF APIs more freely. Automation
-uses points: **one device = one point** (``point_id`` like ``sim.color_bulb``),
+uses points: **one device = one point** (``point_id`` like ``sim.js_kitchen``),
 with live parameters in ``props.params``, not per-vendor APIs. Type labels and
 widgets come from the Host catalog, not from Core C.
 

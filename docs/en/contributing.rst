@@ -34,8 +34,15 @@ What belongs where
        point; no per-type C structs. See :doc:`type_catalog`
    * - User-facing documentation
      - ``docs/en/`` and matching ``docs/zh_CN/`` (same tree)
-   * - Module ABI / export list
-     - ``docs/module_sdk/``, :doc:`api/module_abi`
+
+.. only:: not hide_l3
+
+   .. list-table::
+      :header-rows: 0
+      :widths: 34 66
+
+      * - Module ABI / export list
+        - ``docs/module_sdk/``, :doc:`api/module_abi`
 
 Do **not** add vendor cloud tokens, default OEM secrets, or vendor-only rules to
 generic Host ``configs/`` factory JSON.
@@ -76,15 +83,17 @@ Code and firmware
 
 * Build reference Host: ``./tools/build_firmware.py -app minihub build``
 * After ``manifest.yml`` edits, just build (``build_firmware.py`` merges)
-* L3 modules: ``./tools/build_firmware.py -app minihub modules`` (compile every native ``.so``; pack with ``pack``)
-* Standalone L3 demos (no IDF project): ``python3 tools/test_build_plugin_standalone.py -v``
-  (GitLab job ``build:plugin_standalone``; needs ``riscv32-esp-elf-gcc`` and ``cmake``)
 * CI: ``.gitlab-ci.yml``
 
-When changing Host symbols visible to L3 modules, update
-``docs/module_sdk/host_export_allowlist.json`` and run
-``python3 tools/gen_host_export_symbols.py`` as documented in
-:doc:`plugins/develop_l3`.
+.. only:: not hide_l3
+
+   * L3 modules: ``./tools/build_firmware.py -app minihub modules`` (compile every native ``.so``; pack with ``pack``)
+   * Standalone L3 demos (no IDF project): ``python3 tools/test_build_plugin_standalone.py -v``
+     (GitLab job ``build:plugin_standalone``; needs ``riscv32-esp-elf-gcc`` and ``cmake``)
+   * When changing Host symbols visible to L3 modules, update
+     ``docs/module_sdk/host_export_allowlist.json`` and run
+     ``python3 tools/gen_host_export_symbols.py`` as documented in
+     :doc:`plugins/develop_l3`.
 
 Review expectations
 -------------------
@@ -92,8 +101,11 @@ Review expectations
 * Host Core changes should not introduce vendor-specific defaults
 * Plugin changes should document new ``module.json`` fields or REST RPC in the
   Programming Guide or :doc:`api/plugin_rest`
-* ABI bumps must update ``abi_version`` / ``core_api_*`` docs and pack notes in
-  :doc:`production`
+
+.. only:: not hide_l3
+
+   * ABI bumps must update ``abi_version`` / ``core_api_*`` docs and pack notes in
+     :doc:`production`
 
 Questions
 ---------

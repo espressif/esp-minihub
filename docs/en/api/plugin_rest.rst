@@ -6,11 +6,16 @@ Store plugin REST API
 Overview
 --------
 
-HTTP JSON API for developing, debugging, installing, and operating L1/L2/L3 Store
+HTTP JSON API for developing, debugging, installing, and operating L1/L2 Store
 modules; HTTP entry for module RPC.
 
 Implementation: ``components/minihub_web`` + ``minihub_store`` + ``minihub_module``.
-Requires ``CONFIG_MINIHUB_STORE`` and ``CONFIG_MINIHUB_DYNAMIC_MODULES`` (L3).
+Requires ``CONFIG_MINIHUB_STORE`` and ``CONFIG_MINIHUB_DYNAMIC_MODULES``.
+
+.. only:: not hide_l3
+
+   The same API covers L3 native modules. ``CONFIG_MINIHUB_DYNAMIC_MODULES`` is
+   required to load them.
 
 Host REST: :doc:`host_rest`.
 
@@ -19,7 +24,12 @@ Conventions
 
 * Install/upgrade/uninstall does not support multipart ``.mhub`` upload — run
   ``POST /api/store/refresh`` then install from catalog URL.
-* ``kind`` must be ``module`` (L2/L3) or ``pack`` (L1).
+* ``type`` must be ``module`` (L2) or ``pack`` (L1).
+
+.. only:: not hide_l3
+
+   ``type: module`` also covers L3.
+
 * Default ``reload: true`` triggers Hub soft reload — :doc:`../architecture`.
 
 
@@ -42,12 +52,14 @@ List installed Store modules and load state.
    ``runtime`` is one of:
 
    * ``js`` — L2 QuickJS (``main.js``)
-   * ``native`` — L3 ``.so``
-   * ``hybrid`` — both native and ``main.js`` (optional ``entry`` ``js`` or
-     ``native``)
 
    The field is omitted if Host cannot classify the slot. L1 packs are listed
    by ``GET /api/packs``, not as ``runtime: pack``.
+
+.. only:: not hide_l3
+
+   ``runtime`` may also be ``native`` (L3 ``.so``) or ``hybrid`` (both native
+   and ``main.js``; optional ``entry`` ``js`` or ``native``).
 
 POST /api/modules
 -----------------
@@ -73,7 +85,7 @@ Enable/disable, delete a module, or clear load_guard.
        ``true`` removes ``/store/modules/ID/``.
 
    ``clear_load_guard`` (bool)
-       Clear ``.load_guard`` so native load is retried.
+       Clear ``.load_guard`` so the next load is retried.
 
    ``reload`` (bool, optional)
        Default true; soft-reload Hub after success.
@@ -118,7 +130,7 @@ Invoke ``minihub_module_rpc`` when implemented.
    **Attention**
 
    MCP ``hub.api`` proxies only allowlisted ``method`` values (:doc:`mcp`). L2 JS modules
-   usually have no native RPC.
+   register RPC in ``setup`` when they need it.
 
 GET /api/modules/ID/preview
 ---------------------------
@@ -152,7 +164,7 @@ Current catalog entries from configured Store URL.
 
    **Returns**
 
-   * **HTTP 200** — JSON array with ``kind``, ``id``, ``version``, ``url``, etc.
+   * **HTTP 200** — JSON array with ``type``, ``id``, ``version``, ``url``, etc.
 
 POST /api/store/refresh
 -----------------------
@@ -183,7 +195,7 @@ Download ``.mhub`` from catalog and unpack under ``/store/modules/ID/`` or L1 pa
 
    **Parameters (JSON body)**
 
-   ``kind`` (string, required)
+   ``type`` (string, required)
        ``module`` or ``pack``.
 
    ``id`` (string, required)
@@ -212,7 +224,7 @@ POST /api/store/upgrade · POST /api/store/uninstall
 
    ``POST /api/store/upgrade · POST /api/store/uninstall``
 
-upgrade replaces with catalog version; uninstall removes entry. Body: ``kind`` + ``id``
+upgrade replaces with catalog version; uninstall removes entry. Body: ``type`` + ``id``
 required; optional ``reload`` (default true).
 
 GET / POST /api/store/config
@@ -237,5 +249,8 @@ Development and production
 
 * Pack workflow: :doc:`../plugins/pack_and_catalog`
 * Factory preinstall: :doc:`../production`
-* ABI mismatch on install: :doc:`module_abi`
+
+.. only:: not hide_l3
+
+   * ABI mismatch on install: :doc:`module_abi`
 

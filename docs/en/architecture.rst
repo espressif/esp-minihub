@@ -17,7 +17,7 @@ Layering
    |  MiniHub Host                                                    |
    |  minihub_web / minihub_mcp_*     Web console, REST, MCP          |
    |  minihub_core / minihub_hub      points, commands, rules, reload |
-   |  minihub_module                  Store .mhub (L2 JS / L3 .so)    |
+   |  minihub_module                  Store .mhub (L2 JS)             |
    +------------------------------------------------------------------+
                                   |
    +------------------------------------------------------------------+
@@ -35,6 +35,10 @@ Layering
 
    IP uplink: minihub_net — see :doc:`networking`.
 
+.. only:: not hide_l3
+
+   ``minihub_module`` also loads L3 ``.so`` packages (and Hybrid).
+
 Design principles
 -----------------
 
@@ -46,14 +50,18 @@ third-party credentials.
 
 **Points are the only automation ABI.** One physical device is one point
 (``protocol.device``). Parameters live in ``props.params``. Adapters hide
-protocol details. A rule that says ``turn_on`` on ``sim.color_bulb`` still
+protocol details. A rule that says ``turn_on`` on ``sim.js_kitchen`` still
 works if you later replace that device with another adapter that registers the
 same ``point_id``.
 
 **Soft reload instead of reboot.** Changing ``adapters.json``, installing a
 ``.mhub``, or toggling a module calls ``minihub_hub_reload`` — adapters stop,
-modules ``dlclose``, then load again. Matter+Thread may re-attach CHIP; wait
+then load again. Matter+Thread may re-attach CHIP; wait
 for Hub ready (MCP ``HUB_NOT_READY`` during reload).
+
+.. only:: not hide_l3
+
+   Reload also ``dlclose`` s L3 modules before they load again.
 
 **Two writable flash partitions.** The generic Host mounts ``storage`` at
 ``/data`` (Hub config) and ``modstore`` at ``/store`` (installed plugins and the
@@ -71,7 +79,12 @@ Key components
 * ``minihub_config`` — load/save ``/data/config/*.json``
 * ``minihub_hub`` — soft reload orchestration
 * ``minihub_web`` — HTTP REST, Web console, ``/ws/events``
-* ``minihub_module`` — L2/L3 loader, ABI / host vtable
+* ``minihub_module`` — L2 loader
+
+.. only:: not hide_l3
+
+   ``minihub_module`` also loads L3 modules through the ABI / host vtable.
+
 * ``minihub_pack`` — L1 config packs (``inject`` merge)
 * ``minihub_store`` — catalog, install/upgrade/uninstall
 * ``minihub_net`` — Ethernet / Wi-Fi STA
@@ -95,9 +108,9 @@ Default writable root: ``/data`` (LittleFS on generic ``minihub`` product).
      devices.csv        Flattened type catalog
      model/             Optional uploaded devices.csv + parameters.csv
    /data/config/packs/  Optional L1 pack staging (product-dependent)
-   /store/modules/ID/   Installed Store modules (module.json, .so, main.js, …)
+   /store/modules/ID/   Installed Store modules (module.json, main.js, …)
    /data/web/           Host Web console (index.html, login.html, …)
-   /data/tmp/           MHMD extract / scratch (module loader)
+   /data/tmp/           scratch (module loader)
 
 NVS holds Wi-Fi credentials, Store URL overrides, OTA metadata — not the full
 ``adapters.json`` (that lives on LittleFS).
@@ -127,13 +140,17 @@ Hub soft reload
 
 1. ``minihub_config_reload()`` — re-read JSON from flash
 2. ``minihub_pack_reload()`` — merge L1 packs into adapters view
-3. Stop all adapters; ``minihub_module_reload()`` — dlclose L3, rescan manifests
+3. Stop all adapters; ``minihub_module_reload()`` — rescan manifests
 4. ``minihub_adapter_load_all()`` + ``start_all()``
 5. ``minihub_js_reload()`` — re-run L2 ``setup(host)``
 6. ``minihub_rules_reload()`` + ``minihub_scenes_reload()``
 
-Adapter lifecycle lock prevents ``adapter_poll`` from running while a ``.so`` is
-unloaded. Matter + Thread builds may re-attach CHIP to OpenThread after reload.
+Adapter lifecycle lock prevents ``adapter_poll`` from running across reload.
+Matter + Thread builds may re-attach CHIP to OpenThread after reload.
+
+.. only:: not hide_l3
+
+   The same lock covers ``dlclose`` of an L3 ``.so``.
 
 Data flow: command
 ------------------
@@ -151,7 +168,7 @@ Data flow: Store install
 
 .. code-block:: text
 
-   POST /api/store/install { kind, id }
+   POST /api/store/install { type, id }
         → download .mhub → unzip under /store/modules/ID/
         → optional hub reload
         → minihub_module_load_all → minihub_module_entry → register adapter
@@ -201,16 +218,25 @@ Supported extension surface for OEM Host and Store plugins.
      - :doc:`api/mcp`
    * - L2 JS host object
      - :doc:`api/js_host`
-   * - L3 module + adapter C API
-     - :doc:`api/module_abi`, :doc:`api/minihub_core`, :doc:`api/minihub_adapter`
-   * - L3 link symbols
-     - ``docs/module_sdk/host_export_allowlist.json``
    * - Store pack / catalog
      - :doc:`plugins/pack_and_catalog`
    * - Factory / OTA
      - :doc:`production`
 
-**ABI stability:** L3 ``.so`` modules declare ``abi_version`` and
-``core_api_min`` / ``core_api_max`` in ``module.json``. Ship matched firmware +
-``.mhub`` sets per release (see :doc:`production`). Host export changes require
-allowlist and symbol regeneration (:doc:`plugins/develop_l3`).
+.. only:: not hide_l3
+
+   .. list-table::
+      :header-rows: 1
+      :widths: 28 72
+
+      * - Surface
+        - Chapter / artifact
+      * - L3 module + adapter C API
+        - :doc:`api/module_abi`, :doc:`api/minihub_core`, :doc:`api/minihub_adapter`
+      * - L3 link symbols
+        - ``docs/module_sdk/host_export_allowlist.json``
+
+   **ABI stability:** L3 ``.so`` modules declare ``abi_version`` and
+   ``core_api_min`` / ``core_api_max`` in ``module.json``. Ship matched firmware +
+   ``.mhub`` sets per release (see :doc:`production`). Host export changes require
+   allowlist and symbol regeneration (:doc:`plugins/develop_l3`).

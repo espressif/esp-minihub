@@ -92,20 +92,26 @@ Develop a Store plugin (quick path)
 
 1. Add ``examples/plugins/ID/`` (or a vendor tree via
    ``MINIHUB_PLUGIN_DIRS``; see
-   :doc:`plugins/develop_l1`, :doc:`plugins/develop_l2`, or
-   :doc:`plugins/develop_l3`)
+   :doc:`plugins/develop_l1` or :doc:`plugins/develop_l2`)
 2. ``python3 tools/pack_store_module.py pack ID``
 3. Run ``python3 tools/store_server.py`` on the PC (the Hub pulls packages over
    LAN; do not run this on the device)
 4. Hub: ``POST /api/store/config`` with ``custom_url`` pointing at that server
 5. ``POST /api/store/refresh`` then ``POST /api/store/install`` with
-   ``{"kind":"module","id":"ID"}`` (L1 packs use ``"kind":"pack"``) or Web UI →
+   ``{"type":"module","id":"ID"}`` (L1 packs use ``"type":"pack"``) or Web UI →
    Store
+
+.. only:: not hide_l3
+
+   L3 native modules: :doc:`plugins/develop_l3`. Compile the ``.so`` before pack.
 
 New type / widgets: Host ``model/*.csv`` (rebuild) or
 ``PUT /api/dev/catalog/…`` on a running Hub (:doc:`type_catalog`). Demos:
-L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js``, L3
-``color_bulb`` / ``meter_plug``.
+L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js``.
+
+.. only:: not hide_l3
+
+   L3 demos: ``examples/plugins/color_bulb``, ``examples/plugins/meter_plug``.
 
 OEM Host product: see :doc:`host_customization`.
 

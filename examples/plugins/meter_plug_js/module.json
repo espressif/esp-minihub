@@ -1,0 +1,16 @@
+{
+  "id": "meter_plug_js",
+  "name": "Meter plug JS (L2 demo)",
+  "version": "0.1.0",
+  "targets": [
+    "ALL"
+  ],
+  "enabled": true,
+  "type": "module",
+  "runtime": "js",
+  "adapter": "meter_plug_js",
+  "description": "L2 QuickJS demo: one simulated type=switch point (writable power + read-only voltage/current/watts) with a JS command handler for display and control on the Devices page.",
+  "abi_version": 1,
+  "core_api_min": 1,
+  "core_api_max": 1
+}

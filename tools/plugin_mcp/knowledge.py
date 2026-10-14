@@ -26,7 +26,7 @@ This MCP is for **plugin authors**. It is not the Hub on-device MCP (`CONFIG_MIN
 | L3 native | + MHMD `.so` | `<id>.mhub` (needs Host build) |
 
 `id` = directory name: `^[a-z][a-z0-9_]{0,30}$` (underscores, **no hyphens**).
-`kind` is only `"module"` or `"pack"`.
+`type` is only `"module"` or `"pack"`.
 
 Use tools: `plugin_guide`, `scaffold_plugin`, `validate_plugin`, `pack_plugin` (L1/L2).
 Start from `docs/module_sdk/templates/`, not an existing vendor plugin.
@@ -36,7 +36,7 @@ Vendor cloud tokens stay in the plugin, never in Host Core.
 
 Config only. No `main.js`, no `CMakeLists.txt`, no `.so`.
 
-- `kind`: `"pack"`, `runtime`: `"pack"` (or `config_only: true`)
+- `type`: `"pack"`, `runtime`: `"pack"` (or `config_only: true`)
 - `inject.adapter` must be an **existing Host** adapter: mqtt, zigbee, ble_mesh, modbus, matter, thread
 - L1 does **not** add a new radio stack (that is Host or L3)
 
@@ -47,7 +47,7 @@ Store config field is `custom_url`, not `url`.
 
 Needs Host `CONFIG_MINIHUB_DYNAMIC_MODULES` and `CONFIG_MINIHUB_JS_PLUGINS`.
 
-- `kind`: `"module"`, `runtime`: `"js"`
+- `type`: `"module"`, `runtime`: `"js"`
 - Entry: `main.js` (QuickJS). Optional `ui.json` / `web/`
 - Only call documented `host.*` APIs (see topic `js_api`)
 - Do **not** call native Wi-Fi / Zigbee / BLE Mesh / OpenThread APIs from JS

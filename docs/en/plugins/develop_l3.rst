@@ -11,7 +11,7 @@ loader expects an **MHMD** header on the ``.so`` payload (see
 End-to-end workflow
 -------------------
 
-1. **Scaffold** — ``module.json``, sources, optional ``ui.json``
+1. **Scaffold** — ``module.json``, sources, optional ``meta.json``
 2. **Compile** the ``.so`` — pick one of the two methods below
 3. **Pack** — ``python3 tools/pack_store_module.py pack ID``
 4. **Catalog** — after ``.mhub`` files are in the store directory, rewrite
@@ -51,14 +51,9 @@ the same translation unit. Header reference: :doc:`../api/plugin_host`
    python3 /path/to/module_sdk/pack_store_module.py mhmd \
      build/lib/my_native.so build/my_native.so
 
-   # 3. Pack .mhub (required; the Hub installs the zip, not the bare .so)
+   # 3. MHMD stays in this plugin's build/. pack does not create a store folder.
    export MINIHUB_PLUGIN_DIRS="$PWD"
    python3 /path/to/module_sdk/pack_store_module.py pack my_native
-
-   # 4. Rewrite catalog.json from each Stores/ESP32S31 or Stores/Common .mhub.
-   #    sync_store_catalog.py ships in module_sdk.zip next to pack_store_module.py.
-   python3 /path/to/module_sdk/sync_store_catalog.py --from-store \
-     --deploy ~/workspace/minihub_store
 
 ``-shared -fPIC`` and ``-Wl,-z,max-page-size=4`` are required for ``dlopen`` on
 ESP32-S31. With ``-fvisibility=hidden`` and ``--gc-sections``, also pass
@@ -131,14 +126,15 @@ In-tree with the Host
 Sources live in ``examples/plugins/ID/`` (demos) or a tree listed in
 ``MINIHUB_PLUGIN_DIRS`` (export **before** CMake) with ``idf_component_register``.
 ``REQUIRES`` only the public libs you call. With
-``CONFIG_MINIHUB_DYNAMIC_MODULES``, add ``-fPIC``. Firmware build uses
-``cmake/minihub_module_so.cmake`` to produce
-``application/minihub/build/modules/libadapter_ID.so``, then MHMD + pack.
+``CONFIG_MINIHUB_DYNAMIC_MODULES``, add ``-fPIC``.
+``cmake/minihub_module_so.cmake`` produces
+``application/minihub/build/modules/libadapter_ID.so``, then MHMD + pack,
+when you build the module target. A Host firmware ``build`` does not.
 
 .. code-block:: bash
 
    export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"   # demos only
-   ./tools/build_firmware.py -app minihub build
+   ./tools/build_firmware.py -app minihub modules
 
 To pack again after the ``.so`` exists: ``python3 tools/pack_store_module.py pack ID``.
 
@@ -169,7 +165,7 @@ Directory layout (scaffold ``my_native``)
      module_entry.c       # exports minihub_module_entry (+ optional minihub_module_rpc)
      my_native_adapter.c  # minihub_adapter_t implementation
      CMakeLists.txt
-     ui.json              # optional Web UI
+     meta.json            # optional ui + capabilities
 
 ``module.json`` (L3)
 --------------------
@@ -183,12 +179,13 @@ Directory layout (scaffold ``my_native``)
      "enabled": true,
      "adapter": "my_native",
      "binary": "my_native.so",
-     "ui_file": "ui.json",
      "abi_version": 1,
      "core_api_min": 1,
-     "core_api_max": 1,
-     "capabilities": ["auth", "device_sync"]
+     "core_api_max": 1
    }
+
+``ui`` and ``capabilities`` now live in ``meta.json`` (a sibling file); module.json
+keeps only runtime/environment info.
 
 ``binary`` is the filename **inside** the unpacked module directory on device
 (for example ``/store/modules/my_native/my_native.so``).
@@ -266,7 +263,7 @@ Install and debug
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/install -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"my_native"}'
+     -d '{"type":"module","id":"my_native"}'
    curl -X POST http://$HUB/api/modules -H 'Content-Type: application/json' \
      -d '{"id":"my_native","enabled":true,"reload":true}'
 

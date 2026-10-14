@@ -2,22 +2,21 @@
 #
 # One-click deploy for MiniHub.
 #
-# Regenerates every served artifact under the deploy root (host ABI contract,
-# device-type registry, plugin catalogs, firmware), then starts the local servers
+# Regenerates every served artifact under the deploy root (device-type
+# registry, plugin catalogs, firmware), then starts the local servers
 # (static site + store server + docs preview) via run.sh.
 #
 # Deploy root precedence (mirrors store_paths.resolve_deploy_dir):
 #   $MINIHUB_DEPLOY_DIR  >  ./MiniHub_store  >  ~/workspace/minihub_store
 #
-# Plugin packing: step [4/5] now runs tools/pack_store_module.py pack all
-# (scanning examples/plugins and MINIHUB_PLUGIN_DIRS) before re-indexing. JS /
-# config-only modules pack without a build; native modules need their .so
-# (built by build_firmware.py) and are skipped with a warning when absent, so
-# the script never aborts on an unbuilt native plugin.
+# Plugin packing: step [3/4] runs tools/pack_store_module.py pack all
+# (scanning examples/plugins and MINIHUB_PLUGIN_DIRS) before re-indexing.
+# pack all skips native and hybrid modules.
 #
 # Firmware publish copies the *already built* application image
 # (application/<app>/build/<app>.bin) into Firmwares/<chip>/<version>/ with a
-# release_notes.txt. The build itself is left to build_firmware.py -- this step
+# release_notes.txt and the full flash set (bootloader, partitions, merged.bin,
+# <app>.elf, flash_command.txt). The build itself is left to build_firmware.py -- this step
 # only publishes. When the bin is absent it warns and skips (no failure), same
 # as the plugin flow. GET /api/firmware derives the catalog by walking the
 # Firmwares tree at request time, so no index file is written here. The
@@ -82,6 +81,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+FW_CHIP="$(printf '%s' "$FW_CHIP" | tr '[:upper:]' '[:lower:]')"
+
 # Release versions come from two independent Kconfig values -- web and firmware
 # releases are usually not in sync, so a web-only fix bumps only the web one.
 # Manage both under `idf.py menuconfig` > MiniHub:
@@ -135,12 +136,8 @@ export MINIHUB_DEPLOY_DIR="$DEPLOY_ROOT"
 
 echo "==> deploy root: $DEPLOY_ROOT"
 
-# 1) Host ABI contract -> Stores/host_abi_versions.json (+ .csv matrix view)
-echo "==> [1/5] host ABI contract"
-$PY tools/gen_abi_contract.py --deploy "$DEPLOY_ROOT"
-
-# 2) Web assets: minify components/minihub_web/web -> Webs/<WEB_VERSION>/
-echo "==> [2/5] web assets (Webs/$WEB_VERSION)"
+# 1) Web assets: minify components/minihub_web/web -> Webs/<WEB_VERSION>/
+echo "==> [1/4] web assets (Webs/$WEB_VERSION)"
 _WEB_NOTES="components/minihub_web/web/release_notes.txt"
 _MINIFY_NOTES_FLAG=""
 if [ -f "$_WEB_NOTES" ]; then
@@ -150,26 +147,24 @@ $PY tools/minify_web_assets.py --src components/minihub_web/web \
   --deploy-root "$DEPLOY_ROOT" --web-version "$WEB_VERSION" \
   $_MINIFY_NOTES_FLAG
 
-# 3) Device-type registry. Web and asset manifests are no longer written as
+# 2) Device-type registry. Web and asset manifests are no longer written as
 #    static index.json files: store_server.py serves GET /api/web and
 #    GET /api/assets by walking Webs/<version>/ and Assets/ at request time.
-echo "==> [3/5] device-type registry"
+echo "==> [2/4] device-type registry"
 $PY tools/gen_deploy_index.py --deploy "$DEPLOY_ROOT" --device-widget components/minihub_device_widget --sync-source
 
-# 4) Plugin pack (+ abi blocks) then catalogs.
-#    Packing scans examples/plugins (and MINIHUB_PLUGIN_DIRS). JS / config-only
-#    modules pack without a build; native modules need their .so (built by
-#    build_firmware.py) and are skipped with a warning when absent.
-echo "==> [4/5] plugin catalogs"
+# 3) Plugin pack (+ abi blocks) then catalogs.
+#    JS and config-only modules only. Native and hybrid modules are omitted.
+echo "==> [3/4] plugin catalogs"
 $PY tools/pack_store_module.py pack all --continue-on-error --deploy "$DEPLOY_ROOT" || true
 $PY tools/sync_store_catalog.py --from-store --deploy "$DEPLOY_ROOT"
 
-# 5) Firmware publish.
-#    OTA image -> Firmwares/<chip>/<version>/<app>.bin  (served by GET /api/firmware)
-#    Flash set -> Binaries/<chip>/<version>/: every image in build/flash_args
-#                 (bootloader, partition-table, ota_data, storage, modstore, <app>),
-#                 merged.bin, and <app>.elf — for a flashing tool (flash_command.txt).
-echo "==> [5/5] firmware publish"
+# 4) Firmware publish.
+#    One folder: Firmwares/<chip>/<version>/
+#      <app>.bin + release_notes.txt     OTA image (GET /api/firmware)
+#      bootloader, partition-table, ota_data, storage, modstore, merged.bin,
+#      <app>.elf, flash_command.txt      full flash set for a flashing tool
+echo "==> [4/4] firmware publish"
 if [[ "$SKIP_FW" -eq 1 ]]; then
   echo "==> skipped (--no-firmware)"
 else
@@ -187,10 +182,9 @@ else
     else
       printf 'Firmware %s for %s\n' "$FW_VERSION" "$FW_CHIP" > "$FW_DEST_DIR/release_notes.txt"
     fi
-    echo "==> firmware (OTA): $FW_DEST_DIR"
-    echo "==> flash binaries: Binaries/$FW_CHIP/$FW_VERSION"
+    echo "==> firmware: $FW_DEST_DIR"
     $PY tools/gen_flash_binaries.py --deploy "$DEPLOY_ROOT" --chip "$FW_CHIP" --version "$FW_VERSION" --app "$APP" || \
-      echo "==> warn: Binaries/ generation incomplete (esptool unavailable or build missing?)"
+      echo "==> warn: flash image generation incomplete (esptool unavailable or build missing?)"
   fi
 fi
 

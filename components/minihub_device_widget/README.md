@@ -73,6 +73,7 @@ Reference only (RainMaker system services). Not part of the widget registry.
 - **`light`** — `power`, `brightness`, `cct`, `hue` (label 颜色), `saturation`,
   `intensity`
 - **`switch`** — `power`, `voltage_v`, `current_a`, `power_w`, `energy_wh`
+- **`speaker`** — `power`, `volume` (`volume` requires `power`)
 - **`name`** — in catalog; no device lists it → never a control
 
 Full tables: [`STANDARD_TYPES.md`](STANDARD_TYPES.md).

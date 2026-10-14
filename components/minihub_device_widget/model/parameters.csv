@@ -25,3 +25,4 @@ smoke,烟雾,Smoke,Bool,Read,,,,,ui.text,,Smoke detected,TRUE,,,
 tamper,防拆,Tamper,Bool,Read,,,,,ui.text,,Tamper detected,TRUE,,,
 temperature,温度,Temperature,Float,Read,-40,125,0.1,°C,ui.text,,Device or ambient temperature (read-only),TRUE,,,
 voltage_v,电压,Voltage,Float,Read,0,250,0.1,V,ui.text,,Line voltage (metering readout),TRUE,,,
+volume,音量,Volume,Int,Read/Write,0,100,1,,ui.slider,,Speaker volume,TRUE,,,power

@@ -50,6 +50,11 @@ Host **类型目录** 决定设备页怎么画：有哪些类型、参数标签�
      - power
      - power
      - 插座/开关图标 （见下）
+   * - ``speaker``
+     - power, volume
+     - volume
+     - volume
+     - 音箱图标 （见下）
    * - ``sensor_air_quality``
      - co2, pm25, pressure_hpa, battery
      - co2
@@ -97,11 +102,11 @@ Host **类型目录** 决定设备页怎么画：有哪些类型、参数标签�
      - 漏水图标 （见下）
 
 插件 ``devices.json`` **只需声明本台设备真正用到的子集**；不必把类型上全部
-参数都挂上。演示：
+参数都挂上。JS 演示：
 
-* ``examples/plugins/color_bulb`` → ``type: light`` （power / brightness / hue /
+* ``examples/plugins/color_bulb_js`` → ``type: light`` （power / brightness / hue /
   saturation；cct 用 ``visible: false`` 藏起）
-* ``examples/plugins/meter_plug`` → ``type: switch`` （power 可写；电压电流功率只读）
+* ``examples/plugins/meter_plug_js`` → ``type: switch`` （power 可写；电压电流功率只读）
 
 目录内已内置以下传感器类型：``sensor_contact``、``sensor_motion``、
 ``sensor_occupancy``、``sensor_tamper``、``sensor_water``、``sensor_smoke``、
@@ -132,7 +137,7 @@ hidden。色相 / 饱和度 / 色温都是 **slider**，彩虹或色带靠 CSS�
      - Bool
      - —
      - toggle
-     - light, switch
+     - light, switch, speaker
    * - ``brightness``
      - 亮度
      - Int
@@ -163,6 +168,12 @@ hidden。色相 / 饱和度 / 色温都是 **slider**，彩虹或色带靠 CSS�
      - 0–100 %, step 1
      - slider
      - light
+   * - ``volume``
+     - 音量
+     - Int
+     - 0–100, step 1
+     - slider（依赖 power）
+     - speaker
    * - ``voltage_v``
      - 电压
      - Float
@@ -299,6 +310,11 @@ hidden。色相 / 饱和度 / 色温都是 **slider**，彩虹或色带靠 CSS�
      - ``images/devices/switch.svg``
      - .. image:: ../_static/catalog/images/devices/switch.svg
           :alt: switch device icon
+          :width: 64px
+   * - ``speaker``
+     - ``images/devices/speaker.svg``
+     - .. image:: ../_static/catalog/images/devices/speaker.svg
+          :alt: speaker device icon
           :width: 64px
    * - ``sensor_air_quality``
      - ``images/devices/sensor_air_quality.svg``
@@ -462,8 +478,10 @@ reload。reload 为原子且可容错 （坏行被跳过、无法解析的文件
 
 单对象（非数组）仍可用于只登记一台的插件。
 
-L3：改 JSON 后重新生成 ``device_desc.gen.h``，不要手改头文件。演示目录：
-``examples/plugins/color_bulb``、``examples/plugins/meter_plug``。
+.. only:: not hide_l3
+
+   L3：改 JSON 后重新生成 ``device_desc.gen.h``，不要手改头文件。演示目录：
+   ``examples/plugins/color_bulb``、``examples/plugins/meter_plug``。
 
 2. 增加全新设备类型
 ^^^^^^^^^^^^^^^^^^^
@@ -521,4 +539,7 @@ L3：改 JSON 后重新生成 ``device_desc.gen.h``，不要手改头文件。�
 * REST 示例：:doc:`api/host_rest`
 * 端到端流程：:doc:`architecture_overview`
 * 类型目录组件：``components/minihub_device_widget/README_CN.md``
-* L3 插件：:doc:`plugins/develop_l3`
+
+.. only:: not hide_l3
+
+   * L3 插件：:doc:`plugins/develop_l3`

@@ -20,6 +20,8 @@
 | switch | esp.device.switch | power, voltage_v, current_a, power_w, energy_wh | power | power |
 
 `esp.device.light` = `esp.device.lightbulb`。`name` 仅作元数据（不在上表类型列表中）。
+目录里的 `speaker`（`power`、`volume`，主参数 `volume`）不进这张表：RainMaker 的
+`esp.device.speaker` 主参数是 Power，另外还有 Media State、Media Control、Mute。
 
 ## 2. 服务
 
@@ -43,6 +45,7 @@
 | 颜色 | hue | Int | Read, Write | 0, 360, 1 | ui.slider | 颜色（度；id 仍为 `hue`） |
 | 饱和度 | saturation | Int | Read, Write | 0, 100, 1 | ui.slider | 饱和度 % |
 | 强度 | intensity | Int | Read, Write | 0, 100, 1 | ui.slider | 强度 % |
+| 音量 | volume | Int | Read, Write | 0, 100, 1 | ui.slider | 音箱音量；依赖 power |
 | 电压 | voltage_v | Float | Read | 0, 250, 0.1 | ui.text | 电压（V）；只读计量 |
 | 电流 | current_a | Float | Read | 0, 16, 0.01 | ui.text | 电流（A）；只读计量 |
 | 功率 | power_w | Float | Read | 0, 4000, 1 | ui.text | 有功功率（W）；不是开关 `power`；只读 |
@@ -51,8 +54,9 @@
 | 参数 | 设备 |
 |------|------|
 | name | —（元数据） |
-| power | light, switch |
+| power | light, switch, speaker |
 | brightness, cct, hue, saturation, intensity | light |
+| volume | speaker |
 | voltage_v, current_a, power_w, energy_wh | switch |
 
 图标：设备头像在 `images/devices/`；可选控件图标在 `images/parameters/`。见

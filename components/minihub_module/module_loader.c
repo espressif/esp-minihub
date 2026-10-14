@@ -493,6 +493,48 @@ static cJSON *load_ui_beside_manifest(const char *manifest_path, const char *ui_
     return ui;
 }
 
+static cJSON *load_meta_beside_manifest(const char *manifest_path)
+{
+    if (!manifest_path) {
+        return NULL;
+    }
+    char dir[192];
+    parent_dir(manifest_path, dir, sizeof(dir));
+    if (dir[0] == '\0') {
+        return NULL;
+    }
+    char meta_path[256];
+    snprintf(meta_path, sizeof(meta_path), "%s/meta.json", dir);
+    return load_json_file_capped(meta_path, 16384);
+}
+
+/** Resolve the module's UI descriptor. Prefer meta.json's ``ui``; fall back to
+ *  legacy ``ui``/``ui_file`` keys in module.json or a sibling ``ui.json`` file. */
+static cJSON *resolve_ui(const char *manifest_path, const cJSON *meta, const cJSON *root)
+{
+    if (meta) {
+        const cJSON *ui = cJSON_GetObjectItem(meta, "ui");
+        if (cJSON_IsObject(ui)) {
+            return cJSON_Duplicate(ui, 1);
+        }
+        if (cJSON_IsString(ui)) {
+            return load_ui_beside_manifest(manifest_path, ui->valuestring);
+        }
+    }
+    const cJSON *ui = cJSON_GetObjectItem(root, "ui");
+    const cJSON *ui_file = cJSON_GetObjectItem(root, "ui_file");
+    if (cJSON_IsObject(ui)) {
+        return cJSON_Duplicate(ui, 1);
+    }
+    if (cJSON_IsString(ui)) {
+        return load_ui_beside_manifest(manifest_path, ui->valuestring);
+    }
+    if (cJSON_IsString(ui_file)) {
+        return load_ui_beside_manifest(manifest_path, ui_file->valuestring);
+    }
+    return load_ui_beside_manifest(manifest_path, "ui.json");
+}
+
 static bool path_is_dir(const char *path)
 {
     struct stat st;
@@ -557,6 +599,7 @@ static esp_err_t parse_manifest(const char *path, module_slot_t *slot)
         ESP_LOGE(TAG, "invalid module manifest: %s", path);
         return ESP_FAIL;
     }
+    cJSON *meta = load_meta_beside_manifest(path);
 
     minihub_module_info_t *info = &slot->info;
     info->enabled = true;
@@ -581,17 +624,26 @@ static esp_err_t parse_manifest(const char *path, module_slot_t *slot)
     const cJSON *config_only = cJSON_GetObjectItem(root, "config_only");
     const cJSON *inject = cJSON_GetObjectItem(root, "inject");
     const cJSON *runtime = cJSON_GetObjectItem(root, "runtime");
-    const cJSON *capabilities = cJSON_GetObjectItem(root, "capabilities");
-
+    /* ui + capabilities live in meta.json (preferred) or inline in module.json
+     * (legacy). module.json carries only runtime/environment info. */
+    const cJSON *eff_caps =
+        (meta && cJSON_IsArray(cJSON_GetObjectItem(meta, "capabilities")))
+            ? cJSON_GetObjectItem(meta, "capabilities")
+            : cJSON_GetObjectItem(root, "capabilities");
     slot->auth_cap = false;
-    if (cJSON_IsArray(capabilities)) {
+    if (cJSON_IsArray(eff_caps)) {
         const cJSON *cap = NULL;
-        cJSON_ArrayForEach(cap, capabilities) {
+        cJSON_ArrayForEach(cap, eff_caps) {
             if (cJSON_IsString(cap) && strcmp(cap->valuestring, "auth") == 0) {
                 slot->auth_cap = true;
                 break;
             }
         }
+    }
+    slot->ui_json = resolve_ui(path, meta, root);
+    if (meta) {
+        cJSON_Delete(meta);
+        meta = NULL;
     }
 
     const bool is_js = cJSON_IsString(runtime) && strcmp(runtime->valuestring, "js") == 0;
@@ -671,17 +723,7 @@ static esp_err_t parse_manifest(const char *path, module_slot_t *slot)
             cJSON_Delete(root);
             return ESP_ERR_INVALID_SIZE;
         }
-        const cJSON *ui = cJSON_GetObjectItem(root, "ui");
-        const cJSON *ui_file = cJSON_GetObjectItem(root, "ui_file");
-        if (cJSON_IsObject(ui)) {
-            slot->ui_json = cJSON_Duplicate(ui, 1);
-        } else if (cJSON_IsString(ui)) {
-            slot->ui_json = load_ui_beside_manifest(path, ui->valuestring);
-        } else if (cJSON_IsString(ui_file)) {
-            slot->ui_json = load_ui_beside_manifest(path, ui_file->valuestring);
-        } else {
-            slot->ui_json = load_ui_beside_manifest(path, "ui.json");
-        }
+
         cJSON_Delete(root);
         ESP_LOGI(TAG, "manifest '%s' -> JS module %s", path, info->id);
         return ESP_OK;

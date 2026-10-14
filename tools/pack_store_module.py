@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pack examples/plugins/<id>/ (or MINIHUB_PLUGIN_DIRS) into a Store ``.mhub``, or wrap native .so (MHMD).
 
-Concrete ``targets`` (for example ``ESP32S31``) land in ``deploy/Stores/ESP32S31/<id>/<id>.mhub``.
-``["ALL"]`` stays in ``deploy/Stores/Common/<id>/<id>.mhub``. Several chips get one copy each.
+Every module is published as one ``.mhub``: L1/L2 under
+``deploy/Stores/Common/<id>/<id>.mhub``, native/hybrid under
+``deploy/Stores/<chip>/<id>/<id>.mhub`` (``<chip>`` from ``targets``).
 
 Two orthogonal steps (do not conflate):
 
@@ -43,12 +44,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from store_paths import (  # noqa: E402
     find_deploy_mhubs,
     iter_module_source_dirs,
-    module_deploy_dirs,
     module_mhmd_path,
     module_source_dir,
     prune_plugin_dirs,
     resolve_deploy_dir,
-    store_buckets,
 )
 
 # Build-derived keys — never required in source-tree module.json
@@ -156,6 +155,10 @@ def packaged_manifest(
 ) -> dict:
     """Manifest written into .mhub zip (may include binary_size for device checks)."""
     out = source_manifest(manifest)
+    # ui + capabilities live in meta.json; module.json keeps only runtime/env info.
+    out.pop("capabilities", None)
+    out.pop("ui", None)
+    out.pop("ui_file", None)
     need_binary = (
         so
         and so.is_file()
@@ -180,7 +183,7 @@ def pack_store_module(
     root: Path | None = None,
     deploy: Path | None = None,
     compress: bool = True,
-) -> Path:
+) -> Path | None:
     from store_paths import ROOT
 
     root = root or ROOT
@@ -195,11 +198,13 @@ def pack_store_module(
     if mid != module_id:
         raise ValueError(f"module.json id={mid!r} != directory {module_id!r}")
 
-    from sync_store_catalog import plugin_targets
+    from sync_store_catalog import store_buckets_for_module
 
-    targets = plugin_targets(manifest, module_dir)
-    buckets = store_buckets(targets)
-    deploy_dirs = module_deploy_dirs(module_id, targets, deploy)
+    buckets = store_buckets_for_module(manifest, module_dir)
+    if not buckets:
+        print(f"skip {module_id}: native module is not published to the store")
+        return None
+    deploy_dirs = [deploy / "Stores" / bucket / module_id for bucket in buckets]
     deploy_mod = deploy_dirs[0]
     deploy_mod.mkdir(parents=True, exist_ok=True)
     pkg_path = deploy_mod / f"{module_id}.mhub"
@@ -215,12 +220,44 @@ def pack_store_module(
         manifest, module_dir=module_dir, module_id=module_id, so=so
     )
 
+    # meta.json: canonical home for ui + capabilities (module.json keeps only
+    # runtime/environment info). Read meta.json from the module dir (preferred);
+    # fall back to legacy module.json capabilities + ui.json for old sources.
+    meta: dict = {}
+    meta_path = module_dir / "meta.json"
+    if meta_path.is_file():
+        try:
+            loaded = json.loads(meta_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                meta = loaded
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"WARN: bad {meta_path}: {exc}", file=sys.stderr)
+    if "capabilities" not in meta:
+        caps = manifest.get("capabilities")
+        if isinstance(caps, list):
+            meta["capabilities"] = caps
+    if "ui" not in meta:
+        if isinstance(manifest.get("ui"), dict):
+            meta["ui"] = manifest["ui"]
+        else:
+            ui_fname = manifest.get("ui_file") or "ui.json"
+            ui_file = module_dir / ui_fname
+            if ui_file.is_file():
+                try:
+                    meta["ui"] = json.loads(ui_file.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    print(f"WARN: bad {ui_file}: {exc}", file=sys.stderr)
+
     with zipfile.ZipFile(pkg_path, "w", compression=compression) as zf:
         zf.writestr(
             "module.json",
             json.dumps(pkg_manifest, indent=2, ensure_ascii=False) + "\n",
         )
         names.append("module.json")
+
+        if meta:
+            zf.writestr("meta.json", json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
+            names.append("meta.json")
 
         if is_config_only(manifest):
             pass
@@ -245,10 +282,6 @@ def pack_store_module(
             names.append(f"{module_id}.so")
 
         if not is_config_only(manifest):
-            ui = module_dir / "ui.json"
-            if ui.is_file():
-                zf.write(ui, "ui.json")
-                names.append("ui.json")
             devices = module_dir / "devices.json"
             if devices.is_file():
                 zf.write(devices, "devices.json")
@@ -298,6 +331,18 @@ def iter_packable_ids() -> list[str]:
     return ids
 
 
+def module_is_native(module_id: str) -> bool:
+    """True for L3 native and hybrid packages (they ship an ELF ``.so``)."""
+    module_dir = module_source_dir(module_id)
+    manifest_path = module_dir / "module.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if is_config_only(manifest):
+        return False
+    if is_hybrid_module(manifest):
+        return True
+    return not is_js_module(manifest, module_dir)
+
+
 def _default_pack_format() -> str:
     return os.environ.get("MHUB_PACK_FORMAT", DEFAULT_PACK_FORMAT).strip().lower() or DEFAULT_PACK_FORMAT
 
@@ -330,6 +375,12 @@ def main(argv: list[str] | None = None) -> int:
         help="keep packing remaining modules when one fails (e.g. native .so not built yet)",
     )
     p_pack.add_argument("--deploy", type=Path, default=None, help="deploy root")
+    p_pack.add_argument(
+        "--skip-native",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=argparse.SUPPRESS,
+    )
 
     p_mhmd = sub.add_parser(
         "mhmd",
@@ -369,15 +420,28 @@ def main(argv: list[str] | None = None) -> int:
     deploy = resolve_deploy_dir(args.deploy)
     ids = args.module_id
     if ids == ["all"]:
-        ids = iter_packable_ids()
-        if not ids:
+        found = iter_packable_ids()
+        if not found:
             print("No modules with module.json found", file=sys.stderr)
             return 1
+        ids = found
+        if args.skip_native:
+            kept: list[str] = []
+            for mid in ids:
+                try:
+                    native = module_is_native(mid)
+                except (OSError, ValueError):
+                    native = False
+                if not native:
+                    kept.append(mid)
+            ids = kept
+            if not ids:
+                return 0
 
     failed: list[str] = []
     for mid in ids:
         try:
-            pack_store_module(mid, deploy=deploy, compress=not args.store)
+            packed = pack_store_module(mid, deploy=deploy, compress=not args.store)
         except (OSError, ValueError, FileNotFoundError) as exc:
             print(f"pack_store_module {mid}: {exc}", file=sys.stderr)
             if args.continue_on_error:

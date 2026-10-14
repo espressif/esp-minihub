@@ -25,11 +25,28 @@
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_app_format.h"
+#include "esp_app_desc.h"
 #include "nvs.h"
 #include "sdkconfig.h"
 #include <stdbool.h>
 
 static const char *TAG = "minihub_store";
+
+/* Current running firmware version (Kconfig override, else app descriptor). */
+static const char *store_running_version(void)
+{
+#ifdef CONFIG_MINIHUB_VERSION
+    if (CONFIG_MINIHUB_VERSION[0]) {
+        return CONFIG_MINIHUB_VERSION;
+    }
+#endif
+    const esp_app_desc_t *app = esp_app_get_description();
+    if (app && app->version[0]) {
+        return app->version;
+    }
+    return NULL;
+}
 
 #define STORE_NVS_NS "mh_store"
 
@@ -218,7 +235,9 @@ esp_err_t minihub_store_list_upgrades(cJSON **out)
 #define MINIHUB_STORE_FILES_DIR    MINIHUB_STORE_MOUNT "/files"
 
 static esp_err_t http_download_file(const char *url, const char *path);
+static esp_err_t http_download_to_psram(const char *url, uint8_t **out, size_t *out_len, size_t max_len);
 static esp_err_t http_get_body(const char *url, char **out_body, size_t *out_len);
+static void append_chip_query(char *url, size_t len);
 static void store_base_url(char *out, size_t out_len);
 static esp_err_t store_abs_url(char *out, size_t out_len, const char *path);
 static esp_err_t write_file_atomic(const char *path, const char *data);
@@ -436,21 +455,34 @@ static cJSON *http_get_catalog_array(const char *base)
     if (minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
         get_url = with_mac;
     }
-    /* Advertise the device's baked ABI contract so the store server can filter
-       by compatibility and reject a stale / mismatched catalog. The per-plugin
-       catalog `abi` block is re-checked locally as defense in depth. */
-    char full[MINIHUB_STORE_ABS_URL_MAX + 256];
-    const char *chip = CONFIG_IDF_TARGET;
-    const char *sep = strchr(get_url, '?') ? "&" : "?";
-    int n = snprintf(full, sizeof(full),
-                     "%s%sabi_version=%u&abi_total_hash=%s&chip=%s",
-                     get_url, sep, (unsigned)MINIHUB_ABI_VERSION_BAKED,
-                     MINIHUB_ABI_TOTAL_HASH, chip);
-    if (n >= 0 && (size_t)n < sizeof(full)) {
-        get_url = full;
+    /* Identify the device to the store server.
+       - chip: lets the server drop catalog entries aimed at another chip
+         (defense in depth; the device also filters locally per
+         CONFIG_IDF_TARGET).
+       - cur_version: lets the server flag a newer published firmware build
+         (firmware_upgrade.newer).
+       L3/native ABI (abi_version / abi_total_hash) is unsupported and is
+       never sent. */
+    char *full = NULL;
+    int n = asprintf(&full, "%s%schip=%s",
+                      get_url, strchr(get_url, '?') ? "&" : "?", CONFIG_IDF_TARGET);
+    if (n < 0 || !full) {
+        return NULL;
     }
+    const char *ver = store_running_version();
+    if (ver && ver[0]) {
+        char *prev = full;
+        n = asprintf(&full, "%s%scur_version=%s",
+                      prev, strchr(prev, '?') ? "&" : "?", ver);
+        free(prev);
+        if (n < 0 || !full) {
+            return NULL;
+        }
+    }
+    get_url = full;
     char *body = NULL;
     esp_err_t err = http_get_body(get_url, &body, NULL);
+    free(full);
     if (err != ESP_OK || !body) {
         ESP_LOGW(TAG, "catalog fetch failed from %s: %s", url, esp_err_to_name(err));
         free(body);
@@ -696,11 +728,27 @@ static esp_err_t http_get_body(const char *url, char **out_body, size_t *out_len
     return ESP_OK;
 }
 
+static void append_chip_query(char *url, size_t len)
+{
+    if (!url || !url[0] || len == 0) {
+        return;
+    }
+    size_t used = strnlen(url, len);
+    if (used >= len) {
+        return;
+    }
+    const char *sep = strchr(url, '?') ? "&" : "?";
+    snprintf(url + used, len - used, "%schip=%s", sep, CONFIG_IDF_TARGET);
+}
+
 static esp_err_t http_download_file(const char *url, const char *path)
 {
-    char with_mac[MINIHUB_STORE_ABS_URL_MAX + 32];
-    if (url && minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
-        url = with_mac;
+    char with_queries[MINIHUB_STORE_ABS_URL_MAX + 128];
+    if (url) {
+        snprintf(with_queries, sizeof(with_queries), "%s", url);
+        (void)minihub_net_copy_url_with_mac(url, with_queries, sizeof(with_queries));
+        append_chip_query(with_queries, sizeof(with_queries));
+        url = with_queries;
     }
     esp_http_client_config_t cfg = {
         .url = url,
@@ -842,7 +890,7 @@ static const cJSON *catalog_find(const cJSON *catalog, const char *kind, const c
     const cJSON *item = NULL;
     const cJSON *fallback = NULL;
     cJSON_ArrayForEach(item, catalog) {
-        const cJSON *k = cJSON_GetObjectItem(item, "kind");
+        const cJSON *k = cJSON_GetObjectItem(item, "type");
         const cJSON *i = cJSON_GetObjectItem(item, "id");
         if (!cJSON_IsString(k) || !cJSON_IsString(i) || strcmp(i->valuestring, id) != 0) {
             continue;
@@ -1153,9 +1201,12 @@ static esp_err_t read_file_to_psram(const char *path, uint8_t **out, size_t *out
 
 static esp_err_t http_download_to_psram(const char *url, uint8_t **out, size_t *out_len, size_t max_len)
 {
-    char with_mac[MINIHUB_STORE_ABS_URL_MAX + 32];
-    if (url && minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
-        url = with_mac;
+    char with_queries[MINIHUB_STORE_ABS_URL_MAX + 128];
+    if (url) {
+        snprintf(with_queries, sizeof(with_queries), "%s", url);
+        (void)minihub_net_copy_url_with_mac(url, with_queries, sizeof(with_queries));
+        append_chip_query(with_queries, sizeof(with_queries));
+        url = with_queries;
     }
     esp_http_client_config_t cfg = {
         .url = url,
@@ -1856,7 +1907,7 @@ static esp_err_t store_install_from_catalog(const char *kind, const char *id, bo
         cJSON *d = cJSON_CreateObject();
         if (d) {
             cJSON_AddStringToObject(d, "id", id);
-            cJSON_AddStringToObject(d, "kind", kind);
+            cJSON_AddStringToObject(d, "type", kind);
             cJSON_AddBoolToObject(d, "upgrade", upgrade);
             minihub_event_bus_publish("store.module.installed", d);
         }
@@ -1992,7 +2043,7 @@ cJSON *minihub_store_catalog_merged(void)
         if (!copy) {
             continue;
         }
-        const cJSON *kind = cJSON_GetObjectItem(item, "kind");
+        const cJSON *kind = cJSON_GetObjectItem(item, "type");
         const cJSON *id = cJSON_GetObjectItem(item, "id");
         bool installed = false;
         bool config_only = catalog_item_config_only(item);
@@ -2071,7 +2122,7 @@ bool minihub_store_copy_base_url(char *out, size_t out_len)
 
 static bool installed_item_version(const cJSON *item, char *out, size_t out_len)
 {
-    const cJSON *kind = cJSON_GetObjectItem(item, "kind");
+    const cJSON *kind = cJSON_GetObjectItem(item, "type");
     const cJSON *id = cJSON_GetObjectItem(item, "id");
     if (!cJSON_IsString(id) || !id->valuestring[0]) {
         return false;
@@ -2128,7 +2179,7 @@ esp_err_t minihub_store_list_upgrades(cJSON **out)
         }
         const cJSON *id = cJSON_GetObjectItem(item, "id");
         const cJSON *name = cJSON_GetObjectItem(item, "name");
-        const cJSON *kind = cJSON_GetObjectItem(item, "kind");
+        const cJSON *kind = cJSON_GetObjectItem(item, "type");
         if (cJSON_IsString(id) && id->valuestring) {
             cJSON_AddStringToObject(row, "id", id->valuestring);
         }
@@ -2138,7 +2189,7 @@ esp_err_t minihub_store_list_upgrades(cJSON **out)
             cJSON_AddStringToObject(row, "name", id->valuestring);
         }
         if (cJSON_IsString(kind) && kind->valuestring) {
-            cJSON_AddStringToObject(row, "kind", kind->valuestring);
+            cJSON_AddStringToObject(row, "type", kind->valuestring);
         }
         cJSON_AddStringToObject(row, "installed", cur);
         cJSON_AddStringToObject(row, "version", ver->valuestring);

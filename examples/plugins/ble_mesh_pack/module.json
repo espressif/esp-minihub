@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "targets": ["ESP32S31"],
   "enabled": true,
-  "kind": "pack",
+  "type": "pack",
   "runtime": "pack",
   "description": "L1 config pack: merge extra BLE Mesh bind_models into the Host adapter. No main.js, no .so, no radio devices[].",
   "inject": {

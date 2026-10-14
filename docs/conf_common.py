@@ -13,9 +13,15 @@ sys.path.insert(0, os.path.join(_DOCS_DIR, "_extensions"))
 
 # Pack Host type-catalog CSV / SVGs / demo devices.json into html_static_path.
 from stage_catalog import stage_catalog_assets, stage_module_sdk_zip  # noqa: E402
+from omit_elf_plugin_docs import HIDE_L3  # noqa: E402
 
 stage_catalog_assets()
-stage_module_sdk_zip()
+if HIDE_L3:
+    _sdk_zip = os.path.join(_DOCS_DIR, "_static", "module_sdk.zip")
+    if os.path.isfile(_sdk_zip):
+        os.remove(_sdk_zip)
+else:
+    stage_module_sdk_zip()
 
 languages = ["en", "zh_CN"]
 idf_targets = ["esp32s31"]
@@ -26,6 +32,8 @@ extensions += [  # noqa: F405
     "esp_docs.esp_extensions.run_doxygen",
     "minihub_translation_links",
     "minihub_fn_ptr_decl",
+    # HIDE_L3 drops native ELF chapters and ``.. only:: not hide_l3`` passages.
+    "omit_elf_plugin_docs",
 ]
 
 # GitLab-hosted repo (link roles still use github_* theme keys for theme compatibility).

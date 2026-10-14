@@ -9,8 +9,11 @@ Overview
 Store **L2** modules (``runtime: js``, ``main.js``) access Host services through QuickJS
 bindings in ``components/minihub_js/minihub_js.c``. Requires ``CONFIG_MINIHUB_JS_PLUGINS``.
 
-REST install/RPC: :doc:`plugin_rest`. C point/command model: :doc:`module_abi` and
-:doc:`minihub_core`.
+REST install/RPC: :doc:`plugin_rest`. C point/command model: :doc:`minihub_core`.
+
+.. only:: not hide_l3
+
+   L3 uses the vtable in :doc:`module_abi`.
 
 Module entry
 ------------
@@ -222,6 +225,47 @@ Returns
      }
    });
 
+Methods — host.timer
+--------------------
+
+Timers run JS callbacks on the Host worker task (QuickJS is single-threaded).
+They are the only way to get periodic/delayed work inside a JS module — use
+them for polling or debounce. The same four functions are also injected as
+globals (``setTimeout`` / ``clearTimeout`` / ``setInterval`` / ``clearInterval``).
+
+host.timer.setTimeout(fn, ms) / host.timer.setInterval(fn, ms)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: javascript
+
+   var id = host.timer.setTimeout(function () { host.log.info("fired once"); }, 1000);
+   var poll = host.timer.setInterval(function () { /* read sensor */ }, 5000);
+   host.timer.clearTimeout(id);
+   host.timer.clearInterval(poll);
+
+Parameters
+^^^^^^^^^^
+
+``fn`` (function, required)
+    Callback with no arguments. Runs on the JS worker task.
+
+``ms`` (number, required)
+    Delay in milliseconds (``setInterval``: period). Values ``<= 0`` become
+    ``1`` ms. Argument order ``(fn, ms)`` or ``(ms, fn)`` is accepted.
+
+Returns
+^^^^^^^
+
+Integer id (1-based). Each module can have at most 16 live timers; exceeding
+that **throws**.
+
+Notes
+^^^^^
+
+* ``setup`` may arm timers; they keep running until ``clear*`` or reload.
+* A long-running callback blocks other timers and jobs — keep callbacks short.
+* ``POST /api/hub/reload`` clears all timers and runs ``setup`` again.
+
 Methods — host.command
 ----------------------
 
@@ -411,8 +455,10 @@ host.module.registerRpc(method, handler)
 Register an RPC handler for **this** module id (only valid inside ``setup``).
 Web UI and ``POST /api/modules/<id>/rpc`` call ``handler(method, params)``.
 
-On **hybrid** modules, JS handlers become the primary RPC; methods not
-registered in JS fall through to the native ``minihub_module_rpc``.
+.. only:: not hide_l3
+
+   On **hybrid** modules, JS handlers become the primary RPC; methods not
+   registered in JS fall through to the native ``minihub_module_rpc``.
 
 Parameters
 ^^^^^^^^^^

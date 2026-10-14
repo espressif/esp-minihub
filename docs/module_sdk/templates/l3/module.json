@@ -3,7 +3,7 @@
   "name": "PLACEHOLDER_NAME",
   "version": "0.1.0",
   "targets": ["ESP32S31"],
-  "kind": "module",
+  "type": "module",
   "runtime": "native",
   "adapter": "PLACEHOLDER_ID",
   "description": "L3 native hello adapter (no vendor cloud)",

@@ -7,14 +7,14 @@ Standalone **L2 QuickJS** demo under `examples/plugins/` (not in default
 online simulated lights** (`type=light`) with Devices-page widgets and a JS
 command handler — **no hardware**.
 
-Companion to [`color_bulb`](../color_bulb/) (L3 C, kitchen/living). This module
-does **not** replace the C plugin.
+Companion to [`meter_plug_js`](../meter_plug_js/) (a switch-port of this JS
+approach). This module replaces the old `color_bulb` L3 C demo (removed).
 
 ## When to use
 
 | Need | Use |
 |------|-----|
-| Native `.so` + embedded `devices.json` | **L3** `color_bulb` |
+| Native `.so` + embedded `devices.json` | **L3** native plugin |
 | Same UX from QuickJS (prototype / teaching) | **L2** this demo |
 | Glue over existing Zigbee/L3 points | **L2** `auto_off` |
 
@@ -42,7 +42,7 @@ Param names match the Host `light` catalog (`power`, `brightness`, `hue`,
 `saturation`, optional hidden `cct`). Labels/widgets come from the Host
 device-widget catalog — the plugin does not ship CSS/icons.
 
-Control path mirrors L3 `color_bulb`: update `props.params.<name>.value`, then
+Control path mirrors the L3 native approach: update `props.params.<name>.value`, then
 `host.point.set(id, summary, { params })` so the UI refreshes.
 
 ## Files
@@ -90,5 +90,5 @@ slot is enough (devices are registered from JS, not from `adapters.json`).
 
 | | |
 |--|--|
-| **Can** | Display widgets; control power/brightness/hue/saturation; coexist with L3 `color_bulb` |
+| **Can** | Display widgets; control power/brightness/hue/saturation; coexist with L2 sibling `meter_plug_js` |
 | **Cannot** | Timers/events (`host.timer` / `point.updated` subscribe still missing); load external `devices.json` at runtime |

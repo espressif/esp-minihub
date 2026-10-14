@@ -190,8 +190,8 @@ else()
     set(_MINIHUB_PLUGINS_DEPLOY_DIR "$ENV{HOME}/workspace/minihub_store")
 endif()
 # Catalog is copied AFTER packing below so size/binary_size match staged .mhub.
-# Stage /store/files from the bucket selected by module.json targets
-# (Stores/ESP32S31/<id>/<id>.mhub, or Stores/Common when targets is ALL).
+# Stage /store/files from Stores/Common for L1 and L2.
+# A native module is not a store package.
 minihub_store_preinstall_list(MINIHUB_STORE_PREINSTALL)
 message(STATUS "store_preinstall: ${MINIHUB_STORE_PREINSTALL}")
 # All Store modules (L1/L2/L3) for .mhub staging — includes runtime js/pack under
@@ -206,6 +206,17 @@ endforeach()
 foreach(_MOD_JSON ${_STORE_MOD_JSONS})
     get_filename_component(_MOD_DIR ${_MOD_JSON} DIRECTORY)
     get_filename_component(_MOD ${_MOD_DIR} NAME)
+    set(_IS_NATIVE FALSE)
+    if(EXISTS "${_MOD_DIR}/CMakeLists.txt")
+        set(_IS_NATIVE TRUE)
+    endif()
+    if(_IS_NATIVE)
+        # L3 is compiled by `build_firmware.py module` into the build tree.
+        # Configure does not look up or copy a store package for it.
+        set(_DEPLOY_MOD "")
+        set(_PKG "")
+        set(_SO "")
+    else()
     execute_process(
         COMMAND ${Python3_EXECUTABLE} -c
                 "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); import store_paths; print(store_paths.module_mhub_file(sys.argv[2], deploy=Path(sys.argv[3]), module_dir=Path(sys.argv[4])).parent)"
@@ -228,63 +239,70 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
         set(_LIBAD ${CMAKE_SOURCE_DIR}/build/modules/libadapter_${_MOD}.so)
     endif()
     set(_PKG ${_DEPLOY_MOD}/${_MOD}.mhub)
-    # Always refresh MHMD from libadapter_*.so when present. A stale
-    # build/<id>.so previously blocked refresh because the wrap step only
-    # ran when build/<id>.so was missing.
-    if(EXISTS ${_LIBAD})
-        execute_process(
-            COMMAND ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py mhmd
-                    ${_LIBAD} ${_SO_BUILD}
-            WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
-            RESULT_VARIABLE _PACK_MHMD_RC
-        )
-        if(NOT _PACK_MHMD_RC EQUAL 0)
-            message(WARNING "pack_store_module.py mhmd failed for ${_MOD} (rc=${_PACK_MHMD_RC})")
-        endif()
     endif()
-    # Prefer freshly wrapped build/<id>.so over deploy or extracted zip copies.
-    if(EXISTS ${_SO_BUILD})
-        set(_SO ${_SO_BUILD})
-    elseif(NOT EXISTS ${_SO} AND EXISTS ${_PKG})
-        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/modstore_so_extract)
-        execute_process(
-            COMMAND ${Python3_EXECUTABLE} -c
-                "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); n=sys.argv[2]+'.so'; open(sys.argv[3],'wb').write(z.read(n)) if n in z.namelist() else sys.exit(1)"
+    # Native/hybrid plugins are compiled only by `build_firmware.py module`.
+    # Host configure does not rebuild them and does not publish a store package.
+    if(NOT _IS_NATIVE)
+        # Always refresh MHMD from libadapter_*.so when present. A stale
+        # build/<id>.so previously blocked refresh because the wrap step only
+        # ran when build/<id>.so was missing.
+        if(EXISTS ${_LIBAD})
+            execute_process(
+                COMMAND ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py mhmd
+                        ${_LIBAD} ${_SO_BUILD}
+                WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
+                RESULT_VARIABLE _PACK_MHMD_RC
+            )
+            if(NOT _PACK_MHMD_RC EQUAL 0)
+                message(WARNING "pack_store_module.py mhmd failed for ${_MOD} (rc=${_PACK_MHMD_RC})")
+            endif()
+        endif()
+        # Prefer freshly wrapped build/<id>.so over deploy or extracted zip copies.
+        if(EXISTS ${_SO_BUILD})
+            set(_SO ${_SO_BUILD})
+        elseif(NOT EXISTS ${_SO} AND EXISTS ${_PKG})
+            file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/modstore_so_extract)
+            execute_process(
+                COMMAND ${Python3_EXECUTABLE} -c
+                    "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); n=sys.argv[2]+'.so'; open(sys.argv[3],'wb').write(z.read(n)) if n in z.namelist() else sys.exit(1)"
                 ${_PKG} ${_MOD} ${CMAKE_BINARY_DIR}/modstore_so_extract/${_MOD}.so
-            RESULT_VARIABLE _EXTRACT_SO_RC
-        )
-        if(_EXTRACT_SO_RC EQUAL 0)
-            set(_SO ${CMAKE_BINARY_DIR}/modstore_so_extract/${_MOD}.so)
+                RESULT_VARIABLE _EXTRACT_SO_RC
+            )
+            if(_EXTRACT_SO_RC EQUAL 0)
+                set(_SO ${CMAKE_BINARY_DIR}/modstore_so_extract/${_MOD}.so)
+            endif()
+        endif()
+        # Repack .mhub whenever we have a fresh MHMD so factory/store files are not stale.
+        if(EXISTS ${_SO_BUILD})
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E env
+                        MINIHUB_PLUGINS_DEPLOY_DIR=${_MINIHUB_PLUGINS_DEPLOY_DIR}
+                        ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py
+                        ${_MOD} --deploy ${_MINIHUB_PLUGINS_DEPLOY_DIR}
+                WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
+                RESULT_VARIABLE _PACK_HUB_RC
+            )
+            if(NOT _PACK_HUB_RC EQUAL 0)
+                message(WARNING "pack_store_module.py failed for ${_MOD} (rc=${_PACK_HUB_RC})")
+            endif()
+            set(_PKG ${_DEPLOY_MOD}/${_MOD}.mhub)
+        elseif(NOT EXISTS ${_PKG})
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E env
+                        MINIHUB_PLUGINS_DEPLOY_DIR=${_MINIHUB_PLUGINS_DEPLOY_DIR}
+                        ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py
+                        ${_MOD} --deploy ${_MINIHUB_PLUGINS_DEPLOY_DIR}
+                WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
+                RESULT_VARIABLE _PACK_HUB_RC
+            )
+            if(NOT _PACK_HUB_RC EQUAL 0)
+                message(WARNING "pack_store_module.py failed for ${_MOD} (rc=${_PACK_HUB_RC})")
+            endif()
         endif()
     endif()
-    # Repack .mhub whenever we have a fresh MHMD so factory/store files are not stale.
-    if(EXISTS ${_SO_BUILD})
-        execute_process(
-            COMMAND ${CMAKE_COMMAND} -E env
-                    MINIHUB_PLUGINS_DEPLOY_DIR=${_MINIHUB_PLUGINS_DEPLOY_DIR}
-                    ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py
-                    ${_MOD} --deploy ${_MINIHUB_PLUGINS_DEPLOY_DIR}
-            WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
-            RESULT_VARIABLE _PACK_HUB_RC
-        )
-        if(NOT _PACK_HUB_RC EQUAL 0)
-            message(WARNING "pack_store_module.py failed for ${_MOD} (rc=${_PACK_HUB_RC})")
-        endif()
-        set(_PKG ${_DEPLOY_MOD}/${_MOD}.mhub)
-    elseif(NOT EXISTS ${_PKG})
-        execute_process(
-            COMMAND ${CMAKE_COMMAND} -E env
-                    MINIHUB_PLUGINS_DEPLOY_DIR=${_MINIHUB_PLUGINS_DEPLOY_DIR}
-                    ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/pack_store_module.py
-                    ${_MOD} --deploy ${_MINIHUB_PLUGINS_DEPLOY_DIR}
-            WORKING_DIRECTORY ${MINIHUB_REPO_ROOT}
-            RESULT_VARIABLE _PACK_HUB_RC
-        )
-        if(NOT _PACK_HUB_RC EQUAL 0)
-            message(WARNING "pack_store_module.py failed for ${_MOD} (rc=${_PACK_HUB_RC})")
-        endif()
-    endif()
-    if(EXISTS ${_PKG})
+    if(_IS_NATIVE)
+        # L3 has no store package to stage.
+    elseif(EXISTS ${_PKG})
         execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${_PKG}
                         ${MINIHUB_MODSTORE_DIR}/files/${_MOD}.mhub)
     else()
@@ -331,7 +349,10 @@ foreach(_MOD_JSON ${_STORE_MOD_JSONS})
             execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${_MOD_DIR}/main.js
                             ${MINIHUB_MODSTORE_DIR}/modules/${_MOD}/main.js)
         endif()
-        if(EXISTS ${_MOD_DIR}/ui.json)
+        if(EXISTS ${_MOD_DIR}/meta.json)
+            execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${_MOD_DIR}/meta.json
+                            ${MINIHUB_MODSTORE_DIR}/modules/${_MOD}/meta.json)
+        elseif(EXISTS ${_MOD_DIR}/ui.json)
             execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${_MOD_DIR}/ui.json
                             ${MINIHUB_MODSTORE_DIR}/modules/${_MOD}/ui.json)
         endif()

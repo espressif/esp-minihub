@@ -259,7 +259,7 @@ function sectionModuleUpgradeHtml(ad) {
         : null;
     const up = !!(cat && cat.upgrade_available) || !!mod.binary_stale;
     if (!up) return '';
-    const kind = (cat && cat.kind === 'pack') ? 'pack' : 'module';
+    const kind = (cat && cat.type === 'pack') ? 'pack' : 'module';
     let label = t('ov.upgrade');
     if (cat && cat.version) label += ' ' + cat.version;
     return '<button class="btn-sm on section-mod-upg" type="button" title="' + t('ov.module_upgrade_title') + '" onclick="storeUpgrade(\'' +
@@ -433,7 +433,7 @@ function propsHtml(p) {
     if (!p.props || typeof p.props !== 'object') return '';
     const meterOrder = ['power_w', 'voltage_v', 'current_a', 'energy_wh'];
     const otherOrder = ['humidity'];
-    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room_name', 'room_id', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'commission_phase', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
+    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room', 'room_name', 'room_id', 'did', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'commission_phase', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
     const labels = {
         power_w: t('ov.prop_power'),
         voltage_v: t('ov.prop_voltage'),
@@ -988,7 +988,7 @@ async function storeInstall(kind, id) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                kind,
+                type: kind,
                 id,
                 reload: true
             })
@@ -1012,7 +1012,7 @@ async function storeUpgrade(kind, id) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                kind,
+                type: kind,
                 id,
                 reload: true
             })
@@ -1036,7 +1036,7 @@ async function storeUninstall(kind, id) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                kind,
+                type: kind,
                 id,
                 reload: true
             })
@@ -1069,7 +1069,7 @@ async function storeReinstall(kind, id) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                kind,
+                type: kind,
                 id,
                 reload: true
             })

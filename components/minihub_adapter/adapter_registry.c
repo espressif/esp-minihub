@@ -24,6 +24,11 @@ static size_t s_registered_count;
 static const minihub_adapter_t *s_active[16];
 static size_t s_active_count;
 
+/** Non-blocking poll hooks (e.g. JS runtime) invoked each adapter_poll_task
+ *  tick, after the lifecycle lock is released. Must return quickly. */
+static minihub_adapter_poll_hook_t s_poll_hooks[8];
+static size_t s_poll_hooks_count;
+
 /** Radio-host adapters left running by stop_all — start_all must not call start() on these. */
 static const minihub_adapter_t *s_kept_radio[16];
 static size_t s_kept_radio_count;
@@ -285,6 +290,41 @@ esp_err_t minihub_adapter_registry_init(void)
     s_kept_radio_count = 0;
     memset(s_owner_by_name, 0, sizeof(s_owner_by_name));
     return ensure_lifecycle_mu();
+}
+
+esp_err_t minihub_adapter_register_poll_hook(minihub_adapter_poll_hook_t hook)
+{
+    if (!hook) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    for (size_t i = 0; i < s_poll_hooks_count; i++) {
+        if (s_poll_hooks[i] == hook) {
+            return ESP_OK; /* idempotent */
+        }
+    }
+    if (s_poll_hooks_count >= 8) {
+        return ESP_ERR_NO_MEM;
+    }
+    s_poll_hooks[s_poll_hooks_count++] = hook;
+    return ESP_OK;
+}
+
+esp_err_t minihub_adapter_unregister_poll_hook(minihub_adapter_poll_hook_t hook)
+{
+    if (!hook) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    size_t write = 0;
+    bool found = false;
+    for (size_t i = 0; i < s_poll_hooks_count; i++) {
+        if (s_poll_hooks[i] == hook) {
+            found = true;
+            continue;
+        }
+        s_poll_hooks[write++] = s_poll_hooks[i];
+    }
+    s_poll_hooks_count = write;
+    return found ? ESP_OK : ESP_ERR_NOT_FOUND;
 }
 
 esp_err_t minihub_adapter_register(const minihub_adapter_t *adapter)
@@ -788,6 +828,13 @@ static void adapter_poll_task(void *arg)
         }
         if (n > 0) {
             lifecycle_external_leave();
+        }
+        /* Fire non-blocking poll hooks (e.g. the JS runtime) after releasing
+         * the lock so a hook can never delay reload or adapter polling. */
+        for (size_t i = 0; i < s_poll_hooks_count; i++) {
+            if (s_poll_hooks[i]) {
+                s_poll_hooks[i]();
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(5000));
     }

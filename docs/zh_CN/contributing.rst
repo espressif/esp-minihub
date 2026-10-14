@@ -32,8 +32,15 @@
        不要按类型加 C 结构。见 :doc:`type_catalog`
    * - 面向用户的文档
      - docs 下 en 与 zh_CN 目录须一致
-   * - 模块 ABI / 导出符号
-     - ``docs/module_sdk/``、:doc:`api/module_abi`
+
+.. only:: not hide_l3
+
+   .. list-table::
+      :header-rows: 0
+      :widths: 34 66
+
+      * - 模块 ABI / 导出符号
+        - ``docs/module_sdk/``、:doc:`api/module_abi`
 
 请勿在通用 Host 的 ``configs/`` 出厂配置中写入厂商云 token、OEM 密钥或厂商专用默认规则。
 
@@ -69,21 +76,26 @@ Git 工作流
 
 * 构建参考 Host：``./tools/build_firmware.py -app minihub build``
 * 修改 ``manifest.yml`` 后直接编译（``build_firmware.py`` 会自动合并）
-* L3 模块：``./tools/build_firmware.py -app minihub modules`` （编译全部原生 ``.so``；打包用 ``pack``）
-* L3 演示单独编译（不编 IDF 工程）：``python3 tools/test_build_plugin_standalone.py -v``
-  （GitLab 任务 ``build:plugin_standalone`` ；需要 ``riscv32-esp-elf-gcc`` 与 ``cmake``）
 * CI：根目录 ``.gitlab-ci.yml``
 
-若变更 L3 模块可见的 Host 符号，需更新
-``docs/module_sdk/host_export_allowlist.json`` 并运行
-``python3 tools/gen_host_export_symbols.py`` （见 :doc:`plugins/develop_l3` ）。
+.. only:: not hide_l3
+
+   * L3 模块：``./tools/build_firmware.py -app minihub modules`` （编译全部原生 ``.so``；打包用 ``pack``）
+   * L3 演示单独编译（不编 IDF 工程）：``python3 tools/test_build_plugin_standalone.py -v``
+     （GitLab 任务 ``build:plugin_standalone`` ；需要 ``riscv32-esp-elf-gcc`` 与 ``cmake``）
+   * 若变更 L3 模块可见的 Host 符号，需更新
+     ``docs/module_sdk/host_export_allowlist.json`` 并运行
+     ``python3 tools/gen_host_export_symbols.py`` （见 :doc:`plugins/develop_l3` ）。
 
 评审要点
 --------
 
 * Host Core 变更不得引入厂商专用默认项
 * 插件变更若新增 ``module.json`` 字段或 REST RPC，应在编程指南或 :doc:`api/plugin_rest` 中说明
-* ABI 升级须同步 ``abi_version``、``core_api_min`` 与 ``core_api_max`` 文档及 :doc:`production` 中的打包说明
+
+.. only:: not hide_l3
+
+   * ABI 升级须同步 ``abi_version``、``core_api_min`` 与 ``core_api_max`` 文档及 :doc:`production` 中的打包说明
 
 问题反馈
 --------

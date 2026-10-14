@@ -345,7 +345,11 @@ def run_merge_bin(out_name: str = "minihub_merged.bin") -> int:
 
 
 def maybe_pack_modules_after_build(idf_args: list[str], build_rc: int) -> int:
-    """After successful firmware build, pack all binary store modules."""
+    """After a successful firmware build, pack JS modules already in the tree.
+
+    Native plugins stay out of this step. Compile one with
+    ``./tools/build_firmware.py module <id>``.
+    """
     if build_rc != 0:
         return build_rc
     if "build" not in idf_args:
@@ -356,7 +360,7 @@ def maybe_pack_modules_after_build(idf_args: list[str], build_rc: int) -> int:
     print()
     print("=== Packing store modules (.mhub) ===")
     try:
-        return pack_modules(["all"])
+        return pack_modules(["all"], skip_native=True)
     except FileNotFoundError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -926,8 +930,13 @@ def _store_verb_args(raw: list[str]) -> tuple[Path | None, list[str]]:
 
 def run_pack(raw: list[str]) -> int:
     deploy, ids = _store_verb_args(raw)
+    packing_all = not ids or ids == ["all"]
     try:
-        return pack_modules(ids if ids else ["all"], deploy=deploy)
+        return pack_modules(
+            ids if ids else ["all"],
+            deploy=deploy,
+            skip_native=packing_all,
+        )
     except FileNotFoundError as exc:
         print(str(exc), file=sys.stderr)
         return 1

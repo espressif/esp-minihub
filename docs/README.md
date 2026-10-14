@@ -23,7 +23,7 @@ without reading Core C sources.
 | Understand design and advantages | [introduction.rst](en/introduction.rst) → [architecture.rst](en/architecture.rst) |
 | Build and flash | [getting_started.rst](en/getting_started.rst) |
 | OEM Host product | [application/](en/application/index.rst) → [host_customization.rst](en/host_customization.rst) → [production.rst](en/production.rst) |
-| Store plugin (L1/L2/L3) | [plugins/overview.rst](en/plugins/overview.rst) |
+| Store plugin (L1/L2) | [plugins/overview.rst](en/plugins/overview.rst) |
 | REST / automation only | [type_catalog.rst](en/type_catalog.rst) → [data_model.rst](en/data_model.rst) → [api/](en/api/index.rst) |
 | Contribute | [contributing.rst](en/contributing.rst) |
 
@@ -61,9 +61,11 @@ HTML output: `docs/_build/en/esp32s31/html/` and `docs/_build/zh_CN/esp32s31/htm
 HTML builds include a downloadable type-catalog snapshot under
 `_static/catalog/` (CSV, device icons, `STANDARD_TYPES*.md`, sample
 `devices.json`) and `_static/catalog.zip`, copied from
-`components/minihub_device_widget/` at Sphinx configure time. The L3 Plugin SDK
-headers are packed as `_static/module_sdk.zip` (linked from
-`api/plugin_host.html`).
+`components/minihub_device_widget/` at Sphinx configure time. While
+`HIDE_L3` is true in `docs/_extensions/omit_elf_plugin_docs.py`, the HTML
+build omits L3 chapters and any passage wrapped in `.. only:: not hide_l3`.
+Set `HIDE_L3 = False` to publish them again. The `.rst` sources stay in the
+tree.
 
 Open locally, for example: `docs/_build/zh_CN/esp32s31/html/index.html`.
 
@@ -105,7 +107,8 @@ Headers currently in `INPUT`: `minihub_core.h`, `minihub_http_worker.h`,
 `mbedtls.h`, `psa.h`, `freertos.h`). MiniHub types for out-of-tree plugins are
 documented from the component headers (not the SDK copy) to avoid duplicates.
 
-L3 plugin authors include `minihub_plugin_sdk.h` (see `en/api/plugin_host.rst`).
+`minihub_plugin_sdk.h` lives under `docs/module_sdk/` (`en/api/plugin_host.rst`).
+That page is not in the HTML build while `HIDE_L3` is true.
 Host builds with `CONFIG_MINIHUB_DYNAMIC_MODULES` run `tools/check_plugin_sdk.py`.
 
 REST / JS / MCP pages remain hand-written RST (no C headers).

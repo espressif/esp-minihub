@@ -6,7 +6,7 @@ hashes, and derive the host-side acceptable-hash set.
 
 This module is the single source of truth shared by:
 
-  * tools/gen_abi_contract.py  -- generate host_abi_versions.json + baked header
+  * tools/gen_abi_contract.py  -- bake the C header; no Stores/host_abi_versions file
   * tools/store_server.py      -- validate a plugin's ``abi.symbols`` at request time
   * tools/sync_store_catalog.py-- stamp the ``abi`` block onto a plugin catalog.json
 
@@ -37,11 +37,10 @@ DEFAULT_HEADER = "components/minihub_module/include/minihub_module_abi.h"
 DEFAULT_ALLOWLIST = "docs/module_sdk/host_export_allowlist.json"
 
 ABI_VERSIONS_SCHEMA = "minihub.abi.versions/1"
-HASH_PREFIX = "sha256:"
 
 
 def _hash(text: str) -> str:
-    return HASH_PREFIX + hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 _FNPTR_RE = re.compile(
@@ -132,10 +131,56 @@ def build_host_symbols(
     return merge_allowlist(symbols, allowlist)
 
 
+def symbol_hash_list(value) -> list[str]:
+    """One symbol's hashes. Index 0 is this version; the rest stay acceptable."""
+    if isinstance(value, str) and value:
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str) and item]
+    return []
+
+
 def compute_abi_total_hash(symbols: dict[str, str]) -> str:
     """Hash of every (name, hash) pair in canonical (sorted-by-name) order."""
     canonical = "".join(f"{n}\x00{symbols[n]}\x00" for n in sorted(symbols))
     return _hash(canonical)
+
+
+_MHMD_MAGIC = b"DMHM"
+_MHMD_HEADER = 36  # sizeof(minihub_module_image_header_t)
+
+
+def _elf_file(path: Path) -> tuple[Path, Path | None]:
+    """Return an ELF path. An MHMD image (magic DMHM + ELF) is stripped to a temp file."""
+    data = path.read_bytes()
+    if (
+        data.startswith(_MHMD_MAGIC)
+        and len(data) > _MHMD_HEADER + 4
+        and data[_MHMD_HEADER : _MHMD_HEADER + 4] == b"\x7fELF"
+    ):
+        tmp = Path(tempfile.mkdtemp()) / "mod.elf"
+        tmp.write_bytes(data[_MHMD_HEADER:])
+        return tmp, tmp
+    return path, None
+
+
+_READELF_BINARIES: list[str] | None = None
+
+
+def _readelf_binaries() -> list[str]:
+    """Newest RISC-V and Xtensa ``readelf`` under the ESP toolchain, if present."""
+    global _READELF_BINARIES
+    if _READELF_BINARIES is not None:
+        return _READELF_BINARIES
+    tools = Path.home() / ".espressif" / "tools"
+    found = sorted(tools.glob("*/*/*/bin/*-readelf")) if tools.is_dir() else []
+    picked: list[str] = []
+    for name in ("riscv32-esp-elf-readelf", "xtensa-esp-elf-readelf"):
+        matches = [p for p in found if p.name == name]
+        if matches:
+            picked.append(str(matches[-1]))
+    _READELF_BINARIES = picked
+    return picked
 
 
 def plugin_symbol_block(mhub: Path, host_symbols: dict[str, str]) -> dict[str, str]:
@@ -177,44 +222,65 @@ def plugin_symbol_block(mhub: Path, host_symbols: dict[str, str]) -> dict[str, s
         # (the real ESP toolchain) names have no prefix, so this is a no-op there.
         if key not in host_symbols and key.startswith("_") and key[1:] in host_symbols:
             key = key[1:]
-        if key in host_symbols:
-            block[key] = host_symbols[key]
+        value = host_symbols.get(key)
+        if isinstance(value, list):
+            value = value[0] if value else ""
+        if isinstance(value, str) and value:
+            block[key] = value
     return block
 
 
-def _read_und_symbols(mhub: Path) -> set[str]:
-    """Collect undefined symbol names from an ELF.
+def _parse_undefined(text: str) -> set[str]:
+    names: set[str] = set()
+    for line in text.splitlines():
+        if " UND " in line:
+            parts = line.split()
+            if parts and parts[-1] not in ("UND", "DEFAULT"):
+                names.add(parts[-1])
+            continue
+        toks = line.split()
+        if len(toks) >= 2 and toks[-2] == "U" and toks[-1] not in ("U",):
+            names.add(toks[-1])
+    return names
 
-    Tries, in order: readelf (Linux toolchain), ``nm -D -u`` (dynamic undefined),
-    plain ``nm`` (lines with a ``U`` type), and ``objdump -t``. The first that
-    yields symbols wins.
+
+def _read_und_symbols(mhub: Path) -> set[str]:
+    """Collect undefined symbol names from an ELF or an MHMD image.
+
+    The ``.so`` inside a ``.mhub`` is an MHMD header plus ELF. Host ``nm`` cannot
+    read that image or an Xtensa/RISC-V ELF, so the ESP toolchain ``readelf`` is
+    used when it is installed. ``readelf`` may still exit non-zero ("no .dynamic
+    section") after printing the symbol table; those names are kept.
     """
-    for cmd in (
-        ["readelf", "-sW", str(mhub)],
-        ["readelf", "-s", str(mhub)],
-        ["nm", "-D", "-u", str(mhub)],
-        ["nm", str(mhub)],
-        ["objdump", "-t", str(mhub)],
-    ):
-        try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if out.returncode != 0:
-            continue
-        names: set[str] = set()
-        for line in out.stdout.splitlines():
-            if " UND " in line:
-                parts = line.split()
-                if parts:
-                    names.add(parts[-1])
+    raw = mhub.read_bytes()
+    looks_elf = raw.startswith(b"\x7fELF") or (
+        raw.startswith(_MHMD_MAGIC) and raw[_MHMD_HEADER : _MHMD_HEADER + 4] == b"\x7fELF"
+    )
+    if not looks_elf:
+        return set()
+    elf, elf_tmp = _elf_file(mhub)
+    cmds: list[list[str]] = []
+    for binary in ["readelf", *_readelf_binaries()]:
+        cmds.append([binary, "-sW", str(elf)])
+    cmds.append(["nm", "-D", "-u", str(elf)])
+    cmds.append(["nm", str(elf)])
+    cmds.append(["objdump", "-t", str(elf)])
+    try:
+        for cmd in cmds:
+            try:
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            except (OSError, subprocess.SubprocessError):
                 continue
-            # plain `nm`/`objdump -t`: "addr T type name" with type 'U'
-            toks = line.split()
-            if len(toks) >= 2 and toks[-2] == "U":
-                names.add(toks[-1])
-        if names:
-            return names
+            names = _parse_undefined(out.stdout)
+            if names:
+                return names
+    finally:
+        if elf_tmp is not None and elf_tmp.exists():
+            try:
+                elf_tmp.unlink()
+                elf_tmp.parent.rmdir()
+            except OSError:
+                pass
     print(f"[abi] warn: could not read undefined symbols from {mhub}", flush=True)
     return set()
 

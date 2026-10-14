@@ -18,7 +18,7 @@
 Store 安装返回 400 / 404 / 409
 ------------------------------
 
-* **400** — 缺少 ``kind`` / ``id`` 。``kind`` 只能是 ``module`` 或 ``pack``
+* **400** — 缺少 ``type`` / ``id`` 。``type`` 只能是 ``module`` 或 ``pack``
   （不是 ``adapter`` ）。不支持 multipart ``file=@*.mhub`` 。
 * **404** — 目录或制品缺失；先设 ``custom_url`` 再 ``POST /api/store/refresh``
 * **409** — 已安装；用 ``POST /api/store/upgrade`` 或先卸载
@@ -27,15 +27,17 @@ Store 安装返回 400 / 404 / 409
 模块加载失败 (load_guard)
 --------------------------
 
-原生模块在 ``dlopen`` 时崩溃，Host 会写入 ``/store/modules/ID/.load_guard`` ，
-下次启动跳过。用 ``POST /api/modules`` 清除：
+.. only:: not hide_l3
 
-.. code-block:: json
+   原生模块在 ``dlopen`` 时崩溃，Host 会写入 ``/store/modules/ID/.load_guard`` ，
+   下次启动跳过。用 ``POST /api/modules`` 清除：
 
-   { "id": "color_bulb", "clear_load_guard": true, "reload": true }
+   .. code-block:: json
 
-串口查 ABI。L3 须让 ``module.json`` 的 ``abi_version`` 与 ``core_api_*`` 覆盖
-当前 Host（头文件 ``MINIHUB_MODULE_ABI_VERSION`` ）。见 :doc:`api/module_abi` 。
+      { "id": "color_bulb", "clear_load_guard": true, "reload": true }
+
+   串口查 ABI。L3 须让 ``module.json`` 的 ``abi_version`` 与 ``core_api_*`` 覆盖
+   当前 Host（头文件 ``MINIHUB_MODULE_ABI_VERSION`` ）。见 :doc:`api/module_abi` 。
 
 Hub 重载循环或 MCP 报 HUB_NOT_READY
 -----------------------------------

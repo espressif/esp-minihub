@@ -10,7 +10,7 @@ L3 模块在外层 ``.mhub`` zip 内携带 **原生 ELF** ``.so`` 。加载器�
 端到端流程
 ----------
 
-1. **脚手架** — ``module.json`` 、源码、可选 ``ui.json``
+1. **脚手架** — ``module.json`` 、源码、可选 ``meta.json``
 2. **编译** ``.so`` — 下面两种方式选一
 3. **打包** — ``python3 tools/pack_store_module.py pack ID``
 4. **目录** — ``.mhub`` 已在 store 目录后，重写 ``catalog.json`` （Hub 读这份
@@ -49,14 +49,9 @@ L3 模块在外层 ``.mhub`` zip 内携带 **原生 ELF** ``.so`` 。加载器�
    python3 /path/to/module_sdk/pack_store_module.py mhmd \
      build/lib/my_native.so build/my_native.so
 
-   # 3. 打 .mhub（必需；Hub 安装的是 zip，不是裸 .so）
+   # 3. MHMD 留在本插件的 build/。pack 不创建商店插件目录。
    export MINIHUB_PLUGIN_DIRS="$PWD"
    python3 /path/to/module_sdk/pack_store_module.py pack my_native
-
-   # 4. 按 store 里每个 Stores/ESP32S31 或 Stores/Common 的 ID.mhub 重写 catalog.json（不需要插件源码）。
-   #    sync_store_catalog.py 与 pack_store_module.py 一起在 module_sdk.zip 里。
-   python3 /path/to/module_sdk/sync_store_catalog.py --from-store \
-     --deploy ~/workspace/minihub_store
 
 ``-shared -fPIC`` 以及 ``-Wl,-z,max-page-size=4`` 在 ESP32-S31 上 ``dlopen`` 必需。
 若同时使用 ``-fvisibility=hidden`` 与 ``--gc-sections`` ，还需
@@ -123,13 +118,14 @@ L3 模块在外层 ``.mhub`` zip 内携带 **原生 ELF** ``.so`` 。加载器�
 列出的树（CMake **之前** export），用
 ``idf_component_register`` ；
 ``REQUIRES`` 只加实际用到的公开库。使能 ``CONFIG_MINIHUB_DYNAMIC_MODULES`` 时加
-``-fPIC`` 。固件编译经 ``cmake/minihub_module_so.cmake`` 生成
-``application/minihub/build/modules/libadapter_ID.so`` ，成功后会自动 MHMD 并 pack。
+``-fPIC`` 。``cmake/minihub_module_so.cmake`` 在编译模块目标时生成
+``application/minihub/build/modules/libadapter_ID.so`` ，再做 MHMD 和 pack。
+Host 固件 ``build`` 不会做这件事。
 
 .. code-block:: bash
 
    export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"   # 仅演示
-   ./tools/build_firmware.py -app minihub build
+   ./tools/build_firmware.py -app minihub modules
 
 也可在已有 ``.so`` 后只再打包： ``python3 tools/pack_store_module.py pack ID`` 。
 
@@ -160,7 +156,7 @@ L3 常用脚本
      module_entry.c       # 导出 minihub_module_entry（可选 minihub_module_rpc）
      my_native_adapter.c  # minihub_adapter_t 实现
      CMakeLists.txt
-     ui.json              # 可选 Web UI
+     meta.json            # 可选 ui + capabilities
 
 ``module.json`` （L3）
 ----------------------
@@ -174,12 +170,12 @@ L3 常用脚本
      "enabled": true,
      "adapter": "my_native",
      "binary": "my_native.so",
-     "ui_file": "ui.json",
      "abi_version": 1,
      "core_api_min": 1,
-     "core_api_max": 1,
-     "capabilities": ["auth", "device_sync"]
+     "core_api_max": 1
    }
+
+``ui`` 与 ``capabilities`` 现放在同目录的 ``meta.json`` 里；module.json 只保留运行环境信息。
 
 ``binary`` 是设备解压目录内的文件名（例如 ``/store/modules/my_native/my_native.so`` ）。
 
@@ -260,7 +256,7 @@ Host 编译还会运行 ``tools/check_plugin_sdk.py``，防止 ``minihub_plugin_
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/install -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"my_native"}'
+     -d '{"type":"module","id":"my_native"}'
    curl -X POST http://$HUB/api/modules -H 'Content-Type: application/json' \
      -d '{"id":"my_native","enabled":true,"reload":true}'
 

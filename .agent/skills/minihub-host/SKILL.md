@@ -33,11 +33,11 @@ description: Develop MiniHub Host firmware products (application folder, Kconfig
 
 | Goal | What to do |
 |------|------------|
-| Pull extra sources into configure | `export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"` **before** `./tools/build_firmware.py … build` (`:`/`;` separated). Read at configure time only. |
-| Ship `.mhub` to LAN Store | After L3 Host build (or L1/L2 pack): `$MINIHUB_PLUGINS_DEPLOY_DIR` (default `~/workspace/minihub_store`) has `Stores/ESP32S31/<id>/` for a chip target and `Stores/Common/<id>/` when `targets` is `["ALL"]`. Serve the deploy root with `python3 tools/store_server.py`. |
+| Pull extra sources into configure | `export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"` **before** `./tools/build_firmware.py modules` (`:`/`;` separated). Read at configure time only. Host `build` does not compile those plugins. |
+| Ship `.mhub` to LAN Store | After an L1/L2 pack: `$MINIHUB_PLUGINS_DEPLOY_DIR` (default `~/workspace/minihub_store`) has `Stores/Common/<id>/`. A native module is not published there. Serve the deploy root with `python3 tools/store_server.py`. |
 | Rebuild all L3 `.so` | `./tools/build_firmware.py modules` |
 | Rebuild one L3 `.so` | `./tools/build_firmware.py module <id>` |
-| Re-wrap existing L3 ELF | `./tools/build_firmware.py pack [all\|<id>]` |
+| Re-wrap existing L3 ELF | `./tools/build_firmware.py pack <id>` |
 | Factory-flash a module | App `manifest.yml` `store_preinstall: [<id>]` then rebuild/flash. Does not replace Store install. Public product stays `[]`. |
 
 L1/L2: no Host link step — `python3 tools/pack_store_module.py pack <id>` then `sync_store_catalog.py`. L3: `./tools/build_firmware.py module <id>` produces `application/<app>/build/modules/libadapter_<id>.so`; `./tools/build_firmware.py pack <id>` wraps MHMD `build/<id>.so` into `.mhub`. Details: `.agent/skills/minihub-plugin-l{1,2,3}/`.

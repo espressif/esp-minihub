@@ -84,9 +84,7 @@ assert_catalog_packed() {
     _static/catalog/model/ui_elements.csv \
     _static/catalog/model/services.csv \
     _static/catalog/images/devices/light.svg \
-    _static/catalog/images/devices/switch.svg \
-    _static/catalog/examples/color_bulb/devices.json \
-    _static/catalog/examples/meter_plug/devices.json
+    _static/catalog/images/devices/switch.svg
   do
     if [[ ! -f "$html/$rel" ]]; then
       echo "docs HTML missing packaged catalog file: $html/$rel" >&2

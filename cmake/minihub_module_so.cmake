@@ -1,8 +1,8 @@
 # Build adapter components as .so for MiniHub Store (.mhub packaging).
 
 function(minihub_add_module_so module_id component_name)
-    # Optional ARGV2: plugin source dir (module.json). Used to pick
-    # Stores/ESP32S31 vs Stores/Common from that module's targets.
+    # Optional ARGV2 is accepted for callers that pass the plugin source dir.
+    # The .so stays in the build tree; this rule does not publish a store folder.
     if(NOT CONFIG_MINIHUB_DYNAMIC_MODULES)
         return()
     endif()
@@ -54,48 +54,15 @@ function(minihub_add_module_so module_id component_name)
     if(NOT MINIHUB_REPO_ROOT)
         get_filename_component(MINIHUB_REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
     endif()
-    if(DEFINED ENV{MINIHUB_PLUGINS_DEPLOY_DIR} AND NOT "$ENV{MINIHUB_PLUGINS_DEPLOY_DIR}" STREQUAL "")
-        set(_mh_deploy "$ENV{MINIHUB_PLUGINS_DEPLOY_DIR}")
-    else()
-        set(_mh_deploy "$ENV{HOME}/workspace/minihub_store")
-    endif()
     set(_mh_pack_py "${MINIHUB_REPO_ROOT}/tools/pack_store_module.py")
     set(_mh_python "${Python3_EXECUTABLE}")
     if(NOT _mh_python)
         set(_mh_python "python3")
     endif()
-    set(_mh_mod_dir "")
-    if(ARGC GREATER 2)
-        set(_mh_mod_dir "${ARGV2}")
-    endif()
-    set(_mh_mhub "${_mh_deploy}/Stores/Common/${module_id}/${module_id}.mhub")
-    if(NOT "${_mh_mod_dir}" STREQUAL "")
-        execute_process(
-            COMMAND ${CMAKE_COMMAND} -E env
-                    MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
-                    ${_mh_python} -c
-                    "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); import store_paths; print(store_paths.module_mhub_file(sys.argv[2], deploy=Path(sys.argv[3]), module_dir=Path(sys.argv[4])))"
-                    "${MINIHUB_REPO_ROOT}/tools"
-                    "${module_id}"
-                    "${_mh_deploy}"
-                    "${_mh_mod_dir}"
-            OUTPUT_VARIABLE _mh_mhub
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            RESULT_VARIABLE _mh_mhub_rc
-        )
-        if(NOT _mh_mhub_rc EQUAL 0 OR "${_mh_mhub}" STREQUAL "")
-            message(WARNING "modstore: could not resolve ${module_id} deploy path (rc=${_mh_mhub_rc})")
-            set(_mh_mhub "${_mh_deploy}/Stores/Common/${module_id}/${module_id}.mhub")
-        endif()
-    endif()
-    # Configure-time staging may copy a stale deploy .mhub before libadapter_*.so
-    # exists. After linking, refresh MHMD + deploy .mhub + modstore files/<id>.mhub.
-    # Do NOT rewrite/copy shared catalog.json here: ninja builds module_so_* in
-    # parallel and concurrent cmake -E copy of the same catalog fails with
-    # "Error copying file ... catalog.json". Catalog sync is module_store_catalog.
-    set(_mh_modstore_mhub "${CMAKE_BINARY_DIR}/modstore_image/files/${module_id}.mhub")
-
-    add_custom_command(OUTPUT ${so_output} ${mhmd_output} ${_mh_modstore_mhub}
+    # L3 stays in the build tree (libadapter_*.so and the MHMD .so). It is
+    # not a store package, so this rule does not write Stores/Common or
+    # Stores/<chip>.
+    add_custom_command(OUTPUT ${so_output} ${mhmd_output}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${out_dir}
         COMMAND ${CMAKE_C_COMPILER} ${so_link_flags} -o ${so_output}
                 -Wl,--whole-archive ${static_lib} -Wl,--no-whole-archive
@@ -104,22 +71,14 @@ function(minihub_add_module_so module_id component_name)
                 -P ${so_check_script}
         COMMAND ${CMAKE_STRIP_SO} ${so_strip_flags} ${so_output}
         COMMAND ${_mh_python} ${_mh_pack_py} mhmd ${so_output} ${mhmd_output}
-        COMMAND ${CMAKE_COMMAND} -E env
-                MINIHUB_PLUGINS_DEPLOY_DIR=${_mh_deploy}
-                MINIHUB_PLUGIN_DIRS=$ENV{MINIHUB_PLUGIN_DIRS}
-                MINIHUB_APP=$ENV{MINIHUB_APP}
-                ${_mh_python} ${_mh_pack_py} ${module_id} --deploy ${_mh_deploy}
-        COMMAND ${CMAKE_COMMAND} -E make_directory
-                ${CMAKE_BINARY_DIR}/modstore_image/files
-        COMMAND ${CMAKE_COMMAND} -E copy
-                ${_mh_mhub}
-                ${_mh_modstore_mhub}
         DEPENDS ${so_dependencies}
-        COMMENT "Build module .so + pack .mhub: ${module_id}"
+        COMMENT "Build module .so: ${module_id}"
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         VERBATIM
     )
-    add_custom_target(module_so_${module_id} ALL DEPENDS ${so_output} ${mhmd_output} ${_mh_modstore_mhub})
+    # Not part of ninja `all`. Host `build` must not compile native plugins.
+    # `build_firmware.py module <id>` asks ninja for this target by name.
+    add_custom_target(module_so_${module_id} DEPENDS ${so_output} ${mhmd_output})
 endfunction()
 
 function(minihub_register_module_sos)
@@ -156,8 +115,8 @@ function(minihub_register_module_sos)
         list(APPEND _MH_MODULE_SO_TARGETS module_so_${_MOD})
     endforeach()
 
-    # One catalog rewrite after all packs finish — sizes match files/*.mhub and
-    # ninja no longer races on the shared catalog.json.
+    # Rewrite catalog.json from packages already in the deploy tree. Do not
+    # depend on module_so_*: that edge would pull native compiles into `all`.
     if(NOT MINIHUB_REPO_ROOT)
         get_filename_component(MINIHUB_REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
     endif()
@@ -183,7 +142,6 @@ function(minihub_register_module_sos)
                     MINIHUB_APP=$ENV{MINIHUB_APP}
                     ${_mh_python} ${_mh_catalog_py} --deploy ${_mh_deploy}
                     --aggregate ${_mh_modstore_catalog}
-            DEPENDS ${_MH_MODULE_SO_TARGETS}
             COMMENT "Sync Store catalog into modstore_image"
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             VERBATIM
@@ -191,12 +149,7 @@ function(minihub_register_module_sos)
         add_custom_target(module_store_catalog ALL DEPENDS ${_mh_modstore_catalog})
     endif()
 
-    if(TARGET littlefs_modstore_bin)
-        foreach(_t ${_MH_MODULE_SO_TARGETS})
-            add_dependencies(littlefs_modstore_bin ${_t})
-        endforeach()
-        if(TARGET module_store_catalog)
-            add_dependencies(littlefs_modstore_bin module_store_catalog)
-        endif()
+    if(TARGET littlefs_modstore_bin AND TARGET module_store_catalog)
+        add_dependencies(littlefs_modstore_bin module_store_catalog)
     endif()
 endfunction()

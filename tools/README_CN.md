@@ -9,7 +9,7 @@
 | 变量 | 默认 | 含义 |
 |------|------|------|
 | `MINIHUB_APP` | `minihub` | `application/` 下的产品目录 |
-| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | 部署根：`Stores/ESP32S31/<id>/` 或 `Stores/Common/<id>/`、`Firmwares/`、`Assets/`、`Webs/` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | 部署根：`Stores/Common/<id>/`、`Firmwares/`、`Assets/`、`Webs/` |
 
 ---
 
@@ -62,6 +62,8 @@ python3 tools/dev_sync.py --port 9000
 ./tools/build_firmware.py modules
 ./tools/build_firmware.py pack color_bulb
 ```
+
+`build` 只编 Host。它不编译原生插件。`modules` 或 `module <id>` 把原生 `.so` 编进构建目录，不创建商店插件目录。对原生模块执行 `pack <id>` 只在本地封装 MHMD `.so`，不写入 `Stores/Common`，也不写入 `Stores/<chip>`。
 
 ### `apply_sdkconfig_variant.sh`
 
@@ -144,6 +146,7 @@ python3 tools/pack_store_module.py mhmd build/foo.so build/foo_mhmd.so
 ```
 
 Host 只解 zip（`hub_zip.c`）。`--format` / `MHUB_PACK_FORMAT` 预留；目前仅实现 `zip`。
+`pack all` 默认跳过原生和 hybrid。指定原生 id 时只在本地封装 MHMD `.so`，不写入商店。
 
 ### `build_store_modules.py`
 
@@ -158,7 +161,7 @@ python3 tools/build_store_modules.py my_native --deploy ~/workspace/minihub_stor
 
 ### `sync_store_catalog.py`
 
-重写 `Stores/ESP32S31/<id>/catalog.json` 或 `Stores/Common/<id>/catalog.json` 。部署树不再写派生数组（`/api/catalog` 在请求时聚合各插件 catalog）；需要单份数组时用 `--aggregate PATH` 输出到指定路径。具体芯片用大写芯片目录，`["ALL"]` 留在 `Common`。无参数时默认只遍历这些 `.mhub`（不需要源码，也不看 `MINIHUB_PLUGIN_DIRS`）。`--from-store` 与默认相同。传入 `all` 或模块 id 会先按源码打包，再同样重写 catalog。该脚本也会打进 `module_sdk.zip`。
+重写 L1/L2 的 `Stores/Common/<id>/catalog.json` 。商店里已有的原生包会被删掉，不会挪到 `Common` 或芯片目录。部署树不再写派生数组（`/api/catalog` 在请求时聚合各插件 catalog）；需要单份数组时用 `--aggregate PATH` 输出到指定路径。`targets` 只用于按芯片过滤。无参数时默认只遍历这些 `.mhub`（不需要源码，也不看 `MINIHUB_PLUGIN_DIRS`）。`--from-store` 与默认相同。传入 `all` 或模块 id 会先按源码打包，再同样重写 catalog。该脚本也会打进 `module_sdk.zip`。
 
 ```bash
 python3 tools/sync_store_catalog.py

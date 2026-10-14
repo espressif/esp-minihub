@@ -12,7 +12,10 @@ L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
 
 * 轻量自动化、HTTP 轮询、REST 与点位之间的胶水逻辑
 * 通过 ``/modules/`` 提供 UI 片段，无需原生代码
-* 在投入 L3 之前快速验证想法
+
+.. only:: not hide_l3
+
+   * 在投入 L3 之前快速验证想法
 
 要求：产品 sdkconfig 打开 ``CONFIG_MINIHUB_DYNAMIC_MODULES`` （``app.yml`` 中
 ``dynamic_modules`` 特性）。
@@ -25,7 +28,7 @@ L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
    examples/plugins/ID/
      module.json
      main.js              # 必需 — 须导出 setup(host)
-     ui.json              # 可选 — Web 模块面板
+     meta.json            # 可选 — ui + capabilities
      web/                 # 可选静态资源
 
 ``module.json`` 示例
@@ -117,7 +120,7 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
    curl -X POST http://$HUB/api/store/refresh
    curl -X POST http://$HUB/api/store/install \
      -H 'Content-Type: application/json' \
-     -d '{"kind":"module","id":"demo_js"}'
+     -d '{"type":"module","id":"demo_js"}'
    curl -X POST http://$HUB/api/hub/reload
 
 验证：
@@ -126,4 +129,8 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
 * ``GET /api/points`` — 可见 ``demo_js.hello``
 * 串口：``JS module 'demo_js' setup ok``
 
-L2 可选模块 RPC；更推荐 ``host.command`` 或 REST。API 详解 :doc:`../api/js_host`；L3 见 :doc:`develop_l3`。
+L2 可选模块 RPC；更推荐 ``host.command`` 或 REST。API 详解 :doc:`../api/js_host`。
+
+.. only:: not hide_l3
+
+   L3 RPC 见 :doc:`develop_l3` 。

@@ -1085,6 +1085,10 @@ function dwParamControl(type, p, live, gated) {
             } else if (!Number.isInteger(n)) {
                 display = String(Math.round(n * 1000) / 1000);
             }
+        } else if (unit && valStr !== '' && isNaN(Number(valStr))) {
+            /* Numeric param (has a unit) carrying a non-numeric token — e.g. a
+             * device that returned boolean false when off. Show 0, not raw. */
+            display = '0';
         }
         return '<span class="dw-val">' + esc(display) + esc(unit) + '</span>';
     }

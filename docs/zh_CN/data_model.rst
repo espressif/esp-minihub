@@ -13,7 +13,7 @@ MiniHub Core **按点位工作**，不按灯、开关等 C 结构体工作：
 
 * **一台物理设备对应一条** ``minihub_point_t`` （Matter 按 endpoint，
   见 :doc:`matter`）
-* ``point_id`` = ``协议.设备名`` （如 ``sim.color_bulb``、
+* ``point_id`` = ``协议.设备名`` （如 ``sim.js_kitchen``、
   ``zigbee.zb_7d4b``、``thread.matter_n2_ep1``）
 * 实时参数都在该点的 ``props.params.<参数名>`` 里
 * ``type`` 是字符串 （``light`` / ``switch`` / …），**不是** Core 里的封闭枚举
@@ -39,16 +39,16 @@ MiniHub Core **按点位工作**，不按灯、开关等 C 结构体工作：
           \                              /
            UI = 目录 ∩ 在线 props.params
 
-**不要** 按参数再拆点 （错误示例：``sim.color_bulb.brightness``）。
+**不要** 按参数再拆点 （错误示例：``sim.js_kitchen.brightness``）。
 
 活动点示例 （``GET /api/points``）：
 
 .. code-block:: json
 
    {
-     "point_id": "sim.color_bulb",
+     "point_id": "sim.js_kitchen",
      "type": "light",
-     "adapter": "color_bulb",
+     "adapter": "color_bulb_js",
      "value": "on",
      "online": true,
      "props": {
@@ -255,8 +255,12 @@ CID/PID/VID 与 ``uuid``；Matter Basic Information 与 ``node_id``）。品类�
     * ``writable`` — true 时允许写
     * ``batch_as_props`` — true 时一批寄存器写入点位 ``props``
 
-Store 模块 (L2/L3) 使用自己的键，例如 ``my_module`` 。安装时若槽位不存在会创建。
+Store 模块 (L2) 使用自己的键，例如 ``my_module`` 。安装时若槽位不存在会创建。
 L1 包把 ``inject`` **合并** 进指定适配器块（见 :doc:`plugins/develop_l1` ）。
+
+.. only:: not hide_l3
+
+   L3 模块同样使用自己的适配器键。
 
 **不要** 把厂商云凭证写进通用 Host 的出厂配置。用户登录后由模块写入 NVS 或模块私有文件。
 
@@ -330,7 +334,7 @@ worker 任务里运行，新的 invoke 或配置重载会取消正在执行的�
 事件
 ----
 
-适配器与 JS/原生模块往 Hub 事件总线发布。Web UI 订阅 ``GET /ws/events``。
+适配器与 JS 模块往 Hub 事件总线发布。Web UI 订阅 ``GET /ws/events``。
 规则监听 ``point.updated``。事件类型见 :doc:`api/host_rest` （``GET /ws/events``）。
 插件不必注册 WebSocket — 更新点位/发命令即可。
 
@@ -343,4 +347,7 @@ worker 任务里运行，新的 invoke 或配置重载会取消正在执行的�
 * 端到端流程：:doc:`architecture_overview`
 * Matter 配网 REST：:doc:`matter`
 * L1 inject 合并：:doc:`plugins/develop_l1`
-* L3 插件：:doc:`plugins/develop_l3`
+
+.. only:: not hide_l3
+
+   * L3 插件：:doc:`plugins/develop_l3`

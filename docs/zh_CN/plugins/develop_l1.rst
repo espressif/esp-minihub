@@ -25,9 +25,12 @@ L1 **只改已有 Host 适配器的配置块**，不登记点、不跑逻辑、�
   「纸面设备」。``thread`` **没有** ``devices[]`` （只做 BR）；不要用 L1
   给 Thread 发明设备列表。
 * 厂商、品类、``owner``、``ota`` —— 那是点位顶层 ``props``，由 Host 访谈或
-  L2/L3 ``merge_props`` 写入，不是 ``adapters.json`` 字段。
-* 云端 API、新适配器、认领已有 Zigbee 点 —— 用 :doc:`develop_l2` /
-  :doc:`develop_l3`。
+  L2 ``merge_props`` 写入，不是 ``adapters.json`` 字段。
+* 云端 API、新适配器、认领已有 Zigbee 点 —— 用 :doc:`develop_l2` 。
+
+.. only:: not hide_l3
+
+   L3 也可以用 ``merge_props`` 写这些字段，并增加新适配器。见 :doc:`develop_l3` 。
 
 校验允许 ``inject.adapter`` 为 ``zigbee`` 等，是为了可以改 **provision
 类键**，不是允许用 L1 发设备列表。
@@ -80,7 +83,7 @@ L1 **只改已有 Host 适配器的配置块**，不登记点、不跑逻辑、�
 
    curl -X POST http://HUB/api/store/install \
      -H 'Content-Type: application/json' \
-     -d '{"kind":"pack","id":"ble_mesh_pack"}'
+     -d '{"type":"pack","id":"ble_mesh_pack"}'
    curl -X POST http://HUB/api/hub/reload
 
 用 ``GET /api/packs`` 与 ``GET /api/config/adapters`` 验证。

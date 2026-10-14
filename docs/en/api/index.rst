@@ -9,11 +9,14 @@ OEM products, LAN integration, automation scripts, and **statically linked**
 adapters under ``components/``: REST/MCP against the hub, or implement
 ``minihub_adapter_t`` in Host firmware.
 
-L2 (JS) and L3 (native) modules under ``examples/plugins/`` or
+L2 (JS) modules under ``examples/plugins/`` or
 ``MINIHUB_PLUGIN_DIRS``: use the
-host vtable / JS ``host`` object, plus REST for install, enable, and RPC.
-Out-of-tree L3 C sources should ``#include "minihub_plugin_sdk.h"``
-(:doc:`plugin_host`).
+JS ``host`` object, plus REST for install, enable, and RPC.
+
+.. only:: not hide_l3
+
+   L3 (native) modules use the host vtable. Out-of-tree C sources should
+   ``#include "minihub_plugin_sdk.h"`` (:doc:`plugin_host`).
 
 .. toctree::
    :maxdepth: 2
@@ -32,12 +35,19 @@ Out-of-tree L3 C sources should ``#include "minihub_plugin_sdk.h"``
 
    plugin_rest
    js_host
-   module_abi
-   plugin_host
-   plugin_sdk_minihub
-   plugin_sdk_esp_idf
-   plugin_sdk_cjson
-   plugin_sdk_mbedtls
-   plugin_sdk_psa
-   plugin_sdk_lwip
-   plugin_sdk_freertos
+
+.. only:: not hide_l3
+
+   .. toctree::
+      :maxdepth: 2
+      :caption: Store plugin API (native ELF)
+
+      module_abi
+      plugin_host
+      plugin_sdk_minihub
+      plugin_sdk_esp_idf
+      plugin_sdk_cjson
+      plugin_sdk_mbedtls
+      plugin_sdk_psa
+      plugin_sdk_lwip
+      plugin_sdk_freertos

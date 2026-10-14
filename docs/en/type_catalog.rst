@@ -53,6 +53,11 @@ Built-in device types
      - power
      - power
      - switch / outlet icon (below)
+   * - ``speaker``
+     - power, volume
+     - volume
+     - volume
+     - speaker icon (below)
    * - ``sensor_air_quality``
      - co2, pm25, pressure_hpa, battery
      - co2
@@ -99,11 +104,12 @@ Built-in device types
      - leak
      - water-leak icon (below)
 
-Plugin ``devices.json`` declares **only the subset this device uses**. Demos:
+Plugin ``devices.json`` declares **only the subset this device uses**. The JS
+demos show it:
 
-* ``examples/plugins/color_bulb`` → ``type: light`` (power / brightness / hue /
+* ``examples/plugins/color_bulb_js`` → ``type: light`` (power / brightness / hue /
   saturation; cct hidden with ``visible: false``)
-* ``examples/plugins/meter_plug`` → ``type: switch`` (writable power; read-only
+* ``examples/plugins/meter_plug_js`` → ``type: switch`` (writable power; read-only
   voltage / current / watts)
 
 The catalog ships the following sensor types: ``sensor_contact``,
@@ -137,7 +143,7 @@ hidden. Hue / saturation / CCT are **sliders**; rainbow or tone comes from CSS.
      - Bool
      - —
      - toggle
-     - light, switch
+     - light, switch, speaker
    * - ``brightness``
      - Brightness
      - Int
@@ -168,6 +174,12 @@ hidden. Hue / saturation / CCT are **sliders**; rainbow or tone comes from CSS.
      - 0–100 %, step 1
      - slider
      - light
+   * - ``volume``
+     - Volume
+     - Int
+     - 0–100, step 1
+     - slider (requires power)
+     - speaker
    * - ``voltage_v``
      - Voltage
      - Float
@@ -305,6 +317,11 @@ Device **avatars** are SVG under
      - ``images/devices/switch.svg``
      - .. image:: ../_static/catalog/images/devices/switch.svg
           :alt: switch device icon
+          :width: 64px
+   * - ``speaker``
+     - ``images/devices/speaker.svg``
+     - .. image:: ../_static/catalog/images/devices/speaker.svg
+          :alt: speaker device icon
           :width: 64px
    * - ``sensor_air_quality``
      - ``images/devices/sensor_air_quality.svg``
@@ -487,8 +504,10 @@ On register (one point per array element):
 
 A single object (not an array) is still accepted for one-device plugins.
 
-L3: regenerate ``device_desc.gen.h`` after editing JSON — do not hand-edit the
-header. Demos: ``examples/plugins/color_bulb``, ``examples/plugins/meter_plug``.
+.. only:: not hide_l3
+
+   L3: regenerate ``device_desc.gen.h`` after editing JSON — do not hand-edit the
+   header. Demos: ``examples/plugins/color_bulb``, ``examples/plugins/meter_plug``.
 
 2. Add a brand-new device type
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -548,4 +567,7 @@ Related
 * REST examples: :doc:`api/host_rest`
 * End-to-end flow: :doc:`architecture_overview`
 * Type catalog component: ``components/minihub_device_widget/README.md``
-* L3 plugins: :doc:`plugins/develop_l3`
+
+.. only:: not hide_l3
+
+   * L3 plugins: :doc:`plugins/develop_l3`

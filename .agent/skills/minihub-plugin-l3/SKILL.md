@@ -56,7 +56,7 @@ IDE MCP can scaffold L3 files but **cannot** compile `.so`. Prefer copying patte
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MINIHUB_APP` | `minihub` | Product / `application/<app>/build` |
-| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | `Stores/ESP32S31/<id>/` when `targets` is that chip; `Stores/Common/<id>/` only for `["ALL"]` |
+| `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | Not used for L3. A native module is not published to the store |
 | `MINIHUB_PLUGIN_DIRS` | (empty) | Extra plugin trees (`:`/`;`). **Configure-time** (`cmake/minihub_bundle/minihub_import.cmake`). Does **not** auto-preinstall |
 
 Needs Host `CONFIG_MINIHUB_DYNAMIC_MODULES` (product feature `dynamic_modules`). Link flags: `cmake/minihub_module_so.cmake` (`-Wl,-z,max-page-size=4`).
@@ -77,14 +77,16 @@ Production / vendor plugin (set `MINIHUB_PLUGIN_DIRS`):
 
 ```bash
 ./tools/build_firmware.py -app minihub zigbee ble_mesh build
-# cmake also wraps MHMD + packs .mhub + refreshes catalog
+./tools/build_firmware.py -app minihub modules
+# `modules` compiles native .so and wraps MHMD in the build tree.
+# Host `build` does not. Neither writes a store plugin folder.
 ```
 
-Demo under `examples/plugins/` — export **before** configure/build:
+Demo under `examples/plugins/` — export **before** configure:
 
 ```bash
 export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"   # or .../examples/plugins/color_bulb
-./tools/build_firmware.py -app minihub build
+./tools/build_firmware.py -app minihub modules
 ```
 
 Rebuild one native module, then pack the existing `.so`:
@@ -97,7 +99,7 @@ python3 tools/pack_store_module.py mhmd \
     application/minihub/build/modules/libadapter_my_native.so \
     application/minihub/build/my_native.so
 python3 tools/pack_store_module.py pack my_native
-python3 tools/sync_store_catalog.py
+# native pack wraps MHMD locally and does not create a store folder
 python3 tools/store_server.py --port 8080
 ```
 
@@ -108,14 +110,11 @@ python3 tools/store_server.py --port 8080
 | Path | What |
 |------|------|
 | `application/<app>/build/modules/libadapter_<id>.so` | Linked ELF (stripped) |
-| `application/<app>/build/<id>.so` | MHMD header + ELF (local only; not left in deploy) |
-| `$MINIHUB_PLUGINS_DEPLOY_DIR/Stores/Common/catalog.json` | Derived catalog array (every bucket) staged into the modstore image |
-| `$MINIHUB_PLUGINS_DEPLOY_DIR/Stores/ESP32S31/<id>/<id>.mhub` | Zip for an ESP32S31 target: `module.json` + `<id>.so` [+ ui/web] |
-| `application/<app>/build/modstore_image/files/<id>.mhub` | Copy used for on-device Store littlefs image |
+| `application/<app>/build/<id>.so` | MHMD header + ELF (local only; not a store package) |
 
 ## Install
 
-- **Store (usual, no manifest change):** Hub Store `custom_url` → refresh → install. Store / `module_attach` creates the `adapters.json` slot (`ensure_adapter_slot`); without it, `load_all` skips the adapter.
+- **Store:** a native module is not published. Packing does not create `Stores/Common/<id>/` or `Stores/<chip>/<id>/`.
 - **Factory preinstall (optional):** `store_preinstall: [<id>]` in app `manifest.yml`, then rebuild/flash **with** the same `MINIHUB_PLUGIN_DIRS` if the source is a demo. Public Host keeps `[]`. Clear the list when done.
 
 Load guard: `/store/modules/<id>/.load_guard`. Clear via `POST /api/modules` with `clear_load_guard` / `enabled`.

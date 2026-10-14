@@ -28,10 +28,15 @@ points, run logic, or call the cloud.
   invents a paper device. ``thread`` has **no** ``devices[]`` (BR only);
   do not invent a Thread device list from L1.
 * ``manufacturer``, ``category``, ``owner``, ``ota`` — those are top-level
-  point ``props`` from Host interview or L2/L3 ``merge_props``, not
+  point ``props`` from Host interview or L2 ``merge_props``, not
   ``adapters.json`` keys.
 * Cloud APIs, a new adapter, or claiming an existing Zigbee point — use
-  :doc:`develop_l2` or :doc:`develop_l3`.
+  :doc:`develop_l2`.
+
+.. only:: not hide_l3
+
+   L3 can also set those props with ``merge_props``, and can add a new
+   adapter. See :doc:`develop_l3`.
 
 Validation allows ``inject.adapter`` ``zigbee`` so you can set **provision
 keys**, not so L1 can ship a device list.
@@ -94,7 +99,7 @@ On device (after ``store_server.py`` + catalog refresh):
 
    curl -X POST http://HUB/api/store/install \
      -H 'Content-Type: application/json' \
-     -d '{"kind":"pack","id":"ble_mesh_pack"}'
+     -d '{"type":"pack","id":"ble_mesh_pack"}'
    curl -X POST http://HUB/api/hub/reload
 
 Verify with ``GET /api/packs`` and ``GET /api/config/adapters``.
