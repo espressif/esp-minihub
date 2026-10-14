@@ -167,6 +167,18 @@ function adapterLoggedOut(ad) {
     return !!(st && st.loaded && !st.logged_in);
 }
 
+/* miot_js sync blocks the JS worker, so status() cannot report syncing
+ * until the RPC returns. Track the in-flight module locally. */
+const syncingModuleIds = {};
+function markAuthSyncing(id, on) {
+    if (!id) return;
+    if (on) syncingModuleIds[id] = true;
+    else delete syncingModuleIds[id];
+}
+function authModuleSyncing(id) {
+    return !!(id && syncingModuleIds[id]);
+}
+
 let _syncPollTimer = null;
 function pollAuthSyncWhileBusy() {
     if (_syncPollTimer) return;
@@ -174,7 +186,7 @@ function pollAuthSyncWhileBusy() {
         await loadMeta();
         const busy = authModules().some(function (m) {
             const st = authStatus(m.adapter);
-            return !!(st && st.syncing);
+            return !!(st && st.syncing) || authModuleSyncing(m.id);
         });
         if (view === 'overview') renderOverview();
         if (!busy) {

@@ -285,7 +285,8 @@ function sectionHeader(ad, count) {
         } else {
             acct = showActs ? '<span class="mod-acct off">' + esc(lbl(mod, 'logged_out', t('ov.logged_out'))) + '</span>' : '';
         }
-        const syncBadge = st.syncing ? '<span class="mod-acct busy">' + t('ov.syncing') + '</span>' : '';
+        const syncBadge = (st.syncing || authModuleSyncing(mid))
+            ? '<span class="mod-acct busy">' + t('ov.syncing') + '</span>' : '';
         let acts = '';
         if (showActs) {
             if (st.logged_in) {
@@ -1616,6 +1617,8 @@ async function logoutModule(id) {
 }
 async function syncModule(id, homeId) {
     const mid = id || activeAuthModule;
+    markAuthSyncing(mid, true);
+    if (view === 'overview') renderOverview();
     pollAuthSyncWhileBusy();
     toast(homeId ? t('ov.switching_home') : t('ov.syncing_now'));
     try {
@@ -1679,6 +1682,9 @@ async function syncModule(id, homeId) {
         if (view === 'overview') renderOverview();
     } catch (e) {
         toast(t('ov.failed'));
+    } finally {
+        markAuthSyncing(mid, false);
+        if (view === 'overview') renderOverview();
     }
 }
 
