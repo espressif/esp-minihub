@@ -1,16 +1,31 @@
 ---
 name: minihub-athena
-description: Link Athena issues to GitLab MRs and manage issue progress status. Use when reporting a fix/MR on an Athena issue, replying with an MR link, or moving an issue's status from Not started to In progress.
+description: Link Athena issues to GitLab MRs and manage issue progress status. Use when creating an MR with git push options, reporting a fix on an Athena issue, replying with an MR link, or moving an issue's status from Not started to In progress.
 ---
 
 # MiniHub Athena ↔ MR workflow
 
 ## Rules (always follow)
 
-1. **Full MR URL, never shorthand.** When you reply on an Athena issue with an MR reference, write the COMPLETE URL:
-   `https://gitlab.espressif.cn:6688/ae_group/minihub/esp-minihub/-/merge_requests/<NN>`
-   Do NOT use the bare `!NN` short form (e.g. "MR !53") as the only reference — the link must be fully clickable/copyable. If an existing comment titles itself with `!NN`, rewrite its body to lead with the full URL.
-2. **Flip status after replying.** After you post the reply, check the issue's status. If it is `Not started` (`NOT STARTED`), update it to `In Progress` (`In Progress`).
+1. **Athena and the MR cite each other.** Both directions are required.
+   - The Athena comment contains every related MR as a complete URL:
+     `https://gitlab.espressif.cn:6688/ae_group/minihub/esp-minihub/-/merge_requests/<NN>`
+     Do NOT use the bare `!NN` short form (e.g. "MR !53") as the only reference — the link must be fully clickable/copyable. If an existing comment titles itself with `!NN`, rewrite its body to lead with the full URL.
+   - The MR description contains the complete Athena weblink:
+     `https://athena.espressif.cn:6565/w/<id>`
+     Do NOT use a bare node id. One issue can have more than one MR (host and plugins). Put the same Athena URL in each MR, and list every MR URL in the Athena comment.
+2. **Open the MR with git, not the API.** Push the branch with GitLab push options. Do not use `glab`, the GitLab REST API, or an MCP call to create or retitle the MR.
+
+   ```bash
+   git push -u origin HEAD \
+     -o merge_request.create \
+     -o merge_request.target=master \
+     -o merge_request.title='<conventional title>' \
+     -o merge_request.description='Athena: https://athena.espressif.cn:6565/w/<id>. <what changed>'
+   ```
+
+   The description is one line; the Athena URL is the first item. If Git prints `Everything up-to-date`, the options were not sent — push options ride on a ref update. Do not force-push and do not add an empty commit to force one.
+3. **Flip status after replying.** After you post the reply, check the issue's status. If it is `Not started` (`NOT STARTED`), update it to `In Progress` (`In Progress`).
 
 ## Mechanics (athena CLI, macOS: /opt/homebrew/bin/athena)
 
