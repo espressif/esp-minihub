@@ -64,7 +64,21 @@ async function refreshStoreCatalog() {
             toast(t('store.refresh_server_failed'));
             return;
         }
-        storeCatalog = await r.json();
+        let status = await r.json();
+        const deadline = Date.now() + 60000;
+        while (status && status.result === 'pending' && Date.now() < deadline) {
+            await new Promise(res => setTimeout(res, 500));
+            const sr = await fetch('/api/store/refresh');
+            if (!sr.ok) throw new Error('HTTP ' + sr.status);
+            status = await sr.json();
+        }
+        if (!status || status.result === 'pending' || status.result === 'error') {
+            toast(t('store.refresh_server_failed'));
+            return;
+        }
+        const cr = await fetch('/api/store/catalog');
+        if (!cr.ok) throw new Error('HTTP ' + cr.status);
+        storeCatalog = await cr.json();
         storeCatalogOk = true;
         /* A manual refresh re-syncs with the server: drop the optimistic
          * "just uninstalled" mask so anything the server still offers (now as

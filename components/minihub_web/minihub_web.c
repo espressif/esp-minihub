@@ -4062,19 +4062,50 @@ static esp_err_t handle_api_store_refresh(httpd_req_t *req)
     if (err != ESP_OK) {
         return err;
     }
-    err = minihub_store_refresh_catalog();
-    if (err != ESP_OK) {
-        if (err == ESP_ERR_INVALID_RESPONSE) {
-            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "invalid catalog");
-        }
+    /* Do not fetch the catalog on the httpd task. A bad store URL blocks that
+     * task inside the HTTP client, so POST /api/store/config cannot be served
+     * until the fetch times out. */
+    err = minihub_store_refresh_catalog_async();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
     }
-    cJSON *catalog = minihub_store_catalog_merged();
-    if (!catalog) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "catalog failed");
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
     }
-    err = send_json(req, catalog);
-    cJSON_Delete(catalog);
+    cJSON_AddStringToObject(resp, "result", "pending");
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_store_refresh_status(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    bool busy = false;
+    bool finished = false;
+    esp_err_t result = ESP_FAIL;
+    minihub_store_refresh_catalog_status(&busy, &finished, &result);
+
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+    }
+    if (busy) {
+        cJSON_AddStringToObject(resp, "result", "pending");
+    } else if (!finished) {
+        cJSON_AddStringToObject(resp, "result", "idle");
+    } else if (result == ESP_OK) {
+        cJSON_AddStringToObject(resp, "result", "ok");
+    } else {
+        cJSON_AddStringToObject(resp, "result", "error");
+        cJSON_AddStringToObject(resp, "error", esp_err_to_name(result));
+    }
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
     return err;
 }
 
@@ -5722,6 +5753,8 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
                                   .handler = handle_api_store_catalog };
     httpd_uri_t store_refresh = { .uri = "/api/store/refresh", .method = HTTP_POST,
                                   .handler = handle_api_store_refresh };
+    httpd_uri_t store_refresh_status = { .uri = "/api/store/refresh", .method = HTTP_GET,
+                                         .handler = handle_api_store_refresh_status };
     httpd_uri_t store_install = { .uri = "/api/store/install", .method = HTTP_POST,
                                   .handler = handle_api_store_install };
     httpd_uri_t store_upgrade = { .uri = "/api/store/upgrade", .method = HTTP_POST,
@@ -5732,6 +5765,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
                                     .handler = handle_api_store_uninstall };
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_catalog), TAG, "/api/store/catalog");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_refresh), TAG, "/api/store/refresh");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_refresh_status), TAG, "/api/store/refresh GET");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_install), TAG, "/api/store/install");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_upgrade), TAG, "/api/store/upgrade");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &store_reinstall), TAG, "/api/store/reinstall");

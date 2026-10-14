@@ -25,6 +25,16 @@ cJSON *minihub_store_fetch_catalog(void);
 esp_err_t minihub_store_refresh_catalog(void);
 
 /**
+ * Start a catalog refresh on a background task.
+ * Returns immediately so the HTTP server can still accept a new store URL
+ * while a bad URL is timing out. ESP_ERR_INVALID_STATE if one is already running.
+ */
+esp_err_t minihub_store_refresh_catalog_async(void);
+
+/** Snapshot of the background refresh. finished is false until the first run completes. */
+void minihub_store_refresh_catalog_status(bool *busy, bool *finished, esp_err_t *result);
+
+/**
  * Download and install a store item.
  * @param kind  "module" or "pack"
  * @param id    catalog item id

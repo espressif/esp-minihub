@@ -25,6 +25,8 @@
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_app_format.h"
 #include "esp_app_desc.h"
 #include "nvs.h"
@@ -211,6 +213,24 @@ cJSON *minihub_store_catalog_merged(void)
 esp_err_t minihub_store_refresh_catalog(void)
 {
     return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_store_refresh_catalog_async(void)
+{
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+void minihub_store_refresh_catalog_status(bool *busy, bool *finished, esp_err_t *result)
+{
+    if (busy) {
+        *busy = false;
+    }
+    if (finished) {
+        *finished = false;
+    }
+    if (result) {
+        *result = ESP_ERR_NOT_SUPPORTED;
+    }
 }
 
 bool minihub_store_copy_base_url(char *out, size_t out_len)
@@ -827,6 +847,45 @@ cJSON *minihub_store_fetch_catalog(void)
         ESP_LOGW(TAG, "catalog fetch failed from configured store URL(s)");
     }
     return merged;
+}
+
+static volatile bool s_refresh_busy;
+static volatile bool s_refresh_finished;
+static volatile esp_err_t s_refresh_result = ESP_FAIL;
+
+static void store_refresh_task(void *arg)
+{
+    (void)arg;
+    s_refresh_result = minihub_store_refresh_catalog();
+    s_refresh_finished = true;
+    s_refresh_busy = false;
+    vTaskDelete(NULL);
+}
+
+esp_err_t minihub_store_refresh_catalog_async(void)
+{
+    if (s_refresh_busy) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    s_refresh_busy = true;
+    if (xTaskCreate(store_refresh_task, "store_cat", 12288, NULL, 5, NULL) != pdPASS) {
+        s_refresh_busy = false;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
+void minihub_store_refresh_catalog_status(bool *busy, bool *finished, esp_err_t *result)
+{
+    if (busy) {
+        *busy = s_refresh_busy;
+    }
+    if (finished) {
+        *finished = s_refresh_finished;
+    }
+    if (result) {
+        *result = s_refresh_result;
+    }
 }
 
 esp_err_t minihub_store_refresh_catalog(void)
