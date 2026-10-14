@@ -584,7 +584,7 @@ const RULE_TYPE_CMDS = {
         { cmd: 'turn_off', labelKey: 'rules.opt_off' },
         { cmd: 'toggle', labelKey: 'rules.opt_toggle' },
         { cmd: 'set_brightness', labelKey: 'rules.set_brightness', value: true, param: 'brightness', unit: '%', min: 1, max: 100 },
-        { cmd: 'set_color_temp', labelKey: 'rules.set_color_temp', value: true, param: 'color_temp', unit: 'K', min: 2700, max: 6500 },
+        { cmd: 'set_color_temp', labelKey: 'rules.set_color_temp', value: true, param: 'cct', unit: 'K', min: 2700, max: 6500 },
         { cmd: 'set_color', labelKey: 'rules.set_color', value: true, param: 'hue' }
     ],
     switch: [
@@ -655,6 +655,36 @@ function rulesCmdDefsForType(type) {
         { cmd: 'turn_off', labelKey: 'rules.opt_off' },
         { cmd: 'toggle', labelKey: 'rules.opt_toggle' }
     ];
+}
+
+/* A command that writes a parameter is offered only when this device actually
+ * has that parameter. On/off/toggle stay. color_temp and hue are the old keys
+ * for cct and color. */
+function rulesParamPresent(live, name) {
+    if (!live || !name) return false;
+    if (live[name]) return true;
+    if (name === 'cct' || name === 'color_temp') return !!(live.cct || live.color_temp);
+    if (name === 'color' || name === 'hue') return !!(live.color || live.hue);
+    return false;
+}
+
+function rulesCmdDefsForPoint(pid, type) {
+    const defs = rulesCmdDefsForType(type);
+    if (!pid) return defs;
+    const live = rulesLiveParams(pid);
+    if (!live || !Object.keys(live).length) return defs;
+    return defs.filter(function (d) {
+        if (!d || !d.param) return true;
+        return rulesParamPresent(live, d.param);
+    });
+}
+
+function rulesActionParamValue(act, param) {
+    if (!act || !act.params || !param) return '';
+    if (act.params[param] != null) return act.params[param];
+    if (param === 'cct' && act.params.color_temp != null) return act.params.color_temp;
+    if (param === 'color' && act.params.hue != null) return act.params.hue;
+    return '';
 }
 
 function rulesCmdDefFor(cmd, type) {
@@ -1155,7 +1185,7 @@ function rulesEditActionHtml(si, aj, a) {
     if (typ === 'command') {
         const pid = act.point_id || '';
         const type = (rulesFindPoint(pid) || {}).type || '';
-        const defs = rulesCmdDefsForType(type);
+        const defs = rulesCmdDefsForPoint(pid, type);
         const cmd = act.cmd || (defs[0] && defs[0].cmd) || 'turn_on';
         const cmdOpts = defs.map(function (d) {
             return '<option value="' + d.cmd + '"' + (d.cmd === cmd ? ' selected' : '') + '>' + esc(rulesCmdLabel(d)) + '</option>';
@@ -1168,7 +1198,7 @@ function rulesEditActionHtml(si, aj, a) {
             '<select id="re-step-' + idx + '-act-' + j + '-cmd" onchange="rulesEditRerenderThen()">' + extra + cmdOpts + '</select></div>';
         const active = rulesCmdDefFor(cmd, type);
         if (active && active.value) {
-            const curVal = (active.param && act.params && act.params[active.param] != null) ? act.params[active.param] : '';
+            const curVal = rulesActionParamValue(act, active.param);
             /* Resolved exactly like the WHEN row: the device picked in this row
              * decides the range, so both rows of the same rule agree. */
             const rng = rulesActionValueRange(pid, active.param, active);
