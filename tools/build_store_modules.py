@@ -223,28 +223,37 @@ def host_elf_symbols_out(*, root: Path = ROOT) -> Path:
     return out
 
 
+# L3 adapters are not built or published. gen_host_export_symbols.py scans
+# libadapter_*.so and exits 1 when none exist, which fails a JS-only pack.
+# Set this true again when an L3 .so is part of the pack.
+REFRESH_HOST_ELF_SYMBOLS = False
+
+
 def refresh_host_and_catalog(*, root: Path = ROOT, deploy: Path | None = None) -> None:
     deploy = resolve_deploy_dir(deploy)
-    modules_dir = resolve_modules_dir(root=root)
-    mhmd_dir = app_build_dir(root=root)
-    gen_out = host_elf_symbols_out(root=root)
-    subprocess.run(
-        [
-            sys.executable,
-            str(root / "tools" / "gen_host_export_symbols.py"),
-            "--modules-dir",
-            str(modules_dir),
-            "--mhmd-dir",
-            str(mhmd_dir),
-            "--store-dir",
-            str(deploy),
-            "--out",
-            str(gen_out),
-            "--skip-allowlist",
-        ],
-        cwd=str(root),
-        check=True,
-    )
+    if REFRESH_HOST_ELF_SYMBOLS:
+        modules_dir = resolve_modules_dir(root=root)
+        mhmd_dir = app_build_dir(root=root)
+        gen_out = host_elf_symbols_out(root=root)
+        subprocess.run(
+            [
+                sys.executable,
+                str(root / "tools" / "gen_host_export_symbols.py"),
+                "--modules-dir",
+                str(modules_dir),
+                "--mhmd-dir",
+                str(mhmd_dir),
+                "--store-dir",
+                str(deploy),
+                "--out",
+                str(gen_out),
+                "--skip-allowlist",
+            ],
+            cwd=str(root),
+            check=True,
+        )
+    else:
+        print("skip gen_host_export_symbols: L3 adapters are not built", flush=True)
     # Default catalog rewrite scans deploy .mhub only (no plugin sources).
     subprocess.run(
         [
