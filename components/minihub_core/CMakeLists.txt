@@ -10,6 +10,7 @@ idf_component_register(
         "event_bus.c"
         "command_router.c"
         "http_worker.c"
+        "minihub_tz.c"
     INCLUDE_DIRS "include"
-    REQUIRES espressif__cjson esp_timer freertos esp_system
+    REQUIRES espressif__cjson esp_timer freertos esp_system nvs_flash
 )

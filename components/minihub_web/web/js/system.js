@@ -248,6 +248,73 @@ async function sysOtaUpload() {
     }
 }
 
+window.hubTzOffsetMin = 0;
+
+function hubTzLabel(id) {
+    if (!id || id === 'UTC') return t('sys.tz.utc');
+    const m = /^UTC([+-])(\d+)$/.exec(String(id));
+    if (!m) return String(id);
+    const hour = parseInt(m[2], 10);
+    const cn = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四'];
+    const zh = window.mhLang && String(window.mhLang).indexOf('zh') === 0;
+    const n = (zh && cn[hour]) ? cn[hour] : String(hour);
+    return t(m[1] === '+' ? 'sys.tz.east' : 'sys.tz.west', { n: n, id: id });
+}
+
+function hubWallNow() {
+    const off = Number(window.hubTzOffsetMin) || 0;
+    const d = new Date(Date.now() + off * 60000);
+    const p = x => String(x).padStart(2, '0');
+    return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) +
+        ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
+}
+
+function applyTimezonePayload(j) {
+    if (!j) return;
+    const off = Number(j.offset_min);
+    window.hubTzOffsetMin = Number.isFinite(off) ? off : 0;
+    const sel = document.getElementById('sys-tz-id');
+    if (sel && Array.isArray(j.zones)) {
+        const cur = j.id || 'UTC';
+        sel.innerHTML = j.zones.map(function (id) {
+            const text = hubTzLabel(id);
+            return '<option value="' + esc(id) + '"' + (id === cur ? ' selected' : '') + '>' + esc(text) + '</option>';
+        }).join('');
+    }
+    const now = document.getElementById('sys-tz-now');
+    if (now) now.textContent = t('sys.tz_now', { time: hubWallNow() });
+}
+
+async function loadTimezone() {
+    try {
+        const r = await fetch('/api/system/timezone');
+        if (!r.ok) return;
+        applyTimezonePayload(await r.json());
+    } catch (e) {}
+}
+
+async function sysSaveTimezone() {
+    const sel = document.getElementById('sys-tz-id');
+    if (!sel || !sel.value) return;
+    try {
+        const r = await fetch('/api/system/timezone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: sel.value })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            toast(t('sys.failed'));
+            return;
+        }
+        applyTimezonePayload(j);
+        toast(t('sys.tz_saved'));
+        if (typeof renderOverview === 'function') renderOverview();
+    } catch (e) {
+        toast(t('sys.network_error'));
+    }
+}
+
 async function loadSystem() {
     try {
         const r = await fetch('/api/system');
@@ -311,6 +378,7 @@ async function loadSystem() {
         const hv = document.getElementById('hub-ver');
         if (hv && sysSnap.version) hv.textContent = 'v' + sysSnap.version;
         sysFillNet();
+        if (sysSnap.timezone) applyTimezonePayload(sysSnap.timezone);
         /* The version rows show whatever the device's last probe cached, which is
          * empty right after a boot or a flash. Re-probe once per page load so
          * opening / refreshing the System view reflects the deploy server. */

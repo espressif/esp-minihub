@@ -58,7 +58,15 @@ Document shape
        ``value`` against ``props.params.NAME.value``. Legacy ``equals`` still
        matches the point summary ``value``.
    * - ``time``
-     - Fire once per day at ``at`` (``HH:MM``). Needs SNTP.
+     - Fire once per day at ``at`` (``HH:MM``, stored as UTC). The console
+       time field is the hub timezone from System. Needs SNTP.
+
+A time rule created before the hub timezone setting existed stored its ``at``
+as UTC computed from the *browser* timezone at edit time. After a hub timezone
+is chosen on the System page, the console reads and writes ``at`` in the hub
+timezone, so such a pre-existing rule can fire one ``(browser − hub)`` offset
+away from its original wall-clock time. Re-open and re-save the rule to
+re-anchor it to the hub timezone.
 
 Both ``point`` and ``time`` accept an optional ``delay_sec``: the rule waits
 that many seconds after the trigger before the first step runs. A value of 0

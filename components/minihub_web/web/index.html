@@ -73,6 +73,16 @@
           </div>
         </div>
       </div>
+      <div class="sys-net" style="margin-top:16px" id="sys-tz">
+        <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="sys.tz_title">时区</h3>
+        <div class="sys-hint" data-i18n="sys.tz_hint">事件记录和设备卡片上的时间都按这里的时区显示，不使用浏览器时区。</div>
+        <label for="sys-tz-id" data-i18n="sys.tz_title">时区</label>
+        <select id="sys-tz-id"></select>
+        <div id="sys-tz-now" class="sys-hint"></div>
+        <div class="modal-actions" style="margin-top:8px;justify-content:flex-start">
+          <button class="btn-sm on" type="button" onclick="sysSaveTimezone()" data-i18n="sys.tz_save">保存</button>
+        </div>
+      </div>
       <div class="sys-net" style="margin-top:16px" id="sys-ota">
         <h3 style="margin-bottom:10px;font-size:1rem" data-i18n="mdl.ota_title">自定义固件升级</h3>
         <div id="sys-ota-status" class="modal-hint"></div>

@@ -32,6 +32,7 @@
 #include "minihub_provision.h"
 #include "minihub_net_cfg.h"
 #include "minihub_core.h"
+#include "minihub_tz.h"
 #include "minihub_http_worker.h"
 #include "minihub_config.h"
 #include "minihub_device_widget.h"
@@ -1246,6 +1247,56 @@ static esp_err_t handle_api_system(httpd_req_t *req)
         cJSON_AddItemToObject(root, "net", net);
     }
 
+    cJSON *tz = minihub_tz_status_json();
+    if (tz) {
+        cJSON_AddItemToObject(root, "timezone", tz);
+    }
+
+    err = send_json(req, root);
+    cJSON_Delete(root);
+    return err;
+}
+
+static esp_err_t handle_api_system_timezone_get(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    cJSON *root = minihub_tz_status_json();
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    err = send_json(req, root);
+    cJSON_Delete(root);
+    return err;
+}
+
+static esp_err_t handle_api_system_timezone_post(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char *buf = NULL;
+    size_t buflen = 0;
+    if (read_http_body(req, &buf, &buflen, 256) != ESP_OK || !buf) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad body");
+    }
+    cJSON *body = cJSON_Parse(buf);
+    free(buf);
+    const cJSON *id = body ? cJSON_GetObjectItem(body, "id") : NULL;
+    if (!cJSON_IsString(id) || minihub_tz_set(id->valuestring) != ESP_OK) {
+        cJSON_Delete(body);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "unknown timezone");
+    }
+    cJSON_Delete(body);
+
+    cJSON *root = minihub_tz_status_json();
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
     err = send_json(req, root);
     cJSON_Delete(root);
     return err;
@@ -5555,6 +5606,10 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
                                       .handler = handle_api_system_reboot };
     httpd_uri_t api_system_reset = { .uri = "/api/system/reset", .method = HTTP_POST,
                                      .handler = handle_api_system_reset };
+    httpd_uri_t api_system_tz_get = { .uri = "/api/system/timezone", .method = HTTP_GET,
+                                      .handler = handle_api_system_timezone_get };
+    httpd_uri_t api_system_tz_post = { .uri = "/api/system/timezone", .method = HTTP_POST,
+                                       .handler = handle_api_system_timezone_post };
     httpd_uri_t api_net_cfg = { .uri = "/api/net/config", .method = HTTP_POST, .handler = handle_api_net_config };
     httpd_uri_t api_net_wifi = { .uri = "/api/net/wifi", .method = HTTP_POST, .handler = handle_api_net_wifi };
     httpd_uri_t adapters_api = { .uri = "/api/adapters", .method = HTTP_GET, .handler = handle_api_adapters };
@@ -5659,6 +5714,8 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system), TAG, "/api/system");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_reboot), TAG, "/api/system/reboot");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_reset), TAG, "/api/system/reset");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_tz_get), TAG, "/api/system/timezone GET");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_tz_post), TAG, "/api/system/timezone POST");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_net_cfg), TAG, "/api/net/config");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_net_wifi), TAG, "/api/net/wifi");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &adapters_api), TAG, "/api/adapters");
@@ -5841,7 +5898,7 @@ esp_err_t minihub_web_start(uint16_t port)
     /* Default ctrl_port (32768) collides with RainMaker protocomm_httpd
      * (on-network chal_resp) which also uses HTTPD_DEFAULT_CONFIG. */
     config.ctrl_port = ESP_HTTPD_DEF_CTRL_PORT + 1;
-    config.max_uri_handlers = 80;
+    config.max_uri_handlers = 96;
     config.max_open_sockets = 20;
     /* Store install/upgrade may HTTP-download .mhub on this task (esp_http_client
      * + local buffers). 8K overflows; 16K matches typical IDF httpd+client use. */

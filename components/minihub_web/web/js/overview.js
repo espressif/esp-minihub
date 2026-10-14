@@ -475,7 +475,11 @@ function propsHtml(p) {
 
 function climateSummary(p) {
     const pr = p.props || {};
-    if (pr.card_summary) return '<div class="card-summary">' + esc(String(pr.card_summary)) + '</div>';
+    /* When the value line already is "有人 20261014 13:11", do not repeat it. */
+    if (pr.card_summary && !(p.value === 'detected' &&
+            String(pr.card_summary).indexOf(t('ov.detected') + ' ') === 0)) {
+        return '<div class="card-summary">' + esc(String(pr.card_summary)) + '</div>';
+    }
     const bits = [];
     if (p.type === 'air-conditioner') {
         if (pr.mode_label) bits.push(pr.mode_label);
@@ -564,9 +568,10 @@ function fmtDeviceLogTime(ts) {
     if (!Number.isFinite(n) || n <= 0) return '—';
 
     if (n >= 1577836800000) {
-        const d = new Date(n);
+        const off = Number(window.hubTzOffsetMin) || 0;
+        const d = new Date(n + off * 60000);
         const p = x => String(x).padStart(2, '0');
-        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+        return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds());
     }
     const sec = Math.floor(n / 1000);
     const h = Math.floor(sec / 3600),
@@ -855,7 +860,11 @@ function cardHtml(p) {
         if (cPhase === 'failed') return t('ov.commission_failed');
         if (p.type === 'button') return (p.online ? t('ov.ready') : t('ov.offline'));
         if (isCover && Number.isFinite(pct)) return pct + '%';
-        if (p.value === 'detected') return t('ov.detected');
+        if (p.value === 'detected') {
+            const summary = p.props && p.props.card_summary;
+            if (typeof summary === 'string' && summary.indexOf(t('ov.detected') + ' ') === 0) return summary;
+            return t('ov.detected');
+        }
         if (p.value === 'clear') return t('ov.no_motion');
         if (p.value === 'closed') return t('ov.closed');
         if (p.value === 'open' && p.type === 'binary_sensor') return t('ov.open');

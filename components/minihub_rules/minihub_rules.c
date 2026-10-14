@@ -822,8 +822,10 @@ static bool clock_is_valid(void)
     if (now < 0) {
         return false;
     }
+    /* Time rules are stored as UTC wall clock. libc TZ is the display
+     * timezone, so this check must stay on gmtime. */
     struct tm local_tm;
-    if (!localtime_r(&now, &local_tm)) {
+    if (!gmtime_r(&now, &local_tm)) {
         return false;
     }
     /* Accept any clock set to a plausible year. We deliberately do not require
@@ -842,7 +844,7 @@ static void check_time_rules(void)
 
     time_t now = time(NULL);
     struct tm local_tm;
-    if (!localtime_r(&now, &local_tm)) {
+    if (!gmtime_r(&now, &local_tm)) {
         return;
     }
 

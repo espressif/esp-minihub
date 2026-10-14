@@ -19,6 +19,7 @@
  *   host.http.request({ url, method?, body?, headers?, timeout_ms? })
  *   host.net.udp.open/sendto/recvfrom/close
  *   host.crypto.md5/sha1/sha256/hmacSha256/aes128CbcEncrypt|Decrypt
+ *   host.time.offsetMin() / host.time.id() — hub timezone, minutes east of UTC
  *   host.config.get() / host.config.save(adaptersRoot)
  *   host.module.rpc(moduleId, method, params?) / host.module.registerRpc(method, fn)
  */
@@ -42,6 +43,7 @@
 #include "mbedtls/base64.h"
 #include "minihub_config.h"
 #include "minihub_core.h"
+#include "minihub_tz.h"
 #include "minihub_module.h"
 #include "minihub_paths.h"
 #include "minihub_task.h"
@@ -1757,6 +1759,22 @@ static JSValue js_adapter_clear_poll(JSContext *ctx, JSValueConst this_val, int 
     return JS_UNDEFINED;
 }
 
+static JSValue js_time_offset_min(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+    return JS_NewInt32(ctx, minihub_tz_offset_min());
+}
+
+static JSValue js_time_id(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+    return JS_NewString(ctx, minihub_tz_id());
+}
+
 static JSValue make_host_object(JSContext *ctx)
 {
     JSValue host = JS_NewObject(ctx);
@@ -1810,6 +1828,12 @@ static JSValue make_host_object(JSContext *ctx)
     JS_SetPropertyStr(ctx, adapter, "clearPoll",
                       JS_NewCFunction(ctx, js_adapter_clear_poll, "clearPoll", 0));
     JS_SetPropertyStr(ctx, host, "adapter", adapter);
+
+    JSValue time_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, time_obj, "offsetMin",
+                      JS_NewCFunction(ctx, js_time_offset_min, "offsetMin", 0));
+    JS_SetPropertyStr(ctx, time_obj, "id", JS_NewCFunction(ctx, js_time_id, "id", 0));
+    JS_SetPropertyStr(ctx, host, "time", time_obj);
 
     minihub_js_attach_net_crypto(ctx, host);
     return host;
