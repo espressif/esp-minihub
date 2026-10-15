@@ -705,6 +705,7 @@
   "store.needs_upgrade": "需升级",
   "store.no_install_items": "暂无可安装项（均已安装或未预置）",
   "store.no_installed_items": "暂无已安装项",
+  "store.refresh_aborted": "Store URL 已变更，目录刷新已停止",
   "store.refresh_failed": "刷新失败",
   "store.refresh_server_failed": "无法从商店服务器刷新目录",
   "store.refreshing": "正在从商店服务器刷新目录...",

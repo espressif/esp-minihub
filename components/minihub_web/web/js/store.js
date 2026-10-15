@@ -72,6 +72,12 @@ async function refreshStoreCatalog() {
             if (!sr.ok) throw new Error('HTTP ' + sr.status);
             status = await sr.json();
         }
+        if (status && status.result === 'aborted') {
+            /* A saved store URL cancels the refresh that was fetching the old
+               one; the catalog on flash is still the previous, valid copy. */
+            toast(t('store.refresh_aborted'));
+            return;
+        }
         if (!status || status.result === 'pending' || status.result === 'error') {
             toast(t('store.refresh_server_failed'));
             return;

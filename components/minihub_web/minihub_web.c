@@ -4087,8 +4087,9 @@ static esp_err_t handle_api_store_refresh_status(httpd_req_t *req)
     }
     bool busy = false;
     bool finished = false;
+    bool aborted = false;
     esp_err_t result = ESP_FAIL;
-    minihub_store_refresh_catalog_status(&busy, &finished, &result);
+    minihub_store_refresh_catalog_status(&busy, &finished, &result, &aborted);
 
     cJSON *resp = cJSON_CreateObject();
     if (!resp) {
@@ -4100,6 +4101,8 @@ static esp_err_t handle_api_store_refresh_status(httpd_req_t *req)
         cJSON_AddStringToObject(resp, "result", "idle");
     } else if (result == ESP_OK) {
         cJSON_AddStringToObject(resp, "result", "ok");
+    } else if (aborted) {
+        cJSON_AddStringToObject(resp, "result", "aborted");
     } else {
         cJSON_AddStringToObject(resp, "result", "error");
         cJSON_AddStringToObject(resp, "error", esp_err_to_name(result));

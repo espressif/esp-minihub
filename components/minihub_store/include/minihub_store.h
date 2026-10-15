@@ -31,8 +31,10 @@ esp_err_t minihub_store_refresh_catalog(void);
  */
 esp_err_t minihub_store_refresh_catalog_async(void);
 
-/** Snapshot of the background refresh. finished is false until the first run completes. */
-void minihub_store_refresh_catalog_status(bool *busy, bool *finished, esp_err_t *result);
+/** Snapshot of the background refresh. finished is false until the first run completes.
+ *  aborted is true when the last run stopped because the store config changed. */
+void minihub_store_refresh_catalog_status(bool *busy, bool *finished, esp_err_t *result,
+                                          bool *aborted);
 
 /**
  * Download and install a store item.
