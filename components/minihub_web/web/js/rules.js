@@ -354,17 +354,18 @@ function rulesDeviceLabel(pointId) {
     return pointId;
 }
 
-/* The hub's localtime_r runs in UTC (no timezone is configured on the device),
- * so time rules are stored and matched in UTC. The <input type="time"> control
- * yields the user's *local* wall-clock, so we convert to UTC on save and back
- * to local for display. Without this, a rule set for 07:30 Beijing only matches
- * at 23:30 UTC (= 07:30 Beijing next day offset) and appears to never fire. */
+/* Time rules are stored and matched as UTC HH:MM (gmtime_r). The time input
+ * is wall-clock in the hub timezone from the System page, not the browser. */
+function hubOffsetMin() {
+    const n = Number(window.hubTzOffsetMin);
+    return Number.isFinite(n) ? n : 0;
+}
 function rulesLocalHMToUtc(hm) {
     if (!hm || typeof hm !== 'string' || hm.indexOf(':') < 0) return hm;
     const p = hm.split(':');
     const h = parseInt(p[0], 10), m = parseInt(p[1], 10);
     if (isNaN(h) || isNaN(m)) return hm;
-    let total = (h * 60 + m) + new Date().getTimezoneOffset();
+    let total = (h * 60 + m) - hubOffsetMin();
     total = ((total % 1440) + 1440) % 1440;
     return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
 }
@@ -373,7 +374,7 @@ function rulesUtcHMToLocal(hm) {
     const p = hm.split(':');
     const h = parseInt(p[0], 10), m = parseInt(p[1], 10);
     if (isNaN(h) || isNaN(m)) return hm;
-    let total = (h * 60 + m) - new Date().getTimezoneOffset();
+    let total = (h * 60 + m) + hubOffsetMin();
     total = ((total % 1440) + 1440) % 1440;
     return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
 }

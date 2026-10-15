@@ -221,6 +221,25 @@ Returns
      }
    });
 
+方法 — host.time
+-----------------
+
+系统页选择的时区是固定的整点偏移（``UTC``、``UTC+8``、``UTC-8``），保存在 NVS，
+默认 UTC。``offsetMin`` 是相对 UTC 向东的分钟数，不含夏令时。
+
+host.time.offsetMin() / host.time.id()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: javascript
+
+   var minutes = host.time.offsetMin();
+   var id = host.time.id();
+
+Returns
+^^^^^^^
+
+``offsetMin`` 返回整数。``id`` 返回字符串，例如 ``UTC+8``。
+
 方法 — host.timer
 -----------------
 

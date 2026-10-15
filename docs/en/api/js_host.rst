@@ -225,6 +225,26 @@ Returns
      }
    });
 
+Methods — host.time
+-------------------
+
+The hub timezone is a fixed whole-hour offset chosen on the System page
+(``UTC``, ``UTC+8``, ``UTC-8``) and stored in NVS. The default is UTC.
+``offsetMin`` is minutes east of UTC. There is no daylight-saving shift.
+
+host.time.offsetMin() / host.time.id()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: javascript
+
+   var minutes = host.time.offsetMin();
+   var id = host.time.id();
+
+Returns
+^^^^^^^
+
+``offsetMin`` returns an integer. ``id`` returns a string such as ``UTC+8``.
+
 Methods — host.timer
 --------------------
 

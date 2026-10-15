@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-10-10-18:27:10';
+window.mhWebBuild = '2026-10-14-16:06:00';
 window.mhWebVersion = '0.1.0';
 
 function toggleSecret(btn) {
@@ -399,3 +399,4 @@ if (updateHintClose) updateHintClose.addEventListener('click', dismissUpdateHint
 
 pollUpdateHint();
 setInterval(pollUpdateHint, 60000);
+if (typeof loadTimezone === 'function') loadTimezone();

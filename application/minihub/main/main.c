@@ -16,6 +16,7 @@
 #include "esp_private/esp_sys_event_app_init.h"
 
 #include "minihub_core.h"
+#include "minihub_tz.h"
 #include "minihub_config.h"
 #include "minihub_adapter.h"
 #include "minihub_rules.h"
@@ -100,6 +101,8 @@ void app_main(void)
     if (err != ESP_OK) {
         return;
     }
+
+    minihub_tz_apply();
 
     esp_task_wdt_config_t wdt_cfg = {
         .timeout_ms = 30000,
