@@ -9,6 +9,7 @@
  * Host API highlights for Devices-page demos:
  *   host.point.register({ ..., props | params })
  *   host.point.set(id, value, props?)
+ *   host.point.unregister(id) — drop a point; missing id is not an error
  *   host.point.mergeProps(id, patch, value?)
  *   host.point.mergeParams(id, params, value?)
  *   host.command.on(adapter, fn)  — route Core commands into JS
@@ -825,6 +826,30 @@ static JSValue js_point_set(JSContext *ctx, JSValueConst this_val, int argc, JSV
     JS_FreeCString(ctx, val);
     if (err != ESP_OK) {
         return JS_ThrowInternalError(ctx, "point_set failed %s", esp_err_to_name(err));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_point_unregister(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_ThrowTypeError(ctx, "unregister(id)");
+    }
+    const char *pid = JS_ToCString(ctx, argv[0]);
+    if (!pid || !pid[0]) {
+        if (pid) {
+            JS_FreeCString(ctx, pid);
+        }
+        return JS_ThrowTypeError(ctx, "point_id required");
+    }
+    esp_err_t err = minihub_point_unregister(pid);
+    JS_FreeCString(ctx, pid);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return JS_UNDEFINED;
+    }
+    if (err != ESP_OK) {
+        return JS_ThrowInternalError(ctx, "point_unregister failed %s", esp_err_to_name(err));
     }
     return JS_UNDEFINED;
 }
@@ -1788,6 +1813,7 @@ static JSValue make_host_object(JSContext *ctx)
     JS_SetPropertyStr(ctx, point, "register", JS_NewCFunction(ctx, js_point_register, "register", 1));
     JS_SetPropertyStr(ctx, point, "get", JS_NewCFunction(ctx, js_point_get, "get", 1));
     JS_SetPropertyStr(ctx, point, "set", JS_NewCFunction(ctx, js_point_set, "set", 2));
+    JS_SetPropertyStr(ctx, point, "unregister", JS_NewCFunction(ctx, js_point_unregister, "unregister", 1));
     JS_SetPropertyStr(ctx, point, "mergeProps", JS_NewCFunction(ctx, js_point_merge_props, "mergeProps", 2));
     JS_SetPropertyStr(ctx, point, "mergeParams", JS_NewCFunction(ctx, js_point_merge_params, "mergeParams", 2));
     JS_SetPropertyStr(ctx, host, "point", point);

@@ -63,7 +63,8 @@ Host calls ``setup(host)`` once per load. The ``host`` object exposes:
   ``device_id`` (e.g. ``light`` / ``switch``) for standard Devices-page
   widgets; see :doc:`../type_catalog`. Pass ``params`` (shorthand) or full
   ``props`` so ``props.params`` reaches the UI.
-* ``host.point.get(point_id)`` · ``host.point.set(point_id, value, props?)``
+* ``host.point.get(point_id)`` · ``host.point.set(point_id, value, props?)`` ·
+  ``host.point.unregister(point_id)``
 * ``host.event.subscribe(event_type, handler)`` — ``point.updated`` /
   ``point.registered`` (same Host ``point_id`` enrichment)
 * ``host.command.on(adapter, handler)`` — receive UI/REST commands in JS
