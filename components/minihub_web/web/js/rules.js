@@ -1111,9 +1111,10 @@ function rulesEditWhenFields(when) {
 }
 
 /* THEN is modelled as an ordered sequence of "steps". A step runs its actions
- * together, then (if not the last step and delay_after > 0) waits before the
- * next step. Each step carries at most one delay, which is exactly what separates
- * the moments. The firmware executes steps non-blocking (esp_timer chain). */
+ * together, then (if another step follows and delay_after > 0) waits before the
+ * next step. A delay on the last step waits before that step's actions. Each
+ * step carries at most one delay. The firmware executes steps non-blocking
+ * (esp_timer chain). */
 const MAX_STEPS_WEB = 5;
 const MAX_ACTIONS_PER_STEP_WEB = 4;
 

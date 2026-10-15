@@ -38,10 +38,12 @@ static const char *TAG = "minihub_rules";
 #define RULE_OP_MAX 8
 
 /* `then` is modelled as a sequence of up to MAX_STEPS "moments". Each step runs
- * its actions together, then (if not the last step and delay_after_sec > 0) waits
- * before the next step. A delay therefore separates steps, and a step may carry at
- * most one delay. Legacy flat `then` (a bare action array, possibly with inline
- * `delay` actions) is converted into this step form on parse (see parse_rule). */
+ * its actions together, then (if another step follows and delay_after_sec > 0)
+ * waits before that next step. A delay on the last step has no following step,
+ * so it waits before that step's own actions — a one-step rule of "turn on,
+ * delay_after 30" therefore turns the light on 30s after the trigger. A step
+ * carries at most one delay. Legacy flat `then` (a bare action array, possibly
+ * with inline `delay` actions) is converted into this step form on parse. */
 #define MAX_STEPS 5
 #define MAX_ACTIONS_PER_STEP 4
 
@@ -72,7 +74,7 @@ typedef struct {
 typedef struct {
     then_action_t actions[MAX_ACTIONS_PER_STEP];
     size_t action_count;
-    int delay_after_sec; /* wait this long AFTER this step, before the next step; ignored on last step */
+    int delay_after_sec; /* between this step and the next; on the last step, before its actions */
 } rule_step_t;
 
 typedef struct {
@@ -552,8 +554,10 @@ static void execute_step_continue(int rule_idx, int step, int act_idx, uint32_t 
 
 /* Run a step's actions in order. A `delay` action waits (non-blocking, via
  * arm_step) before the next action; when the last action is done, delay_after
- * advances to the next step. Each continuation is re-checked against the
- * generation counter by the executor task, so a reload discards stale steps. */
+ * advances to the next step. act_idx < 0 means the last step's own delay_after
+ * has already elapsed, so the actions run now. Each continuation is re-checked
+ * against the generation counter by the executor task, so a reload discards
+ * stale steps. */
 static void execute_step_continue(int rule_idx, int step, int act_idx, uint32_t gen)
 {
     if (rule_idx < 0 || (size_t)rule_idx >= s_rule_count) {
@@ -564,6 +568,17 @@ static void execute_step_continue(int rule_idx, int step, int act_idx, uint32_t 
     }
     rule_t *rule = &s_rules[rule_idx];
     rule_step_t *st = &rule->steps[step];
+    /* The saved rule in the report is one step: turn the light on, delay_after
+     * 30. There is no next step, so the wait has to happen before these actions.
+     * act_idx -1 is the continuation after that wait and must not arm it again. */
+    if (act_idx < 0) {
+        act_idx = 0;
+    } else if (act_idx == 0 &&
+               (size_t)(step + 1) >= rule->step_count &&
+               st->delay_after_sec > 0) {
+        arm_step(rule_idx, step, -1, gen, st->delay_after_sec);
+        return;
+    }
     if (act_idx >= (int)st->action_count) {
         if ((size_t)(step + 1) < rule->step_count) {
             arm_step(rule_idx, step + 1, 0, gen, st->delay_after_sec);
