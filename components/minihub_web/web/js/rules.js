@@ -629,9 +629,14 @@ const RULE_TYPE_CMDS = {
         { cmd: 'set_fan_level', labelKey: 'rules.set_fan_level', value: true, param: 'fan_level' }
     ],
     speaker: [
-        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
-        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
-        { cmd: 'set_volume', labelKey: 'rules.set_volume', value: true, param: 'volume', unit: '%', min: 0, max: 100 }
+        /* No turn_on/turn_off: speakers have no power switch. */
+        { cmd: 'set_volume', labelKey: 'rules.set_volume', value: true, param: 'volume', unit: '%', min: 0, max: 100 },
+        { cmd: 'play_prev', labelKey: 'rules.play_prev' },
+        { cmd: 'play_pause', labelKey: 'rules.play_pause' },
+        { cmd: 'play_resume', labelKey: 'rules.play_resume' },
+        { cmd: 'play_next', labelKey: 'rules.play_next' },
+        { cmd: 'mute', labelKey: 'rules.mute' },
+        { cmd: 'unmute', labelKey: 'rules.unmute' }
     ],
     television: [
         { cmd: 'turn_on', labelKey: 'rules.opt_on' },
@@ -852,16 +857,24 @@ function rulesVisibleParams(pointId) {
         cat.params.map(function(p) {
             return p.parameter;
         }) : Object.keys(live);
+    function rulesIsButtonParam(name) {
+        const cp = cat && Array.isArray(cat.params) ?
+            cat.params.find(function(p) { return p.parameter === name; }) : null;
+        const w = cp && (cp.widget || (cp.style && cp.style.widget) || cp.ui_element || '');
+        return String(w).replace(/^ui\./, '').replace(/-/g, '_') === 'button';
+    }
     order.forEach(function(name) {
         if (!name || seen[name]) return;
         const lv = live[name];
         if (!lv || lv.visible === false) return;
+        if (rulesIsButtonParam(name)) return;
         seen[name] = true;
         names.push(name);
     });
     Object.keys(live).forEach(function(name) {
         if (seen[name]) return;
         if (live[name].visible === false) return;
+        if (rulesIsButtonParam(name)) return;
         names.push(name);
     });
     return names;

@@ -124,7 +124,7 @@ CSV_COLS = ["device", "parameter", "style", "image", "device_image"]
 # Closed web-widget set. Spectrum look (hue rainbow, sat, cct) is CSS tone from
 # the parameter name — not extra ui.* types.
 CLOSED_UI = {
-    "ui.toggle", "ui.slider", "ui.dropdown", "ui.text", "ui.hidden",
+    "ui.toggle", "ui.slider", "ui.dropdown", "ui.text", "ui.hidden", "ui.button",
 }
 
 # ui.* -> web widget id (upstream `esp.` prefix already stripped, like
@@ -136,6 +136,7 @@ UI_WIDGET = {
     "ui.dropdown": "dropdown",
     "ui.text": "text",
     "ui.hidden": "hidden",
+    "ui.button": "button",
     # Removed from ui_elements.csv; kept so old catalogs still compile.
     "ui.hue-slider": "slider",
     "ui.hue-circle": "slider",

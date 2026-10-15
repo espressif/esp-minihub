@@ -23,7 +23,7 @@ static const char *TAG = "dw_model";
 #define DW_CSV_MAX_ROWS 256
 
 static const char *const CLOSED_UI[] = {
-    "ui.toggle", "ui.slider", "ui.dropdown", "ui.text", "ui.hidden",
+    "ui.toggle", "ui.slider", "ui.dropdown", "ui.text", "ui.hidden", "ui.button",
 };
 /* Deprecated aliases still accepted (same as gen_device_widget.py). */
 static const char *const UI_ALIAS[] = {

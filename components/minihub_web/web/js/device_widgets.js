@@ -48,6 +48,15 @@ let dwExpandedKeys = Object.create(null);
 
 const DW_PRIMARY_PARAM = 'power';
 
+/* Catalog key order is not guaranteed (may arrive sorted); media rows keep
+ * the canonical remote layout: mute, play, prev, next (play before prev). */
+const DW_MEDIA_RANK = { mute: 0, unmute: 0, play_pause: 1, play_resume: 1, play_prev: 2, play_next: 3 };
+
+function dwMediaRank(pname) {
+    return Object.prototype.hasOwnProperty.call(DW_MEDIA_RANK, pname)
+        ? DW_MEDIA_RANK[pname] : 50;
+}
+
 function dwParseStyle(style) {
     try {
         return style ? JSON.parse(style) : {};
@@ -504,6 +513,42 @@ function dwInstanceInfoHtml(inst) {
     return html;
 }
 
+/* Combined media toggles (mute / play) render their state into the icon and
+   the onclick command, and their state params are visible:false — invisible to
+   dwPatchDetailReadonly. Patch them in place so an open modal follows state
+   while a focused slider blocks the full re-render. */
+function dwPatchDetailMediaButtons(inst) {
+    const body = document.getElementById('device-detail-body');
+    if (!body || !inst || !inst.params) return;
+    [['mute', 'muted'], ['unmute', 'muted'],
+     ['play_pause', 'playing'], ['play_resume', 'playing']].forEach(function (pair) {
+        const row = body.querySelector('.dw-param[data-param="' + pair[0] + '"]');
+        if (!row) return;
+        const btn = row.querySelector('button.dw-media-btn');
+        if (!btn) return;
+        const isOn = dwMediaStateOn(inst.params[pair[1]]);
+        const isMuteRow = pair[0] === 'mute' || pair[0] === 'unmute';
+        const cmd = isMuteRow ? (isOn ? 'unmute' : 'mute')
+            : (isOn ? 'play_pause' : 'play_resume');
+        const label = isMuteRow
+            ? (isOn ? t('dw.unmute') : t('dw.mute'))
+            : (isOn ? t('dw.pause') : t('dw.play'));
+        const icon = isMuteRow ? (isOn ? '🔇' : '🔈')
+            : (isOn ? '⏸' : '▶');
+        btn.classList.toggle('is-on', isOn);
+        const ic = btn.querySelector('.ic');
+        if (ic && ic.textContent !== icon) ic.textContent = icon;
+        if (btn.getAttribute('aria-label') !== label) btn.setAttribute('aria-label', label);
+        if (btn.getAttribute('title') !== label) btn.setAttribute('title', label);
+        const oc = btn.getAttribute('onclick') || '';
+        if (oc) {
+            const next = oc.replace(/'(play_pause|play_resume|mute|unmute)'/,
+                "'" + cmd + "'");
+            if (next !== oc) btn.setAttribute('onclick', next);
+        }
+    });
+}
+
 /* Patch read-only param values in an open detail without tearing down focused controls. */
 function dwPatchDetailReadonly(inst) {
     const body = document.getElementById('device-detail-body');
@@ -563,6 +608,7 @@ function refreshDeviceDetail() {
     }
     if (editing) {
         dwPatchDetailReadonly(inst);
+        dwPatchDetailMediaButtons(inst);
         return;
     }
     deviceDetailId = inst.key || inst.point_id;
@@ -828,6 +874,9 @@ function dwParamRowHtml(type, p, live, opts) {
     const gated = dwControlGated(p, opts.inst, readOnly);
     const extraCss = dwCssClass(live && live.css);
     const paramIcon = dwIconUrl(live && live.icon);
+    /* The merged play/pause toggle is a state control, not a "pause" command. */
+    const rowLabel = (p.parameter === 'play_pause' || p.parameter === 'play_resume')
+        ? t('dw.playing_state') : dwLabel(p);
     return '<div class="dw-param' + (isBar ? ' dw-param-tile' : '') +
         (gated ? ' is-gated' : '') +
         (extraCss ? ' ' + escAttr(extraCss) : '') +
@@ -836,7 +885,7 @@ function dwParamRowHtml(type, p, live, opts) {
         (paramIcon
             ? '<img class="dw-param-icon" src="' + escAttr(paramIcon) + '" alt="">'
             : '') +
-        '<span class="k">' + esc(dwLabel(p)) + '</span></div>' +
+        '<span class="k">' + esc(rowLabel) + '</span></div>' +
         '<div class="dw-ctl">' +
         dwParamControl(type || '', p, live, gated) +
         '</div></div>';
@@ -849,6 +898,9 @@ function dwInstanceCardBody(inst, cat) {
     let extra = '';
     const order = cat && cat.params ? Object.keys(cat.params) : Object.keys(inst.params || {});
     const seen = Object.create(null);
+    order.sort(function (a, b) {
+        return dwMediaRank(a) - dwMediaRank(b);
+    });
 
     if (!cat) {
         console.warn('[device_widgets] type not in catalog:',
@@ -858,6 +910,16 @@ function dwInstanceCardBody(inst, cat) {
     function addRow(pname, p) {
         const live = inst.params[pname];
         if (!live || !live.visible) return;
+
+        /* playing / muted are state readbacks surfaced by the combined
+           play/pause and mute/unmute buttons; never draw them as rows. */
+        if (pname === 'playing' || pname === 'muted') return;
+
+        /* Merge paired media commands into one toggle button (reads state). */
+        if ((pname === 'play_resume' || pname === 'unmute') && cat && cat.params &&
+                cat.params[pname === 'play_resume' ? 'play_pause' : 'mute']) {
+            return;
+        }
 
         if (dwWidget(p) === 'hidden') return;
         seen[pname] = true;
@@ -1118,6 +1180,9 @@ function dwParamControl(type, p, live, gated) {
             gated: !!gated
         });
     }
+    if (widget === 'button') {
+        return dwMediaButtonHtml(type, p, live, pointId, pidArg);
+    }
     if (widget === 'dropdown') {
         const opts = Array.isArray(s.options) ? s.options : [];
         let body = '';
@@ -1158,6 +1223,56 @@ function dwParamControl(type, p, live, gated) {
         dwDisabledAttr(gated) +
         ' onchange="dwSend(\'' + escAttr(type) + '\',\'' +
         escAttr(p.parameter) + '\', this.value' + pidArg + ')">';
+}
+
+function dwMediaStateOn(live) {
+    if (!live || live.value == null) return false;
+    const v = live.value;
+    return v === true || v === '1' || v === 'on' || v === 'ON' || v === 1;
+}
+
+function dwMediaButtonHtml(type, p, live, pointId, pidArg) {
+    const param = p.parameter;
+    const inst = dwFindInstance(pointId);
+
+    /* pause/resume combined toggle reads `playing` */
+    if (param === 'play_pause' || param === 'play_resume') {
+        const playing = inst && inst.params && inst.params.playing;
+        const isPlaying = dwMediaStateOn(playing);
+        const cmd = isPlaying ? 'play_pause' : 'play_resume';
+        const label = isPlaying ? t('dw.pause') : t('dw.play');
+        const icon = isPlaying ? '⏸' : '▶';
+        return '<button type="button" class="dw-media-btn' + (isPlaying ? ' is-on' : '') +
+            '" aria-label="' + escAttr(label) + '" title="' + escAttr(label) + '"' +
+            ' onclick="dwSend(\'' + escAttr(type) + '\',\'' + escAttr(cmd) +
+            '\',1' + pidArg + ')"><span class="ic">' + icon +
+            '</span></button>';
+    }
+    /* mute/unmute combined toggle reads `muted` */
+    if (param === 'mute' || param === 'unmute') {
+        const muted = inst && inst.params && inst.params.muted;
+        const isMuted = dwMediaStateOn(muted);
+        const cmd = isMuted ? 'unmute' : 'mute';
+        const label = isMuted ? t('dw.unmute') : t('dw.mute');
+        const icon = isMuted ? '🔇' : '🔈';
+        return '<button type="button" class="dw-media-btn' + (isMuted ? ' is-on' : '') +
+            '" aria-label="' + escAttr(label) + '" title="' + escAttr(label) + '"' +
+            ' onclick="dwSend(\'' + escAttr(type) + '\',\'' + escAttr(cmd) +
+            '\',1' + pidArg + ')"><span class="ic">' + icon +
+            '</span></button>';
+    }
+    /* plain command button (next/prev render as symbols) */
+    const cmdLabel = dwLabel(p);
+    const cmdIcon = param === 'play_next' ? '⏭' :
+        (param === 'play_prev' ? '⏮' : '');
+    return '<button type="button" class="dw-media-btn"' +
+        ' aria-label="' + escAttr(cmdLabel) + '" title="' + escAttr(cmdLabel) + '"' +
+        ' onclick="dwSend(\'' + escAttr(type) + '\',\'' + escAttr(param) +
+        '\',1' + pidArg + ')">' +
+        (cmdIcon
+            ? '<span class="ic">' + cmdIcon + '</span>'
+            : '<span>' + esc(cmdLabel) + '</span>') +
+        '</button>';
 }
 
 function dwSendValue(v) {
