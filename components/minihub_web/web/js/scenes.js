@@ -390,7 +390,7 @@ function scenesEditOnParamInput(si) {
     const delayEl = document.getElementById('sc-step-' + si + '-delay');
     const s = _scEdit.steps[si];
     if (loopEl) { let l = parseInt(loopEl.value, 10); if (isNaN(l) || l < 1) l = 1; s.loop = l; }
-    if (delayEl) { let d = parseFloat(delayEl.value); if (isNaN(d) || d < 0) d = 0; if (d > SC_MAX_DELAY_SEC) d = SC_MAX_DELAY_SEC; s.delay_after_ms = Math.round(d * 1000); }
+    if (delayEl) { let d = parseFloat(delayEl.value); if (isNaN(d) || d < 0) d = 0; if (d > SC_MAX_DELAY_SEC) d = SC_MAX_DELAY_SEC; if (delayEl.value !== '' && Number(delayEl.value) !== d) delayEl.value = String(d); s.delay_after_ms = Math.round(d * 1000); }
     scenesEditUpdateTotal();
 }
 function scenesEditAddAction(si) {
@@ -445,7 +445,7 @@ function scenesEditSyncModel() {
         const loopEl = document.getElementById('sc-step-' + si + '-loop');
         const delayEl = document.getElementById('sc-step-' + si + '-delay');
         if (loopEl) { let l = parseInt(loopEl.value, 10); if (isNaN(l) || l < 1) l = 1; s.loop = l; }
-        if (delayEl) { let d = parseFloat(delayEl.value); if (isNaN(d) || d < 0) d = 0; s.delay_after_ms = Math.round(d * 1000); }
+        if (delayEl) { let d = parseFloat(delayEl.value); if (isNaN(d) || d < 0) d = 0; if (d > SC_MAX_DELAY_SEC) d = SC_MAX_DELAY_SEC; s.delay_after_ms = Math.round(d * 1000); }
         s.actions.forEach(function (a, aj) {
             const pidEl = document.getElementById('sc-step-' + si + '-act-' + aj + '-pid');
             const cmdEl = document.getElementById('sc-step-' + si + '-act-' + aj + '-cmd');

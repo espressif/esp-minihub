@@ -40,10 +40,11 @@ static const char *TAG = "minihub_rules";
 /* `then` is modelled as a sequence of up to MAX_STEPS "moments". Each step runs
  * its actions together, then (if another step follows and delay_after_sec > 0)
  * waits before that next step. A delay on the last step has no following step,
- * so it waits before that step's own actions — a one-step rule of "turn on,
- * delay_after 30" therefore turns the light on 30s after the trigger. A step
- * carries at most one delay. Legacy flat `then` (a bare action array, possibly
- * with inline `delay` actions) is converted into this step form on parse. */
+ * so it waits AFTER that step's own actions — a one-step rule of "turn on,
+ * delay_after 30" therefore turns the light on immediately and finishes 30s
+ * later. A step carries at most one delay. Legacy flat `then` (a bare action
+ * array, possibly with inline `delay` actions) is converted into this step form
+ * on parse. */
 #define MAX_STEPS 5
 #define MAX_ACTIONS_PER_STEP 4
 
@@ -74,7 +75,7 @@ typedef struct {
 typedef struct {
     then_action_t actions[MAX_ACTIONS_PER_STEP];
     size_t action_count;
-    int delay_after_sec; /* between this step and the next; on the last step, before its actions */
+    int delay_after_sec; /* between this step and the next; on the last step, after its actions (rule ends after) */
 } rule_step_t;
 
 typedef struct {
@@ -87,6 +88,8 @@ typedef struct {
     char op[RULE_OP_MAX];
     char equals[MINIHUB_VALUE_MAX]; /* threshold / expected value (also JSON "value") */
     char time_at[8];
+    char when_once_at[17]; /* once: "YYYY-MM-DD HH:MM" (UTC) */
+    bool when_once_done;   /* once: fired flag, reset on reload */
     if_condition_t if_cond[MAX_IF_CONDITIONS];
     size_t if_count;
     rule_step_t steps[MAX_STEPS];
@@ -554,10 +557,11 @@ static void execute_step_continue(int rule_idx, int step, int act_idx, uint32_t 
 
 /* Run a step's actions in order. A `delay` action waits (non-blocking, via
  * arm_step) before the next action; when the last action is done, delay_after
- * advances to the next step. act_idx < 0 means the last step's own delay_after
- * has already elapsed, so the actions run now. Each continuation is re-checked
- * against the generation counter by the executor task, so a reload discards
- * stale steps. */
+ * advances to the next step. On the last step, delay_after waits AFTER the
+ * step's actions and then the rule completes. act_idx < 0 is that trailing
+ * wait's continuation: the actions already ran, so nothing more happens. Each
+ * continuation is re-checked against the generation counter by the executor
+ * task, so a reload discards stale steps. */
 static void execute_step_continue(int rule_idx, int step, int act_idx, uint32_t gen)
 {
     if (rule_idx < 0 || (size_t)rule_idx >= s_rule_count) {
@@ -568,20 +572,18 @@ static void execute_step_continue(int rule_idx, int step, int act_idx, uint32_t 
     }
     rule_t *rule = &s_rules[rule_idx];
     rule_step_t *st = &rule->steps[step];
-    /* The saved rule in the report is one step: turn the light on, delay_after
-     * 30. There is no next step, so the wait has to happen before these actions.
-     * act_idx -1 is the continuation after that wait and must not arm it again. */
+    /* act_idx < 0 means the last step's own delay_after has already elapsed;
+     * its actions already ran, so the rule is complete. */
     if (act_idx < 0) {
-        act_idx = 0;
-    } else if (act_idx == 0 &&
-               (size_t)(step + 1) >= rule->step_count &&
-               st->delay_after_sec > 0) {
-        arm_step(rule_idx, step, -1, gen, st->delay_after_sec);
         return;
     }
     if (act_idx >= (int)st->action_count) {
         if ((size_t)(step + 1) < rule->step_count) {
+            /* More steps follow: wait delay_after, then run them. */
             arm_step(rule_idx, step + 1, 0, gen, st->delay_after_sec);
+        } else if (st->delay_after_sec > 0) {
+            /* Last step: actions done; wait delay_after, then finish. */
+            arm_step(rule_idx, step, -1, gen, st->delay_after_sec);
         }
         return;
     }
@@ -781,6 +783,18 @@ static void match_rules_for_point(const char *point_id, const char *new_value)
     }
     uint32_t bucket = hash_point_id(point_id) % RULE_BUCKETS;
     char lhs[MINIHUB_VALUE_MAX];
+    /* Edge baselines are flushed only after the whole bucket is scanned, so two
+     * rules that share the same (point, parameter) trigger both read the same
+     * previous value and both detect the edge. The old code wrote mid-loop, so
+     * the first rule clobbered the baseline and the second saw prev == lhs and
+     * never fired (issue #11). */
+    struct {
+        const char *point;
+        const char *param;
+        char val[MINIHUB_VALUE_MAX];
+    } pend[MAX_RULES_PER_BUCKET];
+    int np = 0;
+
     for (uint8_t i = 0; i < s_rule_bucket_len[bucket]; i++) {
         uint8_t ridx = s_rule_buckets[bucket][i];
         rule_t *rule = &s_rules[ridx];
@@ -809,25 +823,37 @@ static void match_rules_for_point(const char *point_id, const char *new_value)
         }
 
         /* Edge trigger: the very first observed value of a (point, parameter)
-         * pair is the baseline established by the initial data sync. We record
-         * it but do not fire the rule, so a freshly booted / re-synced hub does
-         * not trigger rules just because the current state was published.
-         * Only a *change* since that baseline (or since the last published value)
-         * actually fires the rule. */
+         * pair is the baseline established by the initial data sync. */
         const char *prev = edge_lookup(point_id, param);
         if (prev == NULL) {
-            edge_store(point_id, param, lhs);
+            if (np < MAX_RULES_PER_BUCKET) {
+                pend[np].point = point_id;
+                pend[np].param = param;
+                strncpy(pend[np].val, lhs, sizeof(pend[np].val) - 1);
+                pend[np].val[sizeof(pend[np].val) - 1] = '\0';
+                np++;
+            }
             continue; /* first sync -> establish baseline, no trigger */
         }
         if (strcmp(prev, lhs) == 0) {
             continue; /* value unchanged -> not an edge */
         }
-        edge_store(point_id, param, lhs);
-
+        /* Edge: schedule now; defer the baseline write to after the loop. */
+        if (np < MAX_RULES_PER_BUCKET) {
+            pend[np].point = point_id;
+            pend[np].param = param;
+            strncpy(pend[np].val, lhs, sizeof(pend[np].val) - 1);
+            pend[np].val[sizeof(pend[np].val) - 1] = '\0';
+            np++;
+        }
         bool matched = compare_values(lhs, rule->op, rule->equals);
         if (matched && if_conditions_match(rule)) {
             schedule_rule(ridx);
         }
+    }
+
+    for (int k = 0; k < np; k++) {
+        edge_store(pend[k].point, pend[k].param, pend[k].val);
     }
 }
 
@@ -863,26 +889,41 @@ static void check_time_rules(void)
         return;
     }
 
-    char now_hm[8];
+    char now_hm[32];
     snprintf(now_hm, sizeof(now_hm), "%02d:%02d", local_tm.tm_hour, local_tm.tm_min);
+    char now_dt[64];
+    snprintf(now_dt, sizeof(now_dt), "%04d-%02d-%02d %02d:%02d",
+             local_tm.tm_year + 1900, local_tm.tm_mon + 1, local_tm.tm_mday,
+             local_tm.tm_hour, local_tm.tm_min);
 
     for (size_t i = 0; i < s_rule_count; i++) {
         rule_t *rule = &s_rules[i];
-        if (!rule->enabled || strcmp(rule->when_type, "time") != 0 || rule->time_at[0] == '\0') {
+        if (!rule->enabled) {
             continue;
         }
-        if (strcmp(rule->time_at, now_hm) != 0) {
-            continue;
-        }
-        if (rule->last_fired_yday == local_tm.tm_yday && strcmp(rule->last_fired_at, now_hm) == 0) {
-            continue;
-        }
-
-        rule->last_fired_yday = local_tm.tm_yday;
-        strncpy(rule->last_fired_at, now_hm, sizeof(rule->last_fired_at) - 1);
-        ESP_LOGI(TAG, "time rule '%s' fired at %s", rule->name, now_hm);
-        if (if_conditions_match(rule)) {
-            schedule_rule(i);
+        if (strcmp(rule->when_type, "time") == 0) {
+            /* Periodic (daily) schedule. */
+            if (rule->time_at[0] == '\0') continue;
+            if (strcmp(rule->time_at, now_hm) != 0) continue;
+            if (rule->last_fired_yday == local_tm.tm_yday &&
+                strcmp(rule->last_fired_at, now_hm) == 0) {
+                continue;
+            }
+            rule->last_fired_yday = local_tm.tm_yday;
+            strncpy(rule->last_fired_at, now_hm, sizeof(rule->last_fired_at) - 1);
+            ESP_LOGI(TAG, "periodic rule '%s' fired at %s", rule->name, now_hm);
+            if (if_conditions_match(rule)) {
+                schedule_rule(i);
+            }
+        } else if (strcmp(rule->when_type, "once") == 0) {
+            /* One-time schedule: fire exactly once at the target datetime. */
+            if (rule->when_once_at[0] == '\0' || rule->when_once_done) continue;
+            if (strcmp(rule->when_once_at, now_dt) != 0) continue;
+            rule->when_once_done = true;
+            ESP_LOGI(TAG, "one-time rule '%s' fired at %s", rule->name, now_dt);
+            if (if_conditions_match(rule)) {
+                schedule_rule(i);
+            }
         }
     }
 }
@@ -1113,15 +1154,11 @@ static void parse_rule(const cJSON *item, rule_t *rule)
         }
         const cJSON *at = cJSON_GetObjectItem(when, "at");
         if (cJSON_IsString(at)) {
-            strncpy(rule->time_at, at->valuestring, sizeof(rule->time_at) - 1);
-        }
-        /* when.delay_sec: delay between trigger and first step. */
-        const cJSON *wd = cJSON_GetObjectItem(when, "delay_sec");
-        if (!cJSON_IsNumber(wd)) {
-            wd = cJSON_GetObjectItem(when, "delay");
-        }
-        if (cJSON_IsNumber(wd)) {
-            rule->when_delay_sec = wd->valueint;
+            if (strcmp(rule->when_type, "once") == 0) {
+                strncpy(rule->when_once_at, at->valuestring, sizeof(rule->when_once_at) - 1);
+            } else {
+                strncpy(rule->time_at, at->valuestring, sizeof(rule->time_at) - 1);
+            }
         }
     }
 
@@ -1262,13 +1299,6 @@ static esp_err_t load_rules(const cJSON *rules_cfg)
         parse_rule(item, &s_rules[s_rule_count]);
         ESP_LOGI(TAG, "loaded rule '%s' (%s), %u steps", s_rules[s_rule_count].name,
                  s_rules[s_rule_count].id, (unsigned)s_rules[s_rule_count].step_count);
-        if (s_rules[s_rule_count].enabled &&
-            strcmp(s_rules[s_rule_count].when_type, "delay") == 0) {
-            /* Delay trigger: fire once this many seconds after the ruleset loads
-             * (re-arms on each import). Carries the fresh generation so a later
-             * reload invalidates it. */
-            arm_step((int)s_rule_count, 0, 0, s_rules_gen, s_rules[s_rule_count].when_delay_sec);
-        }
         s_rule_count++;
     }
     rebuild_rule_index();
@@ -1302,6 +1332,7 @@ esp_err_t minihub_rules_reload(const cJSON *rules_cfg)
     for (size_t i = 0; i < s_rule_count; i++) {
         s_rules[i].last_fired_yday = -1;
         s_rules[i].last_fired_at[0] = '\0';
+        s_rules[i].when_once_done = false;
     }
     return load_rules(rules_cfg);
 }

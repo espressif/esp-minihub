@@ -396,7 +396,7 @@ function renderRules() {
             (dis ? '<div class="card-meta"><span>' + t('ov.disabled') + '</span></div>' : '') +
             '<div class="rule-flow">' + ruleStepHtml(t('ov.rule_when'), w) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('ov.rule_if'), i) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('ov.rule_then'), th) + '</div>' +
             '<details class="rule-tech"><summary>' + t('ov.rule_tech_details') + '</summary>' +
-            '<h4 class="rule-sec">when</h4>' + rulesAtUtcNoteHtml(rule.when) +
+            '<h4 class="rule-sec">when</h4>' +
             '<pre class="rule-pre">' + esc(JSON.stringify(rule.when || {}, null, 2)) + '</pre>' +
             '<h4 class="rule-sec">if</h4><pre class="rule-pre">' + esc(JSON.stringify(iff, null, 2)) + '</pre>' +
             '<h4 class="rule-sec">then</h4><pre class="rule-pre">' + esc(JSON.stringify(rule.then || {}, null, 2)) + '</pre>' +

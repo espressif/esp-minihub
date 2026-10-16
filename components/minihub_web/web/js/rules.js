@@ -46,7 +46,8 @@ function rulesAiSystemPrompt(pointIds) {
         'Schema per rule: id(string), name(string), enabled(bool), when, if(array), then.\n' +
         'when point: {"type":"point","point_id":"<device point>","parameter":"<param>","op":"eq|lt|le|gt|ge","value":"..."}\n' +
         '  Legacy also ok: {"type":"point","point_id":"...","equals":"..."}.\n' +
-        'when time: {"type":"time","at":"HH:MM"}.\n' +
+        'when time (periodic, daily): {"type":"time","at":"HH:MM"}. '
+      'when time (one-time): {"type":"once","at":"YYYY-MM-DD HH:MM"} (UTC, fires once).\n' +
         'if item: same shape as when point (point_id + parameter + op + value). Empty if ok.\n' +
         'then: one action {"type":"command","point_id":"...","cmd":"..."} or an ordered array of them ' +
         '(e.g. [{"type":"delay","seconds":5},{"type":"command","point_id":"...","cmd":"turn_on"}]; max 4).\n' +
@@ -145,9 +146,8 @@ function rulesAiRenderDraft(file) {
             '<div class="card-meta"><span>' + esc(rule.id || '') + '</span></div>' +
             '<div class="rule-flow">' + ruleStepHtml(t('rules.trigger_when'), w) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('rules.condition_if'), i) + '<div class="rule-arrow">↓</div>' + ruleStepHtml(t('rules.action_then'), th) + '</div></div>';
     });
-    const timeRule = rules.find(function (rule) { return rule && rule.when && rule.when.type === 'time'; });
+    const timeRule = rules.find(function (rule) { return rule && rule.when && (rule.when.type === 'time' || rule.when.type === 'once'); });
     html += '<details class="rule-tech"><summary>' + t('rules.tech_details') + '</summary>' +
-        rulesAtUtcNoteHtml(timeRule && timeRule.when) +
         '<pre class="rule-pre">' + esc(JSON.stringify(file, null, 2)) + '</pre></details>';
     body.innerHTML = html;
     box.hidden = false;
@@ -360,6 +360,21 @@ function hubOffsetMin() {
     const n = Number(window.hubTzOffsetMin);
     return Number.isFinite(n) ? n : 0;
 }
+/* The tz offset lives on the System page; load it here too so time/once
+ * conversion is correct even when the user never opened System this session. */
+let hubTzPromise = null;
+function ensureHubTz() {
+    if (!hubTzPromise) {
+        hubTzPromise = fetch('/api/system/timezone')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) {
+                const off = j && Number(j.offset_min);
+                if (Number.isFinite(off)) window.hubTzOffsetMin = off;
+            })
+            .catch(function () {});
+    }
+    return hubTzPromise;
+}
 function rulesLocalHMToUtc(hm) {
     if (!hm || typeof hm !== 'string' || hm.indexOf(':') < 0) return hm;
     const p = hm.split(':');
@@ -379,19 +394,35 @@ function rulesUtcHMToLocal(hm) {
     return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
 }
 
-/* Display only. The stored and exported at stays HH:MM so the hub's strcmp still matches. */
-function rulesAtUtcNoteHtml(when) {
-    if (!when || when.type !== 'time') return '';
-    const utc = (when.at != null && String(when.at)) || '';
-    return '<p class="rule-at-note">' + t('rules.at_utc_note', {
-        utc: esc(utc || '??:??'),
-        local: esc(rulesUtcHMToLocal(utc) || '??:??')
-    }) + '</p>';
+/* One-time schedule: wall-clock datetime-local (hub tz) -> UTC "YYYY-MM-DD HH:MM"
+ * the hub matches against (handles date rollover across the tz offset). */
+function rulesLocalDTToUtc(dt) {
+    const m = (dt || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (!m) return dt;
+    const base = Date.UTC(+m[1], +m[2] - 1, +m[3], 0, 0, 0) + ((+m[4] * 60 + +m[5]) - hubOffsetMin()) * 60000;
+    const d = new Date(base), p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
 }
+/* Reverse: UTC "YYYY-MM-DD HH:MM" -> local "YYYY-MM-DDTHH:MM" for <input type="datetime-local">. */
+function rulesUtcToLocalDT(utc) {
+    const m = (utc || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
+    if (!m) return '';
+    const base = Date.UTC(+m[1], +m[2] - 1, +m[3], 0, 0, 0) + ((+m[4] * 60 + +m[5]) + hubOffsetMin()) * 60000;
+    const d = new Date(base), p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + 'T' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
+}
+/* Default value for a new one-time trigger: local now + 1h. */
+function rulesDefaultOnceLocal() {
+    const d = new Date(Date.now() + 60 * 60 * 1000), p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+
 
 function whenSummary(w) {
     if (!w || typeof w !== 'object') return '-';
     if (w.type === 'time') return t('rules.summary_time', { at: rulesUtcHMToLocal(w.at || '') });
+    if (w.type === 'once') return t('rules.summary_once', { at: rulesUtcToLocalDT(w.at) || '' });
     if (w.type === 'point') {
         const dev = rulesDeviceLabel(w.point_id);
         const param = w.parameter ? String(w.parameter) : '';
@@ -437,9 +468,9 @@ function whenPlain(w) {
         title: t('rules.when_time'),
         body: t('rules.when_time_body', { at: esc(rulesUtcHMToLocal(w.at || '??:??')) })
     };
-    if (w.type === 'delay') return {
-        title: t('rules.when_delay_type'),
-        body: t('rules.when_delay_body', { n: (w.delay_sec > 0 ? w.delay_sec : '?') })
+    if (w.type === 'once') return {
+        title: t('rules.when_once_type'),
+        body: t('rules.when_once_body', { at: esc((rulesUtcToLocalDT(w.at) || '??:??').replace('T', ' ')) })
     };
     if (w.type === 'point') {
         const dev = rulesDeviceLabel(w.point_id);
@@ -506,6 +537,7 @@ function ruleStepHtml(stepLabel, plain) {
 
 async function loadRules() {
     dwRuleLoadCatalog();
+    await ensureHubTz();
     try {
         const r = await fetch('/api/rules');
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -640,8 +672,6 @@ const RULE_TYPE_CMDS = {
         { cmd: 'unmute', labelKey: 'rules.unmute' }
     ],
     television: [
-        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
-        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
         { cmd: 'set_volume', labelKey: 'rules.set_volume', value: true, param: 'volume', unit: '%', min: 0, max: 100 }
     ]
 };
@@ -656,11 +686,10 @@ function rulesCmdLabel(d) {
 
 function rulesCmdDefsForType(type) {
     if (type && RULE_TYPE_CMDS[type]) return RULE_TYPE_CMDS[type];
-    return [
-        { cmd: 'turn_on', labelKey: 'rules.opt_on' },
-        { cmd: 'turn_off', labelKey: 'rules.opt_off' },
-        { cmd: 'toggle', labelKey: 'rules.opt_toggle' }
-    ];
+    /* Unknown / sensor types (binary_sensor, smoke, motion, ...) expose no
+     * settable commands, so they must not be offered as rule/scene actions
+     * (issue #12). The old fallback handed every device turn_on/off/toggle. */
+    return [];
 }
 
 /* A command that writes a parameter is offered only when this device actually
@@ -926,6 +955,16 @@ function rulesDeviceOptionsHtml(selected) {
             ids.push(p.point_id);
         });
     }
+    /* Issue #12: a device that exposes no writable/actionable command (e.g. a
+     * sensor such as binary_sensor / smoke / motion) must not be offered as a
+     * rule/scene action target. Keep the currently-selected device so an existing
+     * rule that references one can still be edited. */
+    ids = ids.filter(function(id) {
+        if (id === selected) return true;
+        const pt = rulesFindPoint(id);
+        const type = (pt && pt.type) || '';
+        return rulesCmdDefsForPoint(id, type).length > 0;
+    });
     if (selected && ids.indexOf(selected) < 0) ids.unshift(selected);
     if (!ids.length) ids = [''];
     return ids.map(function(id) {
@@ -1092,11 +1131,11 @@ function rulesEditWhenFields(when) {
     const w = when && typeof when === 'object' ? when : {
         type: 'point'
     };
-    const typ = w.type === 'time' ? 'time' : (w.type === 'delay' ? 'delay' : 'point');
+    const typ = w.type === 'time' ? 'time' : (w.type === 'once' ? 'once' : 'point');
     let html = '<label>' + t('rules.trigger_type') + '</label><select id="re-when-type" onchange="rulesEditSyncWhenType()">' +
         '<option value="point"' + (typ === 'point' ? ' selected' : '') + '>' + t('rules.device_state_change') + '</option>' +
         '<option value="time"' + (typ === 'time' ? ' selected' : '') + '>' + t('rules.opt_time_type') + '</option>' +
-        '<option value="delay"' + (typ === 'delay' ? ' selected' : '') + '>' + t('rules.when_delay_type') + '</option></select>';
+        '<option value="once"' + (typ === 'once' ? ' selected' : '') + '>' + t('rules.opt_once_type') + '</option></select>';
     if (typ === 'point') {
         const first = rulesDeviceInstances()[0];
         const cond = {
@@ -1116,18 +1155,18 @@ function rulesEditWhenFields(when) {
         html += '<label>' + t('rules.field_time_at') + '</label><input type="time" id="re-when-at" value="' + escAttr(rulesUtcHMToLocal(w.at) || '23:00') + '" />' +
             '<p class="rule-at-note">' + t('rules.field_time_hint') + '</p>';
     } else {
-        html += '<div class="rule-ed-when-delay"><label>' + t('rules.delay_seconds') + '</label>' +
-            '<input type="number" id="re-when-delay-sec" min="0" value="' + (w.delay_sec > 0 ? w.delay_sec : '') + '" placeholder="0" />' +
-            '<span class="rule-ed-unit">s</span></div>';
+        const defOnce = w.at ? rulesUtcToLocalDT(w.at) : rulesDefaultOnceLocal();
+        html += '<label>' + t('rules.field_once_at') + '</label><input type="datetime-local" id="re-when-once" value="' + escAttr(defOnce) + '" />' +
+            '<p class="rule-at-note">' + t('rules.field_once_hint') + '</p>';
     }
     return html;
 }
 
 /* THEN is modelled as an ordered sequence of "steps". A step runs its actions
  * together, then (if another step follows and delay_after > 0) waits before the
- * next step. A delay on the last step waits before that step's actions. Each
- * step carries at most one delay. The firmware executes steps non-blocking
- * (esp_timer chain). */
+ * next step. A delay on the last step waits after that step's actions, then the
+ * rule ends. Each step carries at most one delay. The firmware executes steps
+ * non-blocking (esp_timer chain). */
 const MAX_STEPS_WEB = 5;
 const MAX_ACTIONS_PER_STEP_WEB = 4;
 
@@ -1609,11 +1648,10 @@ function rulesEditSnapshot() {
         /* Store in UTC: the hub matches time rules against its (UTC) localtime. */
         at = rulesLocalHMToUtc(at);
         when = { type: 'time', at: at };
-    } else if (wtype === 'delay') {
-        const dEl = document.getElementById('re-when-delay-sec');
-        let d = parseInt((dEl && dEl.value) || '0', 10);
-        if (isNaN(d) || d < 0) d = 0;
-        when = { type: 'delay', delay_sec: d };
+    } else if (wtype === 'once') {
+        const atEl = document.getElementById('re-when-once');
+        const at = rulesLocalDTToUtc((atEl && atEl.value) || '');
+        when = { type: 'once', at: at };
     } else {
         when = Object.assign({ type: 'point' }, rulesCollectPointCond('re-when'));
     }
@@ -1655,8 +1693,8 @@ function rulesEditValidate(r) {
         if (r.when.value == null || r.when.value === '') return t('rules.err_trigger_value');
     } else if (r.when.type === 'time') {
         if (!/^\d{2}:\d{2}$/.test(r.when.at || '')) return t('rules.err_time_hhmm');
-    } else if (r.when.type === 'delay') {
-        if (!(r.when.delay_sec > 0)) return t('rules.err_trigger_delay');
+    } else if (r.when.type === 'once') {
+        if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(r.when.at || '')) return t('rules.err_once_datetime');
     } else return t('rules.err_trigger_type');
     const steps = rulesThenList(r.then);
     /* Any row can be deleted, so a rule could end up with nothing to do. */
@@ -1684,8 +1722,8 @@ function rulesEditSyncWhenType() {
     const box = document.getElementById('re-when-box');
     if (!box) return;
     const typ = document.getElementById('re-when-type').value;
-    if (typ === 'delay') {
-        box.innerHTML = rulesEditWhenFields({ type: 'delay', delay_sec: 0 });
+    if (typ === 'once') {
+        box.innerHTML = rulesEditWhenFields({ type: 'once', at: '' });
     } else if (typ === 'time') {
         box.innerHTML = rulesEditWhenFields({
             type: 'time',
