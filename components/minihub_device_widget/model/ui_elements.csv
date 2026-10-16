@@ -4,3 +4,4 @@ ui.slider,滑杆,带 min/max/step 的数值控件；光谱观感由参数名 / C
 ui.dropdown,下拉框,从固定选项集中选取,Int/String；选项来自 parameters.csv 的 options JSON
 ui.text,文本,字符串输入或只读展示,String（如 name）或计量读数（voltage_v / current_a / power_w / energy_wh）；access:R 时只读
 ui.hidden,隐藏,类型级「永不渲染」；参数仍可在目录中存在,任意类型；与实例 props.visible:false 不同（见 README）
+ui.button,按钮,点击即下发命令的按钮控件；命令型参数(无值)，用于媒体控制等,任意类型（命令无值）
