@@ -25,6 +25,8 @@
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_app_format.h"
 #include "esp_app_desc.h"
 #include "nvs.h"
@@ -32,6 +34,11 @@
 #include <stdbool.h>
 
 static const char *TAG = "minihub_store";
+
+#if CONFIG_MINIHUB_STORE
+/* Cancel the catalog refresh that is in flight, if any. */
+static void store_refresh_invalidate(void);
+#endif
 
 /* Current running firmware version (Kconfig override, else app descriptor). */
 static const char *store_running_version(void)
@@ -165,6 +172,9 @@ esp_err_t minihub_store_set_config(const char *custom_url, bool disable_default)
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "saved custom_url='%s' disable_default=%d",
                  buf[0] ? buf : "", (int)disable_default);
+#if CONFIG_MINIHUB_STORE
+        store_refresh_invalidate();
+#endif
     }
     return err;
 }
@@ -213,6 +223,28 @@ esp_err_t minihub_store_refresh_catalog(void)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t minihub_store_refresh_catalog_async(void)
+{
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+void minihub_store_refresh_catalog_status(bool *busy, bool *finished, esp_err_t *result,
+                                          bool *aborted)
+{
+    if (busy) {
+        *busy = false;
+    }
+    if (finished) {
+        *finished = false;
+    }
+    if (result) {
+        *result = ESP_ERR_NOT_SUPPORTED;
+    }
+    if (aborted) {
+        *aborted = false;
+    }
+}
+
 bool minihub_store_copy_base_url(char *out, size_t out_len)
 {
     if (out && out_len) {
@@ -244,7 +276,20 @@ static esp_err_t write_file_atomic(const char *path, const char *data);
 static cJSON *http_get_catalog_array(const char *base);
 static void catalog_rewrite_relative_urls(cJSON *arr, const char *base);
 static cJSON *catalog_merge_prefer_override(cJSON *base_arr, cJSON *override_arr);
-static cJSON *fetch_merged_remote_catalog(void);
+static cJSON *fetch_merged_remote_catalog(uint32_t gen);
+
+/* Bumped every time the store config is saved. A catalog refresh captures the
+ * generation it started with, so a refresh fetching from a URL the user has
+ * already replaced stops at its next network checkpoint instead of overwriting
+ * the catalog with that stale result. gen 0 means "not cancellable". */
+static volatile uint32_t s_refresh_gen;
+
+static bool refresh_cancelled(uint32_t gen)
+{
+    return gen != 0 && gen != s_refresh_gen;
+}
+
+static esp_err_t refresh_catalog_run(uint32_t gen, bool *aborted);
 
 static cJSON *load_bundled_catalog(void)
 {
@@ -592,11 +637,14 @@ static cJSON *catalog_merge_prefer_override(cJSON *base_arr, cJSON *override_arr
 }
 
 /** Fetch default (+ optional custom) catalogs and merge (custom overrides same id). */
-static cJSON *fetch_merged_remote_catalog(void)
+static cJSON *fetch_merged_remote_catalog(uint32_t gen)
 {
     char custom[MINIHUB_STORE_BASE_URL_MAX];
     bool dis = false;
     cfg_load(custom, sizeof(custom), &dis);
+    if (refresh_cancelled(gen)) {
+        return NULL;
+    }
 
     cJSON *def_arr = NULL;
     cJSON *cust_arr = NULL;
@@ -606,7 +654,7 @@ static cJSON *fetch_merged_remote_catalog(void)
         def_arr = http_get_catalog_array(def_base);
         catalog_rewrite_relative_urls(def_arr, def_base);
     }
-    if (custom[0]) {
+    if (custom[0] && !refresh_cancelled(gen)) {
         cust_arr = http_get_catalog_array(custom);
         catalog_rewrite_relative_urls(cust_arr, custom);
     }
@@ -822,19 +870,94 @@ cJSON *minihub_store_fetch_catalog(void)
         return local;
     }
 
-    cJSON *merged = fetch_merged_remote_catalog();
+    cJSON *merged = fetch_merged_remote_catalog(0);
     if (!merged) {
         ESP_LOGW(TAG, "catalog fetch failed from configured store URL(s)");
     }
     return merged;
 }
 
-esp_err_t minihub_store_refresh_catalog(void)
+static volatile bool s_refresh_busy;
+static volatile bool s_refresh_finished;
+static volatile bool s_refresh_aborted;
+static volatile esp_err_t s_refresh_result = ESP_FAIL;
+
+static void store_refresh_invalidate(void)
 {
-    cJSON *root = fetch_merged_remote_catalog();
+    s_refresh_gen++;
+    if (s_refresh_busy) {
+        ESP_LOGI(TAG, "store config changed: cancelling the catalog refresh in flight");
+    }
+}
+
+static void store_refresh_task(void *arg)
+{
+    uint32_t gen = (uint32_t)(uintptr_t)arg;
+    bool aborted = false;
+    s_refresh_result = refresh_catalog_run(gen, &aborted);
+    s_refresh_aborted = aborted;
+    s_refresh_finished = true;
+    s_refresh_busy = false;
+    vTaskDelete(NULL);
+}
+
+esp_err_t minihub_store_refresh_catalog_async(void)
+{
+    if (s_refresh_busy) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    s_refresh_busy = true;
+    s_refresh_aborted = false;
+    /* Snapshot the generation: saving a new store URL cancels this refresh
+     * rather than leaving it holding s_refresh_busy until its fetch times out. */
+    uint32_t gen = s_refresh_gen;
+    if (xTaskCreate(store_refresh_task, "store_cat", 12288, (void *)(uintptr_t)gen, 5,
+                    NULL) != pdPASS) {
+        s_refresh_busy = false;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
+void minihub_store_refresh_catalog_status(bool *busy, bool *finished, esp_err_t *result,
+                                          bool *aborted)
+{
+    if (busy) {
+        *busy = s_refresh_busy;
+    }
+    if (finished) {
+        *finished = s_refresh_finished;
+    }
+    if (result) {
+        *result = s_refresh_result;
+    }
+    if (aborted) {
+        *aborted = s_refresh_aborted;
+    }
+}
+
+static esp_err_t refresh_catalog_run(uint32_t gen, bool *aborted)
+{
+    cJSON *root = fetch_merged_remote_catalog(gen);
     if (!root || !cJSON_IsArray(root)) {
+        if (refresh_cancelled(gen)) {
+            if (aborted) {
+                *aborted = true;
+            }
+            ESP_LOGI(TAG, "catalog refresh cancelled by a store config change");
+            return ESP_FAIL;
+        }
         ESP_LOGW(TAG, "catalog refresh failed from configured store URL(s)");
         cJSON_Delete(root);
+        return ESP_FAIL;
+    }
+
+    if (refresh_cancelled(gen)) {
+        if (aborted) {
+            *aborted = true;
+        }
+        cJSON_Delete(root);
+        ESP_LOGI(TAG, "catalog refresh aborted: store config changed during the fetch");
         return ESP_FAIL;
     }
 
@@ -857,6 +980,11 @@ esp_err_t minihub_store_refresh_catalog(void)
     }
     ESP_LOGI(TAG, "catalog refreshed (%d items) -> %s", count, MINIHUB_STORE_CATALOG_PATH);
     return ESP_OK;
+}
+
+esp_err_t minihub_store_refresh_catalog(void)
+{
+    return refresh_catalog_run(s_refresh_gen, NULL);
 }
 
 static bool catalog_item_config_only(const cJSON *item)

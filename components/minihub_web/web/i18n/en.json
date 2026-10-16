@@ -705,6 +705,7 @@
   "store.needs_upgrade": "Upgrade needed",
   "store.no_install_items": "Nothing to install (all installed or not pre-provisioned)",
   "store.no_installed_items": "Nothing installed",
+  "store.refresh_aborted": "Catalog refresh stopped because the store URL changed",
   "store.refresh_failed": "Refresh failed",
   "store.refresh_server_failed": "Cannot refresh the catalog from the store server",
   "store.refreshing": "Refreshing the catalog from the store server…",
