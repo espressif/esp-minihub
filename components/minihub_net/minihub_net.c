@@ -689,6 +689,19 @@ esp_err_t minihub_net_set_wifi_sta(const char *ssid, const char *password, bool 
         return ESP_OK;
     }
 
+    /* When the device booted into the SoftAP provisioning transport with no
+     * credentials it is in WIFI_MODE_AP, so the STA interface is NOT enabled and
+     * esp_wifi_connect() below would silently fail ("设置 wifi 后连接失败").
+     * Enable STA alongside the AP (APSTA) so the uplink can connect while the
+     * config web console on the AP stays reachable; on the next reboot with
+     * credentials stored start_wifi_sta() switches back to WIFI_MODE_STA. */
+    if (mode == WIFI_MODE_AP || mode == WIFI_MODE_NULL) {
+        esp_err_t merr = esp_wifi_set_mode(mode == WIFI_MODE_NULL ? WIFI_MODE_STA : WIFI_MODE_APSTA);
+        if (merr != ESP_OK) {
+            ESP_LOGE(TAG, "failed to enable STA mode: %s", esp_err_to_name(merr));
+        }
+    }
+
     wifi_config_t cfg = {0};
     strncpy((char *)cfg.sta.ssid, ssid, sizeof(cfg.sta.ssid) - 1);
     strncpy((char *)cfg.sta.password, pass_buf, sizeof(cfg.sta.password) - 1);
