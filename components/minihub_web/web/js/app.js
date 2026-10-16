@@ -502,7 +502,12 @@ async function loadPoints(forceRender) {
             pts = next;
             const foot = document.getElementById('foot');
             lastPtsAt = Date.now();
-            if (foot) foot.textContent = t('foot.updated', { time: new Date().toLocaleTimeString(window.mhLocale()) });
+            if (foot) {
+                const off = Number(window.hubTzOffsetMin) || 0;
+                const d = new Date(Date.now() + off * 60000);
+                const p = function (x) { return String(x).padStart(2, '0'); };
+                foot.textContent = t('foot.updated', { time: p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds()) });
+            }
             if (changed || forceRender) {
                 if (view === 'overview') renderOverview();
                 if (view === 'map' && window.L) renderMap();

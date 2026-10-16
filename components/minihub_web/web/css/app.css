@@ -164,7 +164,7 @@ body.i18n-pending{visibility:hidden}
 .rule-ed-sec{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:12px 0;background:var(--bg2)}
 .rule-ed-sec h4{font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent2);margin-bottom:10px}
 .rule-ed label{display:block;font-size:.72rem;color:var(--muted);margin:8px 0 4px}
-.rule-ed input[type=text],.rule-ed input[type=time],.rule-ed input[type=number],.rule-ed select{
+.rule-ed input[type=text],.rule-ed input[type=time],.rule-ed input[type=datetime-local],.rule-ed input[type=number],.rule-ed select{
   width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:.85rem;outline:none}
 .rule-ed .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .rule-ed .row3{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end}
