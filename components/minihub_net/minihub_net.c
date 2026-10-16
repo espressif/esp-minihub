@@ -35,6 +35,10 @@
 
 static const char *TAG = "minihub_net";
 
+/* SoftAP SSID presented for web-based Wi-Fi configuration when no credentials
+ * are stored. Matches the legacy network_prov SoftAP name so UX stays familiar. */
+#define MINIHUB_WEB_PROV_AP_SSID "PROV_MiniHub"
+
 static EventGroupHandle_t s_net_eg;
 static bool s_started;
 #if CONFIG_MINIHUB_NET_ETH
@@ -272,19 +276,32 @@ static esp_err_t start_wifi_sta(void)
 
 #if CONFIG_MINIHUB_WIFI_PROVISIONING
 #if CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
+    /* network_prov's SoftAP HTTP server binds port 80, colliding with the
+     * MiniHub web console (also port 80) -> web unreachable after a factory
+     * reset. Wi-Fi is instead configured through the web UI (POST /api/wifi/sta
+     * -> minihub_net_set_wifi_sta), so skip network_prov and bring up a plain
+     * SoftAP purely so the web console on port 80 stays reachable. */
+    ESP_LOGI(TAG, "no Wi-Fi credentials; starting SoftAP for web configuration");
     esp_netif_create_default_wifi_ap();
-#endif
+    wifi_config_t ap_cfg = {0};
+    strncpy((char *)ap_cfg.ap.ssid, MINIHUB_WEB_PROV_AP_SSID, sizeof(ap_cfg.ap.ssid) - 1);
+    ap_cfg.ap.ssid_len = strlen(MINIHUB_WEB_PROV_AP_SSID);
+    ap_cfg.ap.channel = 1;
+    ap_cfg.ap.max_connection = 4;
+    ap_cfg.ap.authmode = WIFI_AUTH_OPEN;
+    ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_AP), TAG, "set AP mode");
+    ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg), TAG, "set AP config");
+    ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
+    return ESP_OK;
+#else /* BLE transport: no port-80 conflict, keep network_prov */
     err = minihub_provision_start();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Wi-Fi provisioning failed: %s", esp_err_to_name(err));
         return err;
     }
-#if CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE
     ESP_LOGI(TAG, "Wi-Fi BLE provisioning started");
-#else
-    ESP_LOGI(TAG, "Wi-Fi SoftAP provisioning started");
-#endif
     return ESP_OK;
+#endif
 #else
     ESP_LOGE(TAG, "no Wi-Fi credentials and provisioning disabled");
     return err;
