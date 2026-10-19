@@ -298,6 +298,7 @@ typedef struct esp_http_client_event {
     void *user_data;
     char *header_key;
     char *header_value;
+    esp_err_t error; /**< HTTP_EVENT_ERROR: failing call's esp_err_t. ESP_OK otherwise. */
 } esp_http_client_event_t;
 
 #ifdef DOXYGEN
