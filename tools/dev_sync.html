@@ -444,7 +444,24 @@
     if (fold && sum) sum.textContent = `${fold.open ? "收起" : "显示"}文件列表（${webQueue.length}）`;
   }
 
+  /* Collapse the queue to one entry per device destination. Picking the same
+   * folder (or file) again must refresh that entry, not append a duplicate that
+   * would upload twice and inflate the list. Later picks win so the freshest
+   * bytes are kept. Keyed by destination because that is what gets written. */
+  function dedupeWebQueue() {
+    const mode = $("#web-target").value;
+    const byDest = new Map();
+    webQueue.forEach((item) => byDest.set(mapWebPath(item, mode), item));
+    const out = [...byDest.values()];
+    if (out.length !== webQueue.length) {
+      webQueue.length = 0;
+      webQueue.push(...out);
+    }
+    return webQueue;
+  }
+
   function renderWebQueue() {
+    dedupeWebQueue();
     const box = $("#web-queue");
     box.innerHTML = "";
     webQueue.forEach((item, i) => {
@@ -659,7 +676,7 @@
     await webIngest;
     if (!webQueue.length) { log("没有待上传文件", "log-err"); return; }
     const mode = $("#web-target").value;
-    const batch = [...webQueue];
+    const batch = [...dedupeWebQueue()];
     let ok = 0;
     let fail = 0;
     const btn = $("#web-upload");
@@ -838,9 +855,14 @@
       if (!n) return;
       /* wireDrop hands over its own item shape (handle/entry); a plain <input>
        * hands over File objects. Keep whichever can produce bytes. */
-      imgQueue.push(f instanceof File
+      const item = f instanceof File
         ? { name: n, file: f, item: null }
-        : { name: n, file: f.file || null, item: f });
+        : { name: n, file: f.file || null, item: f };
+      /* One entry per file name: re-selecting a file replaces it, so the icons
+       * queue cannot grow by duplicates on repeated picks. */
+      const at = imgQueue.findIndex((x) => x.name === n);
+      if (at >= 0) imgQueue[at] = item;
+      else imgQueue.push(item);
     });
     renderImgQueue();
   }
