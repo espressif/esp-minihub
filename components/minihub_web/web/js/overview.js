@@ -1896,7 +1896,7 @@ function matterStageLabel(stage) {
 const MATTER_STAGE_STEP = { discovering: 1, binding: 2, activating: 3 };
 const MATTER_STAGE_TOTAL = 3;
 
-/* A waiting row is only "配网中" while the Hub is actually running that node;
+/* A waiting row is only "入网中" while the Hub is actually running that node;
  * the live stage comes from /api/matter/status, not from adapters.json. */
 function matterCommissionLabel(p, cPhase) {
     if (cPhase !== 'waiting') return '';
@@ -2029,7 +2029,7 @@ async function submitMatterAdd() {
             pollMatterCommissionCard(j.node_id);
             return;
         }
-        /* Start failed after eager upsert — card may show 配网失败. */
+        /* Start failed after eager upsert — card may show 入网失败. */
         closeMatterAdd();
         await loadPoints();
         const msg = j.message || j.commission || j.error || ('HTTP ' + r.status);
