@@ -59,6 +59,10 @@ static const char *TAG = "minihub_js";
 #include "minihub_js_ext.h"
 
 #define MINIHUB_JS_HTTP_BODY_MAX (64 * 1024)
+/* One task (16 KB stack) + up to MINIHUB_JS_HTTP_BODY_MAX of body per in-flight
+ * requestAsync. A bulk cloud refresh fires many at once, so bound the
+ * concurrency and reject the overflow instead of exhausting tasks or heap. */
+#define MINIHUB_JS_HTTP_MAX 4
 #define MINIHUB_JS_SCRIPT_MAX    (1024 * 1024)
 #define MINIHUB_JS_CMD_HANDLERS_MAX 8
 #define MINIHUB_JS_EVENT_SUBS_MAX   8
@@ -158,6 +162,21 @@ static SemaphoreHandle_t s_js_admit;
 static SemaphoreHandle_t s_js_done;
 static TaskHandle_t s_js_task;
 
+/* Fire-and-forget jobs submitted by other tasks (e.g. the single httpd task).
+ * The worker drains this queue every loop iteration, so a long RPC (miot_js
+ * sync) executes on the worker WITHOUT blocking the caller: the httpd task
+ * stays free to serve other requests (/api/points, device detail, the rules
+ * editor) while a sync is running, instead of stalling the whole UI. */
+typedef struct js_async_job {
+    struct js_async_job *next;
+    js_job_fn fn;
+    void *arg;
+} js_async_job_t;
+
+static js_async_job_t *s_js_async_head;
+static js_async_job_t *s_js_async_tail;
+static SemaphoreHandle_t s_js_async_lock;
+
 static void js_worker(void *arg);
 static void js_bind_stack(void);
 static void js_polls_fire(void);
@@ -183,7 +202,8 @@ static esp_err_t js_ensure_task(void)
     if (!s_js_admit) {
         s_js_admit = xSemaphoreCreateMutex();
         s_js_done = xSemaphoreCreateBinary();
-        if (!s_js_admit || !s_js_done) {
+        s_js_async_lock = xSemaphoreCreateMutex();
+        if (!s_js_admit || !s_js_done || !s_js_async_lock) {
             return ESP_ERR_NO_MEM;
         }
     }
@@ -222,21 +242,98 @@ static esp_err_t js_call_on_worker(js_job_fn fn, void *arg)
     return err;
 }
 
+/* Enqueue a job to run on the worker without blocking the caller. The worker
+ * drains the queue each loop iteration. Used by the web server so a long module
+ * RPC (e.g. miot_js sync) does not stall the single httpd task. */
+static esp_err_t js_run_async(js_job_fn fn, void *arg)
+{
+    if (js_ensure_task() != ESP_OK) {
+        return ESP_ERR_NO_MEM;
+    }
+    if (!s_js_async_lock) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    js_async_job_t *job = malloc(sizeof(js_async_job_t));
+    if (!job) {
+        return ESP_ERR_NO_MEM;
+    }
+    job->next = NULL;
+    job->fn = fn;
+    job->arg = arg;
+    if (xSemaphoreTake(s_js_async_lock, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        free(job);
+        return ESP_ERR_TIMEOUT;
+    }
+    if (s_js_async_tail) {
+        s_js_async_tail->next = job;
+    } else {
+        s_js_async_head = job;
+    }
+    s_js_async_tail = job;
+    xSemaphoreGive(s_js_async_lock);
+    xTaskNotifyGive(s_js_task);
+    return ESP_OK;
+}
+
+/* Run every queued async job. Called from the worker loop; each job runs inline
+ * on the worker (so QuickJS stays single-threaded). A long job keeps the worker
+ * busy but never blocks the httpd task that submitted it. */
+static void js_async_drain(void)
+{
+    if (!s_js_async_lock) {
+        return;
+    }
+    if (xSemaphoreTake(s_js_async_lock, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        return;
+    }
+    js_async_job_t *job = s_js_async_head;
+    s_js_async_head = NULL;
+    s_js_async_tail = NULL;
+    xSemaphoreGive(s_js_async_lock);
+    while (job) {
+        js_async_job_t *next = job->next;
+        if (job->fn) {
+            job->fn(job->arg);
+        }
+        free(job);
+        job = next;
+    }
+}
+
+esp_err_t minihub_js_run_on_worker_async(js_job_fn fn, void *arg)
+{
+    return js_run_async(fn, arg);
+}
+
+/* Forward declaration: drains QuickJS pending jobs (promise reactions /
+ * async resumes) so awaited host.http.requestAsync continuations resume. */
+static bool js_jobs_drain(void);
+
 static void js_worker(void *arg)
 {
     (void)arg;
     ESP_LOGI(TAG, "js worker ready (stack %u, budget %u)",
              (unsigned)JS_WORKER_STACK_BYTES, (unsigned)JS_WORKER_STACK_BUDGET);
+    bool jobs_remain = false;
     for (;;) {
         js_bind_stack();
         /* Fire any timers whose deadline passed — runs JS callbacks on this
          * same task, keeping QuickJS single-threaded. */
         js_timers_fire_due();
+        /* Run any promise reactions / async resumes the timer callbacks queued. */
+        jobs_remain = js_jobs_drain();
 
-        /* Wait for the next job, or until the nearest timer comes due. */
-        uint32_t notified = ulTaskNotifyTake(pdTRUE, js_timers_wait_ticks());
+        /* Wait for the next job, or until the nearest timer comes due. A capped
+         * drain leaves reactions queued and nothing else will wake us — with no
+         * timer armed js_timers_wait_ticks() returns portMAX_DELAY, so an
+         * await would sleep until some unrelated notify. Wake promptly instead. */
+        TickType_t wait_ticks = js_timers_wait_ticks();
+        if (jobs_remain && wait_ticks > 1) {
+            wait_ticks = 1;
+        }
+        uint32_t notified = ulTaskNotifyTake(pdTRUE, wait_ticks);
         if (notified == 0) {
-            continue; /* timeout: a timer is due (handled at loop top) */
+            continue; /* timeout: a timer is due, or more jobs to drain */
         }
         /* A notify may carry a framework poll tick, a normal job, or both. */
         if (s_js_poll_pending) {
@@ -244,13 +341,21 @@ static void js_worker(void *arg)
             js_polls_fire();
         }
         js_job_t *job = s_js_job;
-        if (!job || !job->fn) {
-            continue;
+        if (job && job->fn) {
+            js_bind_stack();
+            job->result = job->fn(job->arg);
+            s_js_job = NULL;
+            xSemaphoreGive(s_js_done);
         }
-        js_bind_stack();
-        job->result = job->fn(job->arg);
-        s_js_job = NULL;
-        xSemaphoreGive(s_js_done);
+        /* Drain fire-and-forget jobs (e.g. web RPCs). Runs every iteration so a
+         * long job never permanently starves the queue; the httpd task that
+         * submitted it is already free. */
+        js_async_drain();
+        /* Run any promise reactions / async resumes those jobs queued (e.g. a
+         * requestAsync completion resolving back into the worker). No need to
+         * carry its result: the drain at the top of the next iteration re-decides
+         * the wait before anything blocks. */
+        js_jobs_drain();
     }
 }
 
@@ -1270,6 +1375,499 @@ static JSValue js_http_request(JSContext *ctx, JSValueConst this_val, int argc, 
     return out;
 }
 
+/* --- Asynchronous HTTP (host.http.requestAsync) -----------------------------
+ * Mirrors the synchronous js_http_request but runs the blocking socket I/O on a
+ * dedicated lower-priority task (js_http_task, prio 3) instead of the js_worker
+ * (prio 4). The worker stays free to service device control / UI while a cloud
+ * request is in flight, fixing the "UI freezes during miot sync" class of bug.
+ * The Promise is resolved back on the worker via js_call_on_worker, so QuickJS is
+ * only ever touched on the worker thread (single-threaded). On task-spawn or
+ * alloc failure the Promise is rejected (not left unsettled), so `await` never
+ * hangs and `.catch()` also works. */
+
+typedef struct {
+    char *key;
+    char *val;
+} js_http_header_t;
+
+typedef struct {
+    char *url;
+    char *method;
+    char *body;
+    int timeout_ms;
+    bool response_b64;
+    js_http_header_t *headers;
+    size_t n_headers;
+} js_http_req_t;
+
+typedef struct {
+    esp_err_t err;
+    int status;
+    char *location;
+    char *set_cookie;
+    char *ext_pragma;
+    char *body;
+    size_t body_len;
+} js_http_res_t;
+
+typedef struct js_http_async_t {
+    js_http_req_t *req;
+    js_http_res_t res;
+    JSValue resolve;
+    JSValue reject;
+    bool response_b64;
+    TaskHandle_t task;
+    JSRuntime *rt;                      /* runtime that owns resolve/reject */
+    bool cancelled;                     /* set on unload; http task skips settle */
+    struct js_http_async_t *next_inflight;  /* in-flight registry link */
+} js_http_async_t;
+
+/* Registry of requestAsync requests whose HTTP task is still running. Only the
+ * js_worker mutates it (creation / settle / unload), so no lock is needed; the
+ * http task only reads `cancelled` after its socket I/O returns. */
+static js_http_async_t *s_js_http_inflight;
+
+static void js_http_task(void *arg);
+
+static char *js_http_strdup(const char *s)
+{
+    if (!s) {
+        return NULL;
+    }
+    size_t n = strlen(s);
+    char *d = malloc(n + 1);
+    if (d) {
+        memcpy(d, s, n + 1);
+    }
+    return d;
+}
+
+static void js_http_req_free(js_http_req_t *req)
+{
+    if (!req) {
+        return;
+    }
+    free(req->url);
+    free(req->method);
+    free(req->body);
+    for (size_t i = 0; i < req->n_headers; i++) {
+        free(req->headers[i].key);
+        free(req->headers[i].val);
+    }
+    free(req->headers);
+    free(req);
+}
+
+static js_http_req_t *js_http_req_parse(JSContext *ctx, JSValueConst opts)
+{
+    js_http_req_t *req = calloc(1, sizeof(*req));
+    if (!req) {
+        return NULL;
+    }
+    const char *url = js_get_str_prop(ctx, opts, "url");
+    if (!url) {
+        free(req);
+        return NULL;
+    }
+    req->url = js_http_strdup(url);
+    JS_FreeCString(ctx, url);
+    const char *method = js_get_str_prop(ctx, opts, "method");
+    if (method) {
+        req->method = js_http_strdup(method);
+        JS_FreeCString(ctx, method);
+    }
+    JSValue to = JS_GetPropertyStr(ctx, opts, "timeout_ms");
+    if (JS_IsNumber(to)) {
+        int32_t t = 0;
+        JS_ToInt32(ctx, &t, to);
+        if (t > 0) {
+            req->timeout_ms = t;
+        }
+    }
+    JS_FreeValue(ctx, to);
+    JSValue rb = JS_GetPropertyStr(ctx, opts, "response_b64");
+    req->response_b64 = JS_ToBool(ctx, rb);
+    JS_FreeValue(ctx, rb);
+    JSValue headers_v = JS_GetPropertyStr(ctx, opts, "headers");
+    if (JS_IsObject(headers_v)) {
+        JSPropertyEnum *ptab = NULL;
+        uint32_t plen = 0;
+        if (JS_GetOwnPropertyNames(ctx, &ptab, &plen, headers_v,
+                                   JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0 && plen > 0) {
+            req->headers = calloc(plen, sizeof(req->headers[0]));
+            if (req->headers) {
+                req->n_headers = plen;
+                for (uint32_t i = 0; i < plen; i++) {
+                    JSValue key_v = JS_AtomToString(ctx, ptab[i].atom);
+                    const char *key = JS_ToCString(ctx, key_v);
+                    JSValue val_v = JS_GetProperty(ctx, headers_v, ptab[i].atom);
+                    const char *val = JS_ToCString(ctx, val_v);
+                    if (key) {
+                        req->headers[i].key = js_http_strdup(key);
+                    }
+                    if (val) {
+                        req->headers[i].val = js_http_strdup(val);
+                    }
+                    if (key) {
+                        JS_FreeCString(ctx, key);
+                    }
+                    if (val) {
+                        JS_FreeCString(ctx, val);
+                    }
+                    JS_FreeValue(ctx, key_v);
+                    JS_FreeValue(ctx, val_v);
+                }
+            }
+            JS_FreePropertyEnum(ctx, ptab, plen);
+        }
+    }
+    JS_FreeValue(ctx, headers_v);
+    const char *body = js_get_str_prop(ctx, opts, "body");
+    if (body) {
+        req->body = js_http_strdup(body);
+        JS_FreeCString(ctx, body);
+    }
+    if (!req->url) {
+        js_http_req_free(req);
+        return NULL;
+    }
+    return req;
+}
+
+static void js_http_res_free(js_http_res_t *res)
+{
+    if (!res) {
+        return;
+    }
+    free(res->location);
+    free(res->set_cookie);
+    free(res->ext_pragma);
+    free(res->body);
+    *res = (js_http_res_t){0};
+}
+
+static esp_err_t js_http_perform(const js_http_req_t *req, js_http_res_t *res)
+{
+    *res = (js_http_res_t){0};
+    js_http_evt_ctx_t *evt_ctx = calloc(1, sizeof(*evt_ctx));
+    if (!evt_ctx) {
+        return ESP_ERR_NO_MEM;
+    }
+    esp_http_client_config_t cfg = {
+        .url = req->url,
+        .timeout_ms = req->timeout_ms > 0 ? req->timeout_ms : 15000,
+        .buffer_size = 4096,
+        .buffer_size_tx = 4096,
+        .disable_auto_redirect = true,
+        .max_authorization_retries = -1,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .event_handler = js_http_event_handler,
+        .user_data = evt_ctx,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    if (!client) {
+        js_http_evt_ctx_free(evt_ctx);
+        return ESP_FAIL;
+    }
+    if (req->method && req->method[0]) {
+        if (strcasecmp(req->method, "POST") == 0) {
+            esp_http_client_set_method(client, HTTP_METHOD_POST);
+        } else if (strcasecmp(req->method, "PUT") == 0) {
+            esp_http_client_set_method(client, HTTP_METHOD_PUT);
+        } else if (strcasecmp(req->method, "DELETE") == 0) {
+            esp_http_client_set_method(client, HTTP_METHOD_DELETE);
+        } else {
+            esp_http_client_set_method(client, HTTP_METHOD_GET);
+        }
+    }
+    (void)esp_http_client_set_header(client, "Accept-Encoding", "identity");
+    for (size_t i = 0; i < req->n_headers; i++) {
+        if (req->headers[i].key && req->headers[i].val) {
+            (void)esp_http_client_set_header(client, req->headers[i].key, req->headers[i].val);
+        }
+    }
+    if (req->body) {
+        esp_http_client_set_post_field(client, req->body, (int)strlen(req->body));
+    }
+    esp_err_t err = esp_http_client_perform(client);
+    int status = esp_http_client_get_status_code(client);
+    res->err = err;
+    res->status = status;
+    if (!evt_ctx->location || !evt_ctx->location[0]) {
+        char *loc = NULL;
+        if (esp_http_client_get_header(client, "Location", &loc) == ESP_OK && loc && loc[0]) {
+            free(evt_ctx->location);
+            size_t n = strnlen(loc, JS_HTTP_LOCATION_MAX);
+            evt_ctx->location = malloc(n + 1);
+            if (evt_ctx->location) {
+                memcpy(evt_ctx->location, loc, n);
+                evt_ctx->location[n] = '\0';
+            }
+        }
+    }
+    if (evt_ctx->set_cookie_len == 0) {
+        char *sc = NULL;
+        if (esp_http_client_get_header(client, "Set-Cookie", &sc) == ESP_OK && sc && sc[0]) {
+            (void)js_http_set_cookie_append(evt_ctx, sc);
+        }
+    }
+    if (!evt_ctx->ext_pragma || !evt_ctx->ext_pragma[0]) {
+        char *ep = NULL;
+        if (esp_http_client_get_header(client, "extension-pragma", &ep) == ESP_OK && ep && ep[0]) {
+            free(evt_ctx->ext_pragma);
+            size_t n = strnlen(ep, JS_HTTP_EXT_PRAGMA_MAX);
+            evt_ctx->ext_pragma = malloc(n + 1);
+            if (evt_ctx->ext_pragma) {
+                memcpy(evt_ctx->ext_pragma, ep, n);
+                evt_ctx->ext_pragma[n] = '\0';
+            }
+        }
+    }
+    if (evt_ctx->location && evt_ctx->location[0]) {
+        size_t n = strnlen(evt_ctx->location, JS_HTTP_LOCATION_MAX);
+        res->location = malloc(n + 1);
+        if (res->location) {
+            memcpy(res->location, evt_ctx->location, n + 1);
+        }
+    }
+    if (evt_ctx->set_cookie && evt_ctx->set_cookie[0]) {
+        size_t n = strnlen(evt_ctx->set_cookie, JS_HTTP_SET_COOKIE_MAX);
+        res->set_cookie = malloc(n + 1);
+        if (res->set_cookie) {
+            memcpy(res->set_cookie, evt_ctx->set_cookie, n + 1);
+        }
+    }
+    if (evt_ctx->ext_pragma && evt_ctx->ext_pragma[0]) {
+        size_t n = strnlen(evt_ctx->ext_pragma, JS_HTTP_EXT_PRAGMA_MAX);
+        res->ext_pragma = malloc(n + 1);
+        if (res->ext_pragma) {
+            memcpy(res->ext_pragma, evt_ctx->ext_pragma, n + 1);
+        }
+    }
+    if (evt_ctx->body && evt_ctx->body_len > 0) {
+        res->body = malloc(evt_ctx->body_len);
+        if (res->body) {
+            memcpy(res->body, evt_ctx->body, evt_ctx->body_len);
+            res->body_len = evt_ctx->body_len;
+        }
+    }
+    esp_http_client_cleanup(client);
+    js_http_evt_ctx_free(evt_ctx);
+    return err;
+}
+
+/* Reject an already-created Promise capability (funcs[1] = reject) and free all
+   associated resources, without leaking. Used when the request cannot actually be
+   dispatched after the capability exists, so callers using `await`+try/catch and
+   `.catch()` both receive the error instead of hanging on an unsettled Promise. */
+static void js_http_reject(JSContext *ctx, JSValueConst funcs[2],
+                           js_http_req_t *req, const char *msg)
+{
+    JSValue err = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, err, "message", JS_NewString(ctx, msg));
+    JSValue arg = err;
+    JSValue ret = JS_Call(ctx, funcs[1], JS_UNDEFINED, 1, &arg);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, err);
+    JS_FreeValue(ctx, funcs[0]);
+    JS_FreeValue(ctx, funcs[1]);
+    if (req) {
+        js_http_req_free(req);
+    }
+}
+
+/* Runs on the js_worker (via js_call_on_worker). Builds the JS response object
+   from the completed request and settles the Promise. QuickJS is only touched
+   here, never in js_http_task. */
+static void js_http_inflight_unlink(js_http_async_t *a)
+{
+    if (!s_js_http_inflight || !a) {
+        return;
+    }
+    if (s_js_http_inflight == a) {
+        s_js_http_inflight = a->next_inflight;
+        a->next_inflight = NULL;
+        return;
+    }
+    for (js_http_async_t *p = s_js_http_inflight; p->next_inflight;
+         p = p->next_inflight) {
+        if (p->next_inflight == a) {
+            p->next_inflight = a->next_inflight;
+            a->next_inflight = NULL;
+            return;
+        }
+    }
+}
+
+static esp_err_t js_http_resolve_job(void *arg)
+{
+    js_http_async_t *a = arg;
+    /* Drop from the registry first; js_unload_job may already have unlinked it
+     * (idempotent). */
+    js_http_inflight_unlink(a);
+    /* The runtime may have been reloaded (module unload / install) while the
+     * HTTP task was in flight. resolve/reject belong to the OLD runtime, so
+     * touching them now would be a use-after-free (or a NULL-context crash).
+     * js_unload_job already rejected the promise and freed its JSValues; the
+     * http task frees `a` itself once its socket I/O returns. */
+    if (!s_ctx || a->rt != s_rt || a->cancelled) {
+        return ESP_OK;
+    }
+    js_http_res_t *res = &a->res;
+    if (res->err != ESP_OK && res->status <= 0) {
+        JSValue err = JS_NewObject(s_ctx);
+        JS_SetPropertyStr(s_ctx, err, "message",
+                          JS_NewString(s_ctx, "http perform failed"));
+        JSValue arg2 = err;
+        JSValue r = JS_Call(s_ctx, a->reject, JS_UNDEFINED, 1, &arg2);
+        JS_FreeValue(s_ctx, r);
+        JS_FreeValue(s_ctx, err);
+    } else {
+        JSValue out = JS_NewObject(s_ctx);
+        JS_SetPropertyStr(s_ctx, out, "status", JS_NewInt32(s_ctx, res->status));
+        JSValue hdrs = JS_NewObject(s_ctx);
+        if (res->location && res->location[0]) {
+            JS_SetPropertyStr(s_ctx, hdrs, "location", JS_NewString(s_ctx, res->location));
+        }
+        if (res->set_cookie && res->set_cookie[0]) {
+            JS_SetPropertyStr(s_ctx, hdrs, "set-cookie", JS_NewString(s_ctx, res->set_cookie));
+        }
+        if (res->ext_pragma && res->ext_pragma[0]) {
+            JS_SetPropertyStr(s_ctx, hdrs, "extension-pragma", JS_NewString(s_ctx, res->ext_pragma));
+        }
+        JS_SetPropertyStr(s_ctx, out, "headers", hdrs);
+        if (a->response_b64 && res->body && res->body_len > 0) {
+            size_t olen = 0;
+            size_t b64_cap = 4 * ((res->body_len + 2) / 3) + 4;
+            char *b64 = malloc(b64_cap);
+            if (b64) {
+                if (mbedtls_base64_encode((unsigned char *)b64, b64_cap, &olen,
+                                          (const unsigned char *)res->body,
+                                          res->body_len) == 0) {
+                    b64[olen] = '\0';
+                    JS_SetPropertyStr(s_ctx, out, "body", JS_NewString(s_ctx, b64));
+                }
+                free(b64);
+            }
+        } else if (res->body && res->body_len > 0) {
+            JS_SetPropertyStr(s_ctx, out, "body",
+                              JS_NewStringLen(s_ctx, res->body, res->body_len));
+        }
+        JSValue r = JS_Call(s_ctx, a->resolve, JS_UNDEFINED, 1, (JSValueConst *)&out);
+        JS_FreeValue(s_ctx, r);
+        JS_FreeValue(s_ctx, out);
+    }
+    JS_FreeValue(s_ctx, a->resolve);
+    JS_FreeValue(s_ctx, a->reject);
+    return ESP_OK;
+}
+
+/* Runs on a dedicated FreeRTOS task (prio 3, below the js_worker's 4) so the
+   blocking socket I/O never stalls the worker. After the request completes it
+   asks the worker to settle the Promise; js_call_on_worker blocks this task
+   until that job finishes, after which it is safe to free everything. */
+static void js_http_task(void *arg)
+{
+    js_http_async_t *a = arg;
+    js_http_perform(a->req, &a->res);
+    /* If the module was unloaded mid-flight, js_unload_job already rejected the
+     * promise and freed its resolve/reject JSValues; do not settle again. */
+    if (!a->cancelled) {
+        js_call_on_worker(js_http_resolve_job, a);
+    }
+    js_http_req_free(a->req);
+    js_http_res_free(&a->res);
+    free(a);
+    vTaskDelete(NULL);
+}
+
+/* Cancel every in-flight requestAsync while the runtime is being torn down.
+ * The promise is rejected so the awaiting plugin code settles via .catch()
+ * instead of hanging; its resolve/reject JSValues (owned by this runtime) are
+ * freed here while the context is still alive. The request struct itself is
+ * left for js_http_task to free once its socket I/O returns, to avoid a double
+ * free (js_http_task always frees `a`). */
+static void js_http_inflight_cancel_all(JSContext *ctx)
+{
+    js_http_async_t *a = s_js_http_inflight;
+    s_js_http_inflight = NULL;
+    while (a) {
+        js_http_async_t *next = a->next_inflight;
+        a->cancelled = true;
+        if (ctx && a->rt == s_rt) {
+            JSValue err = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, err, "message",
+                              JS_NewString(ctx, "module unloaded during request"));
+            JSValue arg = err;
+            JSValue r = JS_Call(ctx, a->reject, JS_UNDEFINED, 1, &arg);
+            JS_FreeValue(ctx, r);
+            JS_FreeValue(ctx, err);
+            JS_FreeValue(ctx, a->resolve);
+            JS_FreeValue(ctx, a->reject);
+        }
+        a->next_inflight = NULL;
+        a = next;
+    }
+}
+
+/* Worker-thread only (the registry is mutated from JS calls and unload jobs
+ * there), so counting the list is enough — no second counter to drift. */
+static int js_http_inflight_count(void)
+{
+    int n = 0;
+    for (js_http_async_t *a = s_js_http_inflight; a; a = a->next_inflight) {
+        n++;
+    }
+    return n;
+}
+
+static JSValue js_http_request_async(JSContext *ctx, JSValueConst this_val,
+                                     int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1 || !JS_IsObject(argv[0])) {
+        return JS_ThrowTypeError(ctx, "request expects object");
+    }
+    js_http_req_t *req = js_http_req_parse(ctx, argv[0]);
+    if (!req) {
+        return JS_ThrowOutOfMemory(ctx);
+    }
+    JSValue funcs[2];
+    JSValue promise = JS_NewPromiseCapability(ctx, funcs);
+    if (JS_IsException(promise)) {
+        js_http_req_free(req);
+        return JS_EXCEPTION;
+    }
+    if (js_http_inflight_count() >= MINIHUB_JS_HTTP_MAX) {
+        js_http_reject(ctx, funcs, req, "http async busy: too many in flight");
+        return promise;
+    }
+    js_http_async_t *a = calloc(1, sizeof(*a));
+    if (!a) {
+        js_http_reject(ctx, funcs, req, "http async alloc failed");
+        return promise;
+    }
+    a->req = req;
+    a->resolve = funcs[0];
+    a->reject = funcs[1];
+    a->response_b64 = req->response_b64;
+    /* Lower priority than js_worker (4) so resolving Promises never starves the
+       runtime; the blocking I/O happens here, freeing js_worker entirely. */
+    BaseType_t ok = xTaskCreate(js_http_task, "js_http", 16384, a, 3, &a->task);
+    if (ok != pdPASS) {
+        js_http_reject(ctx, funcs, req, "http task spawn failed");
+        free(a);
+        return promise;
+    }
+    /* Register so a module unload / install mid-flight can cancel and reject the
+     * promise instead of leaving the awaiting JS code wedged on a dead context. */
+    a->rt = s_rt;
+    a->cancelled = false;
+    a->next_inflight = s_js_http_inflight;
+    s_js_http_inflight = a;
+    return promise;
+}
+
 static JSValue js_config_get(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     (void)this_val;
@@ -1722,6 +2320,45 @@ static void js_timers_fire_due(void)
     }
 }
 
+/* Drain QuickJS pending jobs (promise reactions and async-function resumes).
+ * quickjs-ng queues these into rt->job_list and ONLY JS_ExecutePendingJob
+ * consumes them. Unlike Node, the worker loop does NOT auto-drain this queue,
+ * so an awaited Promise would never resume here — the plugin's async refresh
+ * chain (host.http.requestAsync -> await) would stall on its first await and
+ * never run the code after it (including a `finally` guard reset). Run after
+ * timers and after async jobs every iteration.
+ *
+ * Upper bound on jobs drained per worker iteration. A self-resolving Promise
+ * chain could otherwise loop forever inside this single call and wedge the
+ * worker; capping it bounds one drain pass and lets the loop service timers /
+ * polls / I/O next iteration. The cap is only safe because js_jobs_drain()
+ * reports it: a leftover job has no notify of its own, and with no timer armed
+ * js_timers_wait_ticks() returns portMAX_DELAY, so the worker must not block on
+ * it — the caller shortens that wait instead. */
+#define MINIHUB_JS_JOBS_DRAIN_MAX 64
+
+static bool js_jobs_drain(void)
+{
+    if (!s_rt || !s_ctx) {
+        return false;
+    }
+    JSContext *ctx = s_ctx;
+    for (int n = 0; n < MINIHUB_JS_JOBS_DRAIN_MAX; n++) {
+        int rc = JS_ExecutePendingJob(s_rt, &ctx);
+        if (rc == 0) {
+            return false; /* queue empty: only now may the worker block */
+        }
+        if (rc < 0) {
+            /* JS_ExecutePendingJob unlinks the entry BEFORE running it, so a
+             * throwing job is consumed while later jobs stay in rt->job_list.
+             * Report the error and keep draining — returning false here would
+             * strand the rest exactly like a missing drain. */
+            dump_exception(ctx);
+        }
+    }
+    return true; /* cap hit: more may be queued, do not sleep on them */
+}
+
 static TickType_t js_timers_wait_ticks(void)
 {
     TickType_t now = xTaskGetTickCount();
@@ -1829,6 +2466,8 @@ static JSValue make_host_object(JSContext *ctx)
 
     JSValue http = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, http, "request", JS_NewCFunction(ctx, js_http_request, "request", 1));
+    JS_SetPropertyStr(ctx, http, "requestAsync",
+                      JS_NewCFunction(ctx, js_http_request_async, "requestAsync", 1));
     JS_SetPropertyStr(ctx, host, "http", http);
 
     JSValue config = JS_NewObject(ctx);
@@ -2004,6 +2643,7 @@ static esp_err_t js_unload_job(void *arg)
         clear_js_rpc_handlers(s_ctx);
         js_timers_clear_all(s_ctx);
         js_polls_clear_all(s_ctx);
+        js_http_inflight_cancel_all(s_ctx);
         JS_FreeContext(s_ctx);
         s_ctx = NULL;
     } else {

@@ -8,6 +8,7 @@ endif()
 
 set(_REQUIRES
     minihub_core minihub_config minihub_rules minihub_hub minihub_pack minihub_module minihub_store
+    minihub_js
     minihub_scenes minihub_auth minihub_ota minihub_update
     minihub_net
     minihub_provision

@@ -381,6 +381,27 @@ Attention
 可选 ``headers`` 对象设置请求头（如 ``Cookie``、``Content-Type``）。自动重定向**关闭**，便于读取
 ``Location`` / ``Set-Cookie``（护照登录）。除 GET/POST/PUT 外支持 ``DELETE``。
 
+host.http.requestAsync(opts)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``opts`` 与 ``host.http.request`` 相同，但返回 **Promise**，并把阻塞的 socket 收发放到独立任务上，
+不再占用 JS worker。多请求的链路（云端属性批量刷新）应使用它：云请求进行中时，设备控制、
+同步状态机与 UI 仍可响应。
+
+Returns
+^^^^^^^
+
+``Promise``，resolve 出与 ``host.http.request`` 相同的 ``{ status, body, headers? }`` 对象。
+
+Attention
+^^^^^^^^^
+
+最多 **4** 个并发请求；第 5 个不会排队，直接 **reject**，请务必处理 rejection。传输失败同样走
+rejection —— Promise 若悬而未决会让 ``await`` 永久卡住。**没有同步降级**：恢复 ``await`` 需要
+worker 排空 QuickJS 待处理任务，所以在不支持本接口的 Host 上，
+``await Promise.resolve(host.http.request(opts))`` 同样不会继续，而且仍然阻塞 worker。
+使用本接口的模块须写明 Host 要求（见 ``examples/plugins/`` 与插件 README 的 “Host 要求”）。
+
 方法 — host.net
 ---------------
 

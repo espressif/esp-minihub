@@ -38,6 +38,7 @@
 #include "minihub_device_widget.h"
 #include "minihub_pack.h"
 #include "minihub_module.h"
+#include "minihub_js.h"
 #include "minihub_store.h"
 #include "minihub_hub.h"
 #include "minihub_rules.h"
@@ -732,6 +733,77 @@ static bool module_id_from_rpc_uri(const char *uri, char *id_out, size_t id_len)
     return true;
 }
 
+/* Async module RPC: the JS worker runs the RPC and this callback sends the
+ * response, so the httpd task is never blocked by a long RPC (e.g. miot_js
+ * sync). See Athena issue 22x6Aswm. */
+typedef struct {
+    httpd_req_t *req;
+    char *module_id;
+    char *method;
+    cJSON *root;         /* owns params; freed by the worker */
+    const cJSON *params; /* child of root (may be NULL) */
+} rpc_async_ctx_t;
+
+/* Build and send the JSON error/result body for a module RPC. Shared by the
+ * legacy blocking fallback and the async worker. Does not free `result` (the
+ * caller owns it). */
+static esp_err_t send_module_rpc_response(httpd_req_t *req, const char *module_id,
+                                          const char *method, esp_err_t err, cJSON *result)
+{
+    if (err == ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "module RPC '%s' not ready (not loaded or no rpc)", module_id);
+        cJSON *resp = cJSON_CreateObject();
+        cJSON_AddStringToObject(resp, "result", "fail");
+        cJSON_AddStringToObject(resp, "error", "module_not_ready");
+        cJSON_AddStringToObject(resp, "message", api_msg(req, "模块未安装或未加载",
+                                                          "module not installed or loaded"));
+        esp_err_t e = send_json(req, resp);
+        cJSON_Delete(resp);
+        return e;
+    }
+    if (err == ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "module RPC '%s' method not found: %s", module_id,
+                 method && method[0] ? method : "?");
+        cJSON *resp = cJSON_CreateObject();
+        cJSON_AddStringToObject(resp, "result", "fail");
+        cJSON_AddStringToObject(resp, "error", "method_not_found");
+        cJSON_AddStringToObject(resp, "message", api_msg(req, "方法不存在", "method not found"));
+        esp_err_t e = send_json(req, resp);
+        cJSON_Delete(resp);
+        return e;
+    }
+    if (err != ESP_OK || !result) {
+        cJSON *resp = cJSON_CreateObject();
+        if (!resp) {
+            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+        }
+        cJSON_AddStringToObject(resp, "result", "fail");
+        cJSON_AddStringToObject(resp, "error", esp_err_to_name(err != ESP_OK ? err : ESP_FAIL));
+        esp_err_t e = send_json(req, resp);
+        cJSON_Delete(resp);
+        return e;
+    }
+    return send_json(req, result);
+}
+
+static esp_err_t rpc_async_worker(void *arg)
+{
+    rpc_async_ctx_t *ctx = (rpc_async_ctx_t *)arg;
+    cJSON *result = NULL;
+    esp_err_t err = minihub_module_invoke_rpc(ctx->module_id, ctx->method, ctx->params, &result);
+    httpd_req_t *req = ctx->req;
+    send_module_rpc_response(req, ctx->module_id, ctx->method, err, result);
+    if (result) {
+        cJSON_Delete(result);
+    }
+    free(ctx->module_id);
+    free(ctx->method);
+    cJSON_Delete(ctx->root);
+    free(ctx);
+    httpd_req_async_handler_complete(req);
+    return ESP_OK;
+}
+
 static esp_err_t handle_api_module_rpc(httpd_req_t *req)
 {
     esp_err_t err = api_auth(req);
@@ -771,46 +843,58 @@ static esp_err_t handle_api_module_rpc(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "params must be object");
     }
 
-    cJSON *result = NULL;
-    err = minihub_module_invoke_rpc(module_id, method->valuestring, params, &result);
-    cJSON_Delete(root);
-
-    if (err == ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(TAG, "module RPC '%s' not ready (not loaded or no rpc)", module_id);
-        cJSON *resp = cJSON_CreateObject();
-        cJSON_AddStringToObject(resp, "result", "fail");
-        cJSON_AddStringToObject(resp, "error", "module_not_ready");
-        cJSON_AddStringToObject(resp, "message", api_msg(req, "模块未安装或未加载",
-                                                          "module not installed or loaded"));
-        err = send_json(req, resp);
-        cJSON_Delete(resp);
-        return err;
-    }
-    if (err == ESP_ERR_NOT_FOUND) {
-        ESP_LOGW(TAG, "module RPC '%s' method not found: %s", module_id,
-                 method && method->valuestring ? method->valuestring : "?");
-        cJSON *resp = cJSON_CreateObject();
-        cJSON_AddStringToObject(resp, "result", "fail");
-        cJSON_AddStringToObject(resp, "error", "method_not_found");
-        cJSON_AddStringToObject(resp, "message", api_msg(req, "方法不存在", "method not found"));
-        err = send_json(req, resp);
-        cJSON_Delete(resp);
-        return err;
-    }
-    if (err != ESP_OK || !result) {
-        cJSON *resp = cJSON_CreateObject();
-        if (!resp) {
-            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+    /* Run the RPC on the JS worker WITHOUT blocking this (single) httpd task. The
+     * worker executes it and the response is sent when it completes, so a long
+     * RPC (miot_js sync) never stalls /api/points and the rest of the UI
+     * (device detail, rule editor). See Athena issue 22x6Aswm. */
+    httpd_req_t *areq = NULL;
+    esp_err_t begin = httpd_req_async_handler_begin(req, &areq);
+    if (begin != ESP_OK) {
+        /* Async handling unavailable (older httpd): legacy blocking invoke. */
+        cJSON *result = NULL;
+        err = minihub_module_invoke_rpc(module_id, method->valuestring, params, &result);
+        esp_err_t sent = send_module_rpc_response(req, module_id, method->valuestring, err, result);
+        cJSON_Delete(root);
+        if (result) {
+            cJSON_Delete(result);
         }
-        cJSON_AddStringToObject(resp, "result", "fail");
-        cJSON_AddStringToObject(resp, "error", esp_err_to_name(err != ESP_OK ? err : ESP_FAIL));
-        err = send_json(req, resp);
-        cJSON_Delete(resp);
-        return err;
+        return sent;
     }
-    err = send_json(req, result);
-    cJSON_Delete(result);
-    return err;
+
+    rpc_async_ctx_t *ctx = calloc(1, sizeof(*ctx));
+    if (!ctx) {
+        cJSON_Delete(root);
+        httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+        httpd_req_async_handler_complete(areq);
+        return ESP_OK;
+    }
+    ctx->req = areq;
+    ctx->module_id = strdup(module_id);
+    ctx->method = strdup(method->valuestring);
+    ctx->root = root;     /* owns params; freed by the worker */
+    ctx->params = params; /* child of root (may be NULL) */
+    if (!ctx->module_id || !ctx->method) {
+        free(ctx->module_id);
+        free(ctx->method);
+        cJSON_Delete(root);
+        free(ctx);
+        httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+        httpd_req_async_handler_complete(areq);
+        return ESP_OK;
+    }
+
+    esp_err_t aerr = minihub_js_run_on_worker_async(rpc_async_worker, ctx);
+    if (aerr != ESP_OK) {
+        free(ctx->module_id);
+        free(ctx->method);
+        cJSON_Delete(root);
+        free(ctx);
+        httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "worker busy");
+        httpd_req_async_handler_complete(areq);
+        return ESP_OK;
+    }
+    /* Handler returns immediately; the worker sends the response later. */
+    return ESP_OK;
 }
 
 #define MODULE_CAM_PREVIEW_FMT "/data/tmp/%s_cam_preview.jpg"
@@ -842,6 +926,95 @@ static bool module_id_from_preview_uri(const char *uri, char *id_out, size_t id_
     return true;
 }
 
+/* Camera preview: runs the camera_preview RPC on the JS worker without blocking
+ * the httpd task, then streams the JPEG. `async` distinguishes the async path
+ * (worker completes the async request) from the legacy fallback (handler sends
+ * synchronously on the original req). */
+typedef struct {
+    httpd_req_t *req;
+    char *module_id;
+    char *point_id;
+    bool async;
+} preview_async_ctx_t;
+
+static esp_err_t preview_async_worker(void *arg)
+{
+    preview_async_ctx_t *ctx = (preview_async_ctx_t *)arg;
+    httpd_req_t *req = ctx->req;
+
+    cJSON *params = cJSON_CreateObject();
+    if (!params) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+        goto done;
+    }
+    cJSON_AddStringToObject(params, "point_id", ctx->point_id);
+    cJSON *result = NULL;
+    esp_err_t err = minihub_module_invoke_rpc(ctx->module_id, "camera_preview", params, &result);
+    cJSON_Delete(params);
+    if (err == ESP_ERR_INVALID_STATE) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "module_not_ready");
+        cJSON_Delete(result);
+        goto done;
+    }
+    if (err != ESP_OK || !result) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                            esp_err_to_name(err != ESP_OK ? err : ESP_FAIL));
+        cJSON_Delete(result);
+        goto done;
+    }
+    const cJSON *empty = cJSON_GetObjectItem(result, "empty");
+    const cJSON *ok = cJSON_GetObjectItem(result, "ok");
+    if (cJSON_IsTrue(empty)) {
+        cJSON_Delete(result);
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no snapshot");
+        goto done;
+    }
+    if (!cJSON_IsTrue(ok)) {
+        cJSON_Delete(result);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "preview failed");
+        goto done;
+    }
+
+    char preview_path[96];
+    const cJSON *file = cJSON_GetObjectItem(result, "file");
+    if (cJSON_IsString(file) && file->valuestring[0]) {
+        strncpy(preview_path, file->valuestring, sizeof(preview_path) - 1);
+        preview_path[sizeof(preview_path) - 1] = '\0';
+    } else {
+        snprintf(preview_path, sizeof(preview_path), MODULE_CAM_PREVIEW_FMT, ctx->module_id);
+    }
+    cJSON_Delete(result);
+
+    FILE *f = fopen(preview_path, "rb");
+    if (!f) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no snapshot");
+        goto done;
+    }
+    httpd_resp_set_type(req, "image/jpeg");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    char buf[2048];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) {
+            fclose(f);
+            unlink(preview_path);
+            goto done;
+        }
+    }
+    fclose(f);
+    unlink(preview_path);
+    httpd_resp_send_chunk(req, NULL, 0);
+done:
+    free(ctx->module_id);
+    free(ctx->point_id);
+    bool async = ctx->async;
+    free(ctx);
+    if (async) {
+        httpd_req_async_handler_complete(req);
+    }
+    return ESP_OK;
+}
+
 static esp_err_t handle_api_module_preview(httpd_req_t *req)
 {
     esp_err_t err = api_auth(req);
@@ -862,63 +1035,55 @@ static esp_err_t handle_api_module_preview(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing point_id");
     }
 
-    cJSON *params = cJSON_CreateObject();
-    if (!params) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-    }
-    cJSON_AddStringToObject(params, "point_id", point_id);
-    cJSON *result = NULL;
-    err = minihub_module_invoke_rpc(module_id, "camera_preview", params, &result);
-    cJSON_Delete(params);
-    if (err == ESP_ERR_INVALID_STATE) {
-        cJSON_Delete(result);
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "module_not_ready");
-    }
-    if (err != ESP_OK || !result) {
-        cJSON_Delete(result);
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err != ESP_OK ? err : ESP_FAIL));
-    }
-    const cJSON *empty = cJSON_GetObjectItem(result, "empty");
-    const cJSON *ok = cJSON_GetObjectItem(result, "ok");
-    if (cJSON_IsTrue(empty)) {
-        cJSON_Delete(result);
-        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no snapshot");
-    }
-    if (!cJSON_IsTrue(ok)) {
-        cJSON_Delete(result);
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "preview failed");
-    }
-
-    char preview_path[96];
-    const cJSON *file = cJSON_GetObjectItem(result, "file");
-    if (cJSON_IsString(file) && file->valuestring[0]) {
-        strncpy(preview_path, file->valuestring, sizeof(preview_path) - 1);
-        preview_path[sizeof(preview_path) - 1] = '\0';
-    } else {
-        snprintf(preview_path, sizeof(preview_path), MODULE_CAM_PREVIEW_FMT, module_id);
-    }
-    cJSON_Delete(result);
-
-    FILE *f = fopen(preview_path, "rb");
-    if (!f) {
-        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no snapshot");
-    }
-    httpd_resp_set_type(req, "image/jpeg");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    char buf[2048];
-    size_t n;
-    bool sent_any = false;
-    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
-        if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) {
-            fclose(f);
-            unlink(preview_path);
-            return sent_any ? ESP_ERR_INVALID_STATE : ESP_FAIL;
+    /* Run the camera_preview RPC on the JS worker without blocking the httpd
+     * task (snapshot capture can take a while); the worker streams the JPEG and
+     * completes the async request. */
+    httpd_req_t *areq = NULL;
+    esp_err_t begin = httpd_req_async_handler_begin(req, &areq);
+    preview_async_ctx_t *ctx = calloc(1, sizeof(*ctx));
+    if (!ctx) {
+        if (begin == ESP_OK) {
+            httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+            httpd_req_async_handler_complete(areq);
+        } else {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
         }
-        sent_any = true;
+        return ESP_OK;
     }
-    fclose(f);
-    unlink(preview_path);
-    return httpd_resp_send_chunk(req, NULL, 0);
+    ctx->module_id = strdup(module_id);
+    ctx->point_id = strdup(point_id);
+    if (!ctx->module_id || !ctx->point_id) {
+        free(ctx->module_id);
+        free(ctx->point_id);
+        free(ctx);
+        if (begin == ESP_OK) {
+            httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+            httpd_req_async_handler_complete(areq);
+        } else {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+        }
+        return ESP_OK;
+    }
+    if (begin == ESP_OK) {
+        ctx->req = areq;
+        ctx->async = true;
+        esp_err_t aerr = minihub_js_run_on_worker_async(preview_async_worker, ctx);
+        if (aerr != ESP_OK) {
+            free(ctx->module_id);
+            free(ctx->point_id);
+            free(ctx);
+            httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "worker busy");
+            httpd_req_async_handler_complete(areq);
+            return ESP_OK;
+        }
+        /* Handler returns immediately; the worker streams + completes. */
+        return ESP_OK;
+    }
+    /* Async handling unavailable: run synchronously on the original request. */
+    ctx->req = req;
+    ctx->async = false;
+    preview_async_worker(ctx);
+    return ESP_OK;
 }
 
 static esp_err_t handle_root(httpd_req_t *req)
@@ -3460,10 +3625,39 @@ static esp_err_t handle_api_update_check(httpd_req_t *req)
     if (err != ESP_OK) {
         return err;
     }
-    cJSON *resp = minihub_update_hints_refresh();
-    if (!resp) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    /* Do not run the hint probe on the httpd task: it performs blocking network
+     * I/O (firmware / catalog / web / asset checks) that, against an unreachable
+     * deploy server, blocks the server for the full select() timeout and stalls
+     * every other request (e.g. POST /api/system/reboot). Mirror the store
+     * refresh: trigger an off-task check and return pending immediately. */
+    err = minihub_update_hints_refresh_async();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
     }
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+    }
+    cJSON_AddStringToObject(resp, "result",
+                            (err == ESP_ERR_INVALID_STATE) ? "unavailable" : "pending");
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_update_check_status(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    bool busy = false;
+    minihub_update_hints_refresh_status(&busy);
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no mem");
+    }
+    cJSON_AddStringToObject(resp, "result", busy ? "pending" : "idle");
     err = send_json(req, resp);
     cJSON_Delete(resp);
     return err;
@@ -5683,6 +5877,8 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
                                  .handler = handle_api_update_notes };
     httpd_uri_t update_check = { .uri = "/api/update/check", .method = HTTP_POST,
                                  .handler = handle_api_update_check };
+    httpd_uri_t update_check_status = { .uri = "/api/update/check", .method = HTTP_GET,
+                                        .handler = handle_api_update_check_status };
     httpd_uri_t update_apply = { .uri = "/api/update/apply", .method = HTTP_POST,
                                  .handler = handle_api_update_apply };
     httpd_uri_t ota_status = { .uri = "/api/ota", .method = HTTP_GET, .handler = handle_api_ota_status };
@@ -5778,6 +5974,7 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_hints), TAG, "/api/update/hints");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_notes), TAG, "/api/update/notes");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_check), TAG, "/api/update/check");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_check_status), TAG, "/api/update/check GET");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_apply), TAG, "/api/update/apply");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_status), TAG, "/api/ota");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_start), TAG, "/api/ota POST");

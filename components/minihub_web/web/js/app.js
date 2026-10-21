@@ -167,33 +167,169 @@ function adapterLoggedOut(ad) {
     return !!(st && st.loaded && !st.logged_in);
 }
 
-/* miot_js sync blocks the JS worker, so status() cannot report syncing
- * until the RPC returns. Track the in-flight module locally. */
+/* Module RPCs are async now, so status() can answer mid-sync. We still track the
+ * click locally to cover the gap between the click and the first status poll. */
+/* Value is the time the click flag was set, so the status poll can age it out
+ * (see the reconciliation in loadMeta()). Truthiness is all callers need. */
 const syncingModuleIds = {};
+const SYNC_LOCAL_FLAG_GRACE_MS = 3000;
 function markAuthSyncing(id, on) {
     if (!id) return;
-    if (on) syncingModuleIds[id] = true;
+    if (on) syncingModuleIds[id] = Date.now();
     else delete syncingModuleIds[id];
 }
 function authModuleSyncing(id) {
     return !!(id && syncingModuleIds[id]);
 }
 
+/* Adapters whose sync the host stopped waiting on (see the deadline below). The
+ * plugin still reports syncing:true for these, so the badge must not claim it. */
+const syncStalledAdapters = {};
+function authSyncStalled(ad) {
+    return !!(ad && syncStalledAdapters[ad]);
+}
+function clearAuthSyncStalled() {
+    Object.keys(syncStalledAdapters).forEach(function (k) { delete syncStalledAdapters[k]; });
+}
+
+/* One-minute UI watchdog per sync session. The plugin reports `syncing:true`
+ * only while it is actively talking; if we get no sync-result interaction (no
+ * active `syncing`) for SYNC_UI_TIMEOUT_MS, the sync is assumed abandoned and we
+ * give up instead of hanging on "同步中". A genuinely ongoing sync refreshes this
+ * window on every poll (below), so a slow but live sync is never cut off at 1 min.
+ * The separate 5-minute stale deadline still catches a plugin that lies about
+ * syncing forever. */
+const SYNC_UI_TIMEOUT_MS = 60 * 1000;
+const syncWatchdog = {};
+
 let _syncPollTimer = null;
-function pollAuthSyncWhileBusy() {
-    if (_syncPollTimer) return;
-    const tick = async function () {
-        await loadMeta();
-        const busy = authModules().some(function (m) {
-            const st = authStatus(m.adapter);
-            return !!(st && st.syncing) || authModuleSyncing(m.id);
-        });
-        if (view === 'overview') renderOverview();
-        if (!busy) {
-            _syncPollTimer = null;
-            return;
+let _syncPollDeadline = 0;
+const SYNC_POLL_MAX_MS = 5 * 60 * 1000;
+/* How long the host waits before declaring a sync stalled. SYNC_POLL_MAX_MS is
+ * a FLOOR, not the plugin's value: a plugin that lowered stale_after_ms below it
+ * would make the console give up mid-sync and show a false "stalled". The
+ * plugin's number only ever raises the wait. */
+function syncStaleMs() {
+    let ms = SYNC_POLL_MAX_MS;
+    authModules().forEach(function (m) {
+        const st = authStatus(m.adapter);
+        if (st && typeof st.stale_after_ms === 'number' && st.stale_after_ms > ms) {
+            ms = st.stale_after_ms;
         }
-        _syncPollTimer = setTimeout(tick, 1500);
+    });
+    return ms;
+}
+/* `renew` MUST only come from a user-initiated sync/login. loadMeta() calls this
+ * too, and the poll tick awaits loadMeta(): if that re-entry reset the clock,
+ * the deadline would move forward every 1.5 s and never expire. */
+function pollAuthSyncWhileBusy(renew) {
+    if (_syncPollTimer) {
+        if (renew) {
+            _syncPollDeadline = Date.now() + syncStaleMs();
+            clearAuthSyncStalled();
+        }
+        return;
+    }
+    _syncPollDeadline = Date.now() + syncStaleMs();
+    if (renew) clearAuthSyncStalled();
+    let _syncPollErrors = 0;
+    const tick = async function () {
+        try {
+            await loadMeta();
+            const busy = authModules().some(function (m) {
+                const st = authStatus(m.adapter);
+                return !!(st && st.syncing) || authModuleSyncing(m.id);
+            });
+            if (window.MINIHUB_SYNC_DEBUG) {
+                console.log('[syncpoll] tick busy=' + busy +
+                    ' dl=' + Math.max(0, _syncPollDeadline - Date.now()) +
+                    ' mods=' + authModules().map(function (m) {
+                        const s = authStatus(m.adapter);
+                        return m.adapter + ':' + ((s && s.syncing) ? 'S' : '-') + (authModuleSyncing(m.id) ? 'L' : '-');
+                    }).join(','));
+            }
+            /* One-minute UI watchdog (per active sync session). While the plugin
+             * reports `syncing:true` we are getting real sync-result interaction, so
+             * refresh the window — a slow but live sync must not be cut at 1 minute.
+             * If the local click flag is still set but the plugin never reports active
+             * syncing (the "stuck before sync began" gap), count the window down and
+             * time out so the badge cannot hang on "同步中" forever. */
+            authModules().forEach(function (m) {
+                const id = m.id;
+                const st = authStatus(m.adapter);
+                if (!st || (!st.syncing && !authModuleSyncing(id))) {
+                    delete syncWatchdog[id];
+                    return;
+                }
+                if (st.syncing) {
+                    syncWatchdog[id] = Date.now() + SYNC_UI_TIMEOUT_MS;
+                    return;
+                }
+                if (syncWatchdog[id] == null) syncWatchdog[id] = Date.now() + SYNC_UI_TIMEOUT_MS;
+                if (Date.now() > syncWatchdog[id]) {
+                    if (window.MINIHUB_SYNC_DEBUG) {
+                        console.log('[syncpoll] ui-timeout (no sync result) for ' + m.adapter);
+                    }
+                    syncStalledAdapters[m.adapter] = true;
+                    markAuthSyncing(id, false);
+                    delete syncWatchdog[id];
+                }
+            });
+            if (view === 'overview') renderOverview();
+            if (!busy) {
+                /* The sync finished (possibly after we gave up waiting): drop the
+                 * timeout marks so the badge does not stay on "stalled" forever. */
+                clearAuthSyncStalled();
+                _syncPollTimer = null;
+                if (view === 'overview') renderOverview();
+                return;
+            }
+            if (Date.now() > _syncPollDeadline) {
+                const staleMs = syncStaleMs();
+                console.warn('pollAuthSyncWhileBusy gave up after ' + staleMs + 'ms');
+                /* The plugin says it is still syncing but nothing will clear it:
+                 * stop claiming "syncing" and say so instead of hanging the badge. */
+                authModules().forEach(function (m) {
+                    const st = authStatus(m.adapter);
+                    if ((st && st.syncing) || authModuleSyncing(m.id)) {
+                        syncStalledAdapters[m.adapter] = true;
+                        markAuthSyncing(m.id, false);
+                    }
+                });
+                toast(t('ov.sync_stalled'));
+                if (view === 'overview') renderOverview();
+                _syncPollTimer = null;
+                return;
+            }
+            _syncPollTimer = setTimeout(tick, 1500);
+            _syncPollErrors = 0;
+        } catch (e) {
+            /* A stray exception (e.g. a transient renderOverview failure) must
+             * not kill the poll chain: otherwise _syncPollTimer keeps a stale,
+             * already-fired id, so the self-guard in loadMeta() (if (_syncPollTimer)
+             * return) blocks any restart and the "同步中" badge hangs forever until
+             * a manual page refresh. Keep the chain alive; only give up after a
+             * sustained run of failures so a truly wedged module still resolves. */
+            console.warn('pollAuthSyncWhileBusy tick error: ' + (e && e.message));
+            if (++_syncPollErrors > 20) {
+                console.warn('pollAuthSyncWhileBusy stopped after repeated errors');
+                /* Giving up must not leave the badge lying "同步中" forever: the
+                 * last status we could read still said syncing, but every refresh
+                 * since has failed. Mark it stalled (same as the deadline path)
+                 * so the badge says so instead of hanging until a manual refresh. */
+                authModules().forEach(function (m) {
+                    const st = authStatus(m.adapter);
+                    if ((st && st.syncing) || authModuleSyncing(m.id)) {
+                        syncStalledAdapters[m.adapter] = true;
+                        markAuthSyncing(m.id, false);
+                    }
+                });
+                if (view === 'overview') renderOverview();
+                _syncPollTimer = null;
+                return;
+            }
+            _syncPollTimer = setTimeout(tick, 1500);
+        }
     };
     _syncPollTimer = setTimeout(tick, 200);
 }
@@ -433,18 +569,47 @@ async function loadMeta() {
                 };
                 continue;
             }
-            const st = await moduleRpc(mod.id, 'status');
-            if (st.json && st.json.logged_in != null) {
-                st.json.loaded = true;
-                next[ad] = st.json;
-            } else {
-                next[ad] = {
+            /* One module's status RPC failing (fetch rejected, or the server
+             * closed the connection mid-sync) must NOT abort the whole refresh:
+             * if loadMeta() throws here, authStatusByAdapter is never reassigned
+             * and a stale syncing:true freezes the "同步中" badge until a manual
+             * refresh — exactly the reported symptom. Keep the previous status
+             * for the failed module and let the poll retry. */
+            try {
+                const st = await moduleRpc(mod.id, 'status');
+                if (st.json && st.json.logged_in != null) {
+                    st.json.loaded = true;
+                    next[ad] = st.json;
+                } else {
+                    next[ad] = {
+                        logged_in: false,
+                        loaded: true
+                    };
+                }
+            } catch (e) {
+                next[ad] = authStatusByAdapter[ad] || {
                     logged_in: false,
-                    loaded: true
+                    loaded: false
                 };
             }
         }
         authStatusByAdapter = next;
+        /* Reconcile the local click flag with the plugin's authoritative status.
+         * The flag only bridges the gap between the click and the first status
+         * poll. A long sync RPC whose async completion never lands (the async
+         * module rpc branch) leaves syncModule()'s finally unrun, so the flag
+         * would pin the "同步中" badge forever while the plugin already reports
+         * done (observed: mods=miot_js:-L with S cleared). Once status is loaded
+         * and definitively not syncing, drop it. The grace window keeps the
+         * badge from flickering off before the plugin accepts the sync. */
+        const nowMs = Date.now();
+        authModules().forEach(function (m) {
+            const s = next[m.adapter];
+            const setAt = syncingModuleIds[m.id];
+            if (setAt && s && s.loaded && !s.syncing && nowMs - setAt > SYNC_LOCAL_FLAG_GRACE_MS) {
+                markAuthSyncing(m.id, false);
+            }
+        });
         /* If any auth module is mid-sync, keep polling so the syncing / "加载中"
          * state is cleared as soon as the (possibly background or auto) sync
          * finishes, instead of lingering until the next unrelated refresh
@@ -456,8 +621,8 @@ async function loadMeta() {
             pollAuthSyncWhileBusy();
         }
         if (adapterEnabled('matter')) {
-            const mt = await fetch('/api/matter/status');
-            if (mt.ok) matterStatus = await mt.json();
+            const mt = await fetch('/api/matter/status').catch(() => null);
+            if (mt && mt.ok) matterStatus = await mt.json().catch(() => matterStatus);
         } else {
             matterStatus = {
                 ready: false,
@@ -466,7 +631,7 @@ async function loadMeta() {
         }
         if (adapterEnabled('zigbee') || adapterEnabled('ble_mesh')) {
             const rp = await fetch('/api/radio/provision').catch(() => null);
-            if (rp && rp.ok) radioProv = await rp.json();
+            if (rp && rp.ok) radioProv = await rp.json().catch(() => radioProv);
         } else {
             radioProv = {
                 zigbee_permit_join: false,
@@ -475,11 +640,20 @@ async function loadMeta() {
                 busy: false
             };
         }
-        const hub = await (await fetch('/api/')).json();
-        const hv = document.getElementById('hub-ver');
-        if (hv) hv.textContent = 'v' + (hub && hub.version ? hub.version : '?');
+        /* Cosmetic only, and must never block the render below: an aux fetch
+         * that throws here would leave the freshly-fetched status (possibly
+         * syncing:false) unrendered, freezing the badge on a stale 同步中. */
+        try {
+            const hub = await (await fetch('/api/')).json();
+            const hv = document.getElementById('hub-ver');
+            if (hv) hv.textContent = 'v' + (hub && hub.version ? hub.version : '?');
+        } catch (e) { /* keep last known version banner */ }
         if (view === 'overview') renderOverview();
-    } catch (e) {}
+    } catch (e) {
+        /* If loadMeta throws before it starts the sync poll (line ~514), a module
+         * can be left stuck on "同步中" until refresh. Log it only when debugging. */
+        if (window.MINIHUB_SYNC_DEBUG) console.warn('[loadMeta] threw: ' + (e && e.message));
+    }
 }
 let pointsPromise = null;
 let lastPtsAt = 0;   /* successful /api/points; tells the view switch whether the cache is fresh */
@@ -688,6 +862,17 @@ function renderOverview() {
     list.forEach(function (p) {
         const ex = cardEls[p.point_id];
         if (ex) updateCardEl(ex, p);
+    });
+    /* Auth section headers carry the live "同步中 / 同步中 xx%" badge, whose value
+     * depends on async module status, not on the device list. The in-place path
+     * above only patches cards, so a manual sync click (device list unchanged)
+     * would never show the badge — only the bottom toast would. Re-render each
+     * auth header in place from the same sectionHeader() used by the full rebuild,
+     * so the badge (and its percentage) appears, updates and clears with the sync. */
+    groupKeys.forEach(function (ad) {
+        if (!authModuleFor(ad)) return;
+        const hEl = el.querySelector('.auth-section-h[data-ad="' + ad + '"]');
+        if (hEl) hEl.outerHTML = sectionHeader(ad, groups[ad].length);
     });
 }
 
