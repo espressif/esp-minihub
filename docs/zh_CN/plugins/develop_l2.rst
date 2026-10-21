@@ -68,6 +68,8 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
 * ``host.command.on(adapter, handler)`` — 在 JS 中接收 UI/REST 命令
 * ``host.command.invoke({ point_id, cmd, params? })``
 * ``host.http.request({ url, method, body, timeout_ms })``
+* ``host.http.requestAsync(opts)`` — ``opts`` 同上，返回 **Promise**，socket 收发不占用
+  JS worker（最多 4 个并发）。多请求链路（云端批量刷新）用它；旧 Host 没有同步降级
 * ``host.config.get()``
 
 厂商插件丰富 Zigbee（或其他 Host）设备时必须用**同一** ``point_id``。

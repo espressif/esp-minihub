@@ -381,12 +381,13 @@ async function loadSystem() {
         if (sysSnap.timezone) applyTimezonePayload(sysSnap.timezone);
         /* The version rows show whatever the device's last probe cached, which is
          * empty right after a boot or a flash. Re-probe once per page load so
-         * opening / refreshing the System view reflects the deploy server. */
+         * opening / refreshing the System view reflects the deploy server. The
+         * probe runs on the hub's hint task, so POST answers "pending" at once:
+         * wait for it before re-reading, or we would show the stale cache. */
         if (!sysHintProbed) {
             sysHintProbed = true;
             try {
-                const c = await fetch('/api/update/check', { method: 'POST' });
-                if (c.ok) {
+                if (await sysProbeHints(60000)) {
                     await loadSystem();
                 }
             } catch (e) {}
@@ -577,14 +578,34 @@ async function sysApplyWifi() {
     }
 }
 
+/* Trigger a hint probe and wait for it to finish. The probe never runs on the
+ * httpd task (its network I/O would stall every other request), so POST returns
+ * "pending" and the result has to be polled. Returns true only when the probe
+ * actually completed; false on timeout, transport error, or the hint subsystem
+ * being unavailable. */
+async function sysProbeHints(timeoutMs) {
+    const r = await fetch('/api/update/check', { method: 'POST' });
+    if (!r.ok) return false;
+    let status = await r.json();
+    if (status && status.result === 'unavailable') return false;
+    const deadline = Date.now() + (timeoutMs || 60000);
+    while (status && status.result === 'pending' && Date.now() < deadline) {
+        await new Promise(res => setTimeout(res, 500));
+        const sr = await fetch('/api/update/check');
+        if (!sr.ok) return false;
+        status = await sr.json();
+        if (status && status.result === 'unavailable') return false;
+    }
+    return !(status && status.result === 'pending');
+}
+
 async function sysUpdateCheck() {
     toast(t('sys.checking_update'));
     try {
-        const r = await fetch('/api/update/check', { method: 'POST' });
-        if (!r.ok) { toast(t('sys.failed')); return; }
+        const done = await sysProbeHints(60000);
         refreshUpdateBanner();
         await loadSystem();
-        toast(t('sys.checked_update'));
+        toast(done ? t('sys.checked_update') : t('sys.check_timeout'));
     } catch (e) {
         toast(t('sys.network_error'));
     }

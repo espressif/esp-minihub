@@ -392,6 +392,31 @@ network policy. Optional ``headers`` object sets request headers (e.g. ``Cookie`
 ``Location`` / ``Set-Cookie`` (passport login). ``DELETE`` is accepted in addition
 to GET/POST/PUT.
 
+host.http.requestAsync(opts)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Same ``opts`` as ``host.http.request``, but returns a **Promise** and runs the
+blocking socket I/O on a dedicated task instead of the JS worker. Use it for the
+many-request paths (bulk cloud property refresh): device control, the sync state
+machine and the UI keep responding while a cloud request is in flight.
+
+Returns
+^^^^^^^
+
+``Promise`` that resolves with the same ``{ status, body, headers? }`` object as
+``host.http.request``.
+
+Attention
+^^^^^^^^^
+
+Up to **4** in-flight requests; a 5th Promise **rejects** rather than queueing, so
+handle the rejection. Rejection also covers transport failure — an unsettled
+Promise would leave ``await`` hanging. There is **no synchronous fallback**:
+resuming an ``await`` needs the worker to drain QuickJS pending jobs, so on a Host
+without this API even ``await Promise.resolve(host.http.request(opts))`` never
+continues, and it still blocks the worker. Modules that use it must state the Host
+requirement (see ``examples/plugins/`` and the plugin README **Host requirements**).
+
 Methods — host.net
 ------------------
 

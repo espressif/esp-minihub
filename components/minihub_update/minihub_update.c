@@ -1187,16 +1187,35 @@ static void on_hub_reloaded(const minihub_event_t *event, void *ctx)
     asset_sync_trigger();
 }
 
+/* Single writer for the hint cache: the web never probes on its own task, it
+ * notifies this one. `busy` spans periodic and manual probes alike, so
+ * GET /api/update/check cannot report idle while a probe is in flight, and
+ * `want` covers a request that has not been served yet -- notably while there
+ * is no IP, when the probe cannot run at all: reporting idle there would let
+ * the console toast "checked" against a cache nobody refreshed. */
+static TaskHandle_t s_hint_task;
+static volatile bool s_hint_refresh_busy;
+static volatile bool s_hint_refresh_want;
+
 static void hint_task(void *arg)
 {
     (void)arg;
     for (;;) {
-        while (!minihub_net_has_ip()) {
-            vTaskDelay(pdMS_TO_TICKS(MH_UPDATE_HINT_WAIT_IP_MS));
+        if (!minihub_net_has_ip()) {
+            /* Leave s_hint_refresh_want set: the request is still owed. */
+            (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(MH_UPDATE_HINT_WAIT_IP_MS));
+            continue;
         }
+        s_hint_refresh_busy = true;
         hint_check_once();
+        /* Hints are written; the caller's wait ends here. Asset sync (catalog
+         * apply + per-type icon pulls) can run for a while and must not keep
+         * the console polling on a cache that is already current. */
+        s_hint_refresh_busy = false;
+        s_hint_refresh_want = false;
         asset_sync_once();
-        vTaskDelay(pdMS_TO_TICKS(MH_UPDATE_HINT_PERIOD_MS));
+        /* Sleep out the period, or wake immediately when the console asks. */
+        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(MH_UPDATE_HINT_PERIOD_MS));
     }
 }
 
@@ -1213,7 +1232,7 @@ void minihub_update_hint_start(void)
     started = true;
     (void)minihub_event_bus_subscribe("store.module.installed", on_store_module_installed, NULL);
     (void)minihub_event_bus_subscribe("hub.reloaded", on_hub_reloaded, NULL);
-    if (xTaskCreate(hint_task, "mh_upd_hint", 16384, NULL, 3, NULL) != pdPASS) {
+    if (xTaskCreate(hint_task, "mh_upd_hint", 16384, NULL, 3, &s_hint_task) != pdPASS) {
         started = false;
         ESP_LOGE(TAG, "update hint task create failed");
     }
@@ -1284,8 +1303,25 @@ cJSON *minihub_update_notes_json(void)
     return root;
 }
 
-cJSON *minihub_update_hints_refresh(void)
+/* Ask the resident hint task to probe now instead of running the probes here or
+ * spawning a second task: hint_check_once() does blocking network I/O (firmware /
+ * catalog / web / asset probes) and must never run on the httpd task, and two
+ * concurrent probes would interleave writes into the hint cache. A request that
+ * lands while a probe is running simply queues one more pass.
+ * ESP_ERR_INVALID_STATE means the hint subsystem never started. */
+esp_err_t minihub_update_hints_refresh_async(void)
 {
-    hint_check_once();
-    return minihub_update_hints_json();
+    if (!s_hint_task) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    s_hint_refresh_want = true;
+    xTaskNotifyGive(s_hint_task);
+    return ESP_OK;
+}
+
+void minihub_update_hints_refresh_status(bool *busy)
+{
+    if (busy) {
+        *busy = s_hint_refresh_busy || s_hint_refresh_want;
+    }
 }

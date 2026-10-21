@@ -68,11 +68,21 @@ void minihub_update_hint_start(void);
 cJSON *minihub_update_hints_json(void);
 
 /**
- * Force an immediate re-check of firmware, plugins, web and device assets
- * (icons + parameter styles) and return the refreshed hint list. Caller deletes.
- * Object shape matches minihub_update_hints_json().
+ * Ask the resident hint task to re-check firmware, plugins, web and device
+ * assets now. Non-blocking: it never runs the probes on the caller's task (they
+ * would block an httpd handler for the full select() timeout against an
+ * unreachable deploy server) and it never spawns a second task, so the hint
+ * cache keeps a single writer. A request arriving during a probe just queues
+ * one more pass. Returns ESP_OK if the hint subsystem is running,
+ * ESP_ERR_INVALID_STATE if it never started. Results land in the cache
+ * GET /api/update/hints reads; poll minihub_update_hints_refresh_status() to
+ * learn when the probe finished.
  */
-cJSON *minihub_update_hints_refresh(void);
+esp_err_t minihub_update_hints_refresh_async(void);
+
+/** True while a hint probe is running, or one was requested and not yet served
+ *  (e.g. there is still no IP, so the probes cannot run). */
+void minihub_update_hints_refresh_status(bool *busy);
 
 /**
  * Local versions and release notes for the console.

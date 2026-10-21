@@ -70,6 +70,9 @@ Host calls ``setup(host)`` once per load. The ``host`` object exposes:
 * ``host.command.on(adapter, handler)`` — receive UI/REST commands in JS
 * ``host.command.invoke({ point_id, cmd, params? })``
 * ``host.http.request({ url, method, headers, body })`` — allowlisted HTTP from JS
+* ``host.http.requestAsync(opts)`` — same ``opts``, returns a **Promise** and runs the
+  socket I/O off the JS worker (max 4 in flight). Use it for many-request paths such as
+  bulk cloud refresh; there is no synchronous fallback for older Hosts
 * ``host.config.get()`` — read merged ``adapters.json`` snippet
 
 Vendor plugins that enrich a Zigbee (or other Host) device must use the

@@ -281,12 +281,32 @@ function sectionHeader(ad, count) {
         } else if (!st.loaded) {
             /* Status not yet known (first paint / reboot) — show a neutral
              * "checking" badge instead of a false "not logged in". */
-            acct = showActs ? '<span class="mod-acct off">' + esc('检查中') + '</span>' : '';
+            acct = showActs ? '<span class="mod-acct off">' + esc(t('ov.checking')) + '</span>' : '';
         } else {
             acct = showActs ? '<span class="mod-acct off">' + esc(lbl(mod, 'logged_out', t('ov.logged_out'))) + '</span>' : '';
         }
-        const syncBadge = (st.syncing || authModuleSyncing(mid))
-            ? '<span class="mod-acct busy">' + t('ov.syncing') + '</span>' : '';
+        /* "stalled" only qualifies a sync the plugin still claims: once
+         * st.syncing clears, the sync really finished and no badge belongs. */
+        const stalled = authSyncStalled(ad) && !!(st && st.syncing);
+        /* A "syncing" badge means the poll MUST be running; otherwise a loadMeta()
+         * that aborted before its poll-start (line ~514) would leave syncing frozen
+         * until a manual refresh. Drive the poll from the badge itself so it cannot
+         * get stuck (issue: sync badge hangs on "同步中"). */
+        const syncingNow = !stalled && (st.syncing || authModuleSyncing(mid));
+        /* When the plugin reports a sync progress (0-100) in its status, show it
+         * on the badge as "同步中 42%". The plugin must populate st.progress while
+         * syncing; without it we fall back to the plain "同步中". */
+        let syncingLabel = t('ov.syncing');
+        if (typeof st.progress === 'number' && st.progress >= 0 && st.progress <= 100) {
+            syncingLabel = t('ov.syncing_pct', { pct: Math.round(st.progress) });
+        }
+        const syncBadge = stalled
+            ? '<span class="mod-acct off">' + t('ov.sync_stalled') + '</span>'
+            : (syncingNow ? '<span class="mod-acct busy">' + syncingLabel + '</span>' : '');
+        if (syncingNow) {
+            if (window.MINIHUB_SYNC_DEBUG) console.log('[syncpoll] render-start poll for ' + ad);
+            pollAuthSyncWhileBusy();
+        }
         let acts = '';
         if (showActs) {
             if (st.logged_in) {
@@ -302,7 +322,7 @@ function sectionHeader(ad, count) {
                 }
             }
         }
-        return '<div class="section-h auth-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + acct + syncBadge + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
+        return '<div class="section-h auth-section-h" data-ad="' + esc(ad) + '"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + acct + syncBadge + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'matter') {
         const st = matterStatus.ready ? '<span class="mod-acct">' + t('ov.matter_controller_ready') + '</span>' : (showActs ? '<span class="mod-acct off">' + t('ov.not_ready') + '</span>' : '');
@@ -1434,7 +1454,7 @@ async function submitAuthLogin() {
                 loadMeta();
                 let m = t('ov.login_ok');
                 if (j.sync === 'pending') {
-                    pollAuthSyncWhileBusy();
+                    pollAuthSyncWhileBusy(true);
                     toast(m + ' · ' + t('ov.syncing_devices'));
                     const deadline = Date.now() + 120000;
                     while (Date.now() < deadline) {
@@ -1504,7 +1524,7 @@ async function submitAuthLogin() {
             if (r.ok && j && j.result === 'ok') {
                 closeAuthLogin();
                 await loadMeta();
-                pollAuthSyncWhileBusy();
+                pollAuthSyncWhileBusy(true);
                 await loadPoints();
                 let m = t('ov.session_imported');
                 if (j.sync === 'need_home') {
@@ -1556,7 +1576,7 @@ async function submitAuthLogin() {
         if (r.ok && j && j.result === 'ok') {
             closeAuthLogin();
             await loadMeta();
-            pollAuthSyncWhileBusy();
+            pollAuthSyncWhileBusy(true);
             await loadPoints();
             let m = t('ov.login_ok');
             if (j.sync === 'need_home') {
@@ -1626,9 +1646,13 @@ async function logoutModule(id) {
 }
 async function syncModule(id, homeId) {
     const mid = id || activeAuthModule;
+    if (authModuleSyncing(mid)) {
+        toast(t('ov.sync_busy'));
+        return;
+    }
     markAuthSyncing(mid, true);
     if (view === 'overview') renderOverview();
-    pollAuthSyncWhileBusy();
+    pollAuthSyncWhileBusy(true);
     toast(homeId ? t('ov.switching_home') : t('ov.syncing_now'));
     try {
         const params = {

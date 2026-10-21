@@ -74,6 +74,54 @@ export IDF_PATH=/path/to/esp-idf-v6.2
 | Re-arming a Matter subscription from a poll loop, and the card goes wrongly offline / leaks | `minihub_matter_subscribe_node()` only short-circuits while the node is **live**; re-sending an arm that is still in flight leaks the previous command and lets the terminated callback clear liveness on the wrong row. Read liveness back and pace retries with a per-node backoff. |
 | A Matter card reads `online` with a stale value and you conclude reporting works | `online` for a Matter row is `minihub_matter_ready()` (commissioner up), not the device answering, and `/api/command` writes the value optimistically. The only report evidence is `subscriptions[].reports` rising in `GET /api/matter/status`; `ESP_OK`/`result: ok` from an invoke submit proves nothing. |
 
+## HTTP URI handlers must not block
+
+Every `httpd` URI handler runs on the **httpd task**. Any blocking I/O inside a
+handler (network via `esp_http_client` / `http_get_*` / `httpd_req_recv`-driven
+external fetches, long flash writes, large downloads) freezes that task, so
+**every other request — including `POST /api/system/reboot` — is queued until the
+call returns**. A bad/unreachable deploy URL turns this into a multi-second stall
+that repeats on every poll (this was the root cause of "reboot takes ~70 s").
+
+Rule: **do blocking work off the httpd task.** Established pattern (see
+`handle_api_store_refresh` / `minihub_store_refresh_catalog_async`, and
+`handle_api_update_check` / `minihub_update_hints_refresh_async`):
+
+1. The `POST` handler spawns a task (or timer) for the work and returns
+   `{result:"pending"}` (or `"busy"` if already running) immediately.
+2. Results are written to a cache the client reads via a plain `GET`
+   (`GET /api/store/catalog`, `GET /api/update/hints`).
+3. A `GET` status endpoint (`GET /api/store/refresh`, `GET /api/update/check`)
+   reports `pending`/`idle` so the client polls until done.
+
+Frontend mirrors this: `store.js refreshStoreCatalog()` and `system.js
+sysUpdateCheck()` POST, then poll the `GET` status every 500 ms up to a deadline,
+then re-read the cached `GET`.
+
+Known synchronous-blocking handlers still on the httpd task (audit 2026-10-20;
+the reboot-delay root cause was `update/check`):
+- `handle_api_ota_start` → `minihub_ota_start_url()` (firmware image download)
+- `handle_api_store_install` / `_upgrade` / `_reinstall` → `minihub_store_*()` (.mhub download + extract)
+- rules import handler (via `rules_http_get_body`) → URL fetch
+- `handle_api_store_catalog` → `minihub_store_catalog_merged()` fetches remote only
+  when no bundled `catalog.json` is present (the common case returns local)
+
+Convert these to the async pattern when touched. Never add new blocking I/O to a
+URI handler.
+
+The JS worker is single-threaded too: `js_call_on_worker()` blocks its caller
+(`portMAX_DELAY` on `s_js_done`) until the job runs, and `js_async_drain()` runs
+queued jobs inline on that same worker. A long synchronous job (a non-yielding
+sync) therefore starves **every** other JS caller — device control, rules, adapter
+poll — and any C caller blocked in `js_call_on_worker`. So JS RPCs that do
+heavy/looping work (notably miot_js `syncRunSync`) MUST yield cooperatively with
+`setTimeout(...,0)` between batches; never run an unbounded loop on the worker
+without yielding. See `esp-minihub-plugins/miot_js/main.js` `syncRunSync` for the
+reference pattern, and keep its `done(err)` single-exit so `syncState.running`
+can never leak true — a leaked running flag wedges the web "syncing" badge
+permanently, amplified by the host's `pollAuthSyncWhileBusy` loop (which now has a
+5-minute deadline as defense-in-depth).
+
 ## MCP
 
 `CONFIG_MINIHUB_MCP_SERVER` is default n. Enable only with `git submodule update --init components/esp-claw`.
