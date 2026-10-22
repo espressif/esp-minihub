@@ -106,18 +106,18 @@ Prefer ``-B build`` inside the plugin directory.
 configure, build, and can ``--pack``. Host in-tree builds still write
 ``application/minihub/build/<id>.so``.
 
-Example demos under ``examples/plugins/`` (dual path)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+A scaffolded L3 plugin (dual path)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``color_bulb``, ``meter_plug``, ``zigbee_ota``, ``ble_mesh_ota``, and
-``matter_ota`` each use ``if(ESP_PLATFORM)`` / standalone ``include()`` of the
-fragment above. Without IDF:
+Splitting the source with ``if(ESP_PLATFORM)`` / a standalone ``include()`` of
+the fragment above is what lets one tree build both ways. Without IDF:
 
 .. code-block:: bash
 
-   python3 tools/build_plugin_standalone.py color_bulb
+   python3 tools/new_store_module.py --tier l3 --id my_native
+   python3 tools/build_plugin_standalone.py my_native
    export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"
-   python3 tools/pack_store_module.py pack color_bulb
+   python3 tools/pack_store_module.py pack my_native
    python3 tools/sync_store_catalog.py --from-store
 
 In-tree with the Host
@@ -282,7 +282,7 @@ Common failures:
 * ``binary_size`` mismatch after OTA — repack ``.mhub`` after rebuild
 
 Device types, ``devices.json``, and widgets: :doc:`../type_catalog`
-(demos ``examples/plugins/color_bulb``, ``examples/plugins/meter_plug``).
+(scaffold with ``tools/new_store_module.py --tier l3``).
 Point identity (manufacturer, category, OTA, ``owner``) and adapters JSON:
 :doc:`../data_model`.
 

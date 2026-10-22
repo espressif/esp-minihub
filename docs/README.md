@@ -59,8 +59,8 @@ build-docs -bs html -t esp32s31 -l zh_CN
 HTML output: `docs/_build/en/esp32s31/html/` and `docs/_build/zh_CN/esp32s31/html/`.
 
 HTML builds include a downloadable type-catalog snapshot under
-`_static/catalog/` (CSV, device icons, `STANDARD_TYPES*.md`, sample
-`devices.json`) and `_static/catalog.zip`, copied from
+`_static/catalog/` (CSV, device icons, `STANDARD_TYPES*.md`) and
+`_static/catalog.zip`, copied from
 `components/minihub_device_widget/` at Sphinx configure time. While
 `HIDE_L3` is true in `docs/_extensions/omit_elf_plugin_docs.py`, the HTML
 build omits L3 chapters and any passage wrapped in `.. only:: not hide_l3`.

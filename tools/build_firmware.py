@@ -29,9 +29,9 @@ Examples:
   ./tools/build_firmware.py -app minihub build
   ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
-  ./tools/build_firmware.py module color_bulb
+  ./tools/build_firmware.py module my_native
   ./tools/build_firmware.py modules
-  ./tools/build_firmware.py pack color_bulb
+  ./tools/build_firmware.py pack my_native
 """
 
 from __future__ import annotations
@@ -156,9 +156,9 @@ Examples:
   ./tools/build_firmware.py -app minihub build
   ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
-  ./tools/build_firmware.py module color_bulb
+  ./tools/build_firmware.py module my_native
   ./tools/build_firmware.py modules
-  ./tools/build_firmware.py pack color_bulb
+  ./tools/build_firmware.py pack my_native
 """,
         file=sys.stderr if code else sys.stdout,
     )

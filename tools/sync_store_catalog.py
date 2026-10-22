@@ -3,9 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Write per-plugin ``catalog.json`` next to each packed ``.mhub``.
 
-Every module lives under one ``Stores/<bucket>/<id>/`` folder. L1/L2 use
-``Common``; native and hybrid use the chip from ``targets`` (``ALL``
-collapses to ``Common``). ``targets`` is the chip filter for ``?chip=``.
+Every published module lives under one ``Stores/<bucket>/<id>/`` folder.
+L1 and L2 use ``Common``; native and hybrid are not published at all
+(``store_buckets_for_module()`` returns no bucket and a leftover folder is
+deleted). ``targets`` is the chip filter for ``?chip=``.
 
 Default (no args, or ``--from-store``): scan ``DEPLOY/Stores/<bucket>/<id>/<id>.mhub``
 only — no plugin sources, no ``MINIHUB_PLUGIN_DIRS`` — and move a package
@@ -357,8 +358,8 @@ def _place_catalogs(
 ) -> dict | None:
     """Write ``catalog.json`` in each bucket. Optionally move the ``.mhub``.
 
-    Native/hybrid modules are filed under ``Stores/<chip>/<id>/`` (``<chip>``
-    from ``targets``); L1/L2 use ``Stores/Common/<id>/``.
+    L1/L2 use ``Stores/Common/<id>/``. A native or hybrid module has no bucket,
+    so nothing is written and any package left from an earlier build is removed.
     """
     mid = manifest["id"]
     buckets = store_buckets_for_module(manifest, module_dir)

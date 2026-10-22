@@ -55,8 +55,8 @@
       # 手动 MHMD（通常 pack 已包含）
       python3 tools/pack_store_module.py mhmd in.so out.so
 
-      # 仓库外演示：无 IDF 编译
-      python3 tools/build_plugin_standalone.py color_bulb
+      # 无 IDF 编译 L3 模块（仓库内无示例，先用脚手架生成）
+      python3 tools/build_plugin_standalone.py my_native
 
    ``./tools/build_firmware.py … modules`` 编译同时含 ``module.json`` 与
    ``CMakeLists.txt`` 的全部原生插件 （``examples/plugins/*/`` 以及
@@ -113,8 +113,10 @@
      "size": 3762
    }
 
-* ``type`` — L2 为 ``module``；纯配置 L1 可为 ``pack``
-  (仅 JSON 包时 ``module`` / ``pack`` 可互换)
+* ``type`` — 生成的目录里恒为 ``module`` 。标记纯配置 L1 的是 ``config_only: true``
+  （安装 URL 以 ``.json`` 结尾也算）；打包器同时写 ``runtime: "pack"`` ，包类型判定器
+  与加载器都读它，据此把包交给 ``minihub_pack`` ，而不是按可加载模块处理。
+  手写 ``"type": "pack"`` 在 Hub 报告已安装状态时仍会被认
 * ``url`` — ``.mhub`` 的路径或绝对 HTTP URL
 * ``targets`` — 小写芯片文件夹名，与固件目录使用同一套字符串
   （例如 ``esp32s31`` ），JS 模块也可以是 ``ALL`` 。从 ``module.json``
@@ -123,11 +125,11 @@
 * ``adapter`` — 可选；安装时 Host 会在 ``adapters.json`` 中建槽
 * ``size`` — **外层 zip** 字节数（须与磁盘上 ``.mhub`` 一致；``pack`` 会回写）
 
-.. only:: not hide_l3
+* ``binary_size`` — 内层 MHMD ``.so`` 大小（不是 zip）。只有原生或 hybrid 条目会
+  带它，而这两类都不发布，所以商店目录里不会出现该字段。
 
-   * ``type`` 对 L3 也是 ``module``
-   * ``binary_size`` — 内层 MHMD ``.so`` 大小（不是 zip）。L3 目录 id 形如
-     ``color_bulb`` ，``targets`` 为 ``["esp32s31"]`` 。
+两个文件里的 ``type`` 含义不同：生成的 ``catalog.json`` 每一层都写 ``module`` ，
+而 L1 包内的 ``module.json`` 写的是 ``pack`` 。
 
 在运行中的 Hub 上安装
 ---------------------
@@ -147,7 +149,7 @@
    curl -X POST http://$HUB/api/store/refresh
    curl -X POST http://$HUB/api/store/install \
      -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+     -d '{"type":"module","id":"color_bulb_js"}'
 
    curl -X POST http://$HUB/api/hub/reload
 
@@ -162,7 +164,8 @@ L1 包使用 ``{"type":"pack","id":"my_pack"}``。
    curl http://$HUB/api/packs
    curl http://$HUB/api/config/adapters
 
-串口：``loaded module 'color_bulb'`` 或 L2 的 ``setup ok``。
+串口日志：JS 模块输出 ``JS module '<id>' setup ok``；原生模块输出
+``loaded module binary: <path>``。
 
 升级 / 卸载
 -----------
@@ -172,11 +175,11 @@ L1 包使用 ``{"type":"pack","id":"my_pack"}``。
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/upgrade -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+     -d '{"type":"module","id":"color_bulb_js"}'
 
 卸载：
 
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/uninstall -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+     -d '{"type":"module","id":"color_bulb_js"}'

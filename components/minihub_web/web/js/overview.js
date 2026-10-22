@@ -715,7 +715,7 @@ async function openDeviceLog(id, ev) {
 
 /*
  * Overview cards = devices, not raw /api/points rows.
- * Preferred: one point with props.params (sim.color_bulb).
+ * Preferred: one point with props.params (sim.js_kitchen).
  * Legacy: group protocol.endpoint.parameter into one card so brightness/hue
  * never become their own toggle cards and 能力点 counts devices.
  * Unscoped ids (not <protocol>.<device>, e.g. switch/bm_000a) stay as one

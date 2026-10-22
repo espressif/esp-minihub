@@ -3,7 +3,7 @@
 
 :link_to_translation:`en:[English]`
 
-OEM 发布路径：工厂镜像、现场 OTA、与 Host ABI 配套的 Store 包。实验室首次上电见
+OEM 发布路径：工厂镜像、现场 OTA、Store 包。实验室首次上电见
 :doc:`getting_started` ；产品目录与分区规划见 :doc:`host_customization` 。
 
 不要把实验室 SSID/PSK（ ``local.overrides`` ，git 忽略）打进量产镜像。不要把

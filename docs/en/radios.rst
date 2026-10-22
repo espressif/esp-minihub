@@ -30,16 +30,14 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
 
 .. list-table::
    :header-rows: 1
-   :widths: 12 22 24 22 20
+   :widths: 14 28 30 28
 
    * - Adapter
      - Hub point
      - Identity (Host)
      - Air OTA
-     - Demo plugin
    * - wifi
      - **no** device points (STA uplink)
-     - —
      - —
      - —
    * - :doc:`zigbee`
@@ -47,7 +45,6 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
        node one point
      - Basic 0x0004 / 0x0005, …
      - Stub (``NOT_SUPPORTED``)
-     - —
    * - :doc:`ble_mesh`
      - ``ble_mesh.bm_XXXX``, one
        node one point
@@ -55,7 +52,6 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
        ``uuid``
      - Stub (Firmware Update /
        BLOB)
-     - —
    * - :doc:`matter`
      - ``{transport}.matter_n{node}_ep{ep}``
        **per endpoint**
@@ -63,15 +59,17 @@ if that plugin slot is ``enabled``, the card moves from the radio group to
        ``node_id``
      - CSA Provider ``0x0029`` +
        BDX
-     - —
    * - :doc:`thread`
      - **no** device points
      - —
      - Use the Matter point
-     - Do not ship ``thread_ota``
+
+No radio has a Store demo in-tree: vendor claim and OTA logic ship as
+their own plugin on the same ``point_id``. Thread needs none — its
+end-devices are Matter points, so do not ship a ``thread_ota`` plugin.
 
 Claim (``props.owner``) does **not** need a cloud catalog. ``props.ota`` is
-merged only after GET ``catalog_url`` succeeds. Demo plugins pack via
+merged only after GET ``catalog_url`` succeeds. Plugins pack via
 ``MINIHUB_PLUGIN_DIRS``; do **not** add them to public Host
 ``store_preinstall``.
 

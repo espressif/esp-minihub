@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pack examples/plugins/<id>/ (or MINIHUB_PLUGIN_DIRS) into a Store ``.mhub``, or wrap native .so (MHMD).
 
-Every module is published as one ``.mhub``: L1/L2 under
-``deploy/Stores/Common/<id>/<id>.mhub``, native/hybrid under
-``deploy/Stores/<chip>/<id>/<id>.mhub`` (``<chip>`` from ``targets``).
+Every published module is one ``.mhub`` under
+``deploy/Stores/Common/<id>/<id>.mhub`` (L1/L2). A native or hybrid module
+is packed for local use but never published to the store.
 
 Two orthogonal steps (do not conflate):
 

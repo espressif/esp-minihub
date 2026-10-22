@@ -303,6 +303,50 @@ Notes
 * A long-running callback blocks other timers and jobs — keep callbacks short.
 * ``POST /api/hub/reload`` clears all timers and runs ``setup`` again.
 
+Methods — host.adapter
+----------------------
+
+.. code-block:: javascript
+
+   host.adapter.poll(function () { /* refresh points from the cloud */ });
+   host.adapter.clearPoll();
+
+host.adapter.poll(fn)
+~~~~~~~~~~~~~~~~~~~~~
+
+Run ``fn`` on the Host adapter poll tick, about every 5 s. The tick only wakes
+the JS worker, so a poll cannot delay adapter polling or a hub reload; the
+callback itself runs on the JS worker task (QuickJS is single-threaded).
+
+Parameters
+^^^^^^^^^^
+
+``fn`` (function, required)
+    Callback with no arguments. Any other value throws ``TypeError``.
+
+Returns
+^^^^^^^
+
+``undefined``. The runtime holds at most 8 poll handlers, so a 9th throws. A
+callback that throws is logged and dropped — the tick keeps going.
+
+host.adapter.clearPoll()
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Removes **every** poll handler registered in the JS runtime, including ones
+armed by another L2 module. There is no per-handler unregister: to stop
+polling from one module, keep your own flag and return early in the callback.
+
+Notes
+^^^^^
+
+* A tick is skipped while the previous batch is still running; callbacks never
+  pile up.
+* A reload (``POST /api/hub/reload``) drops all handlers and runs ``setup``
+  again.
+* Use this for a cloud or LAN refresh loop on the framework's cadence; pick
+  ``host.timer.setInterval`` when you need another period.
+
 Methods — host.command
 ----------------------
 

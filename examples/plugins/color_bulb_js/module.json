@@ -9,8 +9,5 @@
   "type": "module",
   "runtime": "js",
   "adapter": "color_bulb_js",
-  "description": "L2 QuickJS demo: three simulated type=light points with props.params and a JS command handler (display + control on Devices page).",
-  "abi_version": 1,
-  "core_api_min": 1,
-  "core_api_max": 1
+  "description": "L2 QuickJS demo: three simulated type=light points with props.params and a JS command handler (display + control on Devices page)."
 }

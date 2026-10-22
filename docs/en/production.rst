@@ -3,8 +3,8 @@ Deployment and production
 
 :link_to_translation:`zh_CN:[中文]`
 
-OEM release path: factory image, field OTA, and Store packages matched to the
-Host ABI. First lab bring-up: :doc:`getting_started`. Product folder and
+OEM release path: factory image, field OTA, and Store packages. First lab
+bring-up: :doc:`getting_started`. Product folder and
 partition planning: :doc:`host_customization`.
 
 Do not bake lab SSID/PSK (``local.overrides``, gitignored) into a production

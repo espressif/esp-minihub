@@ -52,7 +52,7 @@ build-docs -bs html -t esp32s31 -l zh_CN
 HTML 输出：`docs/_build/en/esp32s31/html/` 与 `docs/_build/zh_CN/esp32s31/html/`。
 
 构建 HTML 时，类型目录快照会随站点发布到 `_static/catalog/`（CSV、设备图标、
-`STANDARD_TYPES*.md`、示例 `devices.json`）及 `_static/catalog.zip`，源文件来自
+`STANDARD_TYPES*.md`）及 `_static/catalog.zip`，源文件来自
 `components/minihub_device_widget/`（Sphinx 配置阶段复制）。
 `docs/_extensions/omit_elf_plugin_docs.py` 里 ``HIDE_L3`` 为 true 时，HTML
 不收录 L3 章节，以及包在 ``.. only:: not hide_l3`` 里的段落。改成

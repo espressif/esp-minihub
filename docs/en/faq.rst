@@ -25,10 +25,10 @@ Store install returns 400 / 404 / 409
 * **409** — already installed; use ``POST /api/store/upgrade`` or uninstall first
 * Check ``GET /api/store/config`` for Store base URL
 
-Module fails to load (load_guard)
----------------------------------
-
 .. only:: not hide_l3
+
+   Module fails to load (load_guard)
+   ---------------------------------
 
    If a native module crashes during ``dlopen``, Host writes
    ``/store/modules/ID/.load_guard`` and skips it on the next boot. Clear with
@@ -36,7 +36,7 @@ Module fails to load (load_guard)
 
    .. code-block:: json
 
-      { "id": "color_bulb", "clear_load_guard": true, "reload": true }
+      { "id": "my_native", "clear_load_guard": true, "reload": true }
 
    Check the serial log for ABI errors. L3 ``module.json`` ``abi_version`` and
    ``core_api_*`` must bracket the Host (header ``MINIHUB_MODULE_ABI_VERSION``).

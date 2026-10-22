@@ -57,8 +57,8 @@ Pack commands
       # Manual MHMD wrap (usually done inside pack / standalone CMake)
       python3 tools/pack_store_module.py mhmd in.so out.so
 
-      # No-IDF build for examples/plugins L3 demos
-      python3 tools/build_plugin_standalone.py color_bulb
+      # No-IDF build for an L3 module (no in-tree demo; scaffold one first)
+      python3 tools/build_plugin_standalone.py my_native
 
    ``./tools/build_firmware.py … modules`` compiles every native plugin that has
    both ``module.json`` and ``CMakeLists.txt`` (``examples/plugins/*/``
@@ -116,8 +116,12 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
      "size": 3762
    }
 
-* ``type`` — ``module`` for L2; L1 config-only packs may appear as ``pack``
-  (``module``/``pack`` are interchangeable only for JSON-only items)
+* ``type`` — always ``module`` in a generated catalog. What marks an L1 config
+  pack is ``config_only: true`` (a ``.json`` install URL works too);
+  ``runtime: "pack"`` is written alongside and is what the package classifier
+  and the loader use to route the package to ``minihub_pack`` rather than
+  treat it as a loadable module. A hand-written ``"type": "pack"`` is still
+  honoured where the Hub reports installed state
 * ``url`` — path or absolute HTTP URL of the ``.mhub``
 * ``targets`` — lowercase chip folder names, the same strings as the firmware
   directories (for example ``esp32s31``), or ``ALL`` for a JS module. Copied
@@ -128,11 +132,13 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
 * ``size`` — **outer zip** byte length (must match the ``.mhub`` on disk;
   ``pack`` rewrites this)
 
-.. only:: not hide_l3
+* ``binary_size`` — inner MHMD ``.so`` size (not the zip). Only a native or
+  hybrid entry carries one, and those are not published, so a store catalog
+  never shows it
 
-   * ``type`` is also ``module`` for L3
-   * ``binary_size`` — inner MHMD ``.so`` size (not the zip). An L3 catalog
-     id looks like ``color_bulb`` with ``targets: ["esp32s31"]``.
+``type`` means different things in the two files: a generated ``catalog.json``
+says ``module`` for every tier, while the ``module.json`` inside an L1 package
+says ``pack``.
 
 Install on a running Hub
 ------------------------
@@ -152,7 +158,7 @@ Install on a running Hub
    curl -X POST http://$HUB/api/store/refresh
    curl -X POST http://$HUB/api/store/install \
      -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+     -d '{"type":"module","id":"color_bulb_js"}'
 
    curl -X POST http://$HUB/api/hub/reload
 
@@ -167,7 +173,8 @@ Verify installation
    curl http://$HUB/api/packs
    curl http://$HUB/api/config/adapters
 
-Serial logs: ``loaded module 'color_bulb'``, or JS ``setup ok`` for L2.
+Serial log: a JS module reports ``JS module '<id>' setup ok``; a native module
+reports ``loaded module binary: <path>``.
 
 Upgrade / uninstall
 -------------------
@@ -177,11 +184,11 @@ Upgrade:
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/upgrade -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+     -d '{"type":"module","id":"color_bulb_js"}'
 
 Uninstall:
 
 .. code-block:: bash
 
    curl -X POST http://$HUB/api/store/uninstall -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+     -d '{"type":"module","id":"color_bulb_js"}'

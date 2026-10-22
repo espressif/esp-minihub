@@ -154,7 +154,7 @@ minihub_device_widget_image_name("light", NULL, icon, sizeof(icon));  // device 
 
 char path[MINIHUB_POINT_ID_MAX];
 minihub_point_resolve_by_type_param("light", "power", path, sizeof(path));
-// -> device point id (e.g. "sim.color_bulb"); param is in props.params
+// -> device point id (e.g. "sim.js_kitchen"); param is in props.params
 ```
 
 ## Edit / add type

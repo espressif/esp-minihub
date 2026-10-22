@@ -6,7 +6,7 @@
  *   parameters.csv + widget API   ≈ EntityDescription defaults
  *   plugin devices.json           ≈ params inside the device point's props
  *   live visible param            ≈ supported_features (brightness → slider)
- *   instance card (color_bulb)    ≈ HA device (one point, params in JSON)
+ *   instance card (one device)    ≈ HA device (one point, params in JSON)
  *
  * Display is looked up dynamically:
  *   1. Live instances from GET /api/points — preferred shape is one point per
@@ -177,7 +177,7 @@ function dwIngestParamsBlob(inst, paramsBlob, pointId) {
  * Preferred: point_id <protocol>.<endpoint> + props.params object/array
  *   (protocol may be sim / thread / zigbee / … — catalog join uses type, not prefix).
  * Legacy: <protocol>.<endpoint>.<parameter> points grouped by protocol.endpoint
- *   so thread.color_bulb.power|brightness|… → one color_bulb card.
+ *   so thread.bulb.power|brightness|… → one thread.bulb card.
  * Unscoped ids (no dot, e.g. switch/bm_000a) are one instance with an empty
  * protocol — callers must not file them under an adapter derived from '/'.
  */
@@ -240,7 +240,7 @@ function dwBuildInstances(points) {
         }
 
         /*
-         * Device-level: non-empty props.params, or a 2-segment id (sim.color_bulb).
+         * Device-level: non-empty props.params, or a 2-segment id (sim.js_kitchen).
          * Do NOT treat 3-segment ids with an empty params {} as device-level —
          * that used to create per-param cards named "power"/"brightness" with
          * no controls (Devices looked empty while Overview still listed rows).
@@ -666,9 +666,8 @@ async function openDeviceDetail(id, ev) {
 }
 
 /* Icons live in the device's own /data/images tree, which the deploy server
- * fills on demand. A type with no artwork shipped (meter_plug), or a storage
- * tree that has not been synced yet, must degrade to the glyph badge instead of
- * showing a broken-image box. */
+ * fills on demand. A type whose SVG is missing from that tree must degrade to
+ * the glyph badge instead of showing a broken-image box. */
 function dwIconFallback(el) {
     if (!el || el.dataset.fallback) return;
     el.dataset.fallback = '1';

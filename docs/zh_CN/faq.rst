@@ -24,17 +24,17 @@ Store 安装返回 400 / 404 / 409
 * **409** — 已安装；用 ``POST /api/store/upgrade`` 或先卸载
 * 检查 ``GET /api/store/config`` 中的 Store 基址 URL
 
-模块加载失败 (load_guard)
---------------------------
-
 .. only:: not hide_l3
+
+   模块加载失败 (load_guard)
+   -------------------------
 
    原生模块在 ``dlopen`` 时崩溃，Host 会写入 ``/store/modules/ID/.load_guard`` ，
    下次启动跳过。用 ``POST /api/modules`` 清除：
 
    .. code-block:: json
 
-      { "id": "color_bulb", "clear_load_guard": true, "reload": true }
+      { "id": "my_native", "clear_load_guard": true, "reload": true }
 
    串口查 ABI。L3 须让 ``module.json`` 的 ``abi_version`` 与 ``core_api_*`` 覆盖
    当前 Host（头文件 ``MINIHUB_MODULE_ABI_VERSION`` ）。见 :doc:`api/module_abi` 。

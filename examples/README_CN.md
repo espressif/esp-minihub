@@ -7,12 +7,11 @@
 | 目录 | 层级 | 目的 |
 |------|------|------|
 | [ble_mesh_pack](plugins/ble_mesh_pack/) | **L1** | 把额外 BLE Mesh `provision.bind_models` 合并进 Host `adapters.ble_mesh`。不登记点、无 JS、无 `.so`。 |
-| [color_bulb_js](plugins/color_bulb_js/) | **L2** | 三盏模拟 `type=light` + JS 命令处理。与 L3 `color_bulb` 配套。 |
-| [color_bulb](plugins/color_bulb/) | **L3** | 两盏模拟灯（`sim.kitchen_lamp`、`sim.living_lamp`）。设备页控件来自 Host 类型目录。 |
-| [meter_plug](plugins/meter_plug/) | **L3** | 一台模拟计量插座（`sim.meter_plug`：开关 + 电压/电流/功率）。 |
-| [zigbee_ota](plugins/zigbee_ota/) | **L3** | 认领 Host Zigbee 点（`props.owner`）+ 目录 OTA 标记。设备仍是 `zigbee.zb_%04x`。空中 ZCL 0x0019 仍是 Host stub。 |
-| [ble_mesh_ota](plugins/ble_mesh_ota/) | **L3** | 同一套认领/目录逻辑，作用在 Host BLE Mesh 点上。Mesh 固件更新空中路径仍是 Host stub。 |
-| [matter_ota](plugins/matter_ota/) | **L3** | 同一套逻辑，作用在 Host Matter endpoint（`light/matter_n*_ep*`）。启动 OTA 时 Hub 走 CSA Provider + BDX。 |
+| [color_bulb_js](plugins/color_bulb_js/) | **L2** | 三盏模拟 `type=light`（`sim.js_kitchen`、`sim.js_desk`、`sim.js_bedroom`）+ JS 命令处理。设备页控件来自 Host 类型目录。 |
+| [meter_plug_js](plugins/meter_plug_js/) | **L2** | 一台模拟计量插座（`sim.plug`：开关 + 电压/电流/功率，计量只读）。 |
+
+仓库内不再有 L3 示例：原生 `.so` 必须针对某个 Host ABI 编译，指南改用
+`tools/new_store_module.py --tier l3` 脚手架（见 `docs/zh_CN/plugins/develop_l3.rst`）。
 
 厂商 Store 插件不在本仓库。在 configure / pack 之前把 `MINIHUB_PLUGIN_DIRS` 指到旁路插件仓库。
 
@@ -36,7 +35,8 @@ L3 还需要对应 `.so`。仓库内编译：在 `./tools/build_firmware.py modu
 和 `cmake`；MHMD 文件在 `plugins/<id>/build/<id>.so`）：
 
 ```bash
-python3 tools/build_plugin_standalone.py color_bulb
+python3 tools/new_store_module.py --tier l3 --id my_native
+python3 tools/build_plugin_standalone.py my_native
 ```
 
 然后再按上面打包。L1/L2 只打 zip，不必编固件。L3 需要 `.so`

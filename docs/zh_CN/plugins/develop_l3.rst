@@ -93,22 +93,23 @@ L3 模块在外层 ``.mhub`` zip 内携带 **原生 ELF** ``.so`` 。加载器�
    python3 /path/to/module_sdk/sync_store_catalog.py --from-store \
      --deploy ~/workspace/minihub_store
 
-``-B build`` 放在插件目录内。``build_plugin_standalone.py``（本仓库
+``-B build`` 放在插件目录内。``build_plugin_standalone.py`` （本仓库
 ``tools/`` 或 ``docs/module_sdk/``；``module_sdk.zip`` 里与 cmake 片段同目录）
 会做 configure、编译，并可加 ``--pack``。Host 树内编译仍写到
 ``application/minihub/build/<id>.so``。
 
-``examples/plugins/`` 演示（双路径）
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+脚手架出的 L3 插件（双路径）
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``color_bulb`` 、``meter_plug`` 、``zigbee_ota`` 、``ble_mesh_ota`` 、``matter_ota``
-均用 ``if(ESP_PLATFORM)`` / 独立 ``include()`` 上述片段。不依赖 IDF：
+用 ``if(ESP_PLATFORM)`` / 独立 ``include()`` 切分上述片段，同一份源码两边都能编。
+不依赖 IDF：
 
 .. code-block:: bash
 
-   python3 tools/build_plugin_standalone.py color_bulb
+   python3 tools/new_store_module.py --tier l3 --id my_native
+   python3 tools/build_plugin_standalone.py my_native
    export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"
-   python3 tools/pack_store_module.py pack color_bulb
+   python3 tools/pack_store_module.py pack my_native
    python3 tools/sync_store_catalog.py --from-store
 
 仓库内跟 Host 一起编
@@ -274,8 +275,8 @@ Host 编译还会运行 ``tools/check_plugin_sdk.py``，防止 ``minihub_plugin_
 * 重定位 / 未定义符号 — 查白名单；模块内勿调用 ``esp_wifi_*`` 等
 * ``binary_size`` 与 OTA 后不一致 — 重新编译并打包 ``.mhub``
 
-设备类型、``devices.json`` 与控件：:doc:`../type_catalog` （演示
-``examples/plugins/color_bulb``、``examples/plugins/meter_plug``）。
+设备类型、``devices.json`` 与控件：:doc:`../type_catalog`
+（用 ``tools/new_store_module.py --tier l3`` 生成）。
 点位身份（厂商、品类、OTA、``owner``）与 adapters JSON：:doc:`../data_model`。
 
 头文件说明：:doc:`../api/plugin_host`、:doc:`../api/module_abi`、

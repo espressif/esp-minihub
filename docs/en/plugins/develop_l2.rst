@@ -41,13 +41,14 @@ Directory layout
      "name": "Demo JS module",
      "version": "0.1.0",
      "enabled": true,
+     "type": "module",
      "runtime": "js",
      "adapter": "demo_js",
-     "abi_version": 1,
-     "core_api_min": 1,
-     "core_api_max": 1,
-     "capabilities": ["points"]
+     "targets": ["ALL"]
    }
+
+An L2 manifest carries no ``abi_version`` — that belongs to a native package.
+``ui`` and ``capabilities`` live in ``meta.json``, not here.
 
 If ``runtime`` is omitted, Host treats the module as JS when ``main.js`` exists
 and there is no ``CMakeLists.txt``.
@@ -69,6 +70,8 @@ Host calls ``setup(host)`` once per load. The ``host`` object exposes:
   ``point.registered`` (same Host ``point_id`` enrichment)
 * ``host.command.on(adapter, handler)`` — receive UI/REST commands in JS
 * ``host.command.invoke({ point_id, cmd, params? })``
+* ``host.adapter.poll(fn)`` — run ``fn`` on the ~5 s adapter poll tick, up to 8
+  handlers in the runtime; ``host.adapter.clearPoll()`` drops them all
 * ``host.http.request({ url, method, headers, body })`` — allowlisted HTTP from JS
 * ``host.http.requestAsync(opts)`` — same ``opts``, returns a **Promise** and runs the
   socket I/O off the JS worker (max 4 in flight). Use it for many-request paths such as
@@ -100,7 +103,7 @@ Minimal ``main.js``:
      });
    }
 
-Optional ``ui.json`` describes module fields in the Web UI (see
+Optional ``meta.json`` describes module fields in the Web UI (see
 ``examples/plugins/color_bulb_js/`` for a Devices-page demo).
 
 Wire into ``adapters.json``

@@ -36,7 +36,8 @@ static const struct esp_elfsym s_minihub_host_elfsyms[] = {
     ESP_ELFSYM_EXPORT(esp_timer_get_time),
     ESP_ELFSYM_EXPORT(minihub_net_dns_probe),
     ESP_ELFSYM_EXPORT(minihub_net_has_ip),
-    /* cJSON helpers that a Store .mhub may leave undefined (e.g. color_bulb) */
+    /* cJSON helpers that a Store .mhub may leave undefined (a native module
+     * resolves them against the Host at load) */
     ESP_ELFSYM_EXPORT(cJSON_GetObjectItemCaseSensitive),
     /* libc string / memory — keep a stable set so plugins need not chase toolchain */
     ESP_ELFSYM_EXPORT(memcmp),

@@ -2,7 +2,7 @@
   "id": "PLACEHOLDER_ID",
   "name": "PLACEHOLDER_NAME",
   "version": "0.1.0",
-  "targets": ["ESP32S31"],
+  "targets": ["esp32s31"],
   "type": "module",
   "runtime": "native",
   "adapter": "PLACEHOLDER_ID",

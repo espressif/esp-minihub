@@ -242,7 +242,7 @@ int16_t minihub_point_index_of_locked(const char *point_id);
 minihub_point_t *minihub_point_get_by_index_locked(uint16_t index);
 
 /* Control-target resolution: (data-model type, parameter) -> registered device
- * point_id, e.g. ("light", "power") -> "sim.color_bulb" (or "thread.color_bulb").
+ * point_id, e.g. ("light", "power") -> "sim.js_kitchen" (or "thread.bulb").
  * The transport prefix is deliberately NOT stored in the device type catalog
  * (device display is protocol-independent); it comes from the device
  * REGISTRATION: point_id is <protocol>.<device>, and live param metadata lives

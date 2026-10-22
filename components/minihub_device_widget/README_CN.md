@@ -148,7 +148,7 @@ minihub_device_widget_image_name("light", NULL, icon, sizeof(icon));  // 设备�
 
 char path[MINIHUB_POINT_ID_MAX];
 minihub_point_resolve_by_type_param("light", "power", path, sizeof(path));
-// -> 设备 point id（如 "sim.color_bulb"）；参数在 props.params
+// -> 设备 point id（如 "sim.js_kitchen"）；参数在 props.params
 ```
 
 ## 修改 / 新增类型

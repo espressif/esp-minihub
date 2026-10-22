@@ -25,12 +25,12 @@ Pull from the Store
 -------------------
 
 Automatic update does not use ``POST /api/ota``. ``minihub_update_check()`` and
-``minihub_update_apply()`` request ``GET /api/firmware?mac=&version=`` on the
-deploy root. The response is a JSON array of every chip. Fields and the version
+``minihub_update_apply()`` request ``GET /api/firmware?mac=&chip=&cur_version=``
+on the deploy root. The response lists that chip only. Fields and the version
 decision are in :doc:`api/deploy_index`. The device keeps the highest version
 whose targets match the local chip, and when that version is higher than
 ``CONFIG_MINIHUB_VERSION`` it calls ``minihub_ota_start_url()`` on that item's
-``url`` (with ``mac`` and ``version`` attached). The download checks the
+``url`` (with ``mac`` and ``cur_version`` attached). The download checks the
 64-digit hex ``sha256``. ``firmware_upgrade`` on ``/api/catalog`` only reports
 the highest firmware version published for the chip. This install path does not
 read it.

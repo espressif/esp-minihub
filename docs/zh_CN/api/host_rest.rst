@@ -538,7 +538,7 @@ GET /ws/events
 
    ``GET /ws/events``
 
-WebSocket 长连接，订阅 Hub 事件总线。每帧为 JSON，含 ``event_type``（字符串）
+WebSocket 长连接，订阅 Hub 事件总线。每帧为 JSON，含 ``event_type`` （字符串）
 及载荷。总线（``minihub_event_bus_publish``）上发布的
 **任意** 名称都会转发。插件与 OEM 固件可自定义类型。
 

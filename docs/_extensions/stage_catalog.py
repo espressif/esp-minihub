@@ -24,7 +24,7 @@ def _copy_file(src: Path, dest: Path) -> None:
 
 
 def stage_catalog_assets() -> Path:
-    """Refresh ``docs/_static/catalog/`` from the widget component + demos."""
+    """Refresh ``docs/_static/catalog/`` from the widget component."""
     if _STAGED.exists():
         shutil.rmtree(_STAGED)
     model_dir = _WIDGET / "model"
@@ -38,12 +38,6 @@ def stage_catalog_assets() -> Path:
     if images.is_dir():
         for svg in sorted(images.glob("*.svg")):
             _copy_file(svg, _STAGED / "images" / "devices" / svg.name)
-
-    demos = _REPO / "examples" / "plugins"
-    for demo in ("color_bulb", "meter_plug"):
-        dj = demos / demo / "devices.json"
-        if dj.is_file():
-            _copy_file(dj, _STAGED / "examples" / demo / "devices.json")
 
     for name in ("STANDARD_TYPES.md", "STANDARD_TYPES_CN.md"):
         src = _WIDGET / name

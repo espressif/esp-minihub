@@ -16,7 +16,7 @@ block on load / `POST /api/hub/reload`. Public Host `store_preinstall` stays
 |------|-----|
 | Defaults for a **Host** adapter (bind list, UUID filters, MQTT/Modbus maps) | **L1** this demo |
 | Logic, HTTP, or a new adapter | **L2** / **L3** |
-| Vendor claim / OTA on a live radio point | **L3** `ble_mesh_ota` (same `point_id`) |
+| Vendor claim / OTA on a live radio point | **L3** native module (same `point_id`) |
 
 Do **not** inject `devices[]` on `zigbee` / `matter` / `ble_mesh`. Those points
 are registered when a node joins. MQTT `devices[]` is allowed (Host MQTT list)
