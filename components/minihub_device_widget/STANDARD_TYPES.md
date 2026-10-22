@@ -22,7 +22,10 @@ Upstream: https://docs.rainmaker.espressif.com/docs/dev/firmware/fw_usage_guides
 `esp.device.light` = `esp.device.lightbulb`. `name` is metadata only (not listed
 on these types). Catalog `speaker` (`power`, `volume`; primary `volume`) is not
 this table: RainMaker `esp.device.speaker` uses Power as the primary parameter
-and also has Media State, Media Control, and Mute.
+and also has Media State, Media Control, and Mute. The `espressif__esp_rainmaker`
+vendored here ships device helpers for fan/lightbulb/switch/temp_sensor only and
+has no volume/media/mute standard parameters, so the RainMaker bridge maps no
+`speaker` parameters at all (see `components/minihub_rainmaker/rainmaker_bridge.c`).
 
 ## 2. Services
 

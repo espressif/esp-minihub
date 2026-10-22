@@ -22,6 +22,9 @@
 `esp.device.light` = `esp.device.lightbulb`。`name` 仅作元数据（不在上表类型列表中）。
 目录里的 `speaker`（`power`、`volume`，主参数 `volume`）不进这张表：RainMaker 的
 `esp.device.speaker` 主参数是 Power，另外还有 Media State、Media Control、Mute。
+本仓库 vendored 的 `espressif__esp_rainmaker` 只提供 fan/lightbulb/switch/temp_sensor
+四个设备 helper，也没有 volume/媒体/静音标准参数，因此 RainMaker 桥完全不映射
+`speaker` 的参数（见 `components/minihub_rainmaker/rainmaker_bridge.c`）。
 
 ## 2. 服务
 

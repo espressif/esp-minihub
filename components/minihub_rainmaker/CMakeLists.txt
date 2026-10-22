@@ -4,7 +4,7 @@
 # idf_component.yml when CONFIG_MINIHUB_RAINMAKER=y. optional_requires is a
 # no-op when that package is not in the build (default n / Mosaic).
 set(_rmaker_srcs rainmaker_stub.c)
-set(_rmaker_requires minihub_core espressif__cjson minihub_ota esp_event nvs_flash esp_hw_support mbedtls)
+set(_rmaker_requires minihub_core espressif__cjson minihub_ota esp_event nvs_flash esp_hw_support mbedtls esp_app_format minihub_device_widget)
 
 # esp_sha_compat.c provides a weak, software esp_sha() (PSA-backed) so
 # RainMaker links under soft crypto. It is always compiled (not only under

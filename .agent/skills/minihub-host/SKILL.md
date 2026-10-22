@@ -29,6 +29,55 @@ description: Develop MiniHub Host firmware products (application folder, Kconfig
 - Public `application/minihub` uses `store_preinstall: []`. Optional factory ids resolve under `examples/plugins/<id>/` **or** `MINIHUB_PLUGIN_DIRS`.
 - Standalone demos live in `examples/plugins/` — not Host builtin.
 
+## RainMaker Entertainment standard params
+
+The RainMaker-facing media schema is the official ESP RainMaker **Entertainment**
+standard. Its parameter names/types belong to the RainMaker cloud protocol and
+must NOT leak into the generic device catalog (`components/minihub_device_widget/model/*.csv`),
+which describes the hub point's real command vocabulary (`play_prev` / `play_pause`
+/ `play_resume` / `play_next` / `mute` / `unmute` / `volume` / `playing` / `muted`)
+and is shared with the web console + rules editor.
+
+Keep the translation in the **conversion layer** (`components/minihub_rainmaker/rainmaker_bridge.c`):
+`create_speaker()` registers the official RM params, `speaker_write()` maps RM writes
+→ hub commands, `report_speaker()` maps hub state → RM params.
+
+| Official RM param | Type / UI | Hub command / state |
+|---|---|---|
+| `esp.param.media-activity-control` | String dropdown (play/pause/next/previous) R/W | → `play_resume`/`play_pause`/`play_next`/`play_prev` |
+| `esp.param.media-playback-state` | String dropdown (play/pause/stop) **R (read-only)** | ← hub `playing` |
+| `esp.param.media-activity-state` | String dropdown (active/inactive) **R (read-only)** | ← hub `playing` |
+
+> **Deviation from the official doc:** the ESP RainMaker docs mark all three media
+> params `Read/Write`, but `media-playback-state` / `media-activity-state` are
+> device-reported *status* (← hub `playing`), so we register them as
+> `PROP_FLAG_READ` only. `media-activity-control` is the writable command channel.
+> Treating the state params as writable only created a no-op write that the cloud
+> echoed back as success while the device state never changed.
+| `esp.param.volume` | Float slider 0–20 step 1 R/W | ↔ hub `volume` (0–100, ÷5) |
+| `esp.param.mute` | Bool toggle R/W | → `mute`/`unmute`; ← hub `muted` |
+
+Reference (official standard types):
+https://docs.rainmaker.espressif.com/docs/dev/firmware/fw_usage_guides/custom-types-standard-types
+
+### RainMaker slider bounds rule
+
+**Every `ESP_RMAKER_UI_SLIDER` param must carry min/max/step bounds** via
+`esp_rmaker_param_add_bounds()`, or the RainMaker app renders the control wrong
+(empty/missing slider). This applies to ALL slider creation paths in
+`components/minihub_rainmaker/rainmaker_bridge.c`, not just the speaker `volume`:
+
+- `rm_add_params()` — light params (`brightness`/`cct`/`hue`/`saturation`/`intensity`).
+- generic param create — the `slider` widget and the numeric (`cJSON_IsNumber`) fallback.
+
+A `rm_effective_slider_bounds(has, mn, mx, st, cur, &emin, &emax, &estep)` helper
+derives guaranteed-valid bounds: prefer catalog min/max/step when present; if step
+is omitted use `step = range/100` (always `<` range and `>0`, so RainMaker-legal);
+if no bounds at all, use `0..cur` (keep the current value in range) with
+`step = range/100`. Always call `esp_rmaker_param_add_bounds()` right after
+`esp_rmaker_param_add_ui_type(..., ESP_RMAKER_UI_SLIDER)` — never gate it behind a
+`has_bounds && (mx > mn || st > 0.0)` guard that can silently skip it.
+
 ## Plugins vs Host build
 
 | Goal | What to do |

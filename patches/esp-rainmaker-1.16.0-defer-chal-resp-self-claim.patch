@@ -8,12 +8,12 @@ RMAKER_EVENT_CLAIM_SUCCESSFUL.
 
 Component: espressif/esp-rainmaker v1.16.0 (commit afda50d)
 File: components/esp_rainmaker/src/core/esp_rmaker_core.c
-Apply-Root: application/minihub/components/esp-rainmaker
+Apply-Root: application/minihub/managed_components/espressif__esp_rainmaker
 
 Apply: ./tools/apply_component_patches.sh
 ---
---- a/components/esp_rainmaker/src/core/esp_rmaker_core.c
-+++ b/components/esp_rainmaker/src/core/esp_rmaker_core.c
+--- a/src/core/esp_rmaker_core.c
++++ b/src/core/esp_rmaker_core.c
 @@ -952,23 +952,22 @@ static esp_err_t esp_rmaker_init(const esp_rmaker_config_t *config, bool use_cla
  #endif
  

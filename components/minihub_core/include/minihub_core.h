@@ -503,6 +503,16 @@ void minihub_command_set_lifecycle_call(void (*enter)(void), void (*leave)(void)
 esp_err_t minihub_core_init(void);
 
 /**
+ * @brief Start the point-update debounce sweep timer (trailing-edge publish).
+ *
+ * Only meaningful when CONFIG_MINIHUB_POINT_DEBOUNCE_MS > 0. Must be called once
+ * during core init. The sweep re-publishes the final point value once the
+ * debounce window elapses, so subscribers still receive eventual state.
+ * No-op when debounce is disabled.
+ */
+esp_err_t minihub_point_debounce_init(void);
+
+/**
  * @brief Start Core background task
  */
 esp_err_t minihub_core_task_start(void);
