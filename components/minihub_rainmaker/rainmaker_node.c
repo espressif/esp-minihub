@@ -189,6 +189,14 @@ static void rmaker_event_handler(void *arg, esp_event_base_t event_base, int32_t
             /* Already claimed on a previous boot: no CLAIM_SUCCESSFUL this run. */
             s_claimed_ready = true;
             log_node_id_banner("MQTT connected");
+            /* Push device info to the cloud now that the link is up. Points
+             * registered after minihub_rainmaker_start() (or missed by the initial
+             * rainmaker_bridge_sync_all at init) are reconciled and reported here,
+             * otherwise the node shows up but with no sub-devices. */
+            esp_err_t sync_err = minihub_rainmaker_sync_points();
+            if (sync_err != ESP_OK) {
+                ESP_LOGW(TAG, "sync points on MQTT connect failed: %s", esp_err_to_name(sync_err));
+            }
 #if CONFIG_ESP_RMAKER_ON_NETWORK_CHAL_RESP_ENABLE
             try_start_on_network_mapping("mqtt_connected");
 #endif
@@ -259,6 +267,11 @@ esp_err_t minihub_rainmaker_start(void)
         return err;
     }
 
+    /* Register MiniHub itself as a RainMaker device (gateway self-device). */
+    if (rainmaker_bridge_add_hub_device(s_node) != ESP_OK) {
+        ESP_LOGW(TAG, "add hub self-device failed");
+    }
+
     {
         esp_err_t ota_err = esp_event_handler_register(RMAKER_OTA_EVENT, ESP_EVENT_ANY_ID,
                                                        &rmaker_ota_event_handler, NULL);
@@ -312,5 +325,9 @@ esp_err_t minihub_rainmaker_sync_points(void)
     if (!s_node) {
         return ESP_ERR_INVALID_STATE;
     }
-    return rainmaker_bridge_sync_all();
+    esp_err_t err = rainmaker_bridge_sync_all();
+    if (err == ESP_OK) {
+        rainmaker_bridge_update_hub_status();
+    }
+    return err;
 }

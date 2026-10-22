@@ -328,7 +328,7 @@ static void try_product_params_attr(const minihub_ble_mesh_device_t *dev,
         break;
     case MINIHUB_BM_ATTR_CTL:
         model_id = 0x1303;
-        field = "temperature";
+        field = "cct";
         raw = (double)evt->u.ctl.temperature;
         (void)minihub_pp_ble_mesh_apply(dev->point_id, dev->uuid_hex, model_id, MINIHUB_BM_CID_SIG, 0,
                                         "lightness", (double)evt->u.ctl.lightness);
@@ -378,7 +378,7 @@ static void on_bm_attr(const minihub_ble_mesh_attr_evt_t *evt, void *ctx)
         snprintf(buf, sizeof(buf), "%d", pct);
         cJSON *params = cJSON_CreateObject();
         if (params) {
-            cJSON_AddNumberToObject(params, "temperature", evt->u.ctl.temperature);
+            cJSON_AddNumberToObject(params, "cct", evt->u.ctl.temperature);
             cJSON_AddNumberToObject(params, "lightness", evt->u.ctl.lightness);
             minihub_point_merge_params(dev->point_id, buf, params);
             cJSON_Delete(params);
@@ -589,7 +589,7 @@ static esp_err_t ble_mesh_adapter_handle_command(const minihub_command_t *cmd)
         int temp = 4000;
         int bright = 100;
         if (cmd->params) {
-            const cJSON *t = cJSON_GetObjectItem(cmd->params, "temperature");
+            const cJSON *t = cJSON_GetObjectItem(cmd->params, "cct");
             const cJSON *b = cJSON_GetObjectItem(cmd->params, "brightness");
             if (cJSON_IsNumber(t)) {
                 temp = t->valueint;
@@ -611,7 +611,7 @@ static esp_err_t ble_mesh_adapter_handle_command(const minihub_command_t *cmd)
             snprintf(buf, sizeof(buf), "%d", bright);
             cJSON *params = cJSON_CreateObject();
             if (params) {
-                cJSON_AddNumberToObject(params, "temperature", temp);
+                cJSON_AddNumberToObject(params, "cct", temp);
                 minihub_point_merge_params(cmd->point_id, buf, params);
                 cJSON_Delete(params);
             } else {

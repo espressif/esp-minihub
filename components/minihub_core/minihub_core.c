@@ -18,6 +18,9 @@ esp_err_t minihub_core_init(void)
     if (err != ESP_OK) {
         return err;
     }
+#if CONFIG_MINIHUB_POINT_DEBOUNCE_MS > 0
+    (void)minihub_point_debounce_init();
+#endif
     err = minihub_event_bus_init();
     if (err != ESP_OK) {
         return err;

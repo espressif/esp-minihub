@@ -23,6 +23,61 @@ extern esp_err_t minihub_point_registry_init(void);
 
 static int64_t s_last_publish_ms[MINIHUB_MAX_POINTS];
 
+#if CONFIG_MINIHUB_POINT_DEBOUNCE_MS > 0
+/* Trailing-edge debounce. While updates arrive within the window we keep the
+ * latest value in point->value but suppress the immediate point.updated event.
+ * A periodic sweep publishes the FINAL value once the window has elapsed since
+ * the last update, so subscribers (e.g. the RainMaker bridge) still receive the
+ * eventual state instead of silently dropping it. */
+static int64_t s_pending_ms[MINIHUB_MAX_POINTS];
+static esp_timer_handle_t s_debounce_timer;
+
+static void debounce_sweep_cb(void *arg)
+{
+    (void)arg;
+    int64_t now = esp_timer_get_time() / 1000;
+    for (uint16_t i = 0; i < MINIHUB_MAX_POINTS; i++) {
+        if (s_pending_ms[i] == 0) {
+            continue;
+        }
+        if ((now - s_pending_ms[i]) < CONFIG_MINIHUB_POINT_DEBOUNCE_MS) {
+            continue;
+        }
+        char val[MINIHUB_VALUE_MAX];
+        val[0] = '\0';
+        minihub_point_registry_lock();
+        minihub_point_t *point = minihub_point_get_by_index_locked(i);
+        if (point) {
+            strncpy(val, point->value, sizeof(val) - 1);
+            val[sizeof(val) - 1] = '\0';
+        }
+        minihub_point_registry_unlock();
+        s_pending_ms[i] = 0;
+        if (point) {
+            esp_err_t err = minihub_event_bus_publish_point_updated(i, val, val);
+            if (err == ESP_OK) {
+                s_last_publish_ms[i] = now;
+            }
+        }
+    }
+}
+
+esp_err_t minihub_point_debounce_init(void)
+{
+    const int period_ms = (CONFIG_MINIHUB_POINT_DEBOUNCE_MS < 100)
+                              ? CONFIG_MINIHUB_POINT_DEBOUNCE_MS : 100;
+    esp_timer_create_args_t t = {
+        .callback = debounce_sweep_cb,
+        .name = "pt_debounce",
+    };
+    esp_err_t err = esp_timer_create(&t, &s_debounce_timer);
+    if (err == ESP_OK) {
+        err = esp_timer_start_periodic(s_debounce_timer, (uint64_t)period_ms * 1000ULL);
+    }
+    return err;
+}
+#endif
+
 static bool props_equal(const cJSON *a, const cJSON *b)
 {
     if (a == b) {
@@ -101,6 +156,9 @@ esp_err_t minihub_point_set(const char *point_id, const char *value, cJSON *prop
         point->value[sizeof(point->value) - 1] = '\0';
         point->updated_ms = now_ms;
         debounced = true;
+        /* Mark a pending trailing-edge publish; the sweep emits the final value
+         * once the debounce window elapses since this (latest) update. */
+        s_pending_ms[(uint16_t)index] = now_ms;
     }
 #endif
 
@@ -126,6 +184,7 @@ esp_err_t minihub_point_set(const char *point_id, const char *value, cJSON *prop
         ESP_LOGW(TAG, "event publish failed: %s", esp_err_to_name(err));
     } else {
         s_last_publish_ms[(uint16_t)index] = now_ms;
+        s_pending_ms[(uint16_t)index] = 0;   /* cancel any trailing-edge pending */
     }
     return ESP_OK;
 }

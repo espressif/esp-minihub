@@ -221,6 +221,13 @@ function handleCommand(host, cmd) {
                 if (!buf) {
                     buf = jsonToStr(cmd.params.color);
                 }
+            } else if (cname === "set_color_temp") {
+                param = "cct";
+                var ct = (cmd.params.cct != null) ? cmd.params.cct
+                       : (cmd.params.color_temp != null) ? cmd.params.color_temp
+                       : cmd.params.temperature;
+                buf = jsonToStr(ct);
+            }
             } else if (cname === "toggle") {
                 param = param || "power";
                 var cur = summaryValue(params);
