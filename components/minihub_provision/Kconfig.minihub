@@ -23,6 +23,7 @@ menu "Provisioning"
 
         config MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
             bool "SoftAP (no Bluetooth)"
+            depends on MINIHUB_NET_WIFI_SOFTAP
 
         config MINIHUB_WIFI_PROV_TRANSPORT_BLE
             bool "BLE (requires Bluetooth / NimBLE)"

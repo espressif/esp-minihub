@@ -101,7 +101,10 @@ Discovery values (``discovery`` field)
 
 The Web add-device dialog always uses BLE + DNS-SD (CHIP ``DiscoveryType::kAll``):
 
-* ``ble_thread`` (default when Wi-Fi toggle is off) — BLE + inject Hub Thread dataset
+* ``ble_thread`` (default when Wi-Fi toggle is off) — BLE + inject Hub Thread dataset.
+  Requires ``CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION`` (default y, depends on the Thread
+  adapter). When that option is n, ``GET /api/matter/status`` reports
+  ``ble_thread: false`` and the dialog sends ``network`` instead.
 * ``ble_wifi`` / ``first_time`` — BLE + inject **device** Wi-Fi credentials
 
 ``POST /api/matter/commission`` still accepts ``network`` (DNS-SD only / multi-admin)

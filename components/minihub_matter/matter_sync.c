@@ -352,6 +352,91 @@ esp_err_t minihub_matter_devices_set_commission_phase(uint64_t node_id, const ch
     return err;
 }
 
+esp_err_t minihub_matter_devices_fail_if_waiting(uint64_t node_id, const char *error_msg)
+{
+    if (node_id < 2) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    cJSON *adapters_root = minihub_config_get_adapters();
+    if (!adapters_root) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    cJSON *devices = get_matter_devices(adapters_root, false);
+    if (!devices) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    int touched = 0;
+    cJSON *item = NULL;
+    cJSON_ArrayForEach(item, devices) {
+        const cJSON *nid = cJSON_GetObjectItem(item, "node_id");
+        uint64_t n = cJSON_IsString(nid) ? parse_node_id(nid->valuestring, 0) : 0;
+        if (n != node_id) {
+            continue;
+        }
+        const cJSON *phase = cJSON_GetObjectItem(item, "commission_phase");
+        if (!cJSON_IsString(phase) || strcmp(phase->valuestring, "waiting") != 0) {
+            continue;
+        }
+        cJSON_DeleteItemFromObject(item, "commission_phase");
+        cJSON_DeleteItemFromObject(item, "commission_error");
+        cJSON_AddStringToObject(item, "commission_phase", "failed");
+        if (error_msg && error_msg[0]) {
+            cJSON_AddStringToObject(item, "commission_error", error_msg);
+        }
+        touched++;
+    }
+    if (touched == 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    esp_err_t err = minihub_config_save_adapters(adapters_root);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "node %" PRIu64 " stuck waiting -> failed (%d row(s))", node_id, touched);
+    }
+    return err;
+}
+
+esp_err_t minihub_matter_devices_fail_all_waiting(const char *error_msg)
+{
+    cJSON *adapters_root = minihub_config_get_adapters();
+    if (!adapters_root) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    cJSON *devices = get_matter_devices(adapters_root, false);
+    if (!devices) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    int touched = 0;
+    cJSON *item = NULL;
+    cJSON_ArrayForEach(item, devices) {
+        const cJSON *phase = cJSON_GetObjectItem(item, "commission_phase");
+        if (!cJSON_IsString(phase) || strcmp(phase->valuestring, "waiting") != 0) {
+            continue;
+        }
+        cJSON_DeleteItemFromObject(item, "commission_phase");
+        cJSON_DeleteItemFromObject(item, "commission_error");
+        cJSON_AddStringToObject(item, "commission_phase", "failed");
+        if (error_msg && error_msg[0]) {
+            cJSON_AddStringToObject(item, "commission_error", error_msg);
+        }
+        touched++;
+    }
+    if (touched == 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    esp_err_t err = minihub_config_save_adapters(adapters_root);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "all waiting commissions -> failed (%d row(s))", touched);
+    }
+    return err;
+}
+
 esp_err_t minihub_matter_device_remove(const char *point_id)
 {
     if (!point_id || !point_id[0]) {

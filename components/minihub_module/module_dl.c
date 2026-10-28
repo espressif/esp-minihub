@@ -26,7 +26,7 @@
 
 static const char *TAG = "module_dl";
 
-#if CONFIG_MINIHUB_DYNAMIC_MODULES && defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) && CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
+#if CONFIG_MINIHUB_ELF_PLUGINS
 #include "esp_dlfcn.h"
 #if defined(CONFIG_ELF_LOADER_LOAD_PSRAM) && CONFIG_ELF_LOADER_LOAD_PSRAM
 void esp_elf_arch_flush(void);
@@ -71,7 +71,7 @@ typedef struct {
 static dl_slot_t s_dl_slots[8];
 static size_t s_dl_count;
 
-#if CONFIG_MINIHUB_DYNAMIC_MODULES && defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) && CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
+#if CONFIG_MINIHUB_ELF_PLUGINS
 static SemaphoreHandle_t s_dl_mu;
 
 typedef struct {
@@ -380,9 +380,9 @@ esp_err_t minihub_module_dl_load(const char *binary_path,
 #if !CONFIG_MINIHUB_DYNAMIC_MODULES
     (void)out_handle;
     return ESP_ERR_NOT_SUPPORTED;
-#elif !defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) || !CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
+#elif !CONFIG_MINIHUB_ELF_PLUGINS
     (void)out_handle;
-    ESP_LOGW(TAG, "dynamic SO load disabled; enable CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT");
+    ESP_LOGW(TAG, "dynamic SO load disabled; enable CONFIG_MINIHUB_ELF_PLUGINS");
     return ESP_ERR_NOT_SUPPORTED;
 #else
     /* Always hop to an internal DRAM stack. FAT/LittleFS flash reads disable the
@@ -421,9 +421,9 @@ esp_err_t minihub_module_dl_load_and_enter(const char *binary_path,
 #if !CONFIG_MINIHUB_DYNAMIC_MODULES
     (void)out_handle;
     return ESP_ERR_NOT_SUPPORTED;
-#elif !defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) || !CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
+#elif !CONFIG_MINIHUB_ELF_PLUGINS
     (void)out_handle;
-    ESP_LOGW(TAG, "dynamic SO load disabled; enable CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT");
+    ESP_LOGW(TAG, "dynamic SO load disabled; enable CONFIG_MINIHUB_ELF_PLUGINS");
     return ESP_ERR_NOT_SUPPORTED;
 #else
     minihub_module_entry_fn entry_unused = NULL;
@@ -442,7 +442,7 @@ esp_err_t minihub_module_dl_load_and_enter(const char *binary_path,
 #endif
 }
 
-#if CONFIG_MINIHUB_DYNAMIC_MODULES && defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) && CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
+#if CONFIG_MINIHUB_ELF_PLUGINS
 static esp_err_t module_dl_load_on_task(const char *binary_path,
                                         minihub_module_entry_fn *out_entry,
                                         minihub_module_rpc_fn *out_rpc,
@@ -554,7 +554,7 @@ static void module_dl_worker(void *arg)
 
 void minihub_module_dl_unload_all(void)
 {
-#if CONFIG_MINIHUB_DYNAMIC_MODULES && defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) && CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
+#if CONFIG_MINIHUB_ELF_PLUGINS
     for (size_t i = 0; i < s_dl_count; i++) {
         if (s_dl_slots[i].handle) {
             ESP_LOGI(TAG, "dlclose module '%s' handle=%p", s_dl_slots[i].path, (void *)s_dl_slots[i].handle);

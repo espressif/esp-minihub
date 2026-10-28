@@ -4,6 +4,18 @@ menu "Matter"
         bool "Enable Matter adapter / commissioner"
         default n
 
+    config MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION
+        bool "Commission new Thread devices over BLE"
+        depends on MINIHUB_MATTER_ADAPTER
+        depends on MINIHUB_THREAD_ADAPTER
+        default y
+        help
+            First-time Thread join: BLE scan plus injecting this Hub's Thread
+            operational dataset (discovery ble_thread). Turn off to keep
+            Matter-over-Thread on-network commissioning (discovery network)
+            and skip the BLE controller scan. Wi-Fi and Ethernet BLE
+            commissioning are unchanged.
+
     config MINIHUB_MATTER_MAX_NODES
         int "Max Matter nodes tracked (device / subscription / identity tables)"
         default 128

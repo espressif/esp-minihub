@@ -101,7 +101,10 @@ discovery 取值（``discovery`` 字段）
 
 Web 添加对话框始终使用 BLE + DNS-SD（CHIP ``DiscoveryType::kAll``）：
 
-* ``ble_thread`` （关闭 Wi-Fi 开关时的默认）— BLE + 注入 Hub Thread 数据集
+* ``ble_thread`` （关闭 Wi-Fi 开关时的默认）— BLE + 注入 Hub Thread 数据集。
+  依赖 ``CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION``（默认 y，且依赖 Thread adapter）。
+  该选项为 n 时，``GET /api/matter/status`` 返回 ``ble_thread: false``，
+  对话框改为发送 ``network``。
 * ``ble_wifi`` / ``first_time`` — BLE + 注入 **设备** Wi-Fi 凭据
 
 ``POST /api/matter/commission`` 仍可接受 ``network``（仅 DNS-SD / multi-admin）和

@@ -821,6 +821,12 @@ static void publish_points(void)
                      (unsigned long long)s_snap[i].node_id,
                      (unsigned)s_snap[i].endpoint_id);
             cJSON_AddStringToObject(props, "name", name);
+            /* The cancel button and the live stage label key off this. A missing
+             * node_id makes the card send the last status id and stay on
+             * "等待入网中" until a full page reload. */
+            char node_str[24];
+            snprintf(node_str, sizeof(node_str), "%llu", (unsigned long long)s_snap[i].node_id);
+            cJSON_AddStringToObject(props, "node_id", node_str);
             if (s_snap[i].transport[0]) {
                 cJSON_AddStringToObject(props, "transport", s_snap[i].transport);
             }

@@ -24,7 +24,7 @@
 static const char *TAG = "minihub_module";
 static const char *MODULE_DIR = MINIHUB_MODULES_DIR;
 
-#if CONFIG_MINIHUB_DYNAMIC_MODULES && defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) && CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
+#if CONFIG_MINIHUB_ELF_PLUGINS
 esp_err_t minihub_module_host_symbols_register(void);
 #endif
 
@@ -995,7 +995,7 @@ esp_err_t minihub_module_loader_init(void)
     if (err != ESP_OK) {
         return err;
     }
-#if CONFIG_MINIHUB_DYNAMIC_MODULES && defined(CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT) && CONFIG_ELF_DYNAMIC_LOAD_SHARED_OBJECT
+#if CONFIG_MINIHUB_ELF_PLUGINS
     err = minihub_module_host_symbols_register();
     if (err != ESP_OK) {
         return err;
