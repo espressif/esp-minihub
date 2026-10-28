@@ -18,6 +18,8 @@
 #include "esp_littlefs.h"
 #include "esp_partition.h"
 #include "sdkconfig.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #ifndef ESP_PARTITION_SUBTYPE_DATA_LITTLEFS
 #define ESP_PARTITION_SUBTYPE_DATA_LITTLEFS ((esp_partition_subtype_t)0x83)
@@ -28,6 +30,17 @@ static const char *TAG = "minihub_config";
 static cJSON *s_adapters_cfg;
 static cJSON *s_rules_cfg;
 static cJSON *s_scenes_cfg;
+
+/* Previous trees kept alive across a save so any reader still holding the prior
+   pointer never dereferences freed cJSON nodes (UAF -> Load access fault). The
+   previous tree is freed on the NEXT successful save of that kind, by which time
+   any in-flight reader (a cJSON_Print / GetObjectItem) has finished. Guarded by
+   s_cfg_mutex because the js_worker and the httpd task can call the save paths
+   concurrently. */
+static cJSON *s_adapters_cfg_prev = NULL;
+static cJSON *s_rules_cfg_prev = NULL;
+static cJSON *s_scenes_cfg_prev = NULL;
+static SemaphoreHandle_t s_cfg_mutex = NULL;
 
 static char s_data_root[32];
 static char s_config_dir[64];
@@ -293,9 +306,25 @@ esp_err_t minihub_config_init(void)
 {
     mount_littlefs();
 
+    if (!s_cfg_mutex) {
+        s_cfg_mutex = xSemaphoreCreateMutex();
+    }
+
     /* Load the device control registry (CSV on /data, embedded fallback). */
     minihub_device_widget_init();
 
+    if (s_adapters_cfg_prev) {
+        cJSON_Delete(s_adapters_cfg_prev);
+        s_adapters_cfg_prev = NULL;
+    }
+    if (s_rules_cfg_prev) {
+        cJSON_Delete(s_rules_cfg_prev);
+        s_rules_cfg_prev = NULL;
+    }
+    if (s_scenes_cfg_prev) {
+        cJSON_Delete(s_scenes_cfg_prev);
+        s_scenes_cfg_prev = NULL;
+    }
     if (s_adapters_cfg) {
         cJSON_Delete(s_adapters_cfg);
     }
@@ -339,18 +368,43 @@ cJSON *minihub_config_get_scenes(void)
     return s_scenes_cfg;
 }
 
+/* Swap the live tree for a freshly duplicated copy and queue the previous live
+   tree for deferred free. Caller must hold s_cfg_mutex. The previous tree is
+   freed only on the next save of that kind, so a reader that grabbed its pointer
+   before the swap keeps a valid tree (no cJSON UAF / Load access fault). */
+static void config_swap_live(cJSON **live, cJSON **prev, cJSON *next)
+{
+    if (*prev) {
+        cJSON_Delete(*prev);
+    }
+    *prev = *live;
+    *live = next;
+}
+
 esp_err_t minihub_config_reload(void)
 {
-    cJSON_Delete(s_adapters_cfg);
-    cJSON_Delete(s_rules_cfg);
-    cJSON_Delete(s_scenes_cfg);
-    s_adapters_cfg = load_or_default(s_adapters_path, DEFAULT_ADAPTERS);
-    s_rules_cfg = load_or_default(s_rules_path, DEFAULT_RULES);
-    s_scenes_cfg = load_or_default(s_scenes_path, DEFAULT_SCENES);
-    if (!s_adapters_cfg || !s_rules_cfg || !s_scenes_cfg) {
+    cJSON *na = load_or_default(s_adapters_path, DEFAULT_ADAPTERS);
+    cJSON *nr = load_or_default(s_rules_path, DEFAULT_RULES);
+    cJSON *ns = load_or_default(s_scenes_path, DEFAULT_SCENES);
+    if (!na || !nr || !ns) {
+        if (na) cJSON_Delete(na);
+        if (nr) cJSON_Delete(nr);
+        if (ns) cJSON_Delete(ns);
         return ESP_FAIL;
     }
-    if (migrate_thread_to_matter(s_adapters_cfg)) {
+    int migrated = migrate_thread_to_matter(na);
+    if (s_cfg_mutex) {
+        xSemaphoreTake(s_cfg_mutex, portMAX_DELAY);
+    }
+    config_swap_live(&s_adapters_cfg, &s_adapters_cfg_prev, na);
+    config_swap_live(&s_rules_cfg, &s_rules_cfg_prev, nr);
+    config_swap_live(&s_scenes_cfg, &s_scenes_cfg_prev, ns);
+    if (s_cfg_mutex) {
+        xSemaphoreGive(s_cfg_mutex);
+    }
+    /* Persist the migration (if any) to disk via the fast path, which writes the
+       live tree without another swap. */
+    if (migrated) {
         (void)minihub_config_save_adapters(s_adapters_cfg);
     }
     return ESP_OK;
@@ -387,12 +441,24 @@ esp_err_t minihub_config_save_adapters(cJSON *adapters_root)
         return ESP_OK;
     }
 
-    if (s_adapters_cfg) {
-        cJSON_Delete(s_adapters_cfg);
+    /*
+     * The JS config bridge always passes a freshly built tree (never the live
+     * s_adapters_cfg), so this is the hot path during a sync. Swap the live
+     * pointer for a duplicate and free the OLD tree only on the NEXT save, so any
+     * reader still holding the previous pointer stays valid. The old Delete+reload
+     * raced minihub_config_get_adapters() holders and caused a cJSON UAF / Load
+     * access fault (Guru Meditation) under the sync's config churn.
+     */
+    cJSON *next = cJSON_Duplicate(adapters_root, 1);
+    if (!next) {
+        return ESP_ERR_NO_MEM;
     }
-    s_adapters_cfg = load_or_default(s_adapters_path, DEFAULT_ADAPTERS);
-    if (!s_adapters_cfg) {
-        return ESP_FAIL;
+    if (s_cfg_mutex) {
+        xSemaphoreTake(s_cfg_mutex, portMAX_DELAY);
+    }
+    config_swap_live(&s_adapters_cfg, &s_adapters_cfg_prev, next);
+    if (s_cfg_mutex) {
+        xSemaphoreGive(s_cfg_mutex);
     }
     ESP_LOGI(TAG, "saved %s", s_adapters_path);
     return ESP_OK;
@@ -546,12 +612,16 @@ esp_err_t minihub_config_save_rules(cJSON *rules_root)
         return ESP_OK;
     }
 
-    if (s_rules_cfg) {
-        cJSON_Delete(s_rules_cfg);
+    cJSON *next = cJSON_Duplicate(rules_root, 1);
+    if (!next) {
+        return ESP_ERR_NO_MEM;
     }
-    s_rules_cfg = load_or_default(s_rules_path, DEFAULT_RULES);
-    if (!s_rules_cfg) {
-        return ESP_FAIL;
+    if (s_cfg_mutex) {
+        xSemaphoreTake(s_cfg_mutex, portMAX_DELAY);
+    }
+    config_swap_live(&s_rules_cfg, &s_rules_cfg_prev, next);
+    if (s_cfg_mutex) {
+        xSemaphoreGive(s_cfg_mutex);
     }
     ESP_LOGI(TAG, "saved %s", s_rules_path);
     return ESP_OK;
@@ -583,12 +653,16 @@ esp_err_t minihub_config_save_scenes(cJSON *scenes_root)
         return ESP_OK;
     }
 
-    if (s_scenes_cfg) {
-        cJSON_Delete(s_scenes_cfg);
+    cJSON *next = cJSON_Duplicate(scenes_root, 1);
+    if (!next) {
+        return ESP_ERR_NO_MEM;
     }
-    s_scenes_cfg = load_or_default(s_scenes_path, DEFAULT_SCENES);
-    if (!s_scenes_cfg) {
-        return ESP_FAIL;
+    if (s_cfg_mutex) {
+        xSemaphoreTake(s_cfg_mutex, portMAX_DELAY);
+    }
+    config_swap_live(&s_scenes_cfg, &s_scenes_cfg_prev, next);
+    if (s_cfg_mutex) {
+        xSemaphoreGive(s_cfg_mutex);
     }
     ESP_LOGI(TAG, "saved %s", s_scenes_path);
     return ESP_OK;
