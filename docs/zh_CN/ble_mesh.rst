@@ -15,7 +15,7 @@ JSON 字段（含 ``provision.uuid_filters`` 与 ``provision.bind_models`` ）�
    ./tools/build_firmware.py -app minihub build
 
 下列 REST 仅在使能 ``CONFIG_MINIHUB_BLE_MESH_SDK`` 时编入固件。启动与 IP 上行见
-:doc:`getting_started` 、 :doc:`networking` 。
+:doc:`getting_started`、 :doc:`networking`。
 
 共存
 ----
@@ -41,25 +41,33 @@ Zigbee 正在入网，或 BLE Mesh 已在配网）。可用 ``GET /api/radio/pro
      }
    }
 
-设置 ``adapters.ble_mesh.enabled`` 。配网策略在 ``provision`` （
-``uuid_filters`` / ``bind_models`` ）。已绑定节点在 ``devices[]`` 。
-``type`` 为 ``sensor`` 的条目会被跳过。字段见 :ref:`adapters-json` 。
+设置 ``adapters.ble_mesh.enabled``。配网策略在 ``provision`` （
+``uuid_filters`` / ``bind_models`` ）。已绑定节点在 ``devices[]``。
+``type`` 为 ``sensor`` 的条目会被跳过。字段见 :ref:`adapters-json`。
 L1 包可 **合并** 额外 bind/过滤默认值（演示
-``examples/plugins/ble_mesh_pack`` ）； **不要** 用 L1 发明 ``devices[]`` 。
+``examples/plugins/ble_mesh_pack`` ）； **不要** 用 L1 发明 ``devices[]``。
 
 REST 接口
 ---------
 
-总览见 :doc:`api/host_rest` 。
+总览见 :doc:`api/host_rest`。
 
 * ``POST /api/ble_mesh/permit_provision`` — 打开或关闭配网窗口
 * ``POST /api/ble_mesh/devices`` — 删除设备（遗留接口；适配器 ``ble_mesh`` ）
-* ``GET /api/radio/provision`` — 射频 / 配网共存状态
+* ``GET /api/radio/provision`` — 射频 / 配网共存状态。这一条 **不** 受
+  ``CONFIG_MINIHUB_BLE_MESH_SDK`` 门控：它始终注册，没编进去的栈就回 ``false``
 
 配网窗口
 ^^^^^^^^
 
 请求体 JSON 可选。 ``seconds`` 缺省 60。 ``0`` 关闭窗口。
+
+窗口实际长度并不等于 ``seconds``：到期时若还有配网在跑，Hub 会把它 **延长一次**
+30 秒，第二次到期就中止卡住的配网并关窗。所以 60 秒的请求最长会占用射频约 90 秒。
+另请注意 BLE Mesh 属于 Wi-Fi 那一组： ``adapters.ble_mesh.enabled`` 与
+``adapters.zigbee.enabled`` 同时为真时，留下的是 Wi-Fi 与 BLE Mesh，运行时被丢掉
+的是 802.15.4 那个适配器，只留一行
+``adapter 'zigbee' not started (radio mutex)`` 日志（见 :doc:`radios`）。
 
 .. code-block:: bash
 
@@ -70,8 +78,8 @@ REST 接口
 移除设备（遗留）
 ^^^^^^^^^^^^^^^^
 
-``POST /api/ble_mesh/devices`` 用于移除设备。若请求体未写 ``adapter`` ，
-处理函数会注入 ``ble_mesh`` 。语义与 Hub 点位移除相同。
+``POST /api/ble_mesh/devices`` 用于移除设备。若请求体未写 ``adapter``，
+处理函数会注入 ``ble_mesh``。语义与 Hub 点位移除相同。
 
 .. code-block:: json
 
@@ -88,34 +96,35 @@ Zigbee 入网或 BLE Mesh 配网是否进行中，以及表示射频关键窗口
 ----
 
 节点绑定后，用 ``POST /api/command`` 与 Hub ``point_id`` 控制（OnOff 模型：
-``turn_on`` / ``turn_off`` / ``toggle`` ）。见 :doc:`api/host_rest` 。
+``turn_on`` / ``turn_off`` / ``toggle`` ）。见 :doc:`api/host_rest`。
 
-点位身份与厂商扩展
+点位身份与插件扩展
 ------------------
 
 每台 BLE Mesh 节点对应 **一条** Host 点（``ble_mesh.bm_XXXX``，与 Zigbee 相同的
 ``<protocol>.<device>`` 约定）。旧版 ``{type}/bm_XXXX`` 在 NVS 加载时迁移。登记时
-适配器写入顶层身份字段（不是类型目录参数 / 设备页滑条）：
+适配器写入顶层身份字段（不是类型目录参数 / 概览页滑条）：
 
 * ``props.uuid`` — 节点 Device UUID 十六进制（Mesh 没有 Zigbee ``ieee``）
-* ``props.manufacturer`` — Composition Page 0 **Company ID**（Bluetooth CID）。
+* ``props.manufacturer`` — Composition Page 0 **Company ID** （Bluetooth CID）。
   ``0x02E5`` 写成 ``Espressif``，其余写成 ``0xNNNN``。**不是** ZCL Basic 字符串
 * ``props.model`` / ``props.sw_version`` — Product ID / Version ID 的 ``0xNNNN``
 * ``props.category`` — BLE Mesh Host **不** 填写。缺省时 UI 用类型目录标签
-  （``light`` →「灯」）。厂商插件可 merge 产品名作为品类
+  （``light`` →「灯」）。插件可 merge 产品名作为品类
 
 遥测（含 CTL 色温 / 亮度）只通过 ``minihub_point_merge_params`` 或只改
 ``value``，**不得** ``minihub_point_set`` 整份替换 ``props``，否则会冲掉
 uuid / 厂商 / ``owner`` / ``ota``。
 
-厂商插件（L2）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
+插件（L2）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
 ``catalog.json``），写在同一 ``point_id`` 上：
 
-* **认领** — 写入 ``props.owner`` = 插件 ``adapter`` 名。该槽在
+* **关联** — 写入 ``props.owner`` = 插件 ``adapter`` 名。该槽在
   ``adapters.json`` 为 ``enabled`` 时，总览把卡片挪到厂商分组（文案见
   ``meta.json`` ``filter_label``）。**不需要** 云端目录。
-* **OTA 标记** — 仅在 GET ``catalog_url`` 成功后 merge ``props.ota``
-  （``available``、``version``，可选 ``url`` / ``file`` / ``size``）。示例::
+* **OTA 标记** — 由插件在自己的检查判定有固件可升时 merge ``props.ota``
+  （``available``、``version``，可选 ``url`` / ``file`` / ``size``）；其中 Hub
+  只会用 ``file`` / ``url`` / ``version``。示例::
 
      {
        "ota": {
