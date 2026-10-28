@@ -149,6 +149,11 @@ class PluginMcpTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "pack_js"
             scaffold_plugin(tier="l2", module_id="pack_js", out_dir=str(dest))
+            src_manifest = json.loads((dest / "module.json").read_text(encoding="utf-8"))
+            src_manifest.update(abi_version=1, core_api_min=1, core_api_max=1)
+            (dest / "module.json").write_text(
+                json.dumps(src_manifest), encoding="utf-8"
+            )
             packed = pack_plugin_dir(dest)
             self.assertTrue(packed["ok"], packed)
             with zipfile.ZipFile(packed["pack"]) as zf:
@@ -157,6 +162,9 @@ class PluginMcpTests(unittest.TestCase):
                 manifest = json.loads(zf.read("module.json").decode("utf-8"))
                 self.assertNotIn("capabilities", manifest)
                 self.assertNotIn("ui", manifest)
+                self.assertNotIn("abi_version", manifest)
+                self.assertNotIn("core_api_min", manifest)
+                self.assertNotIn("core_api_max", manifest)
 
     def test_pack_wraps_native_so_with_mhmd(self) -> None:
         """The device validates the MHMD header on the packed .so — a bare linker

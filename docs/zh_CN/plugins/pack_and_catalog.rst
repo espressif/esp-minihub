@@ -69,8 +69,8 @@
 ``.mhub`` 已经放进 store 目录后（例如
 ``~/workspace/minihub_store/Stores/Common/ble_mesh_pack/ble_mesh_pack.mhub`` ），运行
 ``sync_store_catalog.py`` （ ``--from-store`` 是默认行为）。它遍历
-``Stores/Common/ID/ID.mhub``，读取 zip 内的 ``module.json`` 与 ``meta.json``
-（后者承载 ``ui`` 与 ``capabilities`` ），在该包旁边写出 ``catalog.json``。不需要插件源码。
+``Stores/Common/ID/ID.mhub``，读取 zip 内的 ``module.json``，在该包旁边写出
+``catalog.json``。``ui`` 与 ``capabilities`` 留在包内 ``meta.json``。不需要插件源码。
 ``GET /api/catalog`` 聚合这些对象；只拷贝 zip
 不会更新目录。默认部署根是 ``MINIHUB_PLUGINS_DEPLOY_DIR`` 或
 ``~/workspace/minihub_store``。

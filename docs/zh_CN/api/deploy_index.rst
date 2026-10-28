@@ -66,11 +66,9 @@ catalog 条目字段
 * ``host_api`` —— 仅 L2 与 hybrid：取自 ``module.json``，缺省为 ``0``。
 * ``abi`` —— 仅原生与 hybrid：``abi_version`` 加 ``symbols`` （包所引用的 Host
   符号哈希）。Hub 的部署树里不会出现该条目，因为它不发布原生或 hybrid 包。
-* ``ui`` · ``capabilities`` —— 包内 ``meta.json`` 有这两项时会复制进来，控制台
-  据此从 ``GET /api/catalog`` 直接渲染适配器的登录 / 同步 UI，不必解包。
 
-``meta.json`` （在 ``.mhub`` 内）才是 ``ui`` 与 ``capabilities`` 的正式位置，
-catalog 里带的是它的副本。
+``ui`` 与 ``capabilities`` 不是 catalog 字段。它们留在包内 ``meta.json``。
+安装后控制台从 ``GET /api/modules`` 读取。
 
 设备查询参数
 --------------

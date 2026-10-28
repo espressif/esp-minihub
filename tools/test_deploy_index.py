@@ -75,6 +75,11 @@ def main() -> int:
                 "targets": ["ALL"],
             },
         )
+        with zipfile.ZipFile(deploy / "Stores" / "Common" / "jsdemo" / "jsdemo.mhub", "a") as zf:
+            zf.writestr(
+                "meta.json",
+                json.dumps({"ui": {"filter_label": "JS"}, "capabilities": ["points"]}),
+            )
         _plant(
             "multi",
             {
@@ -106,6 +111,8 @@ def main() -> int:
         # JS plugins are ABI-independent: the catalog omits the abi block.
         assert "abi" not in by_id["demo"]
         assert "abi" not in by_id["jsdemo"]
+        assert "ui" not in by_id["jsdemo"]
+        assert "capabilities" not in by_id["jsdemo"]
         assert "sha256:" not in by_id["demo"]["sha256"]
         assert by_id["jsdemo"]["url"] == "/files/Stores/Common/jsdemo/jsdemo.mhub"
         assert by_id["jsdemo"]["targets"] == ["ALL"]

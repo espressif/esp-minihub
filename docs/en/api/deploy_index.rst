@@ -73,12 +73,9 @@ Catalog entry fields
 * ``abi`` — native and hybrid only: ``abi_version`` plus ``symbols``, the hashes
   of the host symbols the package links. A Hub store tree has no such entry,
   because it publishes no native or hybrid package.
-* ``ui`` · ``capabilities`` — copied out of the package's ``meta.json`` when
-  present, so the console can render the adapter's login / sync UI from
-  ``GET /api/catalog`` without opening the ``.mhub``.
 
-``meta.json`` inside the ``.mhub`` is the canonical home of ``ui`` and
-``capabilities``; the catalog carries a copy of both.
+``ui`` and ``capabilities`` are not catalog fields. They stay in the package
+``meta.json``. After install the console reads them from ``GET /api/modules``.
 
 Device query parameters
 -----------------------
