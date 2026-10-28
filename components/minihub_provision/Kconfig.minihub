@@ -15,26 +15,10 @@ menu "Provisioning"
         default y
         help
             When Kconfig/NVS have no Wi-Fi credentials, start provisioning.
-
-    choice MINIHUB_WIFI_PROV_TRANSPORT
-        prompt "Wi-Fi provisioning transport"
-        depends on MINIHUB_WIFI_PROVISIONING
-        default MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
-
-        config MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
-            bool "SoftAP (no Bluetooth)"
-            depends on MINIHUB_NET_WIFI_SOFTAP
-
-        config MINIHUB_WIFI_PROV_TRANSPORT_BLE
-            bool "BLE (requires Bluetooth / NimBLE)"
-            select BT_ENABLED
-
-    endchoice
-
-    config MINIHUB_WIFI_PROV_BLE_FREE_BTDM
-        bool "Release Bluetooth (BTDM) after BLE Wi-Fi provisioning"
-        depends on MINIHUB_WIFI_PROV_TRANSPORT_BLE
-        default y
+            The only transport is SoftAP (no Bluetooth). The shipped Host serves
+            its console on port 80, so minihub_net brings up a plain open AP
+            instead of the network_provisioning HTTP server; a product that moves
+            the console can call minihub_provision_start() to use the manager.
 
     config MINIHUB_FACTORY_RESET_BUTTON
         bool "BOOT button long-press factory reset (erase NVS)"

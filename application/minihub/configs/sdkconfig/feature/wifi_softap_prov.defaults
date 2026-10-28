@@ -1,4 +1,4 @@
-# Wi-Fi SoftAP provisioning (no Bluetooth)
+# Provisioning is on by default, but the shipped Host brings up a plain open
+# PROV_MiniHub AP for the web console instead of the SoftAP manager (which wants
+# port 80). This fragment only matters for a product that moves the console.
 CONFIG_MINIHUB_WIFI_PROVISIONING=y
-CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP=y
-# CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE is not set

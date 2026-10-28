@@ -17,18 +17,12 @@
 
 #if CONFIG_MINIHUB_WIFI_PROVISIONING
 #include "network_provisioning/manager.h"
-#if CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
 #include "network_provisioning/scheme_softap.h"
-#endif
-#if CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE
-#include "network_provisioning/scheme_ble.h"
-#endif
 #endif /* CONFIG_MINIHUB_WIFI_PROVISIONING */
 
 static const char *TAG = "minihub_provision";
 static const char *PROV_NAMESPACE = "minihub_wifi";
 static const char *SOFTAP_SSID = "PROV_MiniHub";
-static const char *BLE_DEVICE_NAME = "PROV_MiniHub";
 static const char *PROV_POP = "minihub1234";
 
 static bool s_prov_active;
@@ -103,13 +97,8 @@ static void publish_provision_event(const char *type)
 {
     cJSON *data = cJSON_CreateObject();
     if (data) {
-#if CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE
-        cJSON_AddStringToObject(data, "transport", "ble");
-        cJSON_AddStringToObject(data, "device_name", BLE_DEVICE_NAME);
-#else
         cJSON_AddStringToObject(data, "transport", "softap");
         cJSON_AddStringToObject(data, "ssid", SOFTAP_SSID);
-#endif
         cJSON_AddStringToObject(data, "pop", PROV_POP);
         minihub_event_bus_publish(type, data);
     } else {
@@ -126,11 +115,7 @@ static void prov_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 
     switch (event_id) {
     case NETWORK_PROV_START:
-#if CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE
-        ESP_LOGI(TAG, "BLE provisioning active (name=%s)", BLE_DEVICE_NAME);
-#else
         ESP_LOGI(TAG, "SoftAP provisioning active");
-#endif
         publish_provision_event("wifi.provisioning");
         break;
     case NETWORK_PROV_WIFI_CRED_RECV: {
@@ -158,9 +143,6 @@ static void prov_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             network_prov_mgr_deinit();
             s_prov_mgr_ready = false;
         }
-#if CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE && CONFIG_MINIHUB_WIFI_PROV_BLE_FREE_BTDM
-        ESP_LOGI(TAG, "BLE provisioning ended; BTDM release handled by scheme event handler");
-#endif
         publish_provision_event("wifi.provisioned");
         break;
     }
@@ -210,7 +192,7 @@ esp_err_t minihub_provision_load_credentials(wifi_config_t *out_sta_cfg)
 #endif
 }
 
-#if CONFIG_MINIHUB_WIFI_PROVISIONING && CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
+#if CONFIG_MINIHUB_WIFI_PROVISIONING
 esp_err_t minihub_provision_start_softap(void)
 {
     if (s_prov_active || s_prov_mgr_ready) {
@@ -247,86 +229,22 @@ esp_err_t minihub_provision_start_softap(void)
 
     return ESP_OK;
 }
+
+esp_err_t minihub_provision_start(void)
+{
+    return minihub_provision_start_softap();
+}
 #else
 esp_err_t minihub_provision_start_softap(void)
 {
     return ESP_ERR_NOT_SUPPORTED;
 }
-#endif
-
-#if CONFIG_MINIHUB_WIFI_PROVISIONING && CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE
-esp_err_t minihub_provision_start_ble(void)
-{
-    if (s_prov_active || s_prov_mgr_ready) {
-        return ESP_OK;
-    }
-
-#if !CONFIG_BT_ENABLED
-    ESP_LOGE(TAG, "BLE provisioning requires CONFIG_BT_ENABLED");
-    return ESP_ERR_NOT_SUPPORTED;
-#endif
-
-    ESP_LOGI(TAG, "starting BLE provisioning (name=%s, POP=%s, free_btdm=%d)",
-             BLE_DEVICE_NAME, PROV_POP, CONFIG_MINIHUB_WIFI_PROV_BLE_FREE_BTDM);
-
-    esp_err_t err = esp_event_handler_register(NETWORK_PROV_EVENT, ESP_EVENT_ANY_ID, prov_event_handler, NULL);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    network_prov_mgr_config_t config = {
-        .scheme = network_prov_scheme_ble,
-        /*
-         * S31 currently logs "esp_bt_mem_release not implement yet" for FREE_BTDM.
-         * Releasing at the wrong time also kills GATT advertising. Keep BT up for
-         * the provision session; optional post-success release can be revisited.
-         */
-        .scheme_event_handler = NETWORK_PROV_EVENT_HANDLER_NONE,
-    };
-    err = network_prov_mgr_init(config);
-    if (err != ESP_OK) {
-        esp_event_handler_unregister(NETWORK_PROV_EVENT, ESP_EVENT_ANY_ID, prov_event_handler);
-        return err;
-    }
-    s_prov_mgr_ready = true;
-    /* Mark busy before start so Wi-Fi STA_START does not auto-connect mid-setup. */
-    s_prov_active = true;
-
-    /* Custom service UUID (Espressif Wi-Fi provisioning example family). */
-    uint8_t uuid[16] = {
-        0xb4, 0xdf, 0x5a, 0x1c, 0x3f, 0x6b, 0xf4, 0xbf,
-        0xea, 0x4a, 0x82, 0x03, 0x04, 0x90, 0x1a, 0x02,
-    };
-    (void)network_prov_scheme_ble_set_service_uuid(uuid);
-
-    err = network_prov_mgr_start_provisioning(NETWORK_PROV_SECURITY_1, PROV_POP, BLE_DEVICE_NAME, NULL);
-    if (err != ESP_OK) {
-        s_prov_active = false;
-        network_prov_mgr_deinit();
-        s_prov_mgr_ready = false;
-        esp_event_handler_unregister(NETWORK_PROV_EVENT, ESP_EVENT_ANY_ID, prov_event_handler);
-        return err;
-    }
-
-    return ESP_OK;
-}
-#else
-esp_err_t minihub_provision_start_ble(void)
-{
-    return ESP_ERR_NOT_SUPPORTED;
-}
-#endif
 
 esp_err_t minihub_provision_start(void)
 {
-#if !CONFIG_MINIHUB_WIFI_PROVISIONING
     return ESP_ERR_NOT_SUPPORTED;
-#elif CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE
-    return minihub_provision_start_ble();
-#else
-    return minihub_provision_start_softap();
-#endif
 }
+#endif
 
 bool minihub_provision_active(void)
 {
@@ -341,11 +259,6 @@ bool minihub_provision_busy(void)
 const char *minihub_provision_softap_ssid(void)
 {
     return SOFTAP_SSID;
-}
-
-const char *minihub_provision_ble_device_name(void)
-{
-    return BLE_DEVICE_NAME;
 }
 
 const char *minihub_provision_pop(void)
