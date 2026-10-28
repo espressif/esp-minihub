@@ -4,6 +4,7 @@
 # Matter commissioner (multi-admin). Pair with matter_memory / matter_ble / matter_over_eth as needed.
 
 CONFIG_MINIHUB_MATTER_ADAPTER=y
+CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION=y
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_ENABLE_CHIP_CONTROLLER_BUILD=y

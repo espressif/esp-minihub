@@ -733,6 +733,7 @@ static bool module_id_from_rpc_uri(const char *uri, char *id_out, size_t id_len)
     return true;
 }
 
+#if CONFIG_MINIHUB_JS_PLUGINS
 /* Async module RPC: the JS worker runs the RPC and this callback sends the
  * response, so the httpd task is never blocked by a long RPC (e.g. miot_js
  * sync). See Athena issue 22x6Aswm. */
@@ -743,6 +744,7 @@ typedef struct {
     cJSON *root;         /* owns params; freed by the worker */
     const cJSON *params; /* child of root (may be NULL) */
 } rpc_async_ctx_t;
+#endif
 
 /* Build and send the JSON error/result body for a module RPC. Shared by the
  * legacy blocking fallback and the async worker. Does not free `result` (the
@@ -786,6 +788,7 @@ static esp_err_t send_module_rpc_response(httpd_req_t *req, const char *module_i
     return send_json(req, result);
 }
 
+#if CONFIG_MINIHUB_JS_PLUGINS
 static esp_err_t rpc_async_worker(void *arg)
 {
     rpc_async_ctx_t *ctx = (rpc_async_ctx_t *)arg;
@@ -803,6 +806,7 @@ static esp_err_t rpc_async_worker(void *arg)
     httpd_req_async_handler_complete(req);
     return ESP_OK;
 }
+#endif
 
 static esp_err_t handle_api_module_rpc(httpd_req_t *req)
 {
@@ -843,58 +847,56 @@ static esp_err_t handle_api_module_rpc(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "params must be object");
     }
 
-    /* Run the RPC on the JS worker WITHOUT blocking this (single) httpd task. The
-     * worker executes it and the response is sent when it completes, so a long
-     * RPC (miot_js sync) never stalls /api/points and the rest of the UI
-     * (device detail, rule editor). See Athena issue 22x6Aswm. */
+    /* With JS plugins, run the RPC on the JS worker so a long RPC (miot_js sync)
+     * never stalls this single httpd task. Otherwise invoke on this task. */
+#if CONFIG_MINIHUB_JS_PLUGINS
     httpd_req_t *areq = NULL;
     esp_err_t begin = httpd_req_async_handler_begin(req, &areq);
-    if (begin != ESP_OK) {
-        /* Async handling unavailable (older httpd): legacy blocking invoke. */
-        cJSON *result = NULL;
-        err = minihub_module_invoke_rpc(module_id, method->valuestring, params, &result);
-        esp_err_t sent = send_module_rpc_response(req, module_id, method->valuestring, err, result);
-        cJSON_Delete(root);
-        if (result) {
-            cJSON_Delete(result);
+    if (begin == ESP_OK) {
+        rpc_async_ctx_t *ctx = calloc(1, sizeof(*ctx));
+        if (!ctx) {
+            cJSON_Delete(root);
+            httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+            httpd_req_async_handler_complete(areq);
+            return ESP_OK;
         }
-        return sent;
-    }
+        ctx->req = areq;
+        ctx->module_id = strdup(module_id);
+        ctx->method = strdup(method->valuestring);
+        ctx->root = root;     /* owns params; freed by the worker */
+        ctx->params = params; /* child of root (may be NULL) */
+        if (!ctx->module_id || !ctx->method) {
+            free(ctx->module_id);
+            free(ctx->method);
+            cJSON_Delete(root);
+            free(ctx);
+            httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+            httpd_req_async_handler_complete(areq);
+            return ESP_OK;
+        }
 
-    rpc_async_ctx_t *ctx = calloc(1, sizeof(*ctx));
-    if (!ctx) {
-        cJSON_Delete(root);
-        httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-        httpd_req_async_handler_complete(areq);
+        esp_err_t aerr = minihub_js_run_on_worker_async(rpc_async_worker, ctx);
+        if (aerr != ESP_OK) {
+            free(ctx->module_id);
+            free(ctx->method);
+            cJSON_Delete(root);
+            free(ctx);
+            httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "worker busy");
+            httpd_req_async_handler_complete(areq);
+            return ESP_OK;
+        }
+        /* Handler returns immediately; the worker sends the response later. */
         return ESP_OK;
     }
-    ctx->req = areq;
-    ctx->module_id = strdup(module_id);
-    ctx->method = strdup(method->valuestring);
-    ctx->root = root;     /* owns params; freed by the worker */
-    ctx->params = params; /* child of root (may be NULL) */
-    if (!ctx->module_id || !ctx->method) {
-        free(ctx->module_id);
-        free(ctx->method);
-        cJSON_Delete(root);
-        free(ctx);
-        httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-        httpd_req_async_handler_complete(areq);
-        return ESP_OK;
+#endif
+    cJSON *result = NULL;
+    err = minihub_module_invoke_rpc(module_id, method->valuestring, params, &result);
+    esp_err_t sent = send_module_rpc_response(req, module_id, method->valuestring, err, result);
+    cJSON_Delete(root);
+    if (result) {
+        cJSON_Delete(result);
     }
-
-    esp_err_t aerr = minihub_js_run_on_worker_async(rpc_async_worker, ctx);
-    if (aerr != ESP_OK) {
-        free(ctx->module_id);
-        free(ctx->method);
-        cJSON_Delete(root);
-        free(ctx);
-        httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "worker busy");
-        httpd_req_async_handler_complete(areq);
-        return ESP_OK;
-    }
-    /* Handler returns immediately; the worker sends the response later. */
-    return ESP_OK;
+    return sent;
 }
 
 #define MODULE_CAM_PREVIEW_FMT "/data/tmp/%s_cam_preview.jpg"
@@ -1035,20 +1037,9 @@ static esp_err_t handle_api_module_preview(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing point_id");
     }
 
-    /* Run the camera_preview RPC on the JS worker without blocking the httpd
-     * task (snapshot capture can take a while); the worker streams the JPEG and
-     * completes the async request. */
-    httpd_req_t *areq = NULL;
-    esp_err_t begin = httpd_req_async_handler_begin(req, &areq);
     preview_async_ctx_t *ctx = calloc(1, sizeof(*ctx));
     if (!ctx) {
-        if (begin == ESP_OK) {
-            httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-            httpd_req_async_handler_complete(areq);
-        } else {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-        }
-        return ESP_OK;
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
     }
     ctx->module_id = strdup(module_id);
     ctx->point_id = strdup(point_id);
@@ -1056,15 +1047,13 @@ static esp_err_t handle_api_module_preview(httpd_req_t *req)
         free(ctx->module_id);
         free(ctx->point_id);
         free(ctx);
-        if (begin == ESP_OK) {
-            httpd_resp_send_err(areq, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-            httpd_req_async_handler_complete(areq);
-        } else {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-        }
-        return ESP_OK;
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
     }
-    if (begin == ESP_OK) {
+
+#if CONFIG_MINIHUB_JS_PLUGINS
+    /* Capture the snapshot on the JS worker so this httpd task stays free. */
+    httpd_req_t *areq = NULL;
+    if (httpd_req_async_handler_begin(req, &areq) == ESP_OK) {
         ctx->req = areq;
         ctx->async = true;
         esp_err_t aerr = minihub_js_run_on_worker_async(preview_async_worker, ctx);
@@ -1079,7 +1068,8 @@ static esp_err_t handle_api_module_preview(httpd_req_t *req)
         /* Handler returns immediately; the worker streams + completes. */
         return ESP_OK;
     }
-    /* Async handling unavailable: run synchronously on the original request. */
+#endif
+    /* No JS worker, or async handling unavailable: run on this request. */
     ctx->req = req;
     ctx->async = false;
     preview_async_worker(ctx);
@@ -4716,7 +4706,12 @@ static esp_err_t handle_api_matter_commission(httpd_req_t *req)
      * "取消配网" button that matches BLE Mesh's "停止配网" / Zigbee's "停止入网". */
     const cJSON *cancel = cJSON_GetObjectItem(root, "cancel");
     if (cJSON_IsBool(cancel) && cJSON_IsTrue(cancel)) {
-        esp_err_t cerr = minihub_matter_commission_cancel(node_id);
+        /* all:true is the section header (every waiting node). A node_id
+         * without all is the card button and must not end the whole session. */
+        const cJSON *all = cJSON_GetObjectItem(root, "all");
+        esp_err_t cerr = (cJSON_IsBool(all) && cJSON_IsTrue(all))
+                             ? minihub_matter_commission_cancel_all()
+                             : minihub_matter_commission_cancel(node_id);
         cJSON *resp = cJSON_CreateObject();
         cJSON_AddStringToObject(resp, "status", cerr == ESP_OK ? "cancelled" : esp_err_to_name(cerr));
         if (cerr != ESP_OK && minihub_matter_last_error()) {

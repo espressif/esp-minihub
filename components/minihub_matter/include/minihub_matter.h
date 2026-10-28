@@ -29,7 +29,7 @@ esp_err_t minihub_matter_attach_thread(void);
 typedef enum {
     MINIHUB_MATTER_DISCOVERY_NETWORK = 0, /**< Multi-admin / already on LAN (default). */
     MINIHUB_MATTER_DISCOVERY_BLE_WIFI = 1, /**< First-time: BLE + inject device Wi-Fi. */
-    MINIHUB_MATTER_DISCOVERY_BLE_THREAD = 2, /**< First-time: BLE + inject Thread dataset from Hub BR. */
+    MINIHUB_MATTER_DISCOVERY_BLE_THREAD = 2, /**< First-time: BLE + inject Thread dataset. Requires CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION. */
     MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET = 3, /**< First-time: BLE, device already on Ethernet (no SSID). */
 } minihub_matter_discovery_t;
 
@@ -70,12 +70,18 @@ esp_err_t minihub_matter_commission_preflight(minihub_matter_discovery_t discove
 esp_err_t minihub_matter_commission_wait(uint32_t timeout_ms);
 
 /**
- * Abort an in-flight commissioning for ``node_id``: drops the pending device
- * record (so finalize cannot re-add a deleted row), releases the pairing slot
- * and leaves last_error "commissioning cancelled". ESP_ERR_NOT_FOUND when that
- * node is not being commissioned.
+ * Abort commissioning for ``node_id`` only. Other waiting nodes and the
+ * header "cancel all" session stay. Stops CHIP pairing when this node is the
+ * one in progress. ESP_ERR_NOT_FOUND when that node has neither an in-flight
+ * session nor a waiting row.
  */
 esp_err_t minihub_matter_commission_cancel(uint64_t node_id);
+
+/**
+ * Abort every waiting Matter node and the in-flight pairing session.
+ * This is the header control; a per-node cancel must not call it.
+ */
+esp_err_t minihub_matter_commission_cancel_all(void);
 
 /**
  * After commission_code_ex returns ESP_OK, stash the device upsert that must
@@ -179,6 +185,15 @@ esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoi
  */
 esp_err_t minihub_matter_devices_set_commission_phase(uint64_t node_id, const char *phase,
                                                       const char *error_msg);
+
+/**
+ * Mark every matter.devices[] row for node_id as failed, but only when its
+ * current phase is "waiting". ESP_ERR_NOT_FOUND when no such row exists.
+ */
+esp_err_t minihub_matter_devices_fail_if_waiting(uint64_t node_id, const char *error_msg);
+
+/** Mark every matter.devices[] row whose phase is "waiting" as failed. */
+esp_err_t minihub_matter_devices_fail_all_waiting(const char *error_msg);
 
 /** Remove a Matter point from adapters.json by point_id. */
 esp_err_t minihub_matter_device_remove(const char *point_id);

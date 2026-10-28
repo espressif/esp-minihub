@@ -4,6 +4,16 @@ menu "Modules"
         bool "Enable dynamic adapter module loader (.mhub / .so via elf_loader)"
         default n
 
+    config MINIHUB_ELF_PLUGINS
+        bool "Enable L3 ELF plugins (.so via elf_loader)"
+        depends on MINIHUB_DYNAMIC_MODULES
+        default y
+        select ELF_LOADER
+        select ELF_DYNAMIC_LOAD_SHARED_OBJECT
+        help
+            Load L3 .mhub shared objects with espressif/elf_loader.
+            The .so base path stays the loader option (MiniHub uses /data).
+
     config MINIHUB_HUB_MAX_BYTES
         int "Max .mhub package size downloaded into PSRAM (bytes)"
         depends on MINIHUB_DYNAMIC_MODULES

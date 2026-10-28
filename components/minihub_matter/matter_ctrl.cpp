@@ -572,43 +572,101 @@ static bool ensure_pairing_slot_free(void)
         return false;
     }
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-    if (!s_pairing_in_progress && commissioner->GetPairingDelegate() == nullptr) {
+    if (!s_pairing_in_progress && commissioner->GetPairingDelegate() == nullptr &&
+        commissioner->GetCommissioningStage() == chip::Controller::CommissioningStage::kSecurePairing) {
         return true;
     }
-    ESP_LOGW(TAG, "clearing sticky pairing state (delegate=%d flag=%d)",
-             commissioner->GetPairingDelegate() != nullptr, s_pairing_in_progress);
+    ESP_LOGW(TAG, "clearing sticky pairing state (delegate=%d flag=%d stage=%s)",
+             commissioner->GetPairingDelegate() != nullptr, s_pairing_in_progress,
+             chip::Controller::StageToString(commissioner->GetCommissioningStage()));
+    /* Drop the delegate first so StopPairing's completion does not finalize the
+     * device card we are about to commission. */
     commissioner->RegisterPairingDelegate(nullptr);
     s_pairing_in_progress = false;
+    /* A commissioning left at FindOperationalForStayActive makes the next
+     * PairDevice() complete PASE synchronously and then fail Commission().
+     * SetUpCodePairer treats that failure as "PASE never started" and calls
+     * PASEEstablishmentComplete() again, which asserts. StopPairing resets the
+     * stage to kSecurePairing. The first call may only stop discovery; the
+     * second cancels the commissioning itself. */
+    if (s_commission_node_id >= 2 &&
+        commissioner->GetCommissioningStage() != chip::Controller::CommissioningStage::kSecurePairing) {
+        (void)commissioner->StopPairing(static_cast<chip::NodeId>(s_commission_node_id));
+        if (commissioner->GetCommissioningStage() != chip::Controller::CommissioningStage::kSecurePairing) {
+            (void)commissioner->StopPairing(static_cast<chip::NodeId>(s_commission_node_id));
+        }
+    }
     return true;
+}
+
+static void resync_matter_points(void)
+{
+    /* Republish in place so the overview card leaves "等待入网中" without a
+     * full hub reload (that blanks every other adapter for ~1.7 s). */
+    if (minihub_hub_resync_adapter_async) {
+        (void)minihub_hub_resync_adapter_async("matter");
+    } else if (minihub_hub_reload_async) {
+        (void)minihub_hub_reload_async();
+    }
 }
 
 esp_err_t minihub_matter_commission_cancel(uint64_t node_id)
 {
-    bool mine = false;
+    /* Card button: this node only. Do not signal_commission_done — that is the
+     * header "cancel all" path and would drop every other waiting node. */
+    bool active = false;
     portENTER_CRITICAL(&s_commission_mux);
-    if (s_commission_phase == COMMISSION_PHASE_WAITING) {
-        mine = s_pending_device.valid ? (s_pending_device.node_id == node_id)
-                                      : (s_commission_node_id == node_id);
-        if (mine) {
+    if (node_id >= 2 && s_commission_node_id == node_id) {
+        active = s_pending_device.valid ? (s_pending_device.node_id == node_id)
+                                        : true;
+        if (active && s_commission_phase == COMMISSION_PHASE_WAITING) {
             clear_pending_device_locked();
             s_commission_stage = COMMISSION_STAGE_NONE;
         }
     }
     portEXIT_CRITICAL(&s_commission_mux);
-    if (!mine) {
+
+    esp_err_t perr = minihub_matter_devices_fail_if_waiting(node_id, "commissioning cancelled");
+    if (perr != ESP_OK && !active) {
         return ESP_ERR_NOT_FOUND;
     }
-    /* Dropping the pending record is what makes this stick: without it
-     * finalize would re-add the device the caller just deleted. */
+    if (active) {
+        /* Stop this node's pairing so it does not finish in the background.
+         * Leave the phase WAITING: the header button is still "cancel all". */
+        stop_commission_watchdog();
+        (void)ensure_pairing_slot_free();
+        set_error("commissioning cancelled");
+    }
+    if (perr == ESP_OK) {
+        resync_matter_points();
+    }
+    ESP_LOGW(TAG, "commissioning cancelled for node %" PRIu64 " (session still %s)", node_id,
+             active ? "stopped for this node" : "untouched");
+    return ESP_OK;
+}
+
+esp_err_t minihub_matter_commission_cancel_all(void)
+{
+    esp_err_t perr = minihub_matter_devices_fail_all_waiting("commissioning cancelled");
     stop_commission_watchdog();
     (void)ensure_pairing_slot_free();
     set_error("commissioning cancelled");
-    /* Persist a failed phase so the web card stops showing "配网中" and hides
-     * the cancel button (mirrors the timeout/failure path in finalize). The
-     * delete path removes the row right after, so this write is harmless there. */
-    (void)minihub_matter_devices_set_commission_phase(node_id, "failed", "commissioning cancelled");
+    s_persist_busy = false;
+    portENTER_CRITICAL(&s_commission_mux);
+    clear_pending_device_locked();
+    s_commission_stage = COMMISSION_STAGE_NONE;
+    portEXIT_CRITICAL(&s_commission_mux);
     signal_commission_done(ESP_FAIL);
-    ESP_LOGW(TAG, "commissioning cancelled for node %" PRIu64, node_id);
+    portENTER_CRITICAL(&s_commission_mux);
+    if (s_commission_phase != COMMISSION_PHASE_IDLE) {
+        s_commission_phase = COMMISSION_PHASE_DONE;
+        s_commission_result = ESP_FAIL;
+    }
+    portEXIT_CRITICAL(&s_commission_mux);
+    if (perr == ESP_OK) {
+        resync_matter_points();
+    }
+    ESP_LOGW(TAG, "commissioning cancelled for every waiting node");
     return ESP_OK;
 }
 
@@ -867,6 +925,12 @@ esp_err_t minihub_matter_commission_preflight(minihub_matter_discovery_t discove
         set_error("matter commissioner not ready");
         return ESP_ERR_INVALID_STATE;
     }
+#if !CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION
+    if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
+        set_error("ble_thread disabled (CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION)");
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+#endif
     if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
         if (wifi_ssid && wifi_ssid[0]) {
             return ESP_OK;
@@ -932,8 +996,10 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
 
     char ssid[33] = {0};
     char pass[65] = {0};
+#if CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION
     uint8_t dataset_buf[256];
     size_t dataset_len = 0;
+#endif
 
     if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
         if (wifi_ssid && wifi_ssid[0]) {
@@ -958,7 +1024,7 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
             return ESP_ERR_INVALID_ARG;
         }
     } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
-#if CONFIG_MINIHUB_THREAD_ADAPTER
+#if CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION
         if (!minihub_thread_ready()) {
             set_error("ble_thread needs Thread BR running (adapters.thread.enabled)");
             return ESP_ERR_INVALID_STATE;
@@ -969,12 +1035,12 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
             return derr == ESP_OK ? ESP_ERR_INVALID_STATE : derr;
         }
 #else
-        set_error("ble_thread requires CONFIG_MINIHUB_THREAD_ADAPTER");
+        set_error("ble_thread disabled (CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION)");
         return ESP_ERR_NOT_SUPPORTED;
 #endif
     }
 
-#if CONFIG_MINIHUB_THREAD_ADAPTER && CONFIG_ENABLE_MATTER_OVER_THREAD
+#if CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION && CONFIG_ENABLE_MATTER_OVER_THREAD
     if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
         esp_err_t aerr = minihub_matter_attach_thread();
         if (aerr != ESP_OK) {
@@ -1000,7 +1066,7 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
         ESP_LOGI(TAG, "commission BLE+WiFi node=%" PRIu64, node_id);
         err = esp_matter::controller::pairing_code_wifi(static_cast<chip::NodeId>(node_id), ssid, pass,
                                                         code.c_str());
-#if CONFIG_MINIHUB_THREAD_ADAPTER
+#if CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION
     } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
         ESP_LOGI(TAG, "commission BLE+Thread node=%" PRIu64 " dataset_len=%u", node_id,
                  (unsigned)dataset_len);
@@ -1686,7 +1752,11 @@ cJSON *minihub_matter_status_json(void)
     esp_err_t result = ESP_OK;
     read_commission_phase(&phase, &result);
     const char *commission = "idle";
-    if (phase == COMMISSION_PHASE_WAITING || s_persist_busy) {
+    /* s_persist_busy only covers the post-success config write. Once the phase
+     * has left WAITING (including a cancel), the header must stop offering
+     * 取消入网 — otherwise a second click has nothing to abort and returns
+     * ESP_ERR_NOT_FOUND while the button stays on screen. */
+    if (phase == COMMISSION_PHASE_WAITING) {
         commission = "running";
     } else if (phase == COMMISSION_PHASE_DONE) {
         commission = (result == ESP_OK) ? "ok" : "failed";
@@ -1710,6 +1780,11 @@ cJSON *minihub_matter_status_json(void)
     cJSON_AddBoolToObject(root, "thread_br_ready", minihub_thread_ready());
 #else
     cJSON_AddBoolToObject(root, "thread_br_ready", false);
+#endif
+#if CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION
+    cJSON_AddBoolToObject(root, "ble_thread", true);
+#else
+    cJSON_AddBoolToObject(root, "ble_thread", false);
 #endif
     /* snapshot under the commission mux so we never read a half-written buffer. */
     char le[sizeof(s_last_error)];

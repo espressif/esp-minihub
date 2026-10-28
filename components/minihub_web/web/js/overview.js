@@ -326,6 +326,9 @@ function sectionHeader(ad, count) {
     }
     if (ad === 'matter') {
         const st = matterStatus.ready ? '<span class="mod-acct">' + t('ov.matter_controller_ready') + '</span>' : (showActs ? '<span class="mod-acct off">' + t('ov.not_ready') + '</span>' : '');
+        /* One commissioner slot. While a join is running the header is 取消入网
+         * so another code cannot be started; otherwise it is 添加. The card
+         * does not carry its own cancel button. */
         const running = matterStatus.commission === 'running';
         const acts = showActs ? (running
             ? '<button class="btn-sm bad" type="button" onclick="cancelMatterCommission()">' + t('ov.cancel_commission') + '</button>'
@@ -454,7 +457,7 @@ function propsHtml(p) {
     if (!p.props || typeof p.props !== 'object') return '';
     const meterOrder = ['power_w', 'voltage_v', 'current_a', 'energy_wh'];
     const otherOrder = ['humidity'];
-    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room', 'room_name', 'room_id', 'did', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'commission_phase', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
+    const skip = new Set(['extras', 'params', 'owner', 'indicator', 'volume', 'dnd', 'motion_detection', 'motion_tracking', 'time_watermark', 'wdr', 'play_text', 'execute_text', 'open', 'zone_status', 'tamper', 'battery_low', 'name', 'room', 'room_name', 'room_id', 'did', 'home_name', 'home_id', 'appliance_id', 'category', 'product', 'product_name', 'no_control', 'transport', 'commissioning', 'commission_phase', 'commission_error', 'detail_rows', 'ieee', 'uuid', 'node_id', 'manufacturer', 'vendor', 'manufacturer_name', 'model', 'model_id', 'model_identifier', 'sw_version', 'fw_version', 'firmware_version', 'app_version', 'device_version', 'hw_version', 'hardware_version', 'ota', 'cold_temp', 'cold_set', 'freeze_temp', 'freeze_set', 'left_zone_temp', 'right_zone_temp', 'tea_temp', 'milk_temp', 'target_temp', 'mode_label', 'card_summary', 'in_tds', 'out_tds', 'filter_ro_life', 'filter_ro_max', 'water_total_l', 'status_text', 'battery', 'stream_video_codec', 'stream_audio_codec', 'supports_brightness', 'supports_color_temp', 'supports_color', 'color_mode', 'color', 'mode_label', 'fan_label', 'mode', 'target_temp', 'temperature', 'fan_level', 'brightness', 'color_temp', 'position', 'target_position'].concat(meterOrder).concat(otherOrder));
     const labels = {
         power_w: t('ov.prop_power'),
         voltage_v: t('ov.prop_voltage'),
@@ -836,9 +839,6 @@ function cardHtml(p) {
         (!hasParams || powerVal != null || p.value === 'on' || p.value === 'off' || p.value === 'true' || p.value === 'false' || !p.value);
     const ctrl = allowToggle ? '<label class="toggle"><input type="checkbox" data-id="' + p.point_id + '"' + (on ? ' checked' : '') + dis + '>    <span class="slider"></span></label>' : '';
     const pidJs = String(p.point_id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const cancelBtn = (p.adapter === 'matter' && commissioning && cPhase !== 'failed')
-        ? '<button class="btn-sm" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();cancelMatterCommission(\'' + String((p.props && p.props.node_id) || '') + '\')">' + t('ov.cancel_commission') + '</button>'
-        : '';
     const delBtn = (p.adapter === 'matter') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteMatterDevice(\'' + pidJs + '\')">' + t('ov.delete') + '</button>' : (p.adapter === 'zigbee') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteZigbeeDevice(\'' + pidJs + '\')">' + t('ov.delete') + '</button>' : (p.adapter === 'ble_mesh') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteBleMeshDevice(\'' + pidJs + '\')">' + t('ov.delete') + '</button>' : '';
     const short = pointDisplayName(p);
     const room = pointRoomName(p);
@@ -916,7 +916,7 @@ function cardHtml(p) {
     const valCls = cPhase === 'waiting' ? 'pending' : (cPhase === 'failed' ? 'off' : (on ? 'on' : 'off'));
     const cardClickCls = commissioning ? '' : clickCls;
     const renameBtn = '<button class="btn-sm" type="button" onclick="renameDevice(\'' + pidJs + '\',event)">' + t('ov.rename') + '</button>';
-    return '<div class="dcard' + cardClickCls + ((p.online || commissioning) ? '' : ' offline') + (commissioning ? ' commissioning' : '') + '" data-pid="' + escAttr(p.point_id || '') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : mhTypeLabel(p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + valCls + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + renameBtn + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">' + esc(t('ov.log')) + '</button>' : '') + cancelBtn + delBtn + ctrl + '</div></div>';
+    return '<div class="dcard' + cardClickCls + ((p.online || commissioning) ? '' : ' offline') + (commissioning ? ' commissioning' : '') + '" data-pid="' + escAttr(p.point_id || '') + '"' + clickAttr + '><div class="card-top">' + iconHtml + '<div class="card-name">' + esc(short) + '</div><span class="badge ' + p.type + '">' + esc((typeof dwTypeDisplay === 'function') ? dwTypeDisplay(p) : mhTypeLabel(p.type)) + '</span></div>' + '<div class="card-meta"><span>' + onlineLab + '</span>' + (room ? '<span>' + esc(room) + '</span>' : '') + '</div>' + '<div class="card-val ' + valCls + '">' + esc(String(valShow)) + '</div>' + climateSummary(p) + coverSummary(p) + magnetSummary(p) + meterSummary(p) + propsHtml(p) + '<div class="card-actions">' + renameBtn + (showDeviceLogBtn(p) ? '<button class="btn-sm" type="button" onclick="openDeviceLog(\'' + p.point_id + '\',event)">' + esc(t('ov.log')) + '</button>' : '') + delBtn + ctrl + '</div></div>';
 }
 
 async function renameDevice(pointId, ev) {
@@ -1829,9 +1829,16 @@ async function confirmHomePicker() {
 }
 let matterWifiEnabled = false;
 
+function matterBleThreadEnabled() {
+    /* Absent means the status payload predates the flag; keep the BLE default. */
+    return !matterStatus || matterStatus.ble_thread !== false;
+}
+
 function matterDiscoveryValue() {
-    /* Always BLE + DNS-SD (CHIP DiscoveryType::kAll). Wi-Fi toggle selects credentials. */
-    return matterWifiEnabled ? 'ble_wifi' : 'ble_thread';
+    /* BLE + DNS-SD (CHIP DiscoveryType::kAll) when that path is built in.
+     * Wi-Fi toggle selects the credentials injected during commissioning. */
+    if (matterWifiEnabled) return 'ble_wifi';
+    return matterBleThreadEnabled() ? 'ble_thread' : 'network';
 }
 
 function syncMatterDiscoveryField() {
@@ -1854,7 +1861,7 @@ function refreshMatterAddUi() {
     if (hintEl) {
         hintEl.textContent = showWifi
             ? t('ov.matter_hint_wifi')
-            : t('ov.matter_hint_thread');
+            : (matterBleThreadEnabled() ? t('ov.matter_hint_thread') : t('ov.matter_hint_thread_network'));
         hintEl.hidden = false;
     }
 }
@@ -1918,6 +1925,10 @@ async function pollMatterCommissionCard(nodeId) {
             await loadPoints();
             const sr = await fetch('/api/matter/status');
             const st = await sr.json().catch(() => ({}));
+            if (sr.ok) {
+                matterStatus = st;
+                if (typeof renderOverview === 'function' && view === 'overview') renderOverview();
+            }
             const stage = st.commission_stage || '';
             if (stage && stage !== lastStage) {
                 lastStage = stage;
@@ -1944,27 +1955,53 @@ async function pollMatterCommissionCard(nodeId) {
 }
 
 async function cancelMatterCommission(nodeId) {
-    const nid = (nodeId != null && nodeId !== '')
-        ? String(nodeId)
-        : (matterStatus && matterStatus.commission_node_id != null
-            ? String(matterStatus.commission_node_id) : null);
-    if (!nid) {
+    /* No argument is the section header: cancel every waiting node.
+     * A card passes its own node id and must not take that path. */
+    const all = nodeId == null;
+    const nid = all ? null : String(nodeId);
+    if (!all && !nid) {
         toast(t('ov.no_active_commission'));
         return;
     }
+    const body = all ? { cancel: true, all: true } : { cancel: true, node_id: nid };
     try {
         const r = await fetch('/api/matter/commission', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ node_id: nid, cancel: true })
+            body: JSON.stringify(body)
         });
         const j = await r.json().catch(() => ({}));
         toast(t('ov.cancel_sent_prefix') + (j.status || (r.ok ? 'ok' : t('ov.failed'))));
+        if (all && j.status === 'cancelled' && typeof matterStatus === 'object' && matterStatus) {
+            matterStatus.commission = 'failed';
+        }
     } catch (e) {
         toast(t('ov.cancel_commission_failed'));
     }
+    /* loadMeta updates the header button; the card comes from /api/points,
+     * which only changes after the async matter resync. A plain loadPoints()
+     * can also reuse a poll that started before the cancel, so the card stays
+     * on 等待入网中 until a full page reload. */
     if (typeof loadMeta === 'function') await loadMeta();
-    if (typeof loadPoints === 'function') await loadPoints();
+    if (typeof renderOverview === 'function' && view === 'overview') renderOverview();
+    for (let i = 0; i < 4; i++) {
+        if (typeof refreshAfterCommand === 'function') await refreshAfterCommand();
+        else if (typeof loadPoints === 'function') await loadPoints(true);
+        const list = (typeof pts !== 'undefined' && Array.isArray(pts)) ? pts : [];
+        if (all) {
+            const still = list.some(function (p) {
+                return p && p.adapter === 'matter' && p.props && p.props.commission_phase === 'waiting';
+            });
+            if (!still) break;
+        } else {
+            const row = list.find(function (p) {
+                return p && p.adapter === 'matter' && p.props &&
+                    String(p.props.node_id != null ? p.props.node_id : '') === String(nid);
+            });
+            if (row && row.props.commission_phase !== 'waiting') break;
+        }
+        if (i < 3) await new Promise(function (res) { setTimeout(res, 400); });
+    }
 }
 
 async function submitMatterAdd() {
@@ -2001,7 +2038,7 @@ async function submitMatterAdd() {
         body.wifi_ssid = ssid;
         if (wpass) body.wifi_password = wpass;
         body.transport = 'wifi';
-    } else {
+    } else if (discovery === 'ble_thread') {
         body.transport = 'thread';
     }
     if (submitBtn) submitBtn.disabled = true;

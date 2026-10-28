@@ -362,6 +362,7 @@
   "ov.map_attribution": "© AMap",
   "ov.matter_controller_ready": "Controller ready",
   "ov.matter_hint_thread": "Joins over BLE + DNS-SD and writes the Hub's Thread network dataset.",
+  "ov.matter_hint_thread_network": "On-network Matter commissioning (DNS-SD). A factory-new Thread device still needs BLE commissioning.",
   "ov.matter_hint_wifi": "Joins over BLE + DNS-SD and writes the device STA SSID and password.",
   "ov.meter_empty": "Power — · Energy —",
   "ov.module_not_installed": "Module not installed",

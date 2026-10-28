@@ -874,6 +874,13 @@ function renderOverview() {
         const hEl = el.querySelector('.auth-section-h[data-ad="' + ad + '"]');
         if (hEl) hEl.outerHTML = sectionHeader(ad, groups[ad].length);
     });
+    /* Matter's 取消入网 / 添加 lives on the section header, not the card. The
+     * in-place path used to leave that header untouched, so a successful cancel
+     * updated the toast and the card but the button stayed 取消入网. */
+    const matterH = el.querySelector('.matter-section-h');
+    if (matterH && groups.matter) {
+        matterH.outerHTML = sectionHeader('matter', groups.matter.length);
+    }
 }
 
 /* Keyed card update: keep the device icon <img> element alive across state

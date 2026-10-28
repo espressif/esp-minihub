@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-10-14-16:06:00';
+window.mhWebBuild = '2026-10-28-16:35:00';
 window.mhWebVersion = '0.1.0';
 
 function toggleSecret(btn) {

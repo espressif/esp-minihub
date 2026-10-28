@@ -19,7 +19,7 @@
       "devices": []
     },
     "zigbee": {
-      "enabled": true,
+      "enabled": false,
       "devices": []
     },
     "ble_mesh": {

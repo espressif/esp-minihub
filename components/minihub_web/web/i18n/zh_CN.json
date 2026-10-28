@@ -362,6 +362,7 @@
   "ov.map_attribution": "© 高德地图",
   "ov.matter_controller_ready": "控制器就绪",
   "ov.matter_hint_thread": "经 BLE + DNS-SD 入网，并写入 Hub 的 Thread 网络数据集。",
+  "ov.matter_hint_thread_network": "仅走已在网的 Matter 配网（DNS-SD）。全新 Thread 设备仍需要 BLE 配网。",
   "ov.matter_hint_wifi": "经 BLE + DNS-SD 入网，并写入设备 STA 的 SSID 与密码。",
   "ov.meter_empty": "功率 — · 电量 —",
   "ov.module_not_installed": "模块未安装",

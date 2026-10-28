@@ -1,5 +1,5 @@
 # Zigbee coordinator (esp-zigbee-lib 2.x native)
-CONFIG_MINIHUB_ZIGBEE_SDK=y
+CONFIG_MINIHUB_ZIGBEE_SDK=n
 CONFIG_ZB_ENABLED=y
 # CONFIG_ZB_SDK_1xx is not set
 CONFIG_ZB_ZCZR=y
