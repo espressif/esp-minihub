@@ -7,6 +7,39 @@ L2 modules run **QuickJS** scripts on the Hub. Host loads ``main.js`` after
 adapters start and on soft reload (``POST /api/hub/reload``). Implementation:
 ``components/minihub_js/minihub_js.c``.
 
+Runtime
+-------
+
+The engine is QuickJS-NG, the community fork of Bellard's QuickJS, and this
+firmware pins the ``espressif/quickjs-ng`` component at 0.14.0. Syntax follows
+that build: ``class``, ``async``/``await``, ``Proxy`` and optional chaining all
+work. Read the ``quickjs-ng`` documentation for the exact boundary rather than
+trusting a version typed here. MiniHub adds the four timer globals and one
+``host`` object, and nothing else, so an L2 module is neither a browser page
+nor a Node process.
+
+The differences that bite a JavaScript developer:
+
+* One file, no module system. The Host runs each ``main.js`` inside its own
+  function (``minihub_js.c``), so a top-level ``function`` or ``var`` belongs to
+  that module and does not replace the same name in another module. ``import``
+  and ``require`` still resolve to nothing, and there is no file-read Host API
+  either — one file really has to be one file.
+* No ``console`` and no ``print``. Logging goes to ``host.log.info`` /
+  ``host.log.warn`` / ``host.log.error``.
+* No ``fetch``, no ``XMLHttpRequest``, no file system. Outbound HTTP is
+  ``host.http.request`` / ``host.http.requestAsync``; persisted state is
+  ``host.config``. See :doc:`../api/js_host`.
+* ``setTimeout`` / ``setInterval`` / ``clearTimeout`` / ``clearInterval`` are
+  installed as globals and repeated under ``host.timer``. Every callback runs on
+  one JS worker task, so a callback that blocks holds up all other JS modules.
+* The worker task stack is ``CONFIG_MINIHUB_JS_WORKER_STACK_SIZE`` (32768 bytes
+  by default, allocated in PSRAM) and QuickJS is told to stop at
+  ``CONFIG_MINIHUB_JS_WORKER_STACK_BUDGET`` (24576) so recursion hits the engine
+  limit instead of the real stack.
+* L2 needs ``CONFIG_MINIHUB_JS_PLUGINS``, which defaults to on once
+  ``CONFIG_MINIHUB_DYNAMIC_MODULES`` is on.
+
 When to use L2
 ---------------
 
@@ -27,7 +60,9 @@ Directory layout
 
    examples/plugins/ID/
      module.json
-     main.js              # required — must export setup(host)
+     main.js              # required — defines setup(host); without it the
+                          # module still loads, with a no setup(host) function
+                          # warning and no points
      meta.json            # optional ui + capabilities
      web/                 # optional static assets
 
@@ -41,16 +76,24 @@ Directory layout
      "name": "Demo JS module",
      "version": "0.1.0",
      "enabled": true,
+     "type": "module",
      "runtime": "js",
      "adapter": "demo_js",
-     "abi_version": 1,
-     "core_api_min": 1,
-     "core_api_max": 1,
-     "capabilities": ["points"]
+     "targets": ["ALL"]
    }
 
-If ``runtime`` is omitted, Host treats the module as JS when ``main.js`` exists
-and there is no ``CMakeLists.txt``.
+An L2 manifest carries no ``abi_version`` — that belongs to a native package.
+``ui`` and ``capabilities`` are read from ``meta.json`` when one is packaged, and
+fall back to ``module.json`` when it is not.
+
+**``runtime: "js"`` is required.** Omitting it does not make the module JS: at
+load time the runtime only starts a QuickJS module when ``runtime`` is the literal
+string ``js`` (or ``hybrid``), and a manifest with no ``runtime`` and no
+``binary`` falls through to the native path and fails with "no binary or builtin".
+The ``main.js`` / no-``CMakeLists.txt`` heuristic you may have seen described
+elsewhere is used by the **packer and catalog generator** to classify a source
+tree, not by the Hub. ``adapter`` is required too — the loader rejects a manifest
+whose adapter name is empty, L2 included.
 
 ``main.js`` contract
 --------------------
@@ -69,13 +112,19 @@ Host calls ``setup(host)`` once per load. The ``host`` object exposes:
   ``point.registered`` (same Host ``point_id`` enrichment)
 * ``host.command.on(adapter, handler)`` — receive UI/REST commands in JS
 * ``host.command.invoke({ point_id, cmd, params? })``
-* ``host.http.request({ url, method, headers, body })`` — allowlisted HTTP from JS
+* ``host.adapter.poll(fn)`` — run ``fn`` on the ~5 s adapter poll tick, up to 8
+  handlers in the runtime; ``host.adapter.clearPoll()`` drops them all
+* ``host.http.request({ url, method, headers, body, timeout_ms, response_b64 })``
+  — blocking HTTP **on the JS worker**, so it stalls every other L2 module for the
+  duration. There is no URL allowlist in the device: reachability, and the TLS
+  trust bundle for ``https``, are the only limits. ``response_b64`` returns the
+  body base64-encoded instead of as a UTF-8 string
 * ``host.http.requestAsync(opts)`` — same ``opts``, returns a **Promise** and runs the
   socket I/O off the JS worker (max 4 in flight). Use it for many-request paths such as
   bulk cloud refresh; there is no synchronous fallback for older Hosts
 * ``host.config.get()`` — read merged ``adapters.json`` snippet
 
-Vendor plugins that enrich a Zigbee (or other Host) device must use the
+Plugins that enrich a Zigbee (or other Host) device must use the
 **same** ``point_id``. Write extras under top-level ``props``:
 ``manufacturer`` / ``category`` / ``ota`` / ``owner`` are identity and
 grouping metadata — not catalog params. Adapter telemetry merges
@@ -100,7 +149,15 @@ Minimal ``main.js``:
      });
    }
 
-Optional ``ui.json`` describes module fields in the Web UI (see
+``sensor`` in that sample is what the loader fills in when ``type`` is omitted
+(``minihub_js.c``), and it is **not** a catalog ``device_id``: the point still
+registers, works in rules and answers REST, but the console draws no widget card
+for it — it shows the *type not registered* fallback, rendering each parameter
+that the parameter table knows and a read-only text row for the rest
+(:doc:`../type_catalog`). Name a real ``device_id`` (``light``, ``switch``,
+``sensor_contact``, …) to get the card.
+
+Optional ``meta.json`` describes module fields in the Web UI (see
 ``examples/plugins/color_bulb_js/`` for a Devices-page demo).
 
 Wire into ``adapters.json``
@@ -124,12 +181,10 @@ Pack, deploy, test
    python3 tools/pack_store_module.py pack demo_js
    python3 tools/sync_store_catalog.py --from-store
    python3 tools/store_server.py
-   # on Hub: POST /api/store/config {"custom_url":"http://YOUR_PC:8080"}
-   curl -X POST http://$HUB/api/store/refresh
-   curl -X POST http://$HUB/api/store/install \
-     -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"demo_js"}'
-   curl -X POST http://$HUB/api/hub/reload
+
+Then in the Web UI at ``http://HUB/``, open **Store**, set the custom Store URL
+to ``http://YOUR_PC:8080``, refresh the catalog, and install ``demo_js``. The
+Hub reloads the module automatically.
 
 Verify:
 

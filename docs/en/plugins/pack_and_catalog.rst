@@ -3,7 +3,8 @@ Pack and Catalog
 
 :link_to_translation:`zh_CN:[中文]`
 
-This chapter covers the **developer PC → Hub** pipeline for Store modules.
+A Store module travels from a source folder on the developer PC to
+``/store/modules/<id>/`` on the Hub.
 
 Prerequisites
 -------------
@@ -57,8 +58,8 @@ Pack commands
       # Manual MHMD wrap (usually done inside pack / standalone CMake)
       python3 tools/pack_store_module.py mhmd in.so out.so
 
-      # No-IDF build for examples/plugins L3 demos
-      python3 tools/build_plugin_standalone.py color_bulb
+      # No-IDF build for an L3 module (no in-tree demo; scaffold one first)
+      python3 tools/build_plugin_standalone.py my_native
 
    ``./tools/build_firmware.py … modules`` compiles every native plugin that has
    both ``module.json`` and ``CMakeLists.txt`` (``examples/plugins/*/``
@@ -116,8 +117,15 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
      "size": 3762
    }
 
-* ``type`` — ``module`` for L2; L1 config-only packs may appear as ``pack``
-  (``module``/``pack`` are interchangeable only for JSON-only items)
+* ``type`` — always ``module`` in a generated catalog. What marks an L1 config
+  pack is ``config_only: true`` (a ``.json`` install URL works too);
+  ``runtime: "pack"`` is written alongside and is what the package classifier
+  and the loader use to route the package to ``minihub_pack`` rather than
+  treat it as a loadable module. A hand-written ``"type": "pack"`` is honoured
+  only where the Hub reports installed state — it cannot be *installed*: the
+  catalog lookup lets a ``pack`` request find a ``module`` entry (and the
+  reverse) only for ``config_only`` items, and an entry whose ``url`` ends in
+  ``.mhub`` is not one of those (``minihub_store.c:999-1006,1027-1036``).
 * ``url`` — path or absolute HTTP URL of the ``.mhub``
 * ``targets`` — lowercase chip folder names, the same strings as the firmware
   directories (for example ``esp32s31``), or ``ALL`` for a JS module. Copied
@@ -128,46 +136,54 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
 * ``size`` — **outer zip** byte length (must match the ``.mhub`` on disk;
   ``pack`` rewrites this)
 
-.. only:: not hide_l3
+* ``binary_size`` — the inner native image size, not the zip. It is stamped from
+  that id's compiled image whenever the packer finds one under the app build
+  directory, so a non-zero ``binary_size`` next to a ``runtime: js`` entry means
+  a leftover artifact from an earlier build of the same id, not a native module
+  (``sync_store_catalog.py:258-266``).
+* ``sha256`` — the packer hashes every package and writes it here, and the
+  Store API echoes it, but the install path never verifies it: ``size`` must
+  match, the digest is not checked. Digest verification exists only for the
+  firmware and asset records in ``components/minihub_update/``.
 
-   * ``type`` is also ``module`` for L3
-   * ``binary_size`` — inner MHMD ``.so`` size (not the zip). An L3 catalog
-     id looks like ``color_bulb`` with ``targets: ["esp32s31"]``.
+``type`` means different things in the two files: a generated ``catalog.json``
+says ``module`` for every tier, while the ``module.json`` inside an L1 package
+says ``pack``.
 
 Install on a running Hub
 ------------------------
 
 **From local Store server** (Web UI → Store → refresh catalog → install).
 
-**REST** (JSON only — no multipart file upload):
+**Web UI** — open ``http://HUB/`` and go to **Store**, set the custom Store URL
+to your local server, refresh the catalog, then install ``color_bulb_js``. The
+Hub reloads the module automatically after install.
 
-.. code-block:: bash
-
-   HUB=192.168.1.10
-
-   curl -X POST http://$HUB/api/store/config \
-     -H 'Content-Type: application/json' \
-     -d '{"custom_url":"http://YOUR_PC:8080","disable_default":false}'
-
-   curl -X POST http://$HUB/api/store/refresh
-   curl -X POST http://$HUB/api/store/install \
-     -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
-
-   curl -X POST http://$HUB/api/hub/reload
-
-L1 packs use ``{"type":"pack","id":"my_pack"}``.
+L1 packs appear as a pack entry in the Store UI.
 
 Verify installation
 -------------------
 
+.. note::
+
+   ``$HUB`` is the device's LAN address. With Web login on (the default), log in
+   once and reuse the cookie:
+
+   .. code-block:: bash
+
+      export HUB=<hub-ip>          # from the eth got IP log line
+      curl -s -c /tmp/mh -X POST http://$HUB/api/auth/login \
+        -H 'Content-Type: application/json' \
+        -d '{"username":"admin","password":"secret1"}'
+
 .. code-block:: bash
 
-   curl http://$HUB/api/modules
-   curl http://$HUB/api/packs
-   curl http://$HUB/api/config/adapters
+   curl -s -b /tmp/mh http://$HUB/api/modules
+   curl -s -b /tmp/mh http://$HUB/api/packs
+   curl -s -b /tmp/mh http://$HUB/api/config/adapters
 
-Serial logs: ``loaded module 'color_bulb'``, or JS ``setup ok`` for L2.
+Serial log: a JS module reports ``JS module '<id>' setup ok``; a native module
+reports ``loaded module binary: <path>``.
 
 Upgrade / uninstall
 -------------------
@@ -176,12 +192,14 @@ Upgrade:
 
 .. code-block:: bash
 
-   curl -X POST http://$HUB/api/store/upgrade -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+   curl -s -b /tmp/mh -X POST http://$HUB/api/store/upgrade \
+     -H 'Content-Type: application/json' \
+     -d '{"type":"module","id":"color_bulb_js"}'
 
 Uninstall:
 
 .. code-block:: bash
 
-   curl -X POST http://$HUB/api/store/uninstall -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+   curl -s -b /tmp/mh -X POST http://$HUB/api/store/uninstall \
+     -H 'Content-Type: application/json' \
+     -d '{"type":"module","id":"color_bulb_js"}'

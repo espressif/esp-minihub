@@ -4,11 +4,14 @@ Zigbee
 :link_to_translation:`en:[English]`
 
 MiniHub 以 **Host 适配器** （协调器）运行 Zigbee，而不是独立终端示例。设备条目在
-``adapters.zigbee`` 下。JSON 字段见 :doc:`data_model` （ :ref:`adapters-json` ）；
-本章覆盖构建、入网与 REST。
+``adapters.zigbee`` 下。JSON 字段见 :doc:`data_model` （ :ref:`adapters-json` ）。
 
-Zigbee 与 Thread 共用 802.15.4，**编译期互斥**。Hub 启动与 IP 上行见
-:doc:`getting_started` 与 :doc:`networking`。
+Zigbee 独占 2.4 GHz 射频：既不与 Wi-Fi 共存，也不与 BLE Mesh 共存；Thread 又要抢
+同一块 802.15.4 射频，所以这两个栈 **编译期互斥**：
+``tools/build_firmware.py`` 会拦下两者都启用的构建，两个 Kconfig 选项彼此没有依赖。
+JSON 仍然双开时按跳过 Thread 处理；JSON 让 Zigbee 与 Wi-Fi 或 BLE Mesh 并列时，按
+跳过 Zigbee 处理。所以 Zigbee 的 Hub 走以太网接入局域网。Hub 启动见
+:doc:`getting_started` 与 :doc:`networking`，完整矩阵见 :doc:`radios`。
 
 构建
 ----
@@ -38,14 +41,14 @@ Zigbee 与 Thread 共用 802.15.4，**编译期互斥**。Hub 启动与 IP 上�
      }
    }
 
-设置 ``adapters.zigbee.enabled`` ，并在 ``devices[]`` 中列出已绑定设备。
-字段清单见 :ref:`adapters-json` 。
+设置 ``adapters.zigbee.enabled``，并在 ``devices[]`` 中列出已绑定设备。
+字段清单见 :ref:`adapters-json`。
 
 REST 接口
 ---------
 
 仅当编译了 ``CONFIG_MINIHUB_ZIGBEE_SDK`` 时存在。鉴权与总览见
-:doc:`api/host_rest` 。
+:doc:`api/host_rest`。
 
 * ``POST /api/zigbee/permit_join`` — 打开或关闭入网窗口
 * ``POST /api/zigbee/install_code`` — 入网前写入 install code
@@ -54,7 +57,8 @@ REST 接口
 入网窗口
 ^^^^^^^^
 
-请求体 JSON 可选。 ``seconds`` 缺省 60。 ``0`` 关闭窗口。
+请求体 JSON 可选。 ``seconds`` 缺省 60。 ``0`` 关闭窗口。超过 **254** 的值会在进
+协议栈之前被静默压到 254 —— 这个字段只有一个字节，日志里记的是实际打开的秒数。
 
 .. code-block:: bash
 
@@ -62,9 +66,10 @@ REST 接口
      -H 'Content-Type: application/json' \
      -d '{"seconds":60}'
 
-Zigbee 入网窗口与 BLE Mesh 配网窗口不能同时打开。若 Mesh 正在配网，permit-join
-会失败（错误字符串在 JSON 中）。射频 / 配网状态见 ``GET /api/radio/provision``
-（ :doc:`ble_mesh` ）。
+Zigbee 入网窗口与 BLE Mesh 配网窗口不能同时打开。Mesh 那边只要 **窗口还开着**
+就会挡住 permit-join，并不要求真有一台设备正在配网 —— 开着但空闲的 Mesh 窗口已经
+会让 permit-join 失败（错误字符串在 JSON 中）。射频 / 配网状态见
+``GET /api/radio/provision`` （ :doc:`ble_mesh` ）。
 
 Install code
 ^^^^^^^^^^^^
@@ -83,8 +88,8 @@ Install code
 移除设备（遗留）
 ^^^^^^^^^^^^^^^^
 
-``POST /api/zigbee/devices`` 用于删除/移除设备。若请求体未写 ``adapter`` ，
-处理函数会注入 ``zigbee`` 。语义与 Hub 点位移除相同（ ``point_id`` ，或
+``POST /api/zigbee/devices`` 用于删除/移除设备。若请求体未写 ``adapter``，
+处理函数会注入 ``zigbee``。语义与 Hub 点位移除相同（ ``point_id``，或
 ``delete_all`` 加适配器）。
 
 .. code-block:: json
@@ -94,8 +99,8 @@ Install code
 控制
 ----
 
-灯具走标准 Hub 命令 API（ ``turn_on`` / ``turn_off`` / ``toggle`` ，
-或 Devices 页的 ``set`` / ``toggle`` + ``parameter`` ）：
+灯具走标准 Hub 命令 API（ ``turn_on`` / ``turn_off`` / ``toggle``，
+或概览页的 ``set`` / ``toggle`` + ``parameter`` ）：
 
 .. code-block:: bash
 
@@ -107,11 +112,11 @@ Install code
      -H 'Content-Type: application/json' \
      -d '{"device":"light","parameter":"power","value":true,"point_id":"zigbee.zb_0a1b"}'
 
-点位身份与厂商扩展
+点位身份与插件扩展
 ------------------
 
 每台 Zigbee 设备对应 **一条** Host 点（``zigbee.zb_XXXX``）。登记时适配器写入
-顶层身份字段（不是类型目录参数 / 设备页滑条）：
+顶层身份字段（不是类型目录参数 / 概览页滑条）：
 
 * ``props.ieee`` — ``0x`` + 16 位十六进制
 * ``props.manufacturer`` / ``props.model`` — 入网访谈后若能读到 Basic
@@ -119,19 +124,20 @@ Install code
 * ``props.sw_version`` / ``props.hw_version`` — Basic Application Version /
   HW Version（设备未实现对应属性时详情为空）
 * ``props.category`` — Zigbee Host **不** 填写。缺省时 UI 用类型目录标签
-  （``light`` →「灯」）。厂商插件可 merge 产品名作为品类。
+  （``light`` →「灯」）。插件可 merge 产品名作为品类。
 
 遥测更新只通过 ``minihub_point_merge_params`` 合并 ``props.params``，因此同一
 点上的插件字段会保留。
 
-厂商插件（L2）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
+插件（L2）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
 ``catalog.json``），写在同一 ``point_id`` 上：
 
-* **认领** — 写入 ``props.owner`` = 插件 ``adapter`` 名。该槽在
+* **关联** — 写入 ``props.owner`` = 插件 ``adapter`` 名。该槽在
   ``adapters.json`` 为 ``enabled`` 时，总览把卡片挪到厂商分组（文案见
   ``meta.json`` ``filter_label``）。**不需要** 云端目录。
-* **OTA 标记** — 仅在 GET ``catalog_url`` 成功后 merge ``props.ota``
-  （``available``、``version``，可选 ``url`` / ``file`` / ``size``）。示例::
+* **OTA 标记** — 由插件在自己的检查判定有固件可升时 merge ``props.ota``
+  （``available``、``version``，可选 ``url`` / ``file`` / ``size``）；其中 Hub
+  只会用 ``file`` / ``url`` / ``version``。示例::
 
      {
        "ota": {
@@ -152,7 +158,7 @@ Install code
 Cluster 映射（新设备类别）
 --------------------------
 
-Zigbee 接线（分类 / 属性 → ``props.params`` / 控制命令）是**表驱动**的。
+Zigbee 接线（分类 / 属性 → ``props.params`` / 控制命令）是 **表驱动** 的。
 文案与控件仍在类型目录（:doc:`type_catalog`）；映射文件只回答 ZCL cluster
 如何接到参数。
 
@@ -162,7 +168,7 @@ Zigbee 接线（分类 / 属性 → ``props.params`` / 控制命令）是**表�
 
 运行时叠加（在嵌入默认之后合并；同身份条目后者覆盖）：
 
-* ``/store/preinstall/zigbee_cluster_map.json`` — Store / 出厂预装
+* ``/store/preinstall/zigbee_cluster_map.json`` — 商店 / 出厂预装
 * ``/data/config/zigbee_cluster_map.json`` — 设备上覆盖
 
 新增 Zigbee 类别且不必改 ``zigbee_adapter.c`` 的 if-else：

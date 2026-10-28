@@ -50,6 +50,13 @@ docs/_build/
 /_build/
 # Staged by docs/_extensions/stage_catalog.py at Sphinx configure time
 docs/_static/catalog/
+docs/_static/architecture/
+docs/_static/data_model/
+docs/_static/data_flow/
+docs/_static/rules/
+docs/_static/ota_update/
+docs/_static/net_boot/
+docs/_static/source_tree/
 docs/_static/catalog.zip
 docs/_static/module_sdk.zip
 
@@ -58,3 +65,6 @@ docs/superpowers/
 
 # Store pack artifacts (build locally / deploy outside the tree)
 *.mhub
+
+# Local git worktrees
+.worktrees/

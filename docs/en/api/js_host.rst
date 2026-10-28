@@ -6,10 +6,23 @@ L2 JS Host API
 Overview
 --------
 
-Store **L2** modules (``runtime: js``, ``main.js``) access Host services through QuickJS
-bindings in ``components/minihub_js/minihub_js.c``. Requires ``CONFIG_MINIHUB_JS_PLUGINS``.
+An L2 module is JavaScript running inside the Hub; its ``module.json`` marks
+the tier with ``runtime: js``. It reaches Host services
+through QuickJS bindings, not through a linker. Those bindings live in
+``components/minihub_js/minihub_js.c`` and are compiled in when
+``CONFIG_MINIHUB_JS_PLUGINS`` is set.
 
 REST install/RPC: :doc:`plugin_rest`. C point/command model: :doc:`minihub_core`.
+
+The host object
+---------------
+
+What ``setup(host)`` receives, read out of the QuickJS bindings at build time, so a
+method that was renamed or removed cannot stay on this page. The number after ``/``
+is the argument count the C side registers; the table lists each namespace and the
+methods under it.
+
+.. minihub-js-api::
 
 .. only:: not hide_l3
 
@@ -18,9 +31,9 @@ REST install/RPC: :doc:`plugin_rest`. C point/command model: :doc:`minihub_core`
 Module entry
 ------------
 
-Hub calls global ``setup(host)`` once per enabled JS module on load and on each
+Hub calls ``setup(host)`` once per enabled JS module on load and on each
 ``POST /api/hub/reload``. ``main.js`` must define ``setup``; otherwise the module is
-skipped with a warning.
+skipped with a warning. Each module's top-level names stay in that module.
 
 Use a distinct ``point_id`` prefix per module id in ``setup``; reload runs ``setup`` again.
 Register **one point per device** (``module.device``), not one point per parameter.
@@ -245,8 +258,8 @@ Returns
 Methods — host.time
 -------------------
 
-The hub timezone is a fixed whole-hour offset chosen on the System page
-(``UTC``, ``UTC+8``, ``UTC-8``) and stored in NVS. The default is UTC.
+The hub timezone is a fixed offset chosen on the System page
+(``UTC``, ``UTC+8``, ``UTC+5:30``) and stored in NVS. The default is UTC.
 ``offsetMin`` is minutes east of UTC. There is no daylight-saving shift.
 
 host.time.offsetMin() / host.time.id()
@@ -302,6 +315,50 @@ Notes
 * ``setup`` may arm timers; they keep running until ``clear*`` or reload.
 * A long-running callback blocks other timers and jobs — keep callbacks short.
 * ``POST /api/hub/reload`` clears all timers and runs ``setup`` again.
+
+Methods — host.adapter
+----------------------
+
+.. code-block:: javascript
+
+   host.adapter.poll(function () { /* refresh points from the cloud */ });
+   host.adapter.clearPoll();
+
+host.adapter.poll(fn)
+~~~~~~~~~~~~~~~~~~~~~
+
+Run ``fn`` on the Host adapter poll tick, about every 5 s. The tick only wakes
+the JS worker, so a poll cannot delay adapter polling or a hub reload; the
+callback itself runs on the JS worker task (QuickJS is single-threaded).
+
+Parameters
+^^^^^^^^^^
+
+``fn`` (function, required)
+    Callback with no arguments. Any other value throws ``TypeError``.
+
+Returns
+^^^^^^^
+
+``undefined``. The runtime holds at most 8 poll handlers, so a 9th throws. A
+callback that throws is logged and dropped — the tick keeps going.
+
+host.adapter.clearPoll()
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Removes **every** poll handler registered in the JS runtime, including ones
+armed by another L2 module. There is no per-handler unregister: to stop
+polling from one module, keep your own flag and return early in the callback.
+
+Notes
+^^^^^
+
+* A tick is skipped while the previous batch is still running; callbacks never
+  pile up.
+* A reload (``POST /api/hub/reload``) drops all handlers and runs ``setup``
+  again.
+* Use this for a cloud or LAN refresh loop on the framework's cadence; pick
+  ``host.timer.setInterval`` when you need another period.
 
 Methods — host.command
 ----------------------

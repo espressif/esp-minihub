@@ -15,20 +15,44 @@ See :doc:`application/index` then :doc:`host_customization`. Copy ``application/
 ``-app APP`` (or ``MINIHUB_APP``). ``build_firmware.py`` already syncs the
 manifest; you do not need to run ``sync_host_manifest.py`` yourself.
 
+A Store plugin installs but nothing appears
+-------------------------------------------
+
+Install success is not load success. Read the boot log for the module id; each of
+these lines in ``components/minihub_module/module_loader.c`` is its own answer:
+
+* ``JS module 'X' missing main.js`` (:file:`module_loader.c:901`) — the package has
+  no ``main.js``; check ``module.json`` ``runtime`` is the literal ``js``.
+* ``module 'X' has no binary or builtin`` (:file:`module_loader.c:906`) — nothing for
+  the Host to enter.
+* ``skip module 'X' — adapter 'Y' already registered`` (:file:`module_loader.c:912`) —
+  a bundled adapter owns that ``adapter`` name.
+* ``module table full, skip …`` (:file:`module_loader.c:549`) or
+  ``duplicate module id`` (:file:`module_loader.c:559`) — capacity or a repeated id.
+* ``invalid module manifest`` (:file:`module_loader.c:599`) — ``module.json`` did not
+  parse; validate before packing.
+* No ``setup`` in ``main.js`` — the module is skipped with a warning
+  (:doc:`api/js_host`).
+
+Then check the build: JS modules need both ``CONFIG_MINIHUB_JS_PLUGINS`` and
+``CONFIG_MINIHUB_DYNAMIC_MODULES``. Full ladder: :doc:`troubleshooting`.
+
 Store install returns 400 / 404 / 409
 -------------------------------------
 
 * **400** — missing ``type`` / ``id``. ``type`` must be ``module`` or ``pack``
   (not ``adapter``). Multipart ``file=@*.mhub`` is **not** supported.
-* **404** — catalog entry or artifact missing; set ``custom_url`` then
-  ``POST /api/store/refresh``
+* **404** — catalog entry or artifact missing; the body says ``ESP_ERR_NOT_FOUND``, not
+  the reason, so set ``custom_url`` then ``POST /api/store/refresh``
 * **409** — already installed; use ``POST /api/store/upgrade`` or uninstall first
 * Check ``GET /api/store/config`` for Store base URL
 
-Module fails to load (load_guard)
----------------------------------
+Every status and body this endpoint can produce: :doc:`api/errors`.
 
 .. only:: not hide_l3
+
+   Module fails to load (load_guard)
+   ---------------------------------
 
    If a native module crashes during ``dlopen``, Host writes
    ``/store/modules/ID/.load_guard`` and skips it on the next boot. Clear with
@@ -36,7 +60,7 @@ Module fails to load (load_guard)
 
    .. code-block:: json
 
-      { "id": "color_bulb", "clear_load_guard": true, "reload": true }
+      { "id": "my_native", "clear_load_guard": true, "reload": true }
 
    Check the serial log for ABI errors. L3 ``module.json`` ``abi_version`` and
    ``core_api_*`` must bracket the Host (header ``MINIHUB_MODULE_ABI_VERSION``).
@@ -54,7 +78,9 @@ REST returns 401 unauthorized
 
 When ``CONFIG_MINIHUB_WEB_LOGIN_AUTH`` is on (default), REST needs a valid
 ``mh_sess`` cookie or ``Authorization: Bearer``. Set the optional token with
-``CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN`` (NVS fallback key ``api_token``).
+``CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN`` (empty by default, so nothing is shared
+between units), which wins when non-empty; the NVS key ``api_token`` (namespace
+``minihub``) is read only if that compiled string is empty.
 Turn the option off to leave LAN REST open. Login HTML: :doc:`web_console`.
 
 Where is adapters.json?

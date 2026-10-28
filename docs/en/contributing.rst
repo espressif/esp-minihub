@@ -58,6 +58,10 @@ Git workflow
 Documentation contributions
 ---------------------------
 
+This repository ships a project skill for guide work:
+``.agent/skills/minihub-docs/SKILL.md``. An AI assistant editing these pages
+should read it first; see :doc:`vibe_coding` for the full list.
+
 1. Edit RST under ``docs/en/`` **and** ``docs/zh_CN/`` (paths must stay in sync;
    CI compares both trees)
 2. Build locally (output ``docs/_build/``):

@@ -6,5 +6,6 @@
   "enabled": true,
   "type": "module",
   "runtime": "js",
+  "adapter": "PLACEHOLDER_ID",
   "description": "L2 JS hello: log once via host.log"
 }

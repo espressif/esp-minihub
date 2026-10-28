@@ -58,9 +58,9 @@ python3 tools/dev_sync.py --port 9000
 ./tools/build_firmware.py -app minihub zigbee ble_mesh build
 ./tools/build_firmware.py thread matter build
 ./tools/build_firmware.py build merge
-./tools/build_firmware.py module color_bulb
+./tools/build_firmware.py module my_native
 ./tools/build_firmware.py modules
-./tools/build_firmware.py pack color_bulb
+./tools/build_firmware.py pack my_native
 ```
 
 `build` 只编 Host。它不编译原生插件。`modules` 或 `module <id>` 把原生 `.so` 编进构建目录，不创建商店插件目录。对原生模块执行 `pack <id>` 只在本地封装 MHMD `.so`，不写入 `Stores/Common`，也不写入 `Stores/<chip>`。
@@ -123,11 +123,12 @@ python3 tools/new_store_module.py --tier l3 --id my_native --force
 
 ### `build_plugin_standalone.py`
 
-不依赖 IDF，编译 `examples/plugins/<id>` 下的 L3 演示（CMake + Plugin SDK）。
+不依赖 IDF，编译 `examples/plugins/<id>` 下的 L3 模块（CMake + Plugin SDK）。
+仓库内没有 L3 示例，先生成一个脚手架。
 
 ```bash
-python3 tools/build_plugin_standalone.py color_bulb
-python3 tools/build_plugin_standalone.py meter_plug --clean --pack
+python3 tools/build_plugin_standalone.py my_native
+python3 tools/build_plugin_standalone.py my_native --clean --pack
 ```
 
 需要 PATH 上有 `riscv32-esp-elf-gcc`（或 `--cc` / `MINIHUB_PLUGIN_CC`）和 `cmake`。

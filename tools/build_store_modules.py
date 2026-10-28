@@ -211,8 +211,8 @@ def pack_one(
         check=True,
     )
     print(f"Built {module_id}: {mhmd_build} ({mhmd_build.stat().st_size} bytes)")
-    print(f"skip {module_id}: native module is wrapped into a .mhub under "
-          f"Stores/<chip>/<id>/ (not left as a bare .so)")
+    print(f"skip {module_id}: native module is wrapped into a build-local "
+          f".mhub and is not published to the store (not left as a bare .so)")
     return mhmd_build
 
 

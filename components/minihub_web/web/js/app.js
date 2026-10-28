@@ -735,7 +735,7 @@ function renderOverview() {
         ensureDwCatalog().catch(function () {});
     }
     /* Collapse registry rows to devices before filter/stats/cards.
-     * Otherwise legacy per-param points (thread.color_bulb.brightness …)
+     * Otherwise legacy per-param points (thread.bulb.brightness …)
      * inflate 能力点 and render a fake toggle per parameter. */
     /* Keep unscoped ids (switch/bm_000a) even when their adapter is off, so 全部 can list them. */
     let base = overviewCollapsePoints(pts.filter(p => p && (adapterEnabled(p.adapter) || !pointIdScoped(p.point_id)) && !adapterLoggedOut(pointGroup(p))));

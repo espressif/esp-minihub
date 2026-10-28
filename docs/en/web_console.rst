@@ -3,9 +3,15 @@ Replace the Web console
 
 :link_to_translation:`zh_CN:[中文]`
 
-OEM-skinnable Host console (HTML/CSS/JS). It is **not** compiled into the app
-binary. The build copies files onto the ``storage`` LittleFS image; the HTTP
-server reads them at runtime from ``/data/web/``.
+The console is ordinary HTML, CSS and JavaScript, so an OEM can replace it
+without touching firmware source. It is not compiled into the app binary: the
+build copies the files onto the ``storage`` LittleFS image, and the HTTP server
+reads them at run time from ``/data/web/``. A re-skin therefore restages
+``storage``, not the app. Flashing only ``app-flash`` or pushing a field OTA
+leaves the old console in place. Two routes do write the console onto a running
+Hub: the dev upload route further down, and the deploy-root update path
+(``POST /api/update/apply`` with ``"type":"web"``, which pulls the published
+``/api/web`` index) — see :doc:`api/host_rest`.
 
 Source and device path
 -----------------------
@@ -36,14 +42,19 @@ minifies that directory into the ``storage`` image as ``/data/web/``.
    * - ``GET /web/`` plus file name
      - ``/data/web/`` plus the same name
 
-If ``index.html`` is missing under ``/data/web/``, the firmware tries the legacy
-path ``/store/preinstall/web/`` (devices flashed before this migration), then a
-small ROM page (Chinese or English from ``Accept-Language``). That ROM page is
-**not** OEM-editable; restore ``index.html`` on ``storage``. If ``login.html``
-is missing, ``GET /login`` returns 404 (UTF-8 plain text).
+For any ``/web/`` file missing under ``/data/web/``, the firmware tries the
+legacy root ``/store/preinstall/web/`` (devices flashed before this migration)
+before giving up. ``GET /`` falls back again to a small ROM page (Chinese or
+English from ``Accept-Language``); that ROM page is **not** OEM-editable, so
+restore ``index.html`` on ``storage``. If ``login.html`` is missing, ``GET /login``
+returns 404 (UTF-8 plain text).
 
-``GET /`` and ``GET /web/…`` may require a session cookie when Web login is
-enabled; ``GET /login`` stays public so the browser can show the form.
+Only ``GET /`` checks the session cookie; ``GET /login`` stays public so the
+browser can show the form. The whole ``/web/`` asset tree (HTML, JS, CSS, i18n
+JSON) and ``/img/`` icons are served **without** a session on purpose: they carry
+no credentials or device data, and gating them would let an expiring session
+serve the login page into a ``<script>``/``<link>`` tag mid-load. The ``/api/``
+endpoints are the real gate.
 
 Kconfig and login
 -----------------
@@ -52,14 +63,21 @@ Kconfig and login
   404; REST ``/api/`` still works.
 * ``CONFIG_MINIHUB_WEB_LOGIN_AUTH`` (default on, depends on Web UI) — first
   visit to ``/login`` sets the ``admin`` password (NVS ``minihub/web_pw``).
-  Cookie ``mh_sess``: **5 minutes idle** with no authenticated request
-  (GET polls count as activity and refresh idle). Hard cap **8 hours** from
-  login. On expiry APIs return 401 and the console navigates to ``/login`` so a
-  cached SPA cannot keep uninstalling modules or controlling devices. Off: no
-  cookie and no Bearer.
+  Cookie ``mh_sess``: **5 minutes idle**. Only a document navigation
+  (``GET /``, a page reload) slides that window — ``minihub_auth_check`` is
+  read-only, so the console's background ``fetch`` polling does **not** keep the
+  session alive and an auto-refreshing tab still signs out. Hard cap **8 hours**
+  from login, never extended. On expiry APIs return 401 and the console
+  navigates to ``/login`` so a cached SPA cannot keep uninstalling modules or
+  controlling devices. Off: no cookie and no Bearer.
 * ``CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN`` — optional ``Authorization: Bearer``
-  for scripts. Empty string: cookie only. NVS fallback key remains
-  ``api_token``.
+  for scripts. ``CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN`` defaults to ``espressif``
+  for every product, so a fresh build already answers to that token; it is a
+  shared development default, not a per-device secret, so set your own value per
+  product. Resolution is one-shot at boot and the compiled string wins: with it
+  non-empty the NVS key ``minihub/api_token`` is **not** read at all, so setting
+  it there does nothing until the Kconfig value is emptied — which is also how
+  you get a cookie-only build.
 
 A replacement ``login.html`` must keep talking to:
 
@@ -71,10 +89,11 @@ A replacement ``login.html`` must keep talking to:
 ``index.html`` must keep using the same ``/api/`` routes (points, command,
 device widgets, Store, …). Changing HTML does not add new firmware APIs.
 
-The Devices page groups **one card per registered point** (not one card per
+The Overview page groups **one card per registered point** (not one card per
 parameter). It loads ``GET /api/device_widgets`` plus ``GET /api/points`` and
-draws CSS widgets (``device_widgets.css``). A type missing from the catalog
-shows a **type not registered** badge. Writes go to
+draws CSS widgets (``device_widgets.css``). A type missing from the catalog still
+draws its parameter rows in the device detail; the browser console logs the miss
+(:doc:`type_catalog`). Writes go to
 ``POST /api/devices/control`` (``device`` is the type; UI also sends the card's
 ``point_id`` so same-type instances stay distinct). Type-catalog CSVs can
 be updated without a firmware rebuild: ``PUT /api/dev/catalog/…`` or
@@ -133,6 +152,16 @@ such as ``css/app.css`` create parent directories. Reload ``http://HUB/`` or
 This is **not** ``PUT /api/dev/fs/`` (LCD JSON under ``/data/ui/``, gated by
 ``CONFIG_MINIHUB_DEV_FS_UPLOAD``).
 
+.. warning::
+
+   Each PUT replaces **one file**. Nothing about this route knows that ``index.html`` and
+   ``js/app.js`` belong to the same build, so a partial push leaves a console made of two
+   generations — usually one that loads and then fails in the browser console, because the
+   HTML and the JS no longer agree. Push every file you changed, or reflash the storage
+   partition (``storage-flash``) to get back to the console that shipped with the image:
+   ``app-flash`` writes only the app partitions and leaves ``/data/web`` as it is, and a
+   factory reset erases the whole storage partition including these files.
+
 Language layout
 ---------------
 
@@ -149,14 +178,15 @@ Switching writes the key and reloads the page; the catalog is refetched with
 ``?lang=``, so device and parameter names follow the same choice.
 
 The page is hidden until its string file has loaded, so an English user never
-sees a Chinese first frame. ``/web/i18n/`` and ``/web/js/i18n.js`` are the two
-paths served **without** a session, because the login page is the first thing a
-user sees and must translate itself; they carry UI strings only.
+sees a Chinese first frame. That works while signed out because the whole
+``/web/`` tree — including ``/web/i18n/`` and ``/web/js/i18n.js`` — is served
+without a session; those files carry UI strings only.
 
-This is why the HTTP server does **not** map ``Accept-Language`` onto
-``web/en/`` versus ``web/zh_CN/`` folders — there are no per-language page
-trees to pick between. Only the ROM fallback page (before any web assets are
-mounted) still selects zh/en from ``Accept-Language``.
+The HTTP server does **not** map ``Accept-Language`` onto ``web/en/`` versus
+``web/zh_CN/`` folders — there are no per-language page trees to pick between.
+``Accept-Language`` does still choose the language of two things that are not
+pages: the ROM fallback page, and the human-readable strings the API puts in
+error bodies and in the missing-``login.html`` 404.
 
 A Store module's own ``web/`` UI is not covered by this mechanism yet.
 

@@ -16,21 +16,38 @@
 #include "freertos/task.h"
 #include "sdkconfig.h"
 
+#include <stdlib.h>
+
+/* Capacity limits. Each is overridable from the build system (e.g. an
+ * application's CMakeLists.txt via target_compile_definitions(minihub_adapter
+ * PRIVATE MINIHUB_MAX_ADAPTERS=32)) without editing this file. All array
+ * dimensions and bounds checks below use these macros, so a custom value is
+ * always safe. */
+#ifndef MINIHUB_MAX_ADAPTERS
+#define MINIHUB_MAX_ADAPTERS 16
+#endif
+#ifndef MINIHUB_OWNER_LEN
+#define MINIHUB_OWNER_LEN 28
+#endif
+#ifndef MINIHUB_POLL_HOOKS_MAX
+#define MINIHUB_POLL_HOOKS_MAX 8
+#endif
+
 static const char *TAG = "adapter_registry";
 
-static const minihub_adapter_t *s_registered[16];
+static const minihub_adapter_t *s_registered[MINIHUB_MAX_ADAPTERS];
 static size_t s_registered_count;
 
-static const minihub_adapter_t *s_active[16];
+static const minihub_adapter_t *s_active[MINIHUB_MAX_ADAPTERS];
 static size_t s_active_count;
 
 /** Non-blocking poll hooks (e.g. JS runtime) invoked each adapter_poll_task
  *  tick, after the lifecycle lock is released. Must return quickly. */
-static minihub_adapter_poll_hook_t s_poll_hooks[8];
+static minihub_adapter_poll_hook_t s_poll_hooks[MINIHUB_POLL_HOOKS_MAX];
 static size_t s_poll_hooks_count;
 
 /** Radio-host adapters left running by stop_all — start_all must not call start() on these. */
-static const minihub_adapter_t *s_kept_radio[16];
+static const minihub_adapter_t *s_kept_radio[MINIHUB_MAX_ADAPTERS];
 static size_t s_kept_radio_count;
 
 /** Recursive: hub_reload may lock then call stop_all/soft_reload which also lock. */
@@ -140,7 +157,7 @@ static void cmd_router_lock_give(void) { minihub_adapter_lifecycle_unlock(); }
 
 /* Per-registered-adapter owner (module id), parallel to s_registered. Lets us
  * tag a module's event subscriptions and reap them on unload (UAF guard). */
-static char s_owner_by_name[16][28];
+static char s_owner_by_name[MINIHUB_MAX_ADAPTERS][MINIHUB_OWNER_LEN];
 
 static esp_err_t ensure_lifecycle_mu(void)
 {
@@ -269,6 +286,53 @@ static bool adapter_name_is(const minihub_adapter_t *adapter, const char *name)
     return adapter && adapter->name && name && strcmp(adapter->name, name) == 0;
 }
 
+/* True when @p adapter is enabled in the adapters.json object (present and not
+ * explicitly enabled=false). Mirrors the enabled check used by load_all. */
+static bool adapter_enabled_in_config(const cJSON *adapters, const minihub_adapter_t *adapter)
+{
+    if (!adapters || !adapter || !adapter->name) {
+        return false;
+    }
+    const cJSON *adapter_cfg = cJSON_GetObjectItem(adapters, adapter->name);
+    if (!adapter_cfg) {
+        return false;
+    }
+    if (cJSON_IsObject(adapter_cfg)) {
+        const cJSON *enabled = cJSON_GetObjectItem(adapter_cfg, "enabled");
+        if (cJSON_IsBool(enabled) && !cJSON_IsTrue(enabled)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* 2.4 GHz radio arbitration (docs/zh_CN/radios.rst):
+ *  - Zigbee and Thread share IEEE 802.15.4 → Thread loses when both enabled.
+ *  - Wi-Fi + (Zigbee|Thread) + BLE Mesh is the third group → BLE Mesh loses. */
+static void compute_radio_skips(bool has_wifi, bool has_zigbee, bool has_thread, bool has_ble_mesh,
+                                bool *skip_thread, bool *skip_ble_mesh)
+{
+    *skip_thread = has_zigbee && has_thread;
+    *skip_ble_mesh = has_wifi && (has_zigbee || has_thread) && has_ble_mesh;
+}
+
+/* The losing radio adapter for the current arbitration (Thread, or BLE Mesh). */
+static bool adapter_is_radio_loser(const minihub_adapter_t *adapter, bool skip_thread, bool skip_ble_mesh)
+{
+    return adapter &&
+           ((skip_thread && adapter_name_is(adapter, "thread")) ||
+            (skip_ble_mesh && adapter_name_is(adapter, "ble_mesh")));
+}
+
+static int radio_start_cmp(const void *a, const void *b)
+{
+    const minihub_adapter_t *const *pa = (const minihub_adapter_t *const *)a;
+    const minihub_adapter_t *const *pb = (const minihub_adapter_t *const *)b;
+    int ra = radio_start_rank((*pa) ? (*pa)->name : NULL);
+    int rb = radio_start_rank((*pb) ? (*pb)->name : NULL);
+    return ra - rb;
+}
+
 /* Owner (module id) recorded at registration for a given adapter, or "" for core. */
 static const char *owner_of_adapter(const minihub_adapter_t *adapter)
 {
@@ -302,7 +366,7 @@ esp_err_t minihub_adapter_register_poll_hook(minihub_adapter_poll_hook_t hook)
             return ESP_OK; /* idempotent */
         }
     }
-    if (s_poll_hooks_count >= 8) {
+    if (s_poll_hooks_count >= MINIHUB_POLL_HOOKS_MAX) {
         return ESP_ERR_NO_MEM;
     }
     s_poll_hooks[s_poll_hooks_count++] = hook;
@@ -442,11 +506,37 @@ esp_err_t minihub_adapter_load_all(const cJSON *config)
         return ESP_ERR_TIMEOUT;
     }
 
+    /* Resolve the 2.4 GHz radio arbitration up front, so the losing adapter
+     * (Thread when Zigbee is also enabled, or BLE Mesh when all three groups
+     * are) is never initialised — not just never started. See
+     * docs/zh_CN/radios.rst. */
+    bool has_wifi = false, has_zigbee = false, has_thread = false, has_ble_mesh = false;
+    size_t rc = minihub_adapter_count();
+    for (size_t i = 0; i < rc; i++) {
+        const minihub_adapter_t *a = minihub_adapter_get(i);
+        if (!a || !a->name || !adapter_enabled_in_config(adapters, a)) {
+            continue;
+        }
+        if (strcmp(a->name, "wifi") == 0) {
+            has_wifi = true;
+        } else if (strcmp(a->name, "zigbee") == 0) {
+            has_zigbee = true;
+        } else if (strcmp(a->name, "thread") == 0) {
+            has_thread = true;
+        } else if (strcmp(a->name, "ble_mesh") == 0) {
+            has_ble_mesh = true;
+        }
+    }
+    bool skip_thread = false, skip_ble_mesh = false;
+    compute_radio_skips(has_wifi, has_zigbee, has_thread, has_ble_mesh,
+                        &skip_thread, &skip_ble_mesh);
+
     /* Preserve radio-host adapters left active by stop_all (Zigbee / BLE Mesh).
      * Drop them if adapters.json now has enabled=false; otherwise refresh init
-     * (packs / provision policy) without tearing the radio stack down. */
-    const minihub_adapter_t *survivors[16];
-    size_t survivor_in = s_active_count < 16 ? s_active_count : 16;
+     * (packs / provision policy) without tearing the radio stack down. A losing
+     * radio adapter is stopped and dropped from the active set instead. */
+    const minihub_adapter_t *survivors[MINIHUB_MAX_ADAPTERS];
+    size_t survivor_in = s_active_count < MINIHUB_MAX_ADAPTERS ? s_active_count : MINIHUB_MAX_ADAPTERS;
     size_t survivor_count = 0;
     for (size_t i = 0; i < survivor_in; i++) {
         const minihub_adapter_t *adapter = s_active[i];
@@ -474,6 +564,15 @@ esp_err_t minihub_adapter_load_all(const cJSON *config)
             minihub_point_unregister_by_adapter(adapter->name);
             continue;
         }
+        if (adapter_is_radio_loser(adapter, skip_thread, skip_ble_mesh)) {
+            ESP_LOGW(TAG, "radio mutex: '%s' loses 2.4GHz arbitration — stopping",
+                     adapter->name);
+            if (adapter->stop) {
+                adapter->stop();
+            }
+            minihub_point_unregister_by_adapter(adapter->name);
+            continue;
+        }
         if (adapter->init && adapter_cfg) {
             minihub_event_bus_set_current_owner(owner_of_adapter(adapter));
             esp_err_t err = adapter->init(adapter_cfg);
@@ -483,16 +582,18 @@ esp_err_t minihub_adapter_load_all(const cJSON *config)
                          adapter->name, esp_err_to_name(err));
             }
         }
-        survivors[survivor_count++] = adapter;
+        if (survivor_count < MINIHUB_MAX_ADAPTERS) {
+            survivors[survivor_count++] = adapter;
+        }
     }
 
     s_active_count = 0;
-    for (size_t i = 0; i < survivor_count && s_active_count < 16; i++) {
+    for (size_t i = 0; i < survivor_count && s_active_count < MINIHUB_MAX_ADAPTERS; i++) {
         s_active[s_active_count++] = survivors[i];
     }
 
     size_t count = minihub_adapter_count();
-    for (size_t idx = 0; idx < count && s_active_count < 16; idx++) {
+    for (size_t idx = 0; idx < count && s_active_count < MINIHUB_MAX_ADAPTERS; idx++) {
         const minihub_adapter_t *adapter = minihub_adapter_get(idx);
         if (!adapter) {
             continue;
@@ -521,6 +622,14 @@ esp_err_t minihub_adapter_load_all(const cJSON *config)
             }
         }
 
+        if (adapter_is_radio_loser(adapter, skip_thread, skip_ble_mesh)) {
+            /* Never bring up the losing radio adapter: apply the arbitration at
+             * init time, not only at start time. */
+            ESP_LOGW(TAG, "radio mutex: '%s' not initialised (loses 2.4GHz arbitration)",
+                     adapter->name ? adapter->name : "?");
+            continue;
+        }
+
         esp_err_t err = ESP_OK;
         if (adapter->init) {
             minihub_event_bus_set_current_owner(owner_of_adapter(adapter));
@@ -546,10 +655,7 @@ esp_err_t minihub_adapter_start_all(void)
         return ESP_ERR_TIMEOUT;
     }
 
-    bool has_wifi = false;
-    bool has_zigbee = false;
-    bool has_thread = false;
-    bool has_ble_mesh = false;
+    bool has_wifi = false, has_zigbee = false, has_thread = false, has_ble_mesh = false;
     for (size_t i = 0; i < s_active_count; i++) {
         const minihub_adapter_t *adapter = s_active[i];
         if (adapter_name_is(adapter, "wifi")) {
@@ -563,32 +669,22 @@ esp_err_t minihub_adapter_start_all(void)
         }
     }
 
-    bool skip_thread = false;
-    bool skip_ble_mesh = false;
-    if (has_zigbee && has_thread) {
-        skip_thread = true;
+    bool skip_thread = false, skip_ble_mesh = false;
+    compute_radio_skips(has_wifi, has_zigbee, has_thread, has_ble_mesh,
+                        &skip_thread, &skip_ble_mesh);
+    if (skip_thread) {
         ESP_LOGW(TAG, "radio mutex: zigbee and thread both enabled — skipping thread");
     }
-    if (has_wifi && (has_zigbee || has_thread) && has_ble_mesh) {
-        skip_ble_mesh = true;
+    if (skip_ble_mesh) {
         ESP_LOGW(TAG, "radio mutex: wifi + 802.15.4 + ble_mesh — skipping ble_mesh");
     }
 
-    const minihub_adapter_t *ordered[16];
-    size_t n = s_active_count < 16 ? s_active_count : 16;
+    const minihub_adapter_t *ordered[MINIHUB_MAX_ADAPTERS];
+    size_t n = s_active_count < MINIHUB_MAX_ADAPTERS ? s_active_count : MINIHUB_MAX_ADAPTERS;
     for (size_t i = 0; i < n; i++) {
         ordered[i] = s_active[i];
     }
-    for (size_t i = 1; i < n; i++) {
-        const minihub_adapter_t *key = ordered[i];
-        size_t j = i;
-        while (j > 0 && radio_start_rank(ordered[j - 1] ? ordered[j - 1]->name : NULL) >
-                             radio_start_rank(key ? key->name : NULL)) {
-            ordered[j] = ordered[j - 1];
-            j--;
-        }
-        ordered[j] = key;
-    }
+    qsort(ordered, n, sizeof(ordered[0]), radio_start_cmp);
 
     for (size_t i = 0; i < n; i++) {
         const minihub_adapter_t *adapter = ordered[i];
@@ -643,17 +739,17 @@ esp_err_t minihub_adapter_stop_all(void)
         return ESP_ERR_TIMEOUT;
     }
 
-    const minihub_adapter_t *kept[16];
+    const minihub_adapter_t *kept[MINIHUB_MAX_ADAPTERS];
     size_t kept_count = 0;
     s_kept_radio_count = 0;
 
     for (size_t i = 0; i < s_active_count; i++) {
         const minihub_adapter_t *adapter = s_active[i];
         if (adapter_is_radio_host(adapter)) {
-            if (kept_count < 16) {
+            if (kept_count < MINIHUB_MAX_ADAPTERS) {
                 kept[kept_count++] = adapter;
             }
-            if (s_kept_radio_count < 16) {
+            if (s_kept_radio_count < MINIHUB_MAX_ADAPTERS) {
                 s_kept_radio[s_kept_radio_count++] = adapter;
             }
             ESP_LOGI(TAG, "keeping radio-host adapter '%s' across reload", adapter->name);
@@ -804,14 +900,14 @@ static void adapter_poll_task(void *arg)
 {
     (void)arg;
     while (true) {
-        const minihub_adapter_t *batch[16];
+        const minihub_adapter_t *batch[MINIHUB_MAX_ADAPTERS];
         size_t n = 0;
         /* Snapshot under the mutex, then poll outside it. LAN/cloud reads
          * inside poll() take seconds; holding the mutex that long made
          * /api/adapters time out and the overview hide every device. */
         if (minihub_adapter_lifecycle_lock(1000) == ESP_OK) {
             if (!s_quiesce) {
-                for (size_t i = 0; i < s_active_count && n < 16; i++) {
+                for (size_t i = 0; i < s_active_count && n < MINIHUB_MAX_ADAPTERS; i++) {
                     const minihub_adapter_t *adapter = s_active[i];
                     if (adapter && adapter->poll) {
                         batch[n++] = adapter;

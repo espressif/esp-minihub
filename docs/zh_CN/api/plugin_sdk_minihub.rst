@@ -6,7 +6,7 @@ Plugin SDK — MiniHub
 概述
 ----
 
-Store L3 插件使用的 MiniHub Host 导出：**点位**、**模块 ABI**、**配置 / hub 重载**、
+商店 L3 插件使用的 MiniHub Host 导出：**点位**、**模块 ABI**、**配置 / hub 重载**、
 **HTTP worker**、**网络探测**、**BLE GATT 客户端**。
 
 仓库外插件通过 ``minihub_plugin_sdk/minihub.h`` （``#include "minihub_plugin_sdk.h"``）

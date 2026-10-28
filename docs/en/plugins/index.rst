@@ -13,6 +13,7 @@ the Host type catalog; see :doc:`../type_catalog`. Point contract and
    :maxdepth: 2
 
    overview
+   first_plugin
    develop_l1
    develop_l2
    pack_and_catalog

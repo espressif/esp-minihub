@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ./tools/apply_sdkconfig_variant.sh lcd          # Wi-Fi + LCD recipe
-#   ./tools/apply_sdkconfig_variant.sh --restore    # back to default app.yml from git
+#   ./tools/apply_sdkconfig_variant.sh --restore    # back to variants/default.yml
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="${MINIHUB_APP:-minihub}"

@@ -242,7 +242,7 @@ int16_t minihub_point_index_of_locked(const char *point_id);
 minihub_point_t *minihub_point_get_by_index_locked(uint16_t index);
 
 /* Control-target resolution: (data-model type, parameter) -> registered device
- * point_id, e.g. ("light", "power") -> "sim.color_bulb" (or "thread.color_bulb").
+ * point_id, e.g. ("light", "power") -> "sim.js_kitchen" (or "thread.bulb").
  * The transport prefix is deliberately NOT stored in the device type catalog
  * (device display is protocol-independent); it comes from the device
  * REGISTRATION: point_id is <protocol>.<device>, and live param metadata lives
@@ -420,13 +420,16 @@ void minihub_event_bus_set_current_owner(const char *owner);
 const char *minihub_event_bus_current_owner(void);
 
 /**
- * @brief Publish an event; ownership of data transfers to Host
+ * @brief Publish an event on the Hub event bus
  *
+ * @note The payload is duplicated into the queued event, so the caller keeps
+ *       ownership of @p data and must free it itself.
  * @note Do not run lengthy work in event handlers; defer to a lower-priority task.
  *
  * @return
- *     - ESP_OK: succeed
- *     - ESP_ERR_NO_MEM: queue full (event may be dropped)
+ *     - ESP_OK: queued
+ *     - ESP_ERR_INVALID_ARG: event_type is NULL
+ *     - ESP_ERR_NO_MEM: queue full (this event dropped)
  */
 esp_err_t minihub_event_bus_publish(const char *event_type, cJSON *data);
 

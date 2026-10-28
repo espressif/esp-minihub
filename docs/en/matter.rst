@@ -19,7 +19,9 @@ Build
 
 Enable ``CONFIG_MINIHUB_MATTER_ADAPTER``, export ``ESP_MATTER_PATH``, then build;
 the script pulls in Matter when that option is ``=y``. For Matter-over-Thread
-also enable ``CONFIG_MINIHUB_THREAD_ADAPTER`` (mutually exclusive with Zigbee).
+also enable ``CONFIG_MINIHUB_THREAD_ADAPTER`` (mutually exclusive with Zigbee);
+Thread holds the 2.4 GHz radio, so the Hub's own uplink is then Ethernet
+(:doc:`radios`).
 
 .. code-block:: bash
 
@@ -99,7 +101,8 @@ On error: ``status`` is an ``ESP_ERR_*`` name; optional ``message`` string.
 Discovery values (``discovery`` field)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Web add-device dialog always uses BLE + DNS-SD (CHIP ``DiscoveryType::kAll``):
+The Web add-device dialog always pairs over BLE and injects credentials, then
+resolves the joined device with DNS-SD on the fabric:
 
 * ``ble_thread`` (default when Wi-Fi toggle is off) — BLE + inject Hub Thread dataset.
   Requires ``CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION`` (default y, depends on the Thread
@@ -109,16 +112,25 @@ The Web add-device dialog always uses BLE + DNS-SD (CHIP ``DiscoveryType::kAll``
 
 ``POST /api/matter/commission`` still accepts ``network`` (DNS-SD only / multi-admin)
 and ``ble_ethernet`` for API clients; they are not offered in the overview dialog.
+Only the ``ble_ethernet`` path asks CHIP to browse every discovery type at once;
+the two dialog paths go through esp-matter's Wi-Fi / Thread pairing helpers.
+An in-flight commissioning can be stopped with
+``POST /api/matter/commission`` and ``{"cancel": true}`` (the dialog shows
+**取消配网**), which answers ``status: "cancelled"``.
 
 Commission + persist devices
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``POST /api/matter/devices`` with ``pairing_code`` **upserts the device immediately**
-with ``commission_phase: "waiting"`` (overview shows **等待配网中**), starts
+with ``commission_phase: "waiting"`` (overview shows **waiting to join**,
+``等待入网中``), starts
 commissioning, and returns ``commission: "started"`` without blocking the HTTP
 handler. On success the phase is cleared and the card becomes a normal device; on
-failure or a 180 s watchdog the card stays with ``commission_phase: "failed"``
-(deletable). Poll ``GET /api/matter/status`` for
+failure or the commission watchdog the card stays with
+``commission_phase: "failed"`` (deletable). The watchdog is
+``CONFIG_MINIHUB_MATTER_COMMISSION_WAIT_MS``, default **300 s** (60–900 s),
+because a first DNS-SD browse on the fabric can take minutes — an older 180 s
+figure you may find in notes is stale. Poll ``GET /api/matter/status`` for
 ``commission``: ``idle`` | ``running`` | ``ok`` | ``failed``. Omitting
 ``pairing_code`` still upserts without commissioning (``commission: "skipped"``).
 
@@ -234,7 +246,7 @@ an empty array. The numbers above show the field shape, not a bench reading.
   settling at the 10-minute cap — the nominal 30-second floor is never observable.
 * A node whose endpoint set changed is torn down first (a real
   ``send_shutdown_subscription``) and then re-armed; a node that disappeared from
-  ``adapters.json`` is reclaimed the same way, because a re-commissioned device gets a
+  ``adapters.json`` is re-associated the same way, because a re-commissioned device gets a
   **new** node id and the old row would otherwise stay armed forever.
 
 Bench demo
@@ -265,31 +277,47 @@ device may report; they are not a measured button-press-to-card latency.
 Limits
 ^^^^^^
 
+Each cap below, with the line of code that sets it, is listed in :doc:`limits`.
+
+* **Node and endpoint caps.** The subscription table is sized by
+  ``CONFIG_MINIHUB_MATTER_MAX_NODES`` — default **128**, configurable 16–1024 — and
+  the same symbol caps ``adapters.matter.devices[]``. A node past the cap is not
+  accepted (``ESP_ERR_NO_MEM``, ``last_error`` says ``subscribe: table full``).
+  The table size is not what you can control, though: when the Hub builds without
+  its own Matter server (``CONFIG_ESP_MATTER_ENABLE_MATTER_SERVER`` unset),
+  ``matter_project_config.h`` sets ``CHIP_CONFIG_CONTROLLER_MAX_ACTIVE_DEVICES`` to
+  **8**, and that is the ceiling on commissioned peers. The per-node endpoint list
+  is 16, the same limit as one commissioning. Note the
+  Hub-wide ``MINIHUB_MAX_POINTS`` = 64: every Matter **endpoint** is its own point,
+  so 64 endpoints across all radios is the real ceiling on the point registry,
+  well below what the Matter tables allow.
 * **Boolean attributes only.** A report whose TLV does not decode as a bool is dropped.
   OnOff is the only attribute armed; level, colour and cover position each need their own
   decode plus a per-cluster value mapping.
-* **8 nodes, 16 endpoints per node.** The subscription table holds ``MATTER_SUB_MAX`` = 8
-  nodes; a 9th is not accepted (``ESP_ERR_NO_MEM``, ``last_error`` says
-  ``subscribe: table full``). The per-node endpoint list is capped at 16, the same limit
-  as one commissioning.
-* **No on-demand re-read.** ``minihub_matter_read_onoff()`` is implemented (an accepted
-  call returns ``ESP_ERR_NOT_FINISHED`` and the value arrives through the same report
-  callback) but nothing calls it, and there is no periodic re-read: steady state is
-  subscription-only. While an arm never comes up, the card keeps the last value it was
-  given — by a Hub command, or the ``off`` written at registration.
-* **``online`` is not the device answering.** A non-pending Matter row is marked online
-  while the commissioner is up, so a card can read online with ``live`` false, ``reports``
-  ``0`` and a stale value. That combination is exactly what an unreachable Matter device
-  looks like today; check ``subscriptions`` before believing the card.
-* **Sleepy devices (ICD) are untested.** Their subscriptions need a long idle interval and
-  an active-schedule decision; assume they do not work until one is measured.
+* **Re-read after each (re)arm.** ``minihub_matter_read_onoff()`` is called by the
+  adapter right after every subscription arm, so a dropped subscription that clobbered
+  the value self-heals rather than sticking at ``off``. It returns
+  ``ESP_ERR_NOT_FINISHED`` and the value arrives through the same report callback.
+  There is still no on-demand re-read API and no periodic poll beyond that
+  minute-cadence re-arm: steady state is subscription-driven.
+* **``online`` tracks that node's subscription.** The poll writes
+  ``minihub_point_set_online(point, live)`` for a commissioned row, and a real report
+  also flips it online, so a card reading online means that node's subscription is
+  live (or reported recently). Only during the first window after start-up — before
+  the poll's every-twelfth tick — is ``online`` still the commissioner-readiness
+  value from registration, which is when ``live`` false with ``reports`` 0 can show.
+  Check ``subscriptions`` before believing the card.
+* **Sleepy devices (ICD) are not commissioned.** The controller explicitly disables
+  ICD registration (``pairing.set_icd_registration(false)``), because esp-matter's
+  default of registering an ICD fails commissioning outright. An ICD client is
+  therefore expected to fail to join, not merely to under-report.
 * **Multi-fabric** keeps the ``get_fabric_index()`` assumption inherited from the existing
   commissioning code.
 * **No events.** ESP-Matter's subscribe takes an event-path list and an event-callback
   slot; MiniHub's subscription passes neither (zero event paths, a ``nullptr`` callback),
   so no Matter events are subscribed or delivered today.
 
-Point identity and vendor extras
+Point identity and plugin extras
 --------------------------------
 
 Each commissioned Matter **endpoint** is **one** Host point (existing
@@ -311,11 +339,13 @@ Identity uses ``minihub_point_merge_props`` only — **not** written into
 ``adapters.json``. Every endpoint of the same node gets the same Basic
 Information.
 
-Vendor plugins match ``props.manufacturer`` on that ``point_id``:
+Plugins match ``props.manufacturer`` on that ``point_id``:
 
-* **Claim** — ``props.owner`` = plugin ``adapter`` name. Cloud catalog is
-  **not** required.
-* **OTA flag** — only after GET ``catalog_url`` succeeds, merge ``props.ota``.
+* **Associate** — ``props.owner`` = plugin ``adapter`` name. Written by the
+  plugin; no Host code sets it, and no cloud catalog is needed.
+* **OTA flag** — the plugin merges ``props.ota`` when its own check says an image
+  is ready. ``POST /api/devices/ota`` reads only ``file`` / ``url`` / ``version``
+  from it.
 
 Start OTA with adapter commands ``ota`` / ``start_ota`` (``path`` /
 ``file_path`` / ``url``), or Host ``minihub_matter_ota_offer``. The Hub is a

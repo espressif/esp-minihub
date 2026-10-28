@@ -24,16 +24,17 @@ esp_err_t minihub_provision_load_credentials(wifi_config_t *out_sta_cfg);
 esp_err_t minihub_provision_save_credentials(const char *ssid, const char *password);
 
 /**
- * Start provisioning using the Kconfig transport (SoftAP or BLE).
- * Prefer this over softap/ble-specific helpers.
+ * Start SoftAP provisioning through the ESP-IDF provisioning manager.
+ *
+ * The shipped Host does not call this: its manager serves its own web page on
+ * port 80, which the MiniHub console already owns, so minihub_net brings up a
+ * plain open AP named PROV_MiniHub instead. A product that puts the console on
+ * another port can use this to get the manager's flows.
  */
 esp_err_t minihub_provision_start(void);
 
 /** Start SoftAP provisioning without blocking (returns immediately). */
 esp_err_t minihub_provision_start_softap(void);
-
-/** Start BLE GATT provisioning without blocking (returns immediately). */
-esp_err_t minihub_provision_start_ble(void);
 
 bool minihub_provision_active(void);
 
@@ -41,9 +42,6 @@ bool minihub_provision_active(void);
 bool minihub_provision_busy(void);
 
 const char *minihub_provision_softap_ssid(void);
-
-/** BLE advertising / device name used for provisioning (e.g. PROV_MiniHub). */
-const char *minihub_provision_ble_device_name(void);
 
 const char *minihub_provision_pop(void);
 

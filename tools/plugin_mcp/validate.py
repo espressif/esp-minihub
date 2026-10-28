@@ -30,6 +30,28 @@ def validate_module_json(manifest: dict[str, Any], *, source: str = "module.json
     if runtime is not None and runtime not in RUNTIME_VALUES:
         issues.append(_issue(source, f"runtime must be {RUNTIME_VALUES}, got {runtime!r}"))
 
+    # minihub_module's validate_module_info() rejects a manifest with an empty id
+    # OR an empty adapter name, for every tier that reaches the module table.
+    # minihub_js only starts QuickJS for runtime exactly "js"/"hybrid", so
+    # omitting runtime on a JS module does not fall back to JS on device.
+    if kind != "pack" and runtime != "pack" and manifest.get("config_only") is not True:
+        if not manifest.get("adapter"):
+            issues.append(
+                _issue(
+                    source,
+                    "adapter is required: it names the adapters.json slot and the "
+                    "loader rejects a manifest without one (also for L2 JS)",
+                )
+            )
+        if runtime is None and manifest.get("binary") is None and manifest.get("builtin") is None:
+            issues.append(
+                _issue(
+                    source,
+                    'runtime is required: write "js" for a main.js module — the '
+                    "device does not infer JS from the presence of main.js",
+                )
+            )
+
     inject = manifest.get("inject")
     if isinstance(inject, dict):
         adapter = inject.get("adapter")
@@ -39,8 +61,11 @@ def validate_module_json(manifest: dict[str, Any], *, source: str = "module.json
             issues.append(
                 _issue(
                     source,
-                    f"inject.adapter {adapter!r} is not a Host adapter "
-                    f"({', '.join(INJECT_ADAPTERS)}). L1 cannot add a new radio stack.",
+                    f"inject.adapter {adapter!r} is not one of the bundled adapters "
+                    f"({', '.join(INJECT_ADAPTERS)}). The merge does create the key and "
+                    "enables it, but with no adapter implementation behind that name "
+                    "the block is inert — only an L2/L3 module can supply one.",
+                    level="warning",
                 )
             )
 
@@ -52,13 +77,45 @@ def validate_module_json(manifest: dict[str, Any], *, source: str = "module.json
     return issues
 
 
+def _strip_js_noise(text: str) -> str:
+    """Drop comments and string literals so the native-API scan sees real calls only."""
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+    text = re.sub(r"//[^\n]*", " ", text)
+    text = re.sub(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', '""', text)
+    return text
+
+
 def validate_js_source(text: str, *, path: str = "main.js") -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
+    scan = _strip_js_noise(text)
     for token in JS_FORBIDDEN:
-        if token in text:
+        if token in scan:
             issues.append(_issue(path, f"forbidden native API token {token!r} in L2 JS"))
-    if re.search(r"host\.command\.invoke\s*\([^)]*params", text):
-        issues.append(_issue(path, "host.command.invoke has no params field today; use { point_id, cmd }"))
+    # The runtime evaluates main.js as a script and only then looks up a global
+    # setup; there is no other entry point, so a file without it loads and does
+    # nothing (Host logs "no setup(host) function").
+    if not re.search(r"\bfunction\s+setup\s*\(\s*host\s*\)", scan) \
+            and not re.search(r"\bsetup\s*=\s*(?:function|\()", scan):
+        issues.append(
+            _issue(
+                path,
+                "no global setup(host) — Host calls setup() after evaluating main.js "
+                "and skips the module silently when it is missing",
+            )
+        )
+    # host is passed as setup's argument, not installed as a global: touching it at
+    # file level throws ReferenceError while main.js is evaluated, before setup is
+    # ever looked up.
+    setup_at = scan.find("function setup")
+    used_at = scan.find("host.")
+    if used_at != -1 and (setup_at == -1 or used_at < setup_at):
+        issues.append(
+            _issue(
+                path,
+                "host is only available inside setup(host) — using it at file level "
+                "throws ReferenceError while main.js is evaluated",
+            )
+        )
     return issues
 
 

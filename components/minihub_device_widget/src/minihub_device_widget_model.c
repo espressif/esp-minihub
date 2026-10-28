@@ -16,10 +16,11 @@
 #include "cJSON.h"
 #include "esp_log.h"
 
+#include "dw_internal.h"
+
 static const char *TAG = "dw_model";
 
 #define DW_MODEL_MAX_BYTES (128 * 1024)
-#define DW_CSV_MAX_COLS 24
 #define DW_CSV_MAX_ROWS 256
 
 static const char *const CLOSED_UI[] = {

@@ -5,68 +5,6 @@
   padding: 4px 0;
 }
 
-.dw-params-extra {
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-  margin-top: 2px;
-}
-
-.dw-params-extra[hidden] {
-  display: none !important;
-}
-
-.dcard.dw-card {
-  cursor: default;
-}
-
-.dcard.dw-card[onclick] {
-  cursor: pointer;
-}
-
-.dcard.dw-card .dw-ctl,
-.dcard.dw-card .toggle,
-.dcard.dw-card input,
-.dcard.dw-card select,
-.dcard.dw-card button.chip {
-  cursor: pointer;
-}
-
-.dw-expand {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  margin-left: 4px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg2);
-  color: var(--muted);
-  cursor: pointer;
-  position: relative;
-}
-
-.dw-expand::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: translate(-50%, -65%) rotate(45deg);
-  transition: transform .15s ease;
-}
-
-.dcard.dw-card.expanded .dw-expand::before {
-  transform: translate(-50%, -35%) rotate(225deg);
-}
-
-.dw-expand:hover {
-  color: var(--text);
-  border-color: var(--accent2);
-}
-
 .dw-param-icon {
   width: 16px;
   height: 16px;
@@ -82,11 +20,6 @@
 .dcard .card-top > .badge {
   margin-left: auto;
   flex: none;
-}
-
-.badge.warn {
-  background: rgba(248, 113, 113, .15);
-  color: #f87171;
 }
 
 .dw-param.is-gated {

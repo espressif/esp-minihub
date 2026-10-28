@@ -3,15 +3,23 @@ Develop L1 (Config) Packs
 
 :link_to_translation:`zh_CN:[中文]`
 
-L1 modules are **configuration-only** ``.mhub`` packages. They do not ship
-``main.js`` or a native ``.so``. Host loads them through ``minihub_pack`` and
-**merges JSON fragments** into ``adapters.json`` at runtime (or on reload).
+An L1 pack is a ``.mhub`` package with nothing in it but configuration: no
+``main.js``, no native ``.so``. ``minihub_pack_merge_into_adapters()`` folds its
+JSON into the adapter tree the Host works from **in memory**; it never writes
+``adapters.json`` back. The merge is therefore visible in
+``GET /api/config/adapters`` while the file on ``/data`` stays exactly what the
+product shipped — the pack is applied again at boot and on every reload.
 
 When to use L1
 ---------------
 
-L1 **only patches an existing Host adapter block**. It does not register
-points, run logic, or call the cloud.
+Use L1 when adapter defaults need to reach a device that has already been
+flashed. It patches one adapter block by name. If that name is not in the tree
+yet, the merge **creates** it with ``enabled: true`` (serial log
+``created adapter '<name>' for pack '<id>'``); if the block exists and says
+``enabled: false``, the pack is skipped (``skip pack '<id>': adapter '<name>'
+disabled``) — a disabled adapter is never switched on by a pack. The package
+carries no code, so it cannot register points, run logic or call the cloud.
 
 **Do inject:**
 
@@ -30,7 +38,7 @@ points, run logic, or call the cloud.
 * ``manufacturer``, ``category``, ``owner``, ``ota`` — those are top-level
   point ``props`` from Host interview or L2 ``merge_props``, not
   ``adapters.json`` keys.
-* Cloud APIs, a new adapter, or claiming an existing Zigbee point — use
+* Cloud APIs, a new adapter, or associating an existing Zigbee point — use
   :doc:`develop_l2`.
 
 .. only:: not hide_l3
@@ -41,8 +49,8 @@ points, run logic, or call the cloud.
 Validation allows ``inject.adapter`` ``zigbee`` so you can set **provision
 keys**, not so L1 can ship a device list.
 
-Put ``inject`` in ``module.json`` only. There is no ``inject.json`` loader.
-The pack directory only needs ``module.json``.
+``inject`` goes in ``module.json`` and nowhere else, because there is no
+``inject.json`` loader. A pack directory therefore needs that one file.
 
 In-tree demo: ``examples/plugins/ble_mesh_pack`` (export
 ``MINIHUB_PLUGIN_DIRS``). It appends one extra ``provision.bind_models``
@@ -70,9 +78,12 @@ Minimal ``module.json`` (``runtime: pack``):
      }
    }
 
-``inject.adapter`` names the key under ``adapters`` in ``adapters.json``.
-On load, Host **merges** ``inject`` fields into that adapter block (creating it
-if missing). See ``components/minihub_pack/minihub_pack.c``.
+``inject.adapter`` names the key under ``adapters``. The merge is not a general
+deep merge: inside ``provision``, only ``uuid_filters`` and ``bind_models`` are
+appended to whatever the adapter already had
+(``merge_provision()`` → ``merge_json_array_append()``), and every other key is
+replaced whole. A pack overrides a default rather than adding to it, except in
+those two arrays. See ``components/minihub_pack/minihub_pack.c``.
 
 Pack and install
 ----------------
@@ -82,30 +93,25 @@ Scripts (scaffold → pack → catalog → serve):
 .. code-block:: bash
 
    python3 tools/new_store_module.py --tier l1 --id my_pack --name "My pack"
-   # demos live under examples/plugins/ (example: ble_mesh_pack)
    export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"
-   python3 tools/pack_store_module.py pack ble_mesh_pack
-   python3 tools/sync_store_catalog.py --from-store
+   python3 tools/pack_store_module.py pack my_pack
    python3 tools/store_server.py --port 8080
+   # → $MINIHUB_PLUGINS_DEPLOY_DIR/Stores/Common/my_pack/{my_pack.mhub,catalog.json}
 
-.. code-block:: bash
+``pack`` writes the ``catalog.json`` beside the package itself, so
+``sync_store_catalog.py`` is only needed for a ``.mhub`` you placed by hand or
+after editing an entry.
 
-   python3 tools/pack_store_module.py pack ble_mesh_pack
-   # → $MINIHUB_PLUGINS_DEPLOY_DIR/ble_mesh_pack/ble_mesh_pack.mhub
-
-On device (after ``store_server.py`` + catalog refresh):
-
-.. code-block:: bash
-
-   curl -X POST http://HUB/api/store/install \
-     -H 'Content-Type: application/json' \
-     -d '{"type":"pack","id":"ble_mesh_pack"}'
-   curl -X POST http://HUB/api/hub/reload
+On the device, in the Web UI at ``http://HUB/``, open **Store**, set the custom
+Store URL to the address ``store_server.py`` printed, refresh the catalog, and
+install ``my_pack``; the Hub reloads automatically. The in-tree L1 example is
+``examples/plugins/ble_mesh_pack``.
 
 Verify with ``GET /api/packs`` and ``GET /api/config/adapters``.
 
 IDE MCP for authors: ``python3 tools/minihub_plugin_mcp.py`` (scaffold / validate /
 pack). Full script matrix: :doc:`overview`.
 
-Do not add this demo to public Host ``store_preinstall``. OEM factory list:
+Keep this demo out of the public Host ``store_preinstall`` list: whatever is
+listed there reaches every unit of a generic build. OEM factory list:
 ``application/APP/manifest.yml`` (see :doc:`overview`).

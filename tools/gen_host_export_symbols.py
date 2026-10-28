@@ -16,6 +16,32 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ALLOWLIST_JSON = ROOT / "docs" / "module_sdk" / "host_export_allowlist.json"
+HOST_ELF_SYMBOLS_C = ROOT / "components" / "minihub_module" / "host_elf_symbols.c"
+
+
+def always_exported_symbols(c_path: Path = HOST_ELF_SYMBOLS_C) -> set[str]:
+    """Names in host_elf_symbols.c's ``s_minihub_host_elfsyms[]`` block.
+
+    Those are exported on every Host build even when no current ``.so`` needs
+    them, so they belong on the published allowlist. Reading them from the C file
+    keeps the SDK contract from drifting away from what Host really resolves.
+    """
+    try:
+        text = c_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"warning: cannot read {c_path}: {exc}", file=sys.stderr)
+        return set()
+    marker = "s_minihub_host_elfsyms[] = {"
+    start = text.find(marker)
+    if start < 0:
+        print(f"warning: no {marker!r} in {c_path}", file=sys.stderr)
+        return set()
+    block = text[start + len(marker):]
+    end = block.find("\n};")
+    if end >= 0:
+        block = block[:end]
+    return set(re.findall(r"ESP_ELFSYM_EXPORT\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)", block))
+
 
 # Soft-float / libgcc helpers referenced by adapter .so (no public headers).
 LIBGCC_EXTERNS: dict[str, str] = {
@@ -398,27 +424,9 @@ def main() -> int:
     print(f"gen_host_export_symbols: {len(symbols)} symbols from {len(so_paths)} .so -> {args.out}")
 
     if not args.skip_allowlist:
-        # Always-exported Host helpers (host_elf_symbols.c) belong on the public list.
-        always = {
-            "minihub_config_get_adapters",
-            "minihub_config_save_adapters",
-            "minihub_hub_reload",
-            "esp_timer_get_time",
-            "minihub_net_dns_probe",
-            "heap_caps_get_free_size",
-            "mkdir",
-            "stat",
-            "unlink",
-            "rmdir",
-            "esp_http_client_open",
-            "esp_http_client_fetch_headers",
-            "esp_http_client_get_content_length",
-            "esp_http_client_read",
-            "esp_http_client_close",
-            "minihub_point_list_by_adapter",
-            "minihub_point_list_free",
-            "minihub_command_invoke",
-        }
+        # Always-exported Host helpers (host_elf_symbols.c) belong on the public
+        # list; read them from that file instead of re-listing them here.
+        always = always_exported_symbols()
         allow_syms = sorted(set(symbols) | always)
         allow_path = args.allowlist_json
         allow_path.parent.mkdir(parents=True, exist_ok=True)

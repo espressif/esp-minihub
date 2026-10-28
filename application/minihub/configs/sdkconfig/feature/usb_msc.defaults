@@ -1,4 +1,6 @@
-# USB Host MSC (U-disk)
+# USB Host MSC plumbing: the FATFS/VFS/USB-host sizing this feature needs, and the
+# switch itself left OFF, because the connector is board-specific. Enable it per
+# product (or in local.overrides) once the hardware has a USB-OTG host socket.
 CONFIG_MINIHUB_USB_MSC=n
 CONFIG_USB_HOST_HUBS_SUPPORTED=y
 CONFIG_FATFS_VOLUME_COUNT=2

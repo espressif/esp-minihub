@@ -56,12 +56,23 @@ Overview: :doc:`api/host_rest`.
 
 * ``POST /api/ble_mesh/permit_provision`` — open or close the provision window
 * ``POST /api/ble_mesh/devices`` — remove devices (legacy; adapter ``ble_mesh``)
-* ``GET /api/radio/provision`` — RF / provision coexistence status
+* ``GET /api/radio/provision`` — RF / provision coexistence status. This one is
+  **not** gated by ``CONFIG_MINIHUB_BLE_MESH_SDK``: it is always registered and
+  answers ``false`` for the availability flags of whatever is not built in.
 
 Permit provision
 ^^^^^^^^^^^^^^^^
 
 Optional JSON body. ``seconds`` defaults to 60. ``0`` closes the window.
+
+The window is not exactly ``seconds`` long: if a provision is still in flight when
+it expires, the Hub extends it **once** by 30 s, and on the second expiry aborts the
+stuck provision and closes the window. So a 60 s request can hold the radio about
+90 s. Also note that BLE Mesh sits in the Wi-Fi group: with
+``adapters.ble_mesh.enabled`` and ``adapters.zigbee.enabled`` both true, the Hub
+keeps Wi-Fi and BLE Mesh and drops the 802.15.4 adapter at run time, with only a
+``adapter 'zigbee' not started (radio mutex)`` log line to show for it
+(:doc:`radios`).
 
 .. code-block:: bash
 
@@ -93,7 +104,7 @@ Control
 After a node is bound, use ``POST /api/command`` with the Hub ``point_id``
 (OnOff models: ``turn_on`` / ``turn_off`` / ``toggle``). See :doc:`api/host_rest`.
 
-Point identity and vendor extras
+Point identity and plugin extras
 --------------------------------
 
 Each BLE Mesh node is **one** Host point (``ble_mesh.bm_XXXX``, same
@@ -107,7 +118,7 @@ sliders):
   ``0x02E5`` becomes ``Espressif``; others ``0xNNNN``. **Not** a ZCL Basic string
 * ``props.model`` / ``props.sw_version`` — Product ID / Version ID as ``0xNNNN``
 * ``props.category`` — **not** filled by BLE Mesh Host. UI falls back to the
-  type-catalog label (``light`` → “灯”). A vendor plugin may merge a product
+  type-catalog label (``light`` → “灯”). A plugin may merge a product
   name as category
 
 Telemetry (including CTL temperature / lightness) uses
@@ -115,16 +126,19 @@ Telemetry (including CTL temperature / lightness) uses
 the whole ``props`` object, or uuid / manufacturer / ``owner`` / ``ota`` are
 wiped.
 
-Vendor plugins (L2) match ``props.manufacturer`` (local filter, e.g.
+Plugins (L2) match ``props.manufacturer`` (local filter, e.g.
 packed ``catalog.json``) on that same ``point_id``:
 
-* **Claim** — set ``props.owner`` to the plugin ``adapter`` name. Overview
+* **Associate** — set ``props.owner`` to the plugin ``adapter`` name. Overview
   moves the card under the vendor section when that adapter slot is
-  ``enabled`` (label from ``meta.json`` ``filter_label``). Cloud catalog is
-  **not** required for the claim.
-* **OTA flag** — only after GET ``catalog_url`` succeeds, merge
+  ``enabled`` (label from ``meta.json`` ``filter_label``). Both ``owner`` and the
+  OTA block below are **plugin-side conventions** — no Host code writes them, and
+  no cloud catalog is required for the associate.
+* **OTA flag** — the plugin merges
   ``props.ota`` (``available``, ``version``, optional ``url`` / ``file`` /
-  ``size``). Example::
+  ``size``) whenever its own check finds a firmware update ready; of those, the Hub only
+  consumes ``file`` / ``url`` / ``version`` on ``POST /api/devices/ota``.
+  Example::
 
      {
        "ota": {

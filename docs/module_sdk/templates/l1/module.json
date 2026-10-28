@@ -2,11 +2,11 @@
   "id": "PLACEHOLDER_ID",
   "name": "PLACEHOLDER_NAME",
   "version": "0.1.0",
-  "targets": ["ESP32S31"],
+  "targets": ["esp32s31"],
   "enabled": true,
   "type": "pack",
   "runtime": "pack",
-  "description": "L1 pack: inject demo MQTT device (Host mqtt adapter must be enabled).",
+  "description": "L1 pack: inject demo MQTT device. The merge creates the adapters.mqtt key if it is missing and enables it.",
   "inject": {
     "adapter": "mqtt",
     "devices": [

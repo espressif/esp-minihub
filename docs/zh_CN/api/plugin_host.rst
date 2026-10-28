@@ -6,15 +6,15 @@ L3 Host 导出 SDK
 概述
 ----
 
-面向 Store **L3** 插件的独立头文件：可在 **没有** ESP-IDF、也没有 MiniHub 源码树的
+面向商店 **L3** 插件的独立头文件：可在 **没有** ESP-IDF、也没有 MiniHub 源码树的
 情况下编译。交付 ``docs/module_sdk/include/`` 以及与 Host 匹配的交叉编译器
 （ESP32-S31：``riscv32-esp-elf-gcc``）。
 
 HTML 下载：:download:`module_sdk.zip <../../_static/module_sdk.zip>` —
 含 ``include/``、``templates/``、``host_export_allowlist.json``、
 ``minihub_plugin_standalone.cmake``、``build_plugin_standalone.py``、
-``pack_store_module.py``（及其依赖 ``store_paths.py``）、
-``sync_store_catalog.py``（按已部署的 ``.mhub`` 重写 ``catalog.json``）与
+``pack_store_module.py`` （及其依赖 ``store_paths.py``）、
+``sync_store_catalog.py`` （按已部署的 ``.mhub`` 重写 ``catalog.json``）与
 README。解压后 ``-I module_sdk/include``。不必再克隆 MiniHub。
 
 .. code-block:: c

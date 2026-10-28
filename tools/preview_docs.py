@@ -3,10 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Serve Programming Guide HTML for local preview (default 127.0.0.1:8765).
 
-Expects ``./tools/build_docs.sh`` output::
+Expects ``./tools/build_docs.sh`` output. That script relocates the esp-docs tree
+so the published layout has no target segment, so both are accepted::
 
-    docs/_build/en/esp32s31/html/
-    docs/_build/zh_CN/esp32s31/html/
+    docs/_build/en/html/          (what ./tools/build_docs.sh leaves behind)
+    docs/_build/en/esp32s31/html/ (what build-docs writes before the move)
 
 Usage::
 
@@ -32,23 +33,25 @@ TARGET = "esp32s31"
 LANGS = ("en", "zh_CN")
 
 
-def html_dir(build_root: Path, lang: str) -> Path:
-    return build_root / lang / TARGET / "html"
+def html_dirs(build_root: Path, lang: str) -> list[Path]:
+    """Both layouts, relocated first: that is what ./tools/build_docs.sh leaves."""
+    return [build_root / lang / "html", build_root / lang / TARGET / "html"]
 
 
 def resolve_lang_dirs(build_root: Path) -> dict[str, Path]:
     found: dict[str, Path] = {}
     missing: list[str] = []
     for lang in LANGS:
-        path = html_dir(build_root, lang)
-        index = path / "index.html"
-        if index.is_file():
-            found[lang] = path.resolve()
+        for path in html_dirs(build_root, lang):
+            if (path / "index.html").is_file():
+                found[lang] = path.resolve()
+                break
         else:
-            missing.append(str(path))
+            missing.append(str(html_dirs(build_root, lang)[0]))
     if not found:
         print("No built HTML under:", build_root, file=sys.stderr)
-        print("Expected: <build-dir>/en/esp32s31/html/index.html", file=sys.stderr)
+        print("Expected: <build-dir>/en/html/index.html (run ./tools/build_docs.sh)",
+              file=sys.stderr)
         for p in missing:
             print(f"  missing: {p}/index.html", file=sys.stderr)
         sys.exit(1)
@@ -133,8 +136,7 @@ def main() -> int:
         "--build-dir",
         type=Path,
         default=DEFAULT_BUILD,
-        help="esp-docs output root (contains en/esp32s31/html). "
-        "Default: <repo>/docs/_build",
+        help="docs build output root (contains en/html). Default: <repo>/docs/_build",
     )
     parser.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8765)

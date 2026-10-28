@@ -15,8 +15,8 @@ Built artifacts go to:
 Layout under the deploy root (one folder per L1/L2 plugin):
   Stores/Common/<id>/{catalog.json,<id>.mhub}
 
-A native module is published under ``Stores/<chip>/<id>/`` (``<chip>`` from
-``targets``); L1/L2 use ``Stores/Common/<id>/``. Firmware, asset,
+Native (L3) and hybrid modules are not published: no folder is created for
+them and a leftover one is deleted. Firmware, asset,
 and web siblings (Firmwares/, Assets/, Webs/) share this root. store_server.py
 serves the whole root.
 """
@@ -79,7 +79,7 @@ def _find_module_dir(module_id: str, *, root: Path) -> Path:
     demo = root / "examples" / "plugins" / module_id
     for d in plugin_dir_env():
         # Entry may be the plugin dir itself — only match when the basename is
-        # the requested id (avoid returning color_bulb when packing meter_plug).
+        # the requested id (avoid returning my_js when packing my_pack).
         if d.name == module_id and (d / "module.json").is_file():
             return d
         cand = d / module_id

@@ -3,13 +3,15 @@ API 参考
 
 :link_to_translation:`en:[English]`
 
-MiniHub 的对外接口分为 Host 开发 API 与 Store 插件 API 两类。
+用哪套 API 取决于代码跑在哪里。本参考一分为二：一套给 Hub 和编进 Hub 的固件，
+一套给装到 Hub 上的模块。
 
-面向 OEM 产品、局域网集成、自动化脚本，以及在 ``components/`` 内编写 **静态链接**
-适配器的开发者：REST/MCP 操作 Hub，或在 Host 固件中实现 ``minihub_adapter_t`` 。
+编进固件的代码 —— OEM 产品、局域网集成、自动化脚本，或 ``components/`` 内
+**静态链接** 的适配器 —— 用 REST/MCP 操作 Hub，或在 Host 固件中实现
+``minihub_adapter_t``。
 
-面向 ``examples/plugins/`` 或 ``MINIHUB_PLUGIN_DIRS`` 下的 L2（JS）
-模块作者：通过 JS 对象访问 Core，并用 REST 安装、启用与 RPC。
+``examples/plugins/`` 或 ``MINIHUB_PLUGIN_DIRS`` 下的 L2（JS）模块没有链进固件。
+它通过 JS ``host`` 对象工作；安装、启用与 RPC 走 REST。
 
 .. only:: not hide_l3
 
@@ -23,13 +25,14 @@ MiniHub 的对外接口分为 Host 开发 API 与 Store 插件 API 两类。
    host_rest
    deploy_index
    mcp
+   errors
    net_api
    minihub_core
    minihub_adapter
 
 .. toctree::
    :maxdepth: 2
-   :caption: Store 插件 API
+   :caption: 商店插件 API
 
    plugin_rest
    js_host
@@ -38,7 +41,7 @@ MiniHub 的对外接口分为 Host 开发 API 与 Store 插件 API 两类。
 
    .. toctree::
       :maxdepth: 2
-      :caption: Store 插件 API（原生 ELF）
+      :caption: 商店插件 API（原生 ELF）
 
       module_abi
       plugin_host

@@ -15,7 +15,9 @@
  */
 void minihub_tz_apply(void);
 
-/** Persist and apply "UTC", "UTC+8", or "UTC-8" (whole hours, -12 through +14). */
+/** Persist and apply a fixed offset: "UTC", "UTC+8", "UTC-8", "UTC+5:30".
+ * Whole hours from -12 to +14, plus the half and quarter hours in use; the
+ * minute field is 00, 15, 30 or 45. ESP_ERR_INVALID_ARG for anything else. */
 esp_err_t minihub_tz_set(const char *id);
 
 const char *minihub_tz_id(void);

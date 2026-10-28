@@ -195,7 +195,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     (void)arg;
     (void)event_data;
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        /* During BLE/SoftAP provisioning the manager owns connect; auto-connect
+        /* While the provisioning manager is up it owns connect; auto-connect
          * here races set_config and yields ESP_ERR_WIFI_STATE. */
         if (!minihub_provision_busy()) {
             esp_wifi_connect();
@@ -275,10 +275,9 @@ static esp_err_t start_wifi_sta(void)
     }
 
 #if CONFIG_MINIHUB_WIFI_PROVISIONING
-#if CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP
     /* network_prov's SoftAP HTTP server binds port 80, colliding with the
      * MiniHub web console (also port 80) -> web unreachable after a factory
-     * reset. Wi-Fi is instead configured through the web UI (POST /api/wifi/sta
+     * reset. Wi-Fi is instead configured through the web UI (POST /api/net/wifi
      * -> minihub_net_set_wifi_sta), so skip network_prov and bring up a plain
      * SoftAP purely so the web console on port 80 stays reachable. */
     ESP_LOGI(TAG, "no Wi-Fi credentials; starting SoftAP for web configuration");
@@ -293,15 +292,6 @@ static esp_err_t start_wifi_sta(void)
     ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg), TAG, "set AP config");
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
     return ESP_OK;
-#else /* BLE transport: no port-80 conflict, keep network_prov */
-    err = minihub_provision_start();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Wi-Fi provisioning failed: %s", esp_err_to_name(err));
-        return err;
-    }
-    ESP_LOGI(TAG, "Wi-Fi BLE provisioning started");
-    return ESP_OK;
-#endif
 #else
     ESP_LOGE(TAG, "no Wi-Fi credentials and provisioning disabled");
     return err;

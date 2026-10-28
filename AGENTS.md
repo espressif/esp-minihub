@@ -16,7 +16,7 @@ Customer programming guide is RST / esp-docs: [docs/en/](docs/en/index.rst) · [
 |-------|-----------------|
 | Build / Host product | `docs/en/getting_started.rst` · `docs/en/host_customization.rst` |
 | Plugins / Store | `docs/en/plugins/` · allowlist `docs/module_sdk/` · `examples/plugins/` |
-| Data model / type catalog | `docs/en/data_model.rst` · `docs/en/architecture_overview.rst` · `components/minihub_device_widget/README.md` |
+| Data model / type catalog | `docs/en/data_model.rst` · `docs/en/data_flow.rst` · `components/minihub_device_widget/README.md` |
 | REST / JS / MCP / C ABI | `docs/en/api/` |
 | Networking / Matter | `docs/en/networking.rst` · `docs/en/matter.rst` (upstream: [ESP-IDF docs](https://github.com/espressif/esp-idf/tree/master/docs), [ESP-Matter docs](https://github.com/espressif/esp-matter/tree/main/docs)) |
 | Production | `docs/en/production.rst` |
@@ -66,7 +66,12 @@ Repo configs live in `.agent/mcp/` (`cursor.mcp.json`, `vscode.mcp.json`), symli
 - Product = `application/<name>/`. Default public Host: `application/minihub`.
 - Shared Core: `components/minihub_*`, bundled Hub adapters under `components/minihub_protocol_adapters/`. Store plugin sources: `examples/plugins/<id>/` (in-tree demos) or a sibling repo via `MINIHUB_PLUGIN_DIRS`. Products include `cmake/minihub_bundle/minihub_import.cmake` then `minihub_register_kconfig()`; or one yml path `cmake/minihub_bundle`. Do not put ecosystem-specific rules in Core.
 - Vendor / demo adapters ship as Store `.mhub`, not Host `require`. Public Host `store_preinstall` stays empty unless intentionally bundling factory modules.
-- ESP-IDF **~6.2** + target **esp32s31** (`idf.py --preview`). IDF 5.x has no S31 toolchain.
+- ESP-IDF **6.2, pinned to `master` @ `434d5fd100b90a03c19018c572809cc29c7db28b`**
+  (`git describe` = `qa-test-full-v6.2-20261016-70-g434d5fd100b`) + target **esp32s31**
+  (`idf.py --preview`). `tools/build_firmware.py` uses `$IDF_PATH`, else the gitignored
+  `esp-idf/` beside the repo. IDF 5.x has no S31 toolchain. Python is not pinned: 3.10+
+  is enough for `idf.py` and this repo's `tools/*.py`. On a re-pin, move every copy at
+  once: `grep -rl 434d5fd README.md README_CN.md AGENTS.md docs/en docs/zh_CN`.
 - Optional **on-device** MCP: `CONFIG_MINIHUB_MCP_SERVER=y` + `git submodule update --init components/esp-claw`. Unrelated to the plugin-author IDE MCP above.
 
 ## Deploy root
@@ -87,7 +92,7 @@ Device side: L1 and L2 stay on `minihub_store` (the catalog `url` is `/files/Sto
   (light / switch / …) — plugins are runtime `.so`, so types are not
   known at compile time.
 - **One device = one point.** `point_id` is `<protocol>.<device>` (e.g.
-  `sim.color_bulb` or `thread.color_bulb`). Live parameters, access, visibility,
+  `sim.js_kitchen` or `zigbee.bulb_1`). Live parameters, access, visibility,
   and instance bounds live in structured JSON on that point — typically
   `props.params.<name> = { "value", optional access / visible / min / max /
   step / unit }`. `value` is an optional compact summary (e.g. power on/off)
@@ -120,7 +125,7 @@ Device side: L1 and L2 stay on `minihub_store` (the catalog `url` is `/files/Sto
   registration**: a registered point id is `<protocol>.<device>` and carries
   `type` = the data-model type, so `minihub_point_resolve_by_type_param(type, parameter)`
   resolves to the device point when `props.params` contains that parameter —
-  e.g. ("light", "power") -> "sim.color_bulb". Control APIs pass `parameter` in
+  e.g. ("light", "power") -> "sim.js_kitchen". Control APIs pass `parameter` in
   the command so the adapter updates the matching key inside `props`. Never
   hardcode "thread".
 - Bounds (min/max/step/unit): type catalog = **defaults**; instance `devices.json`

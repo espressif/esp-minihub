@@ -3,10 +3,9 @@
 
 :link_to_translation:`en:[English]`
 
-MiniHub 在 ``components/minihub_net`` 中基于 ESP-IDF 的 ESP-NETIF、Wi-Fi 驱动
-及（带 EMAC 的 SoC 上）以太网实现 IP 上行。
-
-上游文档：
+Hub 多数功能都要先有 IP，所以网络很早起来。``components/minihub_net`` 基于
+ESP-IDF 的 ESP-NETIF、Wi-Fi 驱动，以及带 EMAC 的 SoC 上的以太网，搭出 IP 上行。
+三者都是 IDF 层，上游文档如下：
 
 * `ESP-IDF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/>`_
 * `ESP-NETIF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_netif.html>`_
@@ -20,12 +19,18 @@ Kconfig
 * ``CONFIG_MINIHUB_NET_WIFI_STA`` — 创建 ``WIFI_STA_DEF``，凭据连接
 * ``CONFIG_MINIHUB_NET_ETH`` — 原生 EMAC + PHY（S31 Function CoreBoard：YT8531）
 * ``CONFIG_MINIHUB_NET_WIFI_SOFTAP`` — SoftAP/STA 由 ``minihub_net`` 外管理
-* ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — 无 NVS 凭据时 SoftAP 和/或 BLE 配网
+* ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — 无 NVS 凭据时走 SoftAP 配网
 
 片段：``configs/sdkconfig/feature/wifi_sta.defaults``、``eth.defaults``。
 
 启动顺序
 --------
+
+.. image:: ../_static/net_boot/boot_flow.svg
+   :align: center
+   :alt: MiniHub 网络启动：先起以太网 → 轮到 Wi-Fi 适配器 → 连 STA → 选默认路由 → 控制台上线
+
+`交互版 <_static/net_boot/index.html>`_ —— 按开机顺序走五站，青色回程线是没有凭据时走的那条配网路。
 
 1. ``minihub_net_init()`` — netif/事件循环；启动以太网；Wi-Fi **仅注册处理** （日志含 ``wifi STA deferred``）。
 2. ``minihub_adapter_start_all()`` — 射频互斥后按 Wi-Fi → Zigbee 或 Thread →
@@ -37,7 +42,7 @@ Kconfig
 
 **以太网已有 IPv4 时，仍会做 Wi-Fi 关联。**
 
-* **有 STA 凭据** （Kconfig ``CONFIG_MINIHUB_WIFI_SSID`` 或 NVS）— ``minihub_net_start_wifi()`` 会 ``esp_wifi_start`` 并 ``connect`` ；以太网已有 IPv4 也不会跳过。无凭据则走配网（或失败）。配网进行中不会 ``connect``
+* **有 STA 凭据** （Kconfig ``CONFIG_MINIHUB_WIFI_SSID`` 或 NVS）— ``minihub_net_start_wifi()`` 会 ``esp_wifi_start`` 并 ``connect``；以太网已有 IPv4 也不会跳过。无凭据则走配网（或失败）。配网进行中不会 ``connect``
 * **默认路由** — ``minihub_net_refresh_default_netif()``：以太网有 IPv4 则走 Eth，
   否则 Wi-Fi 有 IPv4 则走 Wi-Fi，否则以太网（若已编译）或 Wi-Fi
 * **以太网链路断开** — 日志 ``Ethernet link down`` 后再选一次默认路由；仍是
@@ -46,13 +51,21 @@ Kconfig
 凭据与配网
 ----------
 
-Wi-Fi SSID/PSK 保存在 NVS，由 ``minihub_provision_load_credentials()`` 加载。
+Wi-Fi SSID/PSK 保存在 NVS （命名空间 ``minihub_wifi``），由
+``minihub_provision_load_credentials()`` 加载。NVS 优先于
+``CONFIG_MINIHUB_WIFI_SSID`` / ``CONFIG_MINIHUB_WIFI_PASS``，而字面占位值
+``YOUR_SSID`` 按“未设置”处理。
 
-**无凭据** 且打开 ``CONFIG_MINIHUB_WIFI_PROVISIONING`` 时：
+**无凭据** 且打开 ``CONFIG_MINIHUB_WIFI_PROVISIONING`` 时，Hub 开一个明文开放热点
+—— SSID ``PROV_MiniHub``、无密码、信道 1、最多 4 个客户端 —— 然后从这个热点上进
+控制台，用 ``POST /api/net/wifi`` 配 Wi-Fi。这里刻意 **不** 调
+``minihub_provision_start()``：ESP-IDF 的配网管理器自己要在 80 端口起页面，而 80
+是控制台的端口。Wi-Fi 配网没有蓝牙这条路 —— BLE 传输已移除，配网不需要
+``CONFIG_BT_ENABLED``，也不需要额外的配对工具，浏览器就够了。
 
-* ``minihub_net_start_wifi()`` 之后调用 ``minihub_provision_start()``
-* 传输方式由 Kconfig 决定：SoftAP （``CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP``）
-  和/或 BLE （``CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE``）
+管理器入口留给把控制台挪到别的端口的产品。``CONFIG_MINIHUB_WIFI_PROVISIONING=n``
+连那个开放热点也不开，此时无凭据的设备只留一行
+``no Wi-Fi credentials and provisioning disabled`` 日志。
 
 REST：网络配置
 --------------
@@ -112,7 +125,7 @@ REST：网络配置
 
 **STA 始终不连接**
 
-* 确认配网已完成（Web UI 或 SoftAP/BLE）
+* 确认配网已完成（Web UI 或 SoftAP 流程）
 * 查找 ``wifi got IP``；若无则检查 NVS 中 SSID/PSK
 * 确认 Matter/CHIP 未占用第二套 STA（见 :doc:`matter`）
 
@@ -133,7 +146,7 @@ C API
 * ``minihub_net_init`` / ``minihub_net_start_wifi``
 * ``minihub_net_has_ip`` / ``minihub_net_get_ip`` / ``minihub_net_get_netif``
 * ``minihub_net_refresh_default_netif`` — 按 IPv4 上行选择默认 netif
-* ``minihub_net_dns_probe`` (导出给 Store 模块)
+* ``minihub_net_dns_probe`` (导出给商店模块)
 
 接口 DHCP / 静态 IP 在 ``minihub_net_cfg.h``：
 

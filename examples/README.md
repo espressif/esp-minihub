@@ -7,12 +7,12 @@
 | Directory | Tier | Purpose |
 |-----------|------|---------|
 | [ble_mesh_pack](plugins/ble_mesh_pack/) | **L1** | Merge extra BLE Mesh `provision.bind_models` into Host `adapters.ble_mesh`. No points, no JS, no `.so`. |
-| [color_bulb_js](plugins/color_bulb_js/) | **L2** | Three simulated `type=light` points + JS command handler. Companion to L3 `color_bulb`. |
-| [color_bulb](plugins/color_bulb/) | **L3** | Two simulated lights (`sim.kitchen_lamp`, `sim.living_lamp`). Devices-page widgets from the Host catalog. |
-| [meter_plug](plugins/meter_plug/) | **L3** | One simulated metered switch (`sim.meter_plug`: power + V/A/W). |
-| [zigbee_ota](plugins/zigbee_ota/) | **L3** | Claim Host Zigbee points (`props.owner`) + catalog OTA flag. One device stays `zigbee.zb_%04x`. ZCL 0x0019 air path is a Host stub. |
-| [ble_mesh_ota](plugins/ble_mesh_ota/) | **L3** | Same claim/catalog pattern on Host BLE Mesh points. Mesh Firmware Update air path is a Host stub. |
-| [matter_ota](plugins/matter_ota/) | **L3** | Same pattern on Host Matter endpoints (`light/matter_n*_ep*`). Hub runs CSA Provider + BDX when OTA is started. |
+| [color_bulb_js](plugins/color_bulb_js/) | **L2** | Three simulated `type=light` points (`sim.js_kitchen`, `sim.js_desk`, `sim.js_bedroom`) + JS command handler. Devices-page widgets come from the Host type catalog. |
+| [meter_plug_js](plugins/meter_plug_js/) | **L2** | One simulated metered switch (`sim.plug`: power + V/A/W, metering read-only). |
+
+No L3 demo ships in-tree: a native `.so` must be built against one Host ABI, so
+the guide uses `tools/new_store_module.py --tier l3` scaffolding instead (see
+`docs/en/plugins/develop_l3.rst`).
 
 Vendor Store plugins are not in this tree. Point `MINIHUB_PLUGIN_DIRS` at a sibling plugin repo before configure / pack.
 
@@ -37,7 +37,8 @@ plugins. Without an IDF project (needs
 `riscv32-esp-elf-gcc` and `cmake`; MHMD file is `plugins/<id>/build/<id>.so`):
 
 ```bash
-python3 tools/build_plugin_standalone.py color_bulb
+python3 tools/new_store_module.py --tier l3 --id my_native
+python3 tools/build_plugin_standalone.py my_native
 ```
 
 Then pack as above. L1/L2 zip only — no firmware compile. L3 needs a

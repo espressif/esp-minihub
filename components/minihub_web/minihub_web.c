@@ -2617,7 +2617,7 @@ static esp_err_t handle_api_device_widgets(httpd_req_t *req)
             /* The concrete transport point for this (type, parameter) is decided
              * by the device REGISTRATION, not the protocol-agnostic catalog. Resolve
              * it so the rules editor can target the real device point_id
-             * (e.g. ("light","power") -> "sim.color_bulb"), which is
+             * (e.g. ("light","power") -> "sim.js_kitchen"), which is
              * what the rules engine matches against. Absent when no device of this
              * type is registered yet. Parameter key stays on this catalog row. */
             char pid[MINIHUB_POINT_ID_MAX];

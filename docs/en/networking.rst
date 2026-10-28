@@ -3,10 +3,10 @@ Networking
 
 :link_to_translation:`zh_CN:[中文]`
 
-MiniHub brings up IP uplinks in ``components/minihub_net`` on top of ESP-IDF
-ESP-NETIF, the Wi-Fi driver, and (on EMAC SoCs) Ethernet.
-
-Upstream:
+Most Hub features need IP, so networking comes up early.
+``components/minihub_net`` builds the uplinks on top of ESP-IDF's ESP-NETIF, the
+Wi-Fi driver, and Ethernet on SoCs that have an EMAC. All three are IDF layers,
+documented upstream:
 
 * `ESP-IDF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/>`_
 * `ESP-NETIF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_netif.html>`_
@@ -21,12 +21,19 @@ Kconfig
 * ``CONFIG_MINIHUB_NET_WIFI_STA`` — Create ``WIFI_STA_DEF``, connect with credentials
 * ``CONFIG_MINIHUB_NET_ETH`` — Native EMAC + PHY (S31 Function CoreBoard: YT8531)
 * ``CONFIG_MINIHUB_NET_WIFI_SOFTAP`` — SoftAP/STA owned outside ``minihub_net``
-* ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — SoftAP and/or BLE provisioning when no NVS creds
+* ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — SoftAP provisioning when no NVS creds
 
 Fragments: ``configs/sdkconfig/feature/wifi_sta.defaults``, ``eth.defaults``.
 
 Boot order
 ----------
+
+.. image:: ../_static/net_boot/boot_flow.svg
+   :align: center
+   :alt: MiniHub network bring-up: minihub_net_init → minihub_net_start_wifi → STA connect → default route → console on port 80
+
+`Interactive version <_static/net_boot/index.html>`_ — five steps in boot order;
+the cyan return line is the path taken when no credentials are stored yet.
 
 1. ``minihub_net_init()`` — netif/event loop; start Ethernet; **prepare** Wi-Fi handlers only (log: ``wifi STA deferred``).
 2. ``minihub_adapter_start_all()`` — radio mutex, then adapters in order
@@ -50,13 +57,24 @@ Default route vs STA connect
 Credentials and provisioning
 ----------------------------
 
-Wi-Fi SSID/PSK live in NVS, loaded by ``minihub_provision_load_credentials()``.
+Wi-Fi SSID/PSK live in NVS (namespace ``minihub_wifi``), loaded by
+``minihub_provision_load_credentials()``. NVS wins over
+``CONFIG_MINIHUB_WIFI_SSID`` / ``CONFIG_MINIHUB_WIFI_PASS``, and the literal
+placeholder ``YOUR_SSID`` counts as unset.
 
-When **no credentials** exist and ``CONFIG_MINIHUB_WIFI_PROVISIONING`` is on:
+When **no credentials** exist and ``CONFIG_MINIHUB_WIFI_PROVISIONING`` is on, the
+Hub brings up a plain open AP — SSID ``PROV_MiniHub``, no password, channel 1, 4
+clients — and Wi-Fi is then configured from the Web console on that AP with
+``POST /api/net/wifi``. ``minihub_provision_start()`` is deliberately *not*
+called: the ESP-IDF provisioning manager serves its own page on port 80, which is
+the console's port. There is no Bluetooth path to Wi-Fi provisioning — a BLE
+transport was removed, so ``CONFIG_BT_ENABLED`` is not required to configure a
+device, and provisioning needs no pairing tooling beyond the browser.
 
-* ``minihub_provision_start()`` runs after ``minihub_net_start_wifi()``
-* Transports depend on Kconfig: SoftAP (``CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_SOFTAP``)
-  and/or BLE (``CONFIG_MINIHUB_WIFI_PROV_TRANSPORT_BLE``)
+The manager entry point stays available for a product that moves the console to
+another port; ``CONFIG_MINIHUB_WIFI_PROVISIONING=n`` drops the open AP too, and a
+device with no credentials then only logs
+``no Wi-Fi credentials and provisioning disabled``.
 
 REST: network configuration
 ---------------------------
@@ -118,7 +136,7 @@ does not skip STA connect.
 
 **STA never connects**
 
-* Confirm provisioning finished (Web UI or SoftAP/BLE flow)
+* Confirm provisioning finished (Web UI or SoftAP flow)
 * Look for ``wifi got IP``; if missing, check SSID/PSK in NVS
 * Ensure Matter/CHIP is not owning a second STA (see :doc:`matter`)
 

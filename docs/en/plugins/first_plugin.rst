@@ -1,0 +1,220 @@
+Your First Store Plugin
+=======================
+
+:link_to_translation:`zh_CN:[中文]`
+
+One pass from an empty directory to a plugin running on a Hub, then changing it
+without reflashing. L2 (JavaScript on QuickJS) is used because it needs no
+cross-compiler. Switching tier changes only the ``--tier`` flag in step 1 and
+what step 2 writes.
+
+What you are actually producing
+-------------------------------
+
+A plugin is one directory. Only three of these files are yours to write; the
+rest are generated or read by someone else:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 30 46
+
+   * - File
+     - Written by
+     - Read by
+   * - ``module.json``
+     - you (identity, ``runtime``)
+     - the loader, to decide whether the package may load on this Host
+   * - ``main.js``
+     - you (all behaviour)
+     - the embedded QuickJS engine, inside ``setup(host)``
+   * - ``meta.json``
+     - you (``ui`` labels, ``capabilities``)
+     - the console, to draw that module's own panel
+   * - ``catalog.json``
+     - ``tools/sync_store_catalog.py``
+     - ``GET /api/catalog`` and the Store page -- never hand-edit it
+   * - ``<id>.mhub``
+     - ``tools/pack_store_module.py``
+     - the Hub, which unpacks it under ``/store/modules/<id>/``
+
+Before you start
+----------------
+
+The Host you are installing onto must have been built with dynamic modules and
+the JS runtime: the ``dynamic_modules`` feature in
+``application/minihub/configs/sdkconfig/app.yml``
+(``CONFIG_MINIHUB_DYNAMIC_MODULES`` and ``CONFIG_MINIHUB_JS_PLUGINS``). Check
+your own build tree -- both lines must read ``=y``:
+
+.. code-block:: bash
+
+   grep -E "CONFIG_MINIHUB_(DYNAMIC_MODULES|JS_PLUGINS)" \
+     application/minihub/build/config/sdkconfig || \
+   grep -E "CONFIG_MINIHUB_(DYNAMIC_MODULES|JS_PLUGINS)" application/minihub/sdkconfig
+
+And you need a writable deploy directory, by default ``~/workspace/minihub_store``
+(override with ``MINIHUB_PLUGINS_DEPLOY_DIR``).
+
+1. Scaffold
+-----------
+
+.. code-block:: bash
+
+   python3 tools/new_store_module.py --tier l2 --id my_js
+   # -> examples/plugins/my_js/{module.json,main.js,meta.json}
+
+``--id`` is both the directory name and the module id: lowercase, underscores.
+Nothing is compiled at this point, and nothing is installed.
+
+2. Write the behaviour
+----------------------
+
+``main.js`` exposes one function; the Host calls it on load and on every reload:
+
+.. code-block:: javascript
+
+   function setup(host) {
+       host.point.register({
+           point_id: 'my_js.lamp',        // <prefix>.<device>, unique per module
+           type: 'light',                 // must exist in the type catalog
+           adapter: 'my_js',              // what routes commands here
+           value: 'off',
+           params: { power: { value: false, access: 'RW' } },
+       });
+       host.command.on('my_js', function (cmd) {
+           if (cmd.cmd === 'turn_on') {
+               host.point.set('my_js.lamp', 'on', { params: { power: { value: true } } });
+           } else if (cmd.cmd === 'turn_off') {
+               host.point.set('my_js.lamp', 'off', { params: { power: { value: false } } });
+           }
+       });
+       host.log.info('my_js ready');
+   }
+
+Three rules that decide whether the plugin is usable, not cosmetic:
+
+* ``point_id`` is a name your module owns — the ``<prefix>.<device>`` shape keeps
+  it unique across modules, and nothing derives the adapter from it; the prefix
+  the shipped demos use is ``sim.`` (``examples/plugins/color_bulb_js``).
+  ``type`` is a ``device_id`` from the type catalog, or the device page shows no
+  widget (:doc:`../type_catalog`).
+* commands are routed by the ``adapter`` field you pass to ``point.register()``
+  and bind with ``host.command.on(adapter, fn)`` — omit it and the point lands on
+  the loader's default ``js`` adapter, so ``host.command.on('my_js', …)`` would
+  never be called for it.
+* one physical device is one point, with parameters under ``props.params`` --
+  never one point per parameter (:doc:`../data_model`).
+* the engine is single-threaded and shared by every JS module: never spin in a
+  callback. Use ``host.adapter.poll`` or ``setTimeout`` and return
+  (:doc:`../api/js_host`).
+
+3. Pack it
+----------
+
+.. code-block:: bash
+
+   python3 tools/pack_store_module.py pack my_js
+   python3 tools/sync_store_catalog.py my_js
+   python3 tools/store_server.py --port 8080
+
+The first command writes
+``~/workspace/minihub_store/Stores/Common/my_js/my_js.mhub`` **and** the
+``catalog.json`` beside it (``pack_store_module.py:323-326``); L1 and L2 always
+land under ``Common``, and a native module is not a store package, so ``pack``
+skips it. The second line is what you need for a package you placed by hand or an
+entry you edited — after ``pack`` it is redundant, harmless to leave in. That
+``catalog.json`` is the only store-side index there is, since ``/api/catalog``
+aggregates those per-plugin files per request. The third serves both. Confirm the
+server sees it before touching the Hub:
+
+.. code-block:: bash
+
+   curl -s http://YOUR_PC:8080/api/catalog | head -c 400
+
+4. Install on the Hub
+---------------------
+
+In the Web UI at ``http://HUB/``, open **Store**, set the custom Store URL to
+``http://YOUR_PC:8080``, then refresh the catalog and install ``my_js``.
+
+5. See it running
+-----------------
+
+With Web login on (the default), write calls need a session. Installing in step 4
+already loaded the module and reloaded the Hub, so all that is left is a session:
+set the address, log in once, and reuse the cookie:
+
+.. code-block:: bash
+
+   export HUB=<hub-ip>                              # from the eth got IP log line
+   curl -s -c /tmp/mh -X POST http://$HUB/api/auth/login \
+     -H 'Content-Type: application/json' \
+     -d '{"username":"admin","password":"secret1"}'
+   curl -s -b /tmp/mh http://$HUB/api/points | grep my_js  # your point is registered
+   curl -s -b /tmp/mh -X POST http://$HUB/api/command \
+     -H 'Content-Type: application/json' \
+     -d '{"point_id":"my_js.lamp","cmd":"turn_on"}'
+
+Open the console: the device appears on the Overview page with the standard
+light card, and ``my_js ready`` is on the serial log. Control works through the
+same ``POST /api/command`` you just sent -- which is exactly what the rules
+engine calls, so your plugin is automatable from day one.
+
+6. Change it
+------------
+
+Edit ``main.js``, bump the version in ``module.json``, then repeat step 3 and:
+
+.. code-block:: bash
+
+   curl -s -b /tmp/mh -X POST http://$HUB/api/store/upgrade \
+     -H 'Content-Type: application/json' \
+     -d '{"type":"module","id":"my_js"}'
+
+No Host rebuild, no full-image OTA. The upgrade reloads the Hub as it goes (pass
+``"reload": false`` to skip that), and a reload re-runs ``setup`` and clears the
+module's timers, so a stuck callback cannot outlive it.
+
+If nothing appears
+------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Symptom
+     - Check
+   * - ``/api/catalog`` returns ``no_plugin_for_version``
+     - ``targets`` does not match the Hub's ``?chip=`` (``esp32s31``), or the
+       package never landed next to its ``catalog.json``
+   * - Install succeeds, no points
+     - The loader refused the ABI: compare ``abi_version`` / ``core_api_min`` /
+       ``core_api_max`` in ``module.json`` with ``GET /api/`` ``api_version``
+   * - Module skipped, log says ``load guard``
+     - An earlier load crashed; clear it with
+       ``POST /api/modules {"id":"my_js","clear_load_guard":true}`` and read the
+       serial log before retrying (:doc:`../faq`)
+   * - Browser console logs ``type not in catalog``
+     - ``type`` is not a catalog ``device_id`` -- a data problem, not a render
+       problem (:doc:`../type_catalog`)
+   * - UI stops answering while the plugin runs
+     - A JS callback is blocking the shared worker; move the work to
+       ``host.adapter.poll`` / ``setTimeout``
+
+Switching to another tier
+-------------------------
+
+L1 is the same loop with step 2 replaced by an ``inject`` block in
+``module.json`` -- no code, no ``setup``, and it can only add defaults to an
+adapter the Host already ships (:doc:`develop_l1`).
+
+.. only:: not hide_l3
+
+   L3 replaces step 2 with C sources and adds a compile before packing:
+   ``python3 tools/build_plugin_standalone.py``, or ``./tools/build_firmware.py
+   modules`` when it is built together with the Host. The MHMD header goes on with
+   its own command, ``pack_store_module.py mhmd in.so out.so`` — ``pack`` only
+   embeds an ``.so`` that is already wrapped (:doc:`develop_l3`).
+
+Full details for each step: :doc:`develop_l2`, :doc:`pack_and_catalog`,
+:doc:`../api/host_rest`.

@@ -23,7 +23,7 @@
    * - OEM Host 产品（板级、分区、出厂配置）
      - ``application/APP/`` — 见 :doc:`application/index` 再 :doc:`host_customization`
    * - 厂商云 / 生态逻辑
-     - ``examples/plugins/ID/`` 或 ``MINIHUB_PLUGIN_DIRS`` 的 Store
+     - ``examples/plugins/ID/`` 或 ``MINIHUB_PLUGIN_DIRS`` 的商店
        ``.mhub`` — 请勿写进 Host Core
    * - 共享 Host Core 修复
      - ``components/`` 下 ``minihub_`` 前缀组件、``adapters/`` — 保持生态中立
@@ -55,6 +55,9 @@ Git 工作流
 文档贡献
 --------
 
+本仓库为改指南准备了一个项目 skill： ``.agent/skills/minihub-docs/SKILL.md``。用 AI
+助手改这些页面时，先让它读这个 skill；完整列表见 :doc:`vibe_coding`。
+
 1. 同时修改 ``docs/en/`` 与 ``docs/zh_CN/`` （CI 会对比两棵 ``.rst`` 树）
 2. 本地构建（输出 ``docs/_build/``）：
 
@@ -82,7 +85,7 @@ Git 工作流
 
    * L3 模块：``./tools/build_firmware.py -app minihub modules`` （编译全部原生 ``.so``；打包用 ``pack``）
    * L3 演示单独编译（不编 IDF 工程）：``python3 tools/test_build_plugin_standalone.py -v``
-     （GitLab 任务 ``build:plugin_standalone`` ；需要 ``riscv32-esp-elf-gcc`` 与 ``cmake``）
+     （GitLab 任务 ``build:plugin_standalone``；需要 ``riscv32-esp-elf-gcc`` 与 ``cmake``）
    * 若变更 L3 模块可见的 Host 符号，需更新
      ``docs/module_sdk/host_export_allowlist.json`` 并运行
      ``python3 tools/gen_host_export_symbols.py`` （见 :doc:`plugins/develop_l3` ）。

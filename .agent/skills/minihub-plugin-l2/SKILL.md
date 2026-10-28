@@ -34,14 +34,14 @@ Or IDE MCP: `scaffold_plugin` with `tier=l2`. Do not invent `host.*` fields; ask
 
 ## Files
 
-- `module.json`: `"runtime": "js"`, `kind`: `"module"`
+- `module.json`: `"runtime": "js"`, `type`: `"module"`
 - `main.js`: QuickJS; Host bindings in `components/minihub_js/minihub_js.c`
-- Optional `ui.json` / `web/`
+- Optional `meta.json` / `web/`
 
 ## Data model (when touching points)
 
 - Core is type-agnostic: one device = one `minihub_point_t`; live values in `props.params.<name>`.
-- UI widgets come from Host device-widget catalog (`toggle` / `slider` / `dropdown` / `text` / `hidden`), not from inventing C entity structs.
+- UI widgets come from the Host device-widget catalog: the `ui_element` column validated against `components/minihub_device_widget/model/ui_elements.csv` (read the set there — it is not repeated in this skill), not from inventing C entity structs.
 
 ## JS Host API (do not invent)
 
@@ -50,6 +50,7 @@ Or IDE MCP: `scaffold_plugin` with `tier=l2`. Do not invent `host.*` fields; ask
 - `host.point.get` / `host.point.set(id, value, props?)`
 - `host.command.on(adapter, handler)` — route Core commands into JS
 - `host.command.invoke({ point_id, cmd, params? })`
+- `host.adapter.poll(fn)` — ~5 s adapter tick (max 8 handlers); `host.adapter.clearPoll()` drops every handler in the runtime
 - HTTP helpers if present in the same file — match existing names, do not guess
 
 Do not call native Wi-Fi / radio APIs from JS.
@@ -188,7 +189,7 @@ Rules:
 | `MINIHUB_PLUGINS_DEPLOY_DIR` | `~/workspace/minihub_store` | `Stores/Common/<id>/` |
 | `MINIHUB_PLUGIN_DIRS` | (empty) | Extra source trees (`:`/`;`). Set if the module is under `examples/plugins/` |
 
-No native compile. Packer zips `module.json` + `main.js` (+ `ui.json` / `web/` if present). Host must already have `CONFIG_MINIHUB_DYNAMIC_MODULES` and `CONFIG_MINIHUB_JS_PLUGINS`.
+No native compile. Packer zips `module.json` + `main.js` (+ `meta.json` / `web/` if present). Host must already have `CONFIG_MINIHUB_DYNAMIC_MODULES` and `CONFIG_MINIHUB_JS_PLUGINS`.
 
 ## Pack (zip → `.mhub`)
 

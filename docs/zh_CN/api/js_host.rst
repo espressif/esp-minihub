@@ -6,10 +6,20 @@ L2 JS Host API
 概述
 ----
 
-Store **L2** 模块（``runtime: js``，``main.js``）通过 QuickJS 绑定访问 Host 能力。
-实现位于 ``components/minihub_js/minihub_js.c``；需要 ``CONFIG_MINIHUB_JS_PLUGINS``。
+L2 模块是跑在 Hub 里的 JavaScript，其 ``module.json`` 以 ``runtime: js`` 标明层级。
+它通过 QuickJS 绑定访问 Host 能力，不靠链接器。这些绑定实现在
+``components/minihub_js/minihub_js.c``，由
+``CONFIG_MINIHUB_JS_PLUGINS`` 决定是否编入。
 
 REST 安装与 RPC 见 :doc:`plugin_rest`。C 侧点位/命令模型见 :doc:`minihub_core`。
+
+host 对象
+---------
+
+``setup(host)`` 拿到的就是下表，构建时直接从 QuickJS 绑定里读出来，所以改名或删掉的
+方法不会继续留在本页。斜杠后的数字是 C 侧登记的参数个数；表按命名空间列出各自的方法。
+
+.. minihub-js-api::
 
 .. only:: not hide_l3
 
@@ -18,8 +28,9 @@ REST 安装与 RPC 见 :doc:`plugin_rest`。C 侧点位/命令模型见 :doc:`mi
 模块入口
 --------
 
-Hub 在模块加载及每次 ``POST /api/hub/reload`` 后对 enabled 的 JS 模块调用全局函数
+Hub 在模块加载及每次 ``POST /api/hub/reload`` 后对 enabled 的 JS 模块调用
 ``setup(host)``。``main.js`` 必须定义 ``setup``；缺失则打 warning 并跳过模块。
+每个模块的顶层名字只留在这个模块里。
 
 在 ``setup`` 中为模块 id 使用独立 ``point_id`` 前缀；重载时会再次调用，避免重复注册。
 **一台设备登记一条点** （``模块.设备``），不要按参数再拆点。
@@ -104,7 +115,7 @@ Parameters
     默认 false。
 
 ``obj.props`` (object, optional)
-    完整 props JSON，Core 会复制。设备页控件常用
+    完整 props JSON，Core 会复制。概览页控件常用
     ``props.params.<name> = { value, access?, visible?, min?, max?, … }``。
     厂商 / 品类写顶层：``manufacturer``、``category`` （见 :doc:`../data_model`）。
 
@@ -114,7 +125,7 @@ Parameters
 Returns
 ^^^^^^^
 
-``undefined``；失败**抛错** （QuickJS exception）。
+``undefined``；失败 **抛错** （QuickJS exception）。
 
 host.point.get(point_id)
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -130,7 +141,7 @@ Returns
 host.point.set(point_id, value, props?)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-更新 ``value``（及可选 ``props``）并发布 ``point.updated``。
+更新 ``value`` （及可选 ``props``）并发布 ``point.updated``。
 
 Parameters
 ^^^^^^^^^^
@@ -142,7 +153,7 @@ Parameters
     摘要值（如 ``on`` / ``off``）。
 
 ``props`` (object, optional)
-    若提供则**整对象替换**点位 props。请用 ``host.point.get`` 再 ``set`` 做
+    若提供则 **整对象替换** 点位 props。请用 ``host.point.get`` 再 ``set`` 做
     读-改-写，或把扩展放在顶层键（``ota``、``ieee`` 等），这样适配器遥测只
     合并 ``props.params`` 时不会冲掉它们。
 
@@ -240,7 +251,7 @@ Returns
 方法 — host.time
 -----------------
 
-系统页选择的时区是固定的整点偏移（``UTC``、``UTC+8``、``UTC-8``），保存在 NVS，
+系统页选择的时区是固定偏移（``UTC``、``UTC+8``、``UTC+5:30``），保存在 NVS，
 默认 UTC。``offsetMin`` 是相对 UTC 向东的分钟数，不含夏令时。
 
 host.time.offsetMin() / host.time.id()
@@ -294,6 +305,46 @@ Returns
 * ``setup`` 内可启动定时器；在 ``clear*`` 或重载前持续有效。
 * 长时间运行的回调会阻塞其它定时器与任务——保持回调简短。
 * ``POST /api/hub/reload`` 会清除所有定时器并再次运行 ``setup``。
+
+方法 — host.adapter
+-------------------
+
+.. code-block:: javascript
+
+   host.adapter.poll(function () { /* 从云端刷新点位 */ });
+   host.adapter.clearPoll();
+
+host.adapter.poll(fn)
+~~~~~~~~~~~~~~~~~~~~~
+
+在 Host 适配器轮询节拍下运行 ``fn``，约每 5 秒一次。节拍只负责唤醒 JS worker，
+因此轮询不会拖慢适配器轮询或 hub 重载；回调本身跑在 JS worker 任务上
+（QuickJS 单线程）。
+
+参数
+^^^^
+
+``fn`` （函数，必填）
+    无参回调。传入其它类型抛 ``TypeError``。
+
+返回
+^^^^
+
+``undefined``。整个运行时最多容纳 8 个轮询回调，第 9 个抛异常。回调抛出的异常
+只记录后被丢弃，节拍照常继续。
+
+host.adapter.clearPoll()
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+清除该 JS 运行时里 **所有** 轮询回调，包括别的 L2 模块注册的。没有按回调取消的
+接口：某个模块想停止轮询，就自己置一个标志位在回调里提前返回。
+
+说明
+^^^^
+
+* 上一批回调还在执行时本次节拍直接跳过，回调不会堆积。
+* 重载（``POST /api/hub/reload`` ）会清空所有回调并重新运行 ``setup``。
+* 按框架节奏做云端或局域网刷新用它；需要别的周期用 ``host.timer.setInterval``。
 
 方法 — host.command
 -------------------
@@ -378,8 +429,8 @@ Attention
 ^^^^^^^^^
 
 响应体上限 **65536** 字节；``main.js`` 最大 **1 MiB**。出站 URL 须符合 Host 网络安全策略。
-可选 ``headers`` 对象设置请求头（如 ``Cookie``、``Content-Type``）。自动重定向**关闭**，便于读取
-``Location`` / ``Set-Cookie``（护照登录）。除 GET/POST/PUT 外支持 ``DELETE``。
+可选 ``headers`` 对象设置请求头（如 ``Cookie``、``Content-Type``）。自动重定向 **关闭**，便于读取
+``Location`` / ``Set-Cookie`` （护照登录）。除 GET/POST/PUT 外支持 ``DELETE``。
 
 host.http.requestAsync(opts)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -426,7 +477,7 @@ host.net.udp.close(fd)
 方法 — host.crypto
 ------------------
 
-摘要 / HMAC / AES。摘要返回**小写 hex**；HMAC 与 AES 返回 **base64**。
+摘要 / HMAC / AES。摘要返回 **小写 hex**；HMAC 与 AES 返回 **base64**。
 输入可为字符串或 ``{ data }`` / ``{ data_b64 }``。
 
 * ``host.crypto.md5(input)``
@@ -454,7 +505,7 @@ JavaScript 对象，或 ``null``。
 host.config.save(adaptersRoot)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-写回完整 ``adapters.json``（``minihub_config_save_adapters``）。
+写回完整 ``adapters.json`` （``minihub_config_save_adapters``）。
 
 Parameters
 ^^^^^^^^^^
@@ -473,7 +524,7 @@ Returns
 host.module.rpc(moduleId, method, params?)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-调用其它已加载模块的 RPC（``minihub_module_invoke_rpc``），例如一个 Store
+调用其它已加载模块的 RPC（``minihub_module_invoke_rpc``），例如一个商店
 模块调用另一个模块的共享能力。
 
 Parameters

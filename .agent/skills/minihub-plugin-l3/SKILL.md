@@ -5,7 +5,7 @@ description: Create or edit MiniHub Store L3 native plugins (MHMD .so, minihub_m
 
 # MiniHub Store L3 (native)
 
-L3 is a **Store packaging tier**: native MHMD `.so` loaded at runtime (not statically linked into Host by default). Reference demos: `examples/plugins/color_bulb`, `examples/plugins/meter_plug`.
+L3 is a **Store packaging tier**: native MHMD `.so` loaded at runtime (not statically linked into Host by default). No L3 demo ships in-tree; start from `tools/new_store_module.py --tier l3`.
 
 ## Where this fits
 
@@ -30,14 +30,16 @@ Do **not** move demos into Host `require` or leave them in public `store_preinst
 python3 tools/new_store_module.py --tier l3 --id my_native --name "My native"
 ```
 
-IDE MCP can scaffold L3 files but **cannot** compile `.so`. Prefer copying patterns from `examples/plugins/color_bulb` over inventing entity structs.
+IDE MCP can scaffold L3 files but **cannot** compile `.so`. Prefer the scaffolded
+`module_entry.c` / `hello_adapter.c` (`docs/module_sdk/templates/l3/`) over
+inventing entity structs.
 
 ## Device instance pattern
 
-- **One device = one point** (`<protocol>.<device>`, e.g. `sim.color_bulb`).
+- **One device = one point** (`<protocol>.<device>`, e.g. `zigbee.bulb_1`).
 - Live params in `props.params.<name> = { value, optional access / visible / min / max / step / unit }`.
 - Instance list: plugin `devices.json` → generate `device_desc.gen.h` (`tools/generate_devices_property_from_json.py`).
-- Type UI catalog is **Host-side**: `components/minihub_device_widget/model/*.csv` → embed → runtime `/data/config/devices.csv`. Closed widgets: `toggle` / `slider` / `dropdown` / `text` / `hidden`.
+- Type UI catalog is **Host-side**: `components/minihub_device_widget/model/*.csv` → embed → runtime `/data/config/devices.csv`. Closed widget set: read `model/ui_elements.csv`; anything outside it fails the validation in `tools/gen_device_widget.py`, so never copy the list into a module README or this skill.
 - Plugins reuse catalog types (`light`, `switch`, …); do **not** ship labels / widget CSS / icons inside the plugin.
 
 ## Must
@@ -65,12 +67,12 @@ Needs Host `CONFIG_MINIHUB_DYNAMIC_MODULES` (product feature `dynamic_modules`).
 
 `new_store_module.py` only copies sources — it does **not** produce `.so`. IDE MCP cannot compile either.
 
-If the plugin has `devices.json`:
+If the plugin has `devices.json` (the scaffold does not ship one):
 
 ```bash
 python3 tools/generate_devices_property_from_json.py \
-    examples/plugins/color_bulb/devices.json \
-    examples/plugins/color_bulb/device_desc.gen.h
+    examples/plugins/<id>/devices.json \
+    examples/plugins/<id>/device_desc.gen.h
 ```
 
 Production / vendor plugin (set `MINIHUB_PLUGIN_DIRS`):
@@ -85,7 +87,7 @@ Production / vendor plugin (set `MINIHUB_PLUGIN_DIRS`):
 Demo under `examples/plugins/` — export **before** configure:
 
 ```bash
-export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"   # or .../examples/plugins/color_bulb
+export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"   # or one plugin: .../examples/plugins/my_native
 ./tools/build_firmware.py -app minihub modules
 ```
 

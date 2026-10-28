@@ -227,7 +227,6 @@ function handleCommand(host, cmd) {
                        : (cmd.params.color_temp != null) ? cmd.params.color_temp
                        : cmd.params.temperature;
                 buf = jsonToStr(ct);
-            }
             } else if (cname === "toggle") {
                 param = param || "power";
                 var cur = summaryValue(params);

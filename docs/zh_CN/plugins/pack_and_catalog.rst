@@ -3,7 +3,7 @@
 
 :link_to_translation:`en:[English]`
 
-本章说明 Store 模块从 **开发机到 Hub** 的完整流水线。
+一个商店模块从开发机的源目录，走到 Hub 的 ``/store/modules/<id>/``。
 
 前置条件
 --------
@@ -55,25 +55,25 @@
       # 手动 MHMD（通常 pack 已包含）
       python3 tools/pack_store_module.py mhmd in.so out.so
 
-      # 仓库外演示：无 IDF 编译
-      python3 tools/build_plugin_standalone.py color_bulb
+      # 无 IDF 编译 L3 模块（仓库内无示例，先用脚手架生成）
+      python3 tools/build_plugin_standalone.py my_native
 
    ``./tools/build_firmware.py … modules`` 编译同时含 ``module.json`` 与
    ``CMakeLists.txt`` 的全部原生插件 （``examples/plugins/*/`` 以及
    ``MINIHUB_PLUGIN_DIRS``），并把 MHMD ``.so`` 留在构建目录。这次编译
    不创建商店插件目录。Host 固件 ``build`` 不编译这些插件。
    ``./tools/build_firmware.py … pack ID`` 把已有的 ``libadapter_ID.so``
-   封装成本地 MHMD ``.so`` ，不写入 ``Stores/Common/ID/`` ，也不写入
-   ``Stores/<chip>/`` 。
+   封装成本地 MHMD ``.so``，不写入 ``Stores/Common/ID/``，也不写入
+   ``Stores/<chip>/``。
 
 ``.mhub`` 已经放进 store 目录后（例如
 ``~/workspace/minihub_store/Stores/Common/ble_mesh_pack/ble_mesh_pack.mhub`` ），运行
 ``sync_store_catalog.py`` （ ``--from-store`` 是默认行为）。它遍历
-``Stores/Common/ID/ID.mhub`` ，读取 zip 内的 ``module.json`` 与 ``meta.json``
-（后者承载 ``ui`` 与 ``capabilities`` ），在该包旁边写出 ``catalog.json`` 。不需要插件源码。
+``Stores/Common/ID/ID.mhub``，读取 zip 内的 ``module.json`` 与 ``meta.json``
+（后者承载 ``ui`` 与 ``capabilities`` ），在该包旁边写出 ``catalog.json``。不需要插件源码。
 ``GET /api/catalog`` 聚合这些对象；只拷贝 zip
 不会更新目录。默认部署根是 ``MINIHUB_PLUGINS_DEPLOY_DIR`` 或
-``~/workspace/minihub_store`` 。
+``~/workspace/minihub_store``。
 
 .. only:: not hide_l3
 
@@ -113,56 +113,63 @@
      "size": 3762
    }
 
-* ``type`` — L2 为 ``module``；纯配置 L1 可为 ``pack``
-  (仅 JSON 包时 ``module`` / ``pack`` 可互换)
+* ``type`` — 生成的目录里恒为 ``module``。标记纯配置 L1 的是 ``config_only: true``
+  （安装 URL 以 ``.json`` 结尾也算）；打包器同时写 ``runtime: "pack"``，包类型判定器
+  与加载器都读它，据此把包交给 ``minihub_pack``，而不是按可加载模块处理。
+  手写 ``"type": "pack"`` 只在 Hub 报告已安装状态时被认，**装不了** ：目录查找只在
+  ``config_only`` 条目上让 ``pack`` 与 ``module`` 互相兜底，而 URL 以 ``.mhub``
+  结尾的条目不属于它（ ``minihub_store.c:999-1006,1027-1036`` ）
 * ``url`` — ``.mhub`` 的路径或绝对 HTTP URL
 * ``targets`` — 小写芯片文件夹名，与固件目录使用同一套字符串
-  （例如 ``esp32s31`` ），JS 模块也可以是 ``ALL`` 。从 ``module.json``
+  （例如 ``esp32s31`` ），JS 模块也可以是 ``ALL``。从 ``module.json``
   抄入时具体芯片名转为小写， ``ALL`` 保持不变。省略该字段时，JS 模块打包写成
-  ``["ALL"]`` ，其它模块写成 ``["esp32s31"]``
+  ``["ALL"]``，其它模块写成 ``["esp32s31"]``
 * ``adapter`` — 可选；安装时 Host 会在 ``adapters.json`` 中建槽
 * ``size`` — **外层 zip** 字节数（须与磁盘上 ``.mhub`` 一致；``pack`` 会回写）
 
-.. only:: not hide_l3
+* ``binary_size`` — 内层原生镜像的大小，不是 zip 的大小。只要打包器在应用构建目录里找得到这个
+  id 编好的原生镜像，就会把它盖进来。所以 ``runtime: js`` 的条目旁出现一个非零
+  ``binary_size`` ，意思是同 id 早前那次构建留下了产物，不是说它是原生模块
+  （ ``sync_store_catalog.py:258-266`` ）。
+* ``sha256`` — 打包器对每个包算一份写在这里，商店接口也照原样把它给出去，但安装路径
+  从不校验它 ：校验的是 ``size`` 必须相等，摘要不看。摘要校验只存在于
+  ``components/minihub_update/`` 的固件与资源记录里。
 
-   * ``type`` 对 L3 也是 ``module``
-   * ``binary_size`` — 内层 MHMD ``.so`` 大小（不是 zip）。L3 目录 id 形如
-     ``color_bulb`` ，``targets`` 为 ``["esp32s31"]`` 。
+两个文件里的 ``type`` 含义不同：生成的 ``catalog.json`` 每一层都写 ``module``，
+而 L1 包内的 ``module.json`` 写的是 ``pack``。
 
 在运行中的 Hub 上安装
 ---------------------
 
-**本地 Store 服务：** Web UI → Store → 刷新目录 → 安装。
+**本地商店服务：** Web UI → 商店 → 刷新目录 → 安装。
 
-**REST** (仅 JSON，无 multipart 文件上传)：
+**Web UI** — 打开 ``http://HUB/`` 并进入 **商店**，将 自定义商店 URL 设为本地
+服务，刷新目录后安装 ``color_bulb_js``。安装后 Hub 会自动重载模块。
 
-.. code-block:: bash
-
-   HUB=192.168.1.10
-
-   curl -X POST http://$HUB/api/store/config \
-     -H 'Content-Type: application/json' \
-     -d '{"custom_url":"http://YOUR_PC:8080","disable_default":false}'
-
-   curl -X POST http://$HUB/api/store/refresh
-   curl -X POST http://$HUB/api/store/install \
-     -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
-
-   curl -X POST http://$HUB/api/hub/reload
-
-L1 包使用 ``{"type":"pack","id":"my_pack"}``。
+L1 包在商店 UI 中显示为 pack 条目。
 
 验证安装
 --------
 
+.. note::
+
+   ``$HUB`` 是设备的局域网地址。Web 登录默认开启，先登录一次并复用 Cookie：
+
+   .. code-block:: bash
+
+      export HUB=<hub-ip>          # 来自 eth got IP 日志
+      curl -s -c /tmp/mh -X POST http://$HUB/api/auth/login \
+        -H 'Content-Type: application/json' \
+        -d '{"username":"admin","password":"secret1"}'
+
 .. code-block:: bash
 
-   curl http://$HUB/api/modules
-   curl http://$HUB/api/packs
-   curl http://$HUB/api/config/adapters
+   curl -s -b /tmp/mh http://$HUB/api/modules
+   curl -s -b /tmp/mh http://$HUB/api/packs
+   curl -s -b /tmp/mh http://$HUB/api/config/adapters
 
-串口：``loaded module 'color_bulb'`` 或 L2 的 ``setup ok``。
+串口日志：JS 模块输出 ``JS module '<id>' setup ok``；原生模块输出
+``loaded module binary: <path>``。
 
 升级 / 卸载
 -----------
@@ -171,12 +178,14 @@ L1 包使用 ``{"type":"pack","id":"my_pack"}``。
 
 .. code-block:: bash
 
-   curl -X POST http://$HUB/api/store/upgrade -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+   curl -s -b /tmp/mh -X POST http://$HUB/api/store/upgrade \
+     -H 'Content-Type: application/json' \
+     -d '{"type":"module","id":"color_bulb_js"}'
 
 卸载：
 
 .. code-block:: bash
 
-   curl -X POST http://$HUB/api/store/uninstall -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"color_bulb"}'
+   curl -s -b /tmp/mh -X POST http://$HUB/api/store/uninstall \
+     -H 'Content-Type: application/json' \
+     -d '{"type":"module","id":"color_bulb_js"}'

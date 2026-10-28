@@ -8,8 +8,14 @@ end-device sample. Devices live under ``adapters.zigbee``. JSON field details
 are in :doc:`data_model` (:ref:`adapters-json`); this chapter covers build,
 join, and REST.
 
-Zigbee and Thread share 802.15.4 and are **mutually exclusive** at compile time.
-See :doc:`getting_started` and :doc:`networking` for Hub bring-up and IP uplink.
+Zigbee takes the 2.4 GHz radio to itself: it shares it with neither Wi-Fi nor BLE
+Mesh, and Thread wants the same 802.15.4 radio, so the two stacks are **mutually
+exclusive at build time** — ``tools/build_firmware.py`` stops a build that enables
+both, since neither Kconfig option depends on the other. JSON that still asks for
+both is honoured by skipping Thread; JSON that asks for Zigbee beside Wi-Fi or BLE
+Mesh is honoured by skipping Zigbee. A Zigbee Hub therefore reaches the LAN over
+Ethernet. See :doc:`getting_started` and :doc:`networking` for Hub bring-up, and
+:doc:`radios` for the full matrix.
 
 Build
 -----
@@ -55,7 +61,9 @@ overview: :doc:`api/host_rest`.
 Permit join
 ^^^^^^^^^^^
 
-Optional JSON body. ``seconds`` defaults to 60. ``0`` closes the window.
+Optional JSON body. ``seconds`` defaults to 60. ``0`` closes the window. Values
+above **254** are silently clamped to 254 before they reach the stack — the log
+line reports what was actually opened — because the field is one byte.
 
 .. code-block:: bash
 
@@ -64,7 +72,9 @@ Optional JSON body. ``seconds`` defaults to 60. ``0`` closes the window.
      -d '{"seconds":60}'
 
 The Zigbee join window and the BLE Mesh provision window cannot both be open.
-If Mesh provisioning is active, permit-join fails (see error strings in the
+The Mesh side blocks it while its **permit window is open**, not only while a
+device is actually being provisioned — an open-but-idle Mesh window already
+fails permit-join (see error strings in the
 JSON body). RF / provision status: ``GET /api/radio/provision``
 (:doc:`ble_mesh`).
 
@@ -109,7 +119,7 @@ Lights use the standard Hub command API (``turn_on`` / ``turn_off`` /
      -H 'Content-Type: application/json' \
      -d '{"device":"light","parameter":"power","value":true,"point_id":"zigbee.zb_0a1b"}'
 
-Point identity and vendor extras
+Point identity and plugin extras
 --------------------------------
 
 Each Zigbee device is **one** Host point (``zigbee.zb_XXXX``). On register the
@@ -122,22 +132,28 @@ adapter sets top-level identity (not catalog params / Devices sliders):
 * ``props.sw_version`` / ``props.hw_version`` — Basic Application Version /
   HW Version (detail stays blank if the attribute is unsupported)
 * ``props.category`` — **not** filled by Zigbee Host. UI falls back to the
-  type-catalog label (``light`` → “灯”). A vendor plugin may merge a product
+  type-catalog label (``light`` → “灯”). A plugin may merge a product
   name as category.
 
 Telemetry updates merge **only** ``props.params`` via
 ``minihub_point_merge_params``, so plugin keys on the same point survive.
 
-Vendor plugins (L2) match ``props.manufacturer`` (local filter, e.g.
-packed ``catalog.json``) on that same ``point_id``:
+Plugins (L2) match ``props.manufacturer`` (local filter, e.g.
+packed ``catalog.json``) on that same ``point_id``. Both keys below are
+**plugin-side conventions**: no Host code writes ``props.owner`` or ``props.ota``,
+and the Hub does not fetch a vendor catalog for you.
 
-* **Claim** — set ``props.owner`` to the plugin ``adapter`` name. Overview
-  moves the card under the vendor section when that adapter slot is
-  ``enabled`` (label from ``meta.json`` ``filter_label``). Cloud catalog is
-  **not** required for the claim.
-* **OTA flag** — only after GET ``catalog_url`` succeeds, merge
-  ``props.ota`` (``available``, ``version``, optional ``url`` / ``file`` /
-  ``size``). Example::
+* **Associate** — the plugin sets ``props.owner`` to its own ``adapter`` name.
+  Overview moves the card under the vendor section when that adapter slot is
+  ``enabled`` (label from ``meta.json`` ``filter_label``). Nothing here needs a
+  cloud catalog.
+* **OTA flag** — the plugin merges ``props.ota`` (``available``, ``version``,
+  optional ``url`` / ``file`` / ``size``) whenever its own check says a firmware
+  update is ready; where that check comes from (the plugin's ``adapters.json`` block naming
+  its vendor URL, its own NVS, a scheduled fetch) is the plugin's business.
+  Of these keys the Hub only consumes ``file``, ``url`` and ``version`` when
+  ``POST /api/devices/ota`` runs; ``available`` and ``size`` are console display
+  hints. Example::
 
      {
        "ota": {

@@ -123,9 +123,9 @@ esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool
  * @param endpoint_ids  OnOff endpoints of this node, up to 16 (same cap as one
  *                      commissioning); ESP_ERR_INVALID_ARG above that, never a
  *                      silent truncation. The table itself is keyed by node and
- *                      holds only MATTER_SUB_MAX = 8 nodes — fewer than the 16
- *                      endpoints one commissioning can carry — so a 9th node
- *                      fails with ESP_ERR_NO_MEM.
+ *                      holds CONFIG_MINIHUB_MATTER_MAX_NODES nodes (default 128,
+ *                      range 16-1024), so it outgrows the 16-endpoint cap; a node
+ *                      past the configured cap fails with ESP_ERR_NO_MEM.
  *
  * ESP_OK means already live; ESP_ERR_NOT_FINISHED means the request was handed
  * to CHIP (liveness shows up in minihub_matter_subscriptions_json()); any

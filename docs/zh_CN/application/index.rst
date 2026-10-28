@@ -3,9 +3,9 @@ application 产品
 
 :link_to_translation:`en:[English]`
 
-``application/`` 下每个子目录是一份可烧录的 ESP-IDF **产品**。本页是总览；
-下方每一章对应一个产品。阅读后再看 :doc:`../host_customization`
-（如何复制产品、交付 OEM SKU）。
+``application/`` 下每个子目录是一份可烧录的 ESP-IDF **产品**，下方每一章对应
+一个产品。建议先读本页，再看 :doc:`../host_customization` （如何复制产品、
+交付 OEM SKU）。
 
 .. toctree::
    :maxdepth: 1
@@ -14,11 +14,12 @@ application 产品
 
 .. rubric:: 产品是什么
 
-MiniHub 把 **产品** 与 **Core** 分开：
+MiniHub 把 **产品** 与 **Core** 分开，好让一份 Core 服务所有 SKU
+（Stock Keeping Unit ，库存单位）：
 
 * ``application/APP/`` — 实际烧录的 Host：板级、分区表、sdkconfig 组合、出厂
   JSON、``app_main``、产品 Kconfig。目录名即产品名（``APP``）。
-* ``components/`` — 共享 Core、协议适配器。Store 源码在
+* ``components/`` — 共享 Core、协议适配器。商店源码在
   ``examples/plugins/`` 或 ``MINIHUB_PLUGIN_DIRS``。所有产品都链接 Core
   与适配器，不要拷进 ``application/APP/``。
 * 仓库根 ``configs/`` — 共享 manifest 基座（``configs/minihub_manifest.yml`` 里的
@@ -72,7 +73,7 @@ Compose：``tools/compose_sdkconfig.py``。协议栈列表：
 * 产品 ``main/CMakeLists.txt`` 里列出的额外源文件
 * 仅该产品的 Kconfig（``main/Kconfig.projbuild``）
 
-留在 ``components/`` （或 Store 插件）的：
+留在 ``components/`` （或商店插件）的：
 
 * 共享 Hub 服务与适配器
 * 厂商云、OEM 设备目录、云 token —— 不要写进公开 ``configs/`` 种子或 Core。

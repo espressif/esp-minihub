@@ -6,24 +6,49 @@ Plugin Overview
 Host vs plugin
 --------------
 
-* **In Host (static link):** Core, Web, MCP; Zigbee / BLE Mesh / Matter / MQTT / Modbus
-  when compiled in via Kconfig
-* **Via Store (``.mhub``):** ecosystem / vendor adapters as L1 or L2
-  (choose a tier below)
+Code that ships with every unit is linked into the firmware: Core, and the radio
+stacks and adapters that Kconfig enables (Zigbee, BLE Mesh, Matter, MQTT,
+Modbus). The web console is a linked HTTP server plus the HTML, CSS and
+JavaScript that live on the ``storage`` partition, so a re-skin does not rebuild
+the app (:doc:`../web_console`). The MCP server is its own component and is off
+by default (``CONFIG_MINIHUB_MCP_SERVER``).
+
+Developer and ecosystem adapters are different. They often carry credentials that
+must not appear in a public build, and not every product needs them. Those arrive
+later as Store ``.mhub`` packages at L1 or L2 (choose a tier below).
 
 .. only:: not hide_l3
 
    L3 is the native ELF tier (``.so`` inside ``.mhub``). Hybrid is L2 plus L3
    in one package.
 
-Do not add vendor cloud credentials to generic Host Core ``configs/``. Tokens belong
-in ``/store/modules/ID/`` or module-private NVS keys.
+Do not put vendor cloud credentials in the generic Host Core ``configs/``.
+Anything written there is flashed into every unit of a public build. Keep tokens
+under ``/store/modules/ID/`` or in module-private NVS keys.
 
 Module tiers
 ------------
 
-Pick a tier from the constraints below, then open that chapter. Packing,
-catalog, and install: :doc:`pack_and_catalog`.
+Pick a tier from the constraints below, then open that chapter. Packing, catalog
+and install work the same way for every tier (:doc:`pack_and_catalog`). To follow
+one plugin from an empty directory to a running device, see :doc:`first_plugin`.
+Each tier also has a project skill for AI assistants under ``.agent/skills/``,
+named after the tier and listed in :doc:`../vibe_coding`.
+
+Choose by what you already write:
+
+* **L1** -- configuration only, no code at all: a JSON pack that adds defaults to
+  an adapter the Host already ships.
+* **L2** -- JavaScript on the embedded **QuickJS-NG** engine. For developers
+  comfortable in JS: no cross-compiler, no ``.so``, and a fault in one module
+  cannot take down the Host. It is not a browser, so read the runtime limits in
+  :doc:`develop_l2` first.
+
+.. only:: not hide_l3
+
+   * **L3** -- native C/C++ compiled to a ``.so`` and loaded through the Host ABI
+     vtable. For embedded developers who need the export allowlist, threads, or a
+     binary protocol.
 
 .. list-table::
    :header-rows: 1
@@ -38,17 +63,20 @@ catalog, and install: :doc:`pack_and_catalog`.
        Merged into ``adapters.json`` at runtime.
      - **Use when:** default parameters for an existing **Host** adapter
        (BLE Mesh bind, UUID filters, Modbus maps). **Do not** inject radio
-       ``devices[]`` (the Host registers one point per join). Keep vendor
+       ``devices[]`` (the Host registers one point per join). Keep your own
        defaults out of Host Core ``configs/``.
        **Do not use when:** custom logic, cloud HTTP, a new adapter, or
-       vendor claim / OTA.
+       plugin associate / OTA.
      - :doc:`develop_l1`
    * - L2
-     - ``runtime: js`` plus ``main.js``; optional ``meta.json`` / ``web/``.
-     - **Use when:** lightweight automation, HTTP polling, REST/point glue,
-       or a Web panel without native code.
-       **Requires:** ``CONFIG_MINIHUB_DYNAMIC_MODULES`` (``dynamic_modules``
-       in ``app.yml``).
+     - ``runtime: js``: ``main.js`` run by the embedded **QuickJS** engine;
+       optional ``meta.json`` / ``web/``.
+     - **Use when:** automation, HTTP polling, REST / point glue, or a Web panel
+       -- in JavaScript, with no native code and no cross-compile step.
+       **Requires:** ``CONFIG_MINIHUB_DYNAMIC_MODULES`` and
+       ``CONFIG_MINIHUB_JS_PLUGINS`` (``dynamic_modules`` in ``app.yml``).
+       The engine is single-threaded: one callback at a time for all JS modules,
+       so long work must yield (``host.adapter.poll`` / ``setTimeout``).
      - :doc:`develop_l2`
 
 .. only:: not hide_l3
@@ -70,7 +98,7 @@ catalog, and install: :doc:`pack_and_catalog`.
           cross compiler (or in-tree firmware build); ``abi_version`` /
           ``core_api_*`` must bracket the Host; symbols on the allowlist. See
           :doc:`../api/module_abi`.
-          Example ``color_bulb``: ``module.json`` + ``color_bulb.so`` (+ optional
+          Example ``my_native``: ``module.json`` + ``my_native.so`` (+ optional
           ``devices.json``), no ``main.js``, no ``inject`` — that is L3, not L1.
         - :doc:`develop_l3`
       * - Hybrid
@@ -85,10 +113,10 @@ catalog, and install: :doc:`pack_and_catalog`.
         - :doc:`develop_l3` and
           :doc:`develop_l2`
 
-Every tier has ``module.json``; ``meta.json`` (``ui`` + ``capabilities``) is an optional sibling file.
-That is **not** L1. L1 means ``inject`` merged by
-``minihub_pack`` into an existing adapter block (for example BLE Mesh bind
-defaults).
+Every tier has a ``module.json``. Any tier may also ship a sibling ``meta.json``
+for ``ui`` and ``capabilities``. Having a ``module.json`` does not make the
+package L1. L1 means ``inject`` is merged by ``minihub_pack`` into an existing
+adapter block — BLE Mesh bind defaults are the usual example.
 
 .. only:: not hide_l3
 
@@ -96,23 +124,25 @@ defaults).
    empty ``adapters.json`` slot (``enabled`` + ``devices``); the module reads
    and writes its own config.
 
-**Device model:** register one point per physical device
-(``protocol.device``), put live values in ``props.params``. ``type`` and
-``devices.json`` must match the Host type catalog for standard Devices-page
-widgets (:doc:`../type_catalog`). Point fields and adapters / rules:
-:doc:`../data_model`. Do not invent a C struct per lamp or switch. Demos:
-L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js``.
-Extra vendor plugins live outside this tree —
-export ``MINIHUB_PLUGIN_DIRS`` at a sibling Store plugin repo before configure.
+Every tier uses the same device model. One physical device is one point
+(``protocol.device``), with live values under ``props.params``. The ``type``
+string and any ``devices.json`` must match the Host type catalog, or the Devices
+page has no widget to draw (:doc:`../type_catalog`). Point fields, adapters and
+rules are in :doc:`../data_model`. Do not invent a C struct per lamp or switch —
+a type is a name plus parameters, so a new device family needs no firmware
+change. Demos: L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js``.
+Third-party plugins live outside this tree; point ``MINIHUB_PLUGIN_DIRS`` at a sibling
+Store plugin repository before CMake runs.
 
 .. only:: not hide_l3
 
-   L3 demos: ``examples/plugins/color_bulb``, ``examples/plugins/meter_plug``.
+   There is no in-tree L3 demo; scaffold one with
+   ``tools/new_store_module.py --tier l3 --id my_native``.
 
 Source tree
 -----------
 
-Optional in-repo sources:
+In-repo sources are optional. A plugin can live entirely in a sibling repository:
 
 * Demos: ``examples/plugins/ID/``
   (export ``MINIHUB_PLUGIN_DIRS`` **before** CMake for extras). Index:
@@ -143,15 +173,17 @@ Deploy / catalog (development PC):
      Stores/Common/ID/catalog.json
      Stores/Common/ID/ID.mhub
 
-L1 and L2 use that layout. A native module is published under
-``Stores/<chip>/<id>/`` (``<chip>`` from ``targets``); L1/L2 use ``Common``.
+L1 and L2 use that layout. A native or hybrid module is not published. The
+packer creates no store folder for it. Any folder left by an earlier build is
+removed only during catalog sync that moves packages, not by the packer.
 
 .. _store-preinstall:
 
 Factory preinstall
 ------------------
 
-List module ids in ``application/APP/manifest.yml``:
+Factory bundling is a product decision, not a module one. List the module ids in
+``application/APP/manifest.yml``:
 
 .. code-block:: yaml
 
@@ -160,160 +192,72 @@ List module ids in ``application/APP/manifest.yml``:
 
 .. only:: not hide_l3
 
-   An L3 id such as ``color_bulb`` is listed the same way.
+   An L3 id such as ``my_native`` is listed the same way.
 
-Firmware build copies packed ``.mhub`` files into ``modstore`` (mounted as
-``/store``). The ``preinstall`` field in ``module.json`` is not used for factory
-bundling.
+The firmware build copies each packed ``.mhub`` into ``modstore`` (mounted as
+``/store``). The ``preinstall`` field inside ``module.json`` is ignored for
+factory bundling.
 
-Development loop (summary)
---------------------------
+Developer scripts
+-----------------
 
-1. Edit sources under ``examples/plugins/ID/`` (or
-   ``MINIHUB_PLUGIN_DIRS``)
-2. ``python3 tools/pack_store_module.py pack ID``
-3. After ``.mhub`` is in the store directory:
-   ``python3 tools/sync_store_catalog.py`` then
-   ``python3 tools/store_server.py``
-4. On Hub: install from catalog or upload ``.mhub``, then ``POST /api/hub/reload``
+.. list-table::
+   :header-rows: 1
+   :widths: 46 54
 
-.. only:: not hide_l3
+   * - Script
+     - Role
+   * - ``tools/new_store_module.py --tier l1|l2 --id ID``
+     - Scaffold under ``examples/plugins/``
+   * - ``tools/pack_store_module.py pack ID|all``
+     - Zip ``.mhub`` (does not compile C)
+   * - ``tools/sync_store_catalog.py``
+     - Rewrite ``catalog.json`` beside each deployed ``.mhub`` (default)
+   * - ``tools/sync_store_catalog.py all``
+     - Pack from sources, then rewrite ``catalog.json`` the same way
+   * - ``tools/store_server.py``
+     - Local catalog HTTP server
+   * - ``tools/minihub_plugin_mcp.py`` (IDE MCP)
+     - Scaffold / validate / pack; does not cross-compile ``.so``
 
-   For L3, compile the ``.so`` first (standalone cross-compile or with the Host;
-   see :doc:`develop_l3`), then pack that id.
-
-Scaffolding for the tier you picked is linked in the previous section.
-Catalog and publish: :doc:`pack_and_catalog`.
-
-.. only:: hide_l3
-
-   Developer scripts (L1 / L2)
-   ---------------------------
-
-   .. list-table::
-      :header-rows: 1
-      :widths: 44 10 10 36
-
-      * - Script
-        - L1
-        - L2
-        - Role
-      * - ``tools/new_store_module.py --tier l1|l2``
-        - yes
-        - yes
-        - Scaffold under ``examples/plugins/``
-      * - ``tools/pack_store_module.py pack ID|all``
-        - yes
-        - yes
-        - Zip ``.mhub`` (does not compile C)
-      * - ``tools/sync_store_catalog.py``
-        - yes
-        - yes
-        - Rewrite ``catalog.json`` beside each deployed ``.mhub`` (default)
-      * - ``tools/sync_store_catalog.py all``
-        - yes
-        - yes
-        - Pack from sources, then rewrite ``catalog.json`` the same way
-      * - ``tools/store_server.py``
-        - yes
-        - yes
-        - Local catalog HTTP server
-      * - ``tools/minihub_plugin_mcp.py`` (IDE MCP)
-        - yes
-        - yes
-        - Scaffold / validate / pack
-
-   Tier details: :doc:`develop_l1`, :doc:`develop_l2`.
+Tier details: :doc:`develop_l1`, :doc:`develop_l2`.
 
 .. only:: not hide_l3
 
-   Developer scripts (L1 / L2 / L3)
-   --------------------------------
-
-   .. list-table::
-      :header-rows: 1
-      :widths: 40 8 8 8 36
-
-      * - Script
-        - L1
-        - L2
-        - L3
-        - Role
-      * - ``tools/new_store_module.py --tier l1|l2|l3``
-        - yes
-        - yes
-        - yes
-        - Scaffold under ``examples/plugins/``
-      * - ``tools/pack_store_module.py pack ID|all``
-        - yes
-        - yes
-        - yes
-        - Zip ``.mhub`` (does not compile C)
-      * - ``tools/pack_store_module.py mhmd``
-        - —
-        - —
-        - yes
-        - Wrap ELF with MHMD header
-      * - ``tools/sync_store_catalog.py``
-        - yes
-        - yes
-        - yes
-        - Rewrite ``catalog.json`` beside each deployed ``.mhub`` (default)
-      * - ``tools/sync_store_catalog.py all``
-        - yes
-        - yes
-        - yes
-        - Pack from sources, then rewrite ``catalog.json`` the same way
-      * - ``tools/store_server.py``
-        - yes
-        - yes
-        - yes
-        - Local catalog HTTP server
-      * - ``tools/generate_devices_property_from_json.py``
-        - —
-        - —
-        - opt
-        - ``devices.json`` → ``device_desc.gen.h``
-      * - ``tools/build_firmware.py … build`` / ``modules``
-        - —
-        - —
-        - yes
-        - Compile in-tree native ``.so`` (``modules``) or pack (``pack``)
-      * - ``tools/build_plugin_standalone.py ID``
-        - —
-        - —
-        - yes
-        - No-IDF CMake build for ``examples/plugins`` L3 demos
-      * - ``tools/minihub_plugin_mcp.py`` (IDE MCP)
-        - yes
-        - yes
-        - yes
-        - Scaffold / validate / pack; does not cross-compile ``.so``
-      * - ``tools/check_plugin_sdk.py``
-        - —
-        - —
-        - yes
-        - Host-side SDK vs allowlist check
-
-   Tier details: :doc:`develop_l1`, :doc:`develop_l2`, :doc:`develop_l3`.
+   L3 adds ``tools/new_store_module.py --tier l3``,
+   ``tools/pack_store_module.py mhmd`` (wrap an ELF with the MHMD header),
+   ``tools/build_firmware.py modules``,
+   ``tools/build_plugin_standalone.py ID`` (no-IDF CMake build),
+   ``tools/generate_devices_property_from_json.py`` (``devices.json`` →
+   ``device_desc.gen.h``, optional) and ``tools/check_plugin_sdk.py check``
+   (also `coverage` and `emit-sizes`; the Host CMake runs `check` itself when
+   ``CONFIG_MINIHUB_DYNAMIC_MODULES`` is on). See :doc:`develop_l3`.
 
 ``module.json`` fields
 ----------------------
 
-Required for every tier:
+Every tier ships a ``module.json``. Two fields are what the loader actually
+insists on:
 
-* ``id`` — catalog and directory name (also Store REST ``id``)
-* ``name`` · ``version`` — shown in catalog / ``GET /api/modules``
-* ``enabled`` — default on after install
+* ``id`` — catalog and directory name (also Store REST ``id``). At install it must
+  equal the catalog entry's ``id``.
+* ``adapter`` — the ``adapters.json`` key Host creates and enables. A missing or
+  empty ``adapter`` fails validation for **every** tier, L2 included, so a JS
+  plugin without it never loads.
 
-Tier / loader:
+Everything else has a default, so leaving it out is not an error:
 
+* ``name`` · ``version`` — shown in catalog / ``GET /api/modules``; ``version``
+  falls back to ``0.0.0``
+* ``enabled`` — defaults to true
+* ``abi_version`` · ``core_api_min`` — default to the Host's own values;
+  ``core_api_max`` defaults to 0, meaning no upper bound
 * ``runtime`` — ``pack`` (L1) or ``js`` (L2)
-* ``adapter`` — ``adapters.json`` key Host will create/enable
-* ``ui`` / ``capabilities`` — live in ``meta.json`` (a sibling file), **not** in
-  module.json. module.json carries only runtime/environment info. ``ui`` is the
-  optional Web form; ``capabilities`` are informational tags
-  (``points``, ``auth``, ``device_sync``)
+
+``ui`` / ``capabilities`` are read from ``meta.json`` when a sibling ``meta.json``
+exists, otherwise from ``module.json`` itself; ``ui`` is the optional Web form and
+``capabilities`` are informational tags (``points``, ``auth``, ``device_sync``).
+
 * ``vendor`` · ``description`` — catalog text
 * ``inject`` — L1 merge payload only
 * ``preinstall`` — **ignored** for factory bundling; use
@@ -325,7 +269,7 @@ Tier / loader:
 
    * ``runtime`` — omitted/native (L3), or ``hybrid`` (L2 + L3 in one package
      only; see the tier table)
-   * ``binary`` — L3 filename inside the unpacked dir (example ``color_bulb.so``)
+   * ``binary`` — L3 filename inside the unpacked dir (example ``my_native.so``)
    * ``abi_version`` · ``core_api_min`` · ``core_api_max`` — must bracket Host
      (see :doc:`../api/module_abi`)
    * ``inject`` is not loaded for Hybrid / L3 packages (``minihub_pack``

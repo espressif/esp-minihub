@@ -57,9 +57,9 @@ Stacks (optional): `ble_mesh`, `zigbee`, `matter`, `thread`. `thread` and `zigbe
 ```bash
 ./tools/build_firmware.py -app minihub build
 ./tools/build_firmware.py build merge
-./tools/build_firmware.py module color_bulb
+./tools/build_firmware.py module my_native
 ./tools/build_firmware.py modules
-./tools/build_firmware.py pack color_bulb
+./tools/build_firmware.py pack my_native
 ```
 
 `build` compiles the Host only. It does not compile native plugins. `modules` or `module <id>` compiles a native `.so` into the build tree and does not create a store plugin folder. `pack <id>` on a native module wraps the local MHMD `.so` and does not write `Stores/Common` or `Stores/<chip>`.
@@ -122,11 +122,12 @@ python3 tools/new_store_module.py --tier l3 --id my_native --force
 
 ### `build_plugin_standalone.py`
 
-No-IDF build for `examples/plugins/<id>` L3 demos (CMake + Plugin SDK).
+No-IDF build for an `examples/plugins/<id>` L3 module (CMake + Plugin SDK).
+There is no in-tree L3 demo, so scaffold one first.
 
 ```bash
-python3 tools/build_plugin_standalone.py color_bulb
-python3 tools/build_plugin_standalone.py meter_plug --clean --pack
+python3 tools/build_plugin_standalone.py my_native
+python3 tools/build_plugin_standalone.py my_native --clean --pack
 ```
 
 Requires `riscv32-esp-elf-gcc` (or `--cc` / `MINIHUB_PLUGIN_CC`) and `cmake` on `PATH`.
