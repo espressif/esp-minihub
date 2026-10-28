@@ -6,7 +6,7 @@ L3 Host 导出 SDK
 概述
 ----
 
-面向 Store **L3** 插件的独立头文件：可在 **没有** ESP-IDF、也没有 MiniHub 源码树的
+面向商店 **L3** 插件的独立头文件：可在 **没有** ESP-IDF、也没有 MiniHub 源码树的
 情况下编译。交付 ``docs/module_sdk/include/`` 以及与 Host 匹配的交叉编译器
 （ESP32-S31：``riscv32-esp-elf-gcc``）。
 

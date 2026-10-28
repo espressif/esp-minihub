@@ -47,7 +47,9 @@ See [`application/README.md`](application/README.md).
 
 ## Requirements
 
-* ESP-IDF ~6.2 (ESP32-S31 / project CI image)
+* ESP-IDF 6.2, pinned to `master` at `434d5fd100b90a03c19018c572809cc29c7db28b`
+  (`git describe` = `qa-test-full-v6.2-20261016-70-g434d5fd100b`); ESP32-S31 support is
+  newer than any 6.2 release tag. The build reads `$IDF_PATH`, default `./esp-idf`
 * Python 3.10+ and PyYAML
 * Optional: `ESP_MATTER_PATH` when Matter is compiled in
 
@@ -95,8 +97,8 @@ does not register device points.
 | Tier | Package | Demo |
 |------|---------|------|
 | L1 | `module.json` + `inject` | [`ble_mesh_pack`](examples/plugins/ble_mesh_pack/) |
-| L2 | `module.json` + `main.js` | [`color_bulb_js`](examples/plugins/color_bulb_js/) |
-| L3 | `module.json` + `.so` | [`color_bulb`](examples/plugins/color_bulb/), [`meter_plug`](examples/plugins/meter_plug/), `*_ota` |
+| L2 | `module.json` + `main.js` | [`color_bulb_js`](examples/plugins/color_bulb_js/), [`meter_plug_js`](examples/plugins/meter_plug_js/) |
+| L3 | `module.json` + `.so` | none in-tree — scaffold with `tools/new_store_module.py --tier l3` |
 
 Index: [examples/README.md](examples/README.md). Do not add demos to public
 `store_preinstall`.

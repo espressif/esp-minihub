@@ -59,14 +59,14 @@ LCD 选项
        ``variants``。编译时与仓库 ``configs/minihub_manifest.yml`` 的
        ``_host_base`` 合并，并写出 ``main/idf_component.yml`` 等生成文件
        （见 :doc:`index`）。本表路径都在 ``application/minihub/`` 下，不是仓库根的
-       ``configs/`` 。产品目录缺 JSON 时回退到仓库 ``configs/*.json``
+       ``configs/``。产品目录缺 JSON 时回退到仓库 ``configs/*.json``
        （:doc:`../host_customization`）。
    * - ``partitions.csv``
      - Flash 分区表（``nvs`` / ``ota`` / ``storage`` / ``modstore`` 等）。起点而非
        所有 SKU 规格，见 :doc:`../production`。
    * - ``CMakeLists.txt``
-     - IDF 工程入口：把仓库 ``components/`` 、``adapters/``
-       加入 ``EXTRA_COMPONENT_DIRS``；Store 插件走
+     - IDF 工程入口：把仓库 ``components/``、``adapters/``
+       加入 ``EXTRA_COMPONENT_DIRS``；商店插件走
        ``MINIHUB_PLUGIN_DIRS`` （``examples/plugins``），不是 Host 内置树；
        按环境可选 Matter / RainMaker。
    * - ``README.md``

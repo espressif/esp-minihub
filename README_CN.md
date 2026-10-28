@@ -46,7 +46,9 @@ Modbus / Thread 边界路由器）。
 
 ## 环境
 
-* ESP-IDF ~6.2（ESP32-S31 / 项目 CI 镜像）
+* ESP-IDF 6.2，固定在 `master` 的 `434d5fd100b90a03c19018c572809cc29c7db28b`
+  （`git describe` = `qa-test-full-v6.2-20261016-70-g434d5fd100b`）；ESP32-S31 的支持比任何
+  6.2 release tag 都新。构建读取 `$IDF_PATH`，默认 `./esp-idf`
 * Python 3.10+ 与 PyYAML
 * 可选：编进 Matter 时设置 `ESP_MATTER_PATH`
 
@@ -94,8 +96,8 @@ Core **按点位工作**，不为灯/开关定义 C 结构体。一台物理设�
 | 层级 | 包内 | 演示 |
 |------|------|------|
 | L1 | `module.json` + `inject` | [`ble_mesh_pack`](examples/plugins/ble_mesh_pack/) |
-| L2 | `module.json` + `main.js` | [`color_bulb_js`](examples/plugins/color_bulb_js/) |
-| L3 | `module.json` + `.so` | [`color_bulb`](examples/plugins/color_bulb/)、[`meter_plug`](examples/plugins/meter_plug/)、`*_ota` |
+| L2 | `module.json` + `main.js` | [`color_bulb_js`](examples/plugins/color_bulb_js/)、[`meter_plug_js`](examples/plugins/meter_plug_js/) |
+| L3 | `module.json` + `.so` | 仓库内无示例 —— 用 `tools/new_store_module.py --tier l3` 生成脚手架 |
 
 索引：[examples/README_CN.md](examples/README_CN.md)。不要把演示写进公开
 `store_preinstall`。

@@ -3,30 +3,23 @@ Host Customization
 
 :link_to_translation:`zh_CN:[中文]`
 
-Use this chapter to ship your own Host firmware product on top of MiniHub Core
-(OEM / secondary development). Layout of ``application/`` and the generic
-``minihub`` product: :doc:`application/index` · :doc:`application/minihub`.
+MiniHub Core is shared, and a shipped device differs from the generic Host in
+only a handful of ways: the board it runs on, the features compiled in, and the
+configuration it leaves the factory with. Put those differences in a product of
+your own (OEM / secondary development). For the
+layout of ``application/`` and of the generic ``minihub`` product, see
+:doc:`application/index` · :doc:`application/minihub`.
 
 Overview
 --------
 
-A **product** is a folder ``application/APP/``. It selects:
+A **product** is a folder ``application/APP/``. Every difference lives there, and
+none of them needs a change to Core:
 
 * Board and partition table
 * Sdkconfig feature set (Ethernet, Matter, Store, …)
 * Default ``adapters.json`` / rules / scenes
 * Optional factory-preinstalled Store modules
-
-Approach
---------
-
-1. Copy ``application/minihub`` to ``application/myhub`` (steps below).
-2. Under ``myhub``, edit product files (board, partitions, factory JSON, sdkconfig
-   features, and so on) and add your own code.
-3. **Keep Core shared** in repo ``components/minihub_*`` — do not copy those
-   libraries into ``myhub``.
-4. You usually leave the copied ``main.c`` alone; stacks come from Kconfig and
-   generated ``adapters_setup.c``.
 
 Factory flash and OTA: :doc:`production`.
 
@@ -38,6 +31,10 @@ Step-by-step: create ``myhub``
    .. code-block:: bash
 
       cp -a application/minihub application/myhub
+
+   Keep Core in ``components/minihub_*``: a product that carries its own copy
+   stops receiving Core fixes. The copied ``main.c`` usually needs no changes —
+   Kconfig and the generated ``adapters_setup.generated.c`` select the stacks.
 
 2. **Edit** ``application/myhub/manifest.yml``
 
@@ -60,8 +57,12 @@ Step-by-step: create ``myhub``
 
 3. **Edit** ``application/myhub/configs/sdkconfig/app.yml``
 
-   ``features:`` must match the manifest ``sdkconfig_features`` (compose uses
-   ``app.yml``).
+   This file alone is the feature list: sdkconfig composition and the generated
+   component table both read ``app.yml``, and the manifest's
+   ``sdkconfig_features`` is only a fallback for a product with no ``app.yml`` —
+   so the two need not match word for word (the shipped ``minihub`` manifest
+   lists one extra feature, ``rainmaker``). Each feature is a fragment and each
+   fragment's options are listed, with what they actually set, in :doc:`kconfig`.
 
 4. **Factory JSON** (optional)
 
@@ -82,16 +83,29 @@ Step-by-step: create ``myhub``
    list them in ``CMakeLists.txt`` ``SRCS``. You usually leave bring-up as-is;
    stacks come from Kconfig.
 
+   Which interface these sources use depends on where the code runs (the split is
+   in :doc:`api/index` ); product code linked into this firmware mostly uses three
+   pages:
+
+   * :doc:`api/minihub_core` — point registry, state store, event bus, command routing
+   * :doc:`api/minihub_adapter` — implementing ``minihub_adapter_t``, and the order
+     Host calls it in
+   * :doc:`api/net_api` — Host uplink (Ethernet / Wi-Fi STA) bring-up, IPv4 queries
+     and DNS diagnostics
+
+   Factory checks and automation scripts are not linked into the firmware; they drive
+   the Hub over REST: :doc:`api/host_rest`.
+
    The device "firmware version" (OTA comparison, ``Firmwares/<chip>/<ver>/``)
    and the product/sidebar version (shown as ``v<ver>`` in the Web UI) are the
    SAME value, ``MINIHUB_VERSION`` (default ``0.1.0``). Git describe still shows
    separately as the commit line.
 
    Only the Web bundle is versioned independently, via ``MINIHUB_WEB_VERSION``
-   (``Webs/v<ver>/`` and ``window.mhWebVersion``), because web and firmware
-   releases are usually not in sync; set it separately in ``menuconfig``
-   (defaults to ``MINIHUB_VERSION``). ``tools/deploy.sh`` reads both
-   ``MINIHUB_VERSION`` and ``MINIHUB_WEB_VERSION`` at publish time.
+   (``Webs/v<ver>/`` and ``window.mhWebVersion``). Web and firmware releases are
+   usually not in sync, so set it separately in ``menuconfig`` (defaults to
+   ``MINIHUB_VERSION``). ``tools/deploy.sh`` reads both ``MINIHUB_VERSION`` and
+   ``MINIHUB_WEB_VERSION`` at publish time.
 
 6. **Build and flash**
 
@@ -99,6 +113,63 @@ Step-by-step: create ``myhub``
 
       ./tools/build_firmware.py -app myhub build
       ./tools/build_firmware.py -app myhub -p PORT app-flash monitor
+
+Hardware variants
+-----------------
+
+One product can carry more than one board recipe: put extra YAML files under
+``application/<app>/configs/sdkconfig/variants/`` and switch between them with
+
+.. code-block:: bash
+
+   ./tools/apply_sdkconfig_variant.sh lcd          # variants/lcd.yml -> app.yml
+   ./tools/apply_sdkconfig_variant.sh --restore    # variants/default.yml -> app.yml
+
+A variant is a whole replacement for ``app.yml`` — the feature list, not a patch on top
+of it. Whatever you put in ``app.yml`` by hand (a lab SSID, an extra feature) is what
+gets overwritten.
+
+One variant really touches two things, and ``variants/<name>.yml`` covers only the
+first. The component set, board and ESP-IDF dependencies live in the ``variants:``
+block of ``manifest.yml``, and ``tools/sync_host_manifest.py`` picks them at build
+time: it looks for the ``lcd`` feature in ``app.yml`` and switches components only
+if ``variants.lcd`` exists — that name is hardcoded. A variant under any other name
+changes the sdkconfig features and leaves the component set as the product's own.
+
+.. warning::
+
+   ``apply_sdkconfig_variant.sh`` copies over ``application/<app>/configs/sdkconfig/app.yml``
+   and keeps no backup: hand edits to the recipe are lost the moment you switch variants,
+   and ``--restore`` does not return them either — it copies ``variants/default.yml``, which
+   is a file you maintain, not the git history. Keep ``variants/default.yml`` in step with
+   ``app.yml`` (they are identical in the shipped ``minihub`` product) and put anything you
+   want to survive a switch into ``local.overrides``, which is not touched by this script.
+
+Board glue
+----------
+
+Pin-level setup is not hand-written here. ``esp_board_manager`` owns the board, ``app.yml``
+names it with ``board:``, and the build regenerates
+``application/<app>/components/gen_bmgr_codes/`` from that definition:
+
+.. code-block:: bash
+
+   idf.py --preview bmgr -b esp32_s31_function_coreboard_1
+   idf.py --preview bmgr -c ./boards -b <name>   # a board you define under application/<app>/boards/
+
+ESP-IDF still treats S31 as a preview target, so every ``idf.py`` call needs ``--preview``
+(``tools/build_firmware.py`` adds it). That generated directory is gitignored, and on a fresh
+checkout it can still be the placeholder the build script lays down before Component Manager
+has fetched ``esp_board_manager`` — which is why a first configure that cannot resolve
+``REQUIRES: esp_board_manager`` is fixed by ``idf.py --preview reconfigure``, not by editing
+those files: the next build overwrites anything you change there.
+
+The board choices that reach into the product's configuration are Ethernet versus the RGB
+LCD, which share pin groups (``MINIHUB_LCD_UI`` is declared ``depends on !MINIHUB_NET_ETH``),
+and the PHY address, its reset GPIO and any chip-specific init. All of them are options
+rather than constants — :doc:`kconfig` lists each with its default and the file that reads it.
+Re-apply ``./tools/apply_component_patches.sh`` after any dependency refresh: a freshly
+fetched ``managed_components`` silently undoes what is under ``patches/``.
 
 Product file tree (typical)
 ---------------------------

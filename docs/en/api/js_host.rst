@@ -6,10 +6,23 @@ L2 JS Host API
 Overview
 --------
 
-Store **L2** modules (``runtime: js``, ``main.js``) access Host services through QuickJS
-bindings in ``components/minihub_js/minihub_js.c``. Requires ``CONFIG_MINIHUB_JS_PLUGINS``.
+An L2 module is JavaScript running inside the Hub; its ``module.json`` marks
+the tier with ``runtime: js``. It reaches Host services
+through QuickJS bindings, not through a linker. Those bindings live in
+``components/minihub_js/minihub_js.c`` and are compiled in when
+``CONFIG_MINIHUB_JS_PLUGINS`` is set.
 
 REST install/RPC: :doc:`plugin_rest`. C point/command model: :doc:`minihub_core`.
+
+The host object
+---------------
+
+What ``setup(host)`` receives, read out of the QuickJS bindings at build time, so a
+method that was renamed or removed cannot stay on this page. The number after ``/``
+is the argument count the C side registers; the table lists each namespace and the
+methods under it.
+
+.. minihub-js-api::
 
 .. only:: not hide_l3
 
@@ -245,8 +258,8 @@ Returns
 Methods — host.time
 -------------------
 
-The hub timezone is a fixed whole-hour offset chosen on the System page
-(``UTC``, ``UTC+8``, ``UTC-8``) and stored in NVS. The default is UTC.
+The hub timezone is a fixed offset chosen on the System page
+(``UTC``, ``UTC+8``, ``UTC+5:30``) and stored in NVS. The default is UTC.
 ``offsetMin`` is minutes east of UTC. There is no daylight-saving shift.
 
 host.time.offsetMin() / host.time.id()

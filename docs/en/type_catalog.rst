@@ -3,14 +3,31 @@ Type catalog and UI
 
 :link_to_translation:`zh_CN:[中文]`
 
-The Host **type catalog** drives the Devices page: which types exist, parameter
-labels, widgets, and default bounds. The runtime point contract (one device =
-one point, ``props.params``) is in :doc:`data_model`.
+What drives the Overview page is the Host **type catalog**: CSV tables that list
+types, parameter names, widgets and bounds. No per-type C struct is involved,
+so a new type can still be added after a Hub has shipped. The built-in CSVs
+under ``components/minihub_device_widget/model/`` are compiled into the
+firmware, so editing them means a rebuild; the runtime table on the device,
+``/data/config/devices.csv``, is read in preference to that embedded copy and
+editing it needs no reflash.
 
-UI = type catalog ∩ live ``props.params`` (CSS widgets, not per-parameter SVGs).
+Whether a type is controllable is a separate question: the overview card draws
+a power toggle only for the types in a hardcoded whitelist (``ctrlTypes`` in
+``components/minihub_web/web/js/overview.js``), and the map popup only for
+``switch`` and ``light`` (``components/minihub_web/web/js/map.js``). A new type
+renders its card from the catalog, but shows no toggle until those lists
+change.
 
-**Manufacturer and category are not CSV parameters.** They live on top-level
-``props`` (:doc:`data_model`):
+The runtime half of the contract — one device is one point, live values under
+``props.params`` — is in :doc:`data_model`.
+
+A widget is drawn where the two halves meet. The catalog supplies the shape, the
+live ``props.params`` supplies the value, and CSS does the drawing — not a
+per-parameter SVG.
+
+Manufacturer and category are absent from those tables on purpose. They describe
+a particular unit, not a type, so they live on top-level ``props``
+(:doc:`data_model`):
 
 * ``manufacturer`` — detail row for brand
 * ``category`` (or ``product`` / ``product_name``) — product display name;
@@ -27,82 +44,14 @@ Source of truth: ``components/minihub_device_widget/model/*.csv``. Full tables:
 * :download:`devices.csv <../_static/catalog/model/devices.csv>`
 * :download:`parameters.csv <../_static/catalog/model/parameters.csv>`
 * :download:`ui_elements.csv <../_static/catalog/model/ui_elements.csv>`
-* :download:`services.csv <../_static/catalog/model/services.csv>`
+* :download:`services.csv <../_static/catalog/model/services.csv>` — reference only (RainMaker system services); not part of the widget registry
 * :download:`STANDARD_TYPES.md <../_static/catalog/STANDARD_TYPES.md>`
 * :download:`catalog.zip <../_static/catalog.zip>`
 
 Built-in device types
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. list-table::
-   :header-rows: 1
-   :widths: 12 28 12 12 36
-
-   * - Type id
-     - Parameters (full set in the catalog)
-     - Primary
-     - Mandatory
-     - Avatar
-   * - ``light``
-     - power, brightness, cct, hue, saturation, intensity
-     - power
-     - power
-     - bulb icon (below)
-   * - ``switch``
-     - power, voltage_v, current_a, power_w, energy_wh, temperature, fault, indicator
-     - power
-     - power
-     - switch / outlet icon (below)
-   * - ``speaker``
-     - power, volume
-     - volume
-     - volume
-     - speaker icon (below)
-   * - ``sensor_air_quality``
-     - co2, pm25, pressure_hpa, battery
-     - co2
-     - co2
-     - air-quality icon (below)
-   * - ``sensor_contact``
-     - contact, battery
-     - contact
-     - contact
-     - contact icon (below)
-   * - ``sensor_illuminance``
-     - illuminance, battery
-     - illuminance
-     - illuminance
-     - illuminance icon (below)
-   * - ``sensor_motion``
-     - motion, battery
-     - motion
-     - motion
-     - motion icon (below)
-   * - ``sensor_occupancy``
-     - occupancy, battery
-     - occupancy
-     - occupancy
-     - occupancy icon (below)
-   * - ``sensor_smoke``
-     - smoke, battery
-     - smoke
-     - smoke
-     - smoke icon (below)
-   * - ``sensor_tamper``
-     - tamper, battery
-     - tamper
-     - tamper
-     - tamper icon (below)
-   * - ``sensor_temp_humidity``
-     - temperature, humidity, battery
-     - temperature
-     - temperature
-     - temperature / humidity icon (below)
-   * - ``sensor_water``
-     - leak, battery
-     - leak
-     - leak
-     - water-leak icon (below)
+.. minihub-catalog:: devices
 
 Plugin ``devices.json`` declares **only the subset this device uses**. The JS
 demos show it:
@@ -116,258 +65,46 @@ The catalog ships the following sensor types: ``sensor_contact``,
 ``sensor_motion``, ``sensor_occupancy``, ``sensor_tamper``, ``sensor_water``,
 ``sensor_smoke``, ``sensor_illuminance``, ``sensor_temp_humidity``,
 ``sensor_air_quality``. Adapters may also register
-other type strings such as ``unknown``; those points work for rules and REST, but
-if the type is missing from the catalog the Devices page shows **type not
-registered** with no standard widget card. Add the type to the CSV before you
-expect catalog UI.
+other type strings such as ``unknown``; those points work for rules and REST. When
+the type is missing from the catalog the detail panel still draws the parameter
+rows — a name the parameter table knows keeps its label and its control, a name it
+does not know becomes a read-only text row labelled with the raw name — but there
+is no type-level parameter order, default bounds or avatar, and the browser console
+logs ``type not in catalog``. Add the type to the CSV before you expect catalog UI.
 
 Built-in parameters and widgets
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Closed ``ui_element`` set: ``ui.toggle`` / ``ui.slider`` / ``ui.dropdown`` /
-``ui.text`` / ``ui.hidden``. Web maps them to toggle / slider / dropdown / text /
-hidden. Hue / saturation / CCT are **sliders**; rainbow or tone comes from CSS.
+The ``ui_element`` values the catalog accepts are the ids in
+``components/minihub_device_widget/model/ui_elements.csv`` — today ``ui.toggle`` /
+``ui.slider`` / ``ui.dropdown`` / ``ui.text`` / ``ui.button`` / ``ui.hidden``. Web
+maps them to toggle / slider / dropdown / text / button / hidden; the parameter
+table below shows which ones today's rows use. Two legacy names,
+``ui.hue-slider`` and ``ui.hue-circle``, are still accepted in the catalog and
+both mean slider; plugin ``devices.json`` accepts neither, nor anything else
+outside the closed set. Hue / saturation / CCT are **sliders**; rainbow or tone
+comes from CSS.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 14 12 10 18 14 32
+.. figure:: ../_static/data_model/widget_styles.svg
+   :alt: The parameter widget shapes: toggle, slider, dropdown, text, button and hidden
 
-   * - Parameter
-     - Label
-     - Data
-     - Default bounds
-     - UI
-     - Used by
-   * - ``power``
-     - Power
-     - Bool
-     - —
-     - toggle
-     - light, switch, speaker
-   * - ``brightness``
-     - Brightness
-     - Int
-     - 0–100 %, step 1
-     - slider
-     - light
-   * - ``cct``
-     - CCT
-     - Int
-     - 2700–6500 K, step 100
-     - slider
-     - light
-   * - ``hue``
-     - Color
-     - Int
-     - 0–360 °, step 1
-     - slider (rainbow track)
-     - light
-   * - ``saturation``
-     - Saturation
-     - Int
-     - 0–100 %, step 1
-     - slider
-     - light
-   * - ``intensity``
-     - Intensity
-     - Int
-     - 0–100 %, step 1
-     - slider
-     - light
-   * - ``volume``
-     - Volume
-     - Int
-     - 0–100, step 1
-     - slider (requires power)
-     - speaker
-   * - ``voltage_v``
-     - Voltage
-     - Float
-     - 0–250 V
-     - text (read-only metering)
-     - switch
-   * - ``current_a``
-     - Current
-     - Float
-     - 0–16 A
-     - text (read-only metering)
-     - switch
-   * - ``power_w``
-     - Active power
-     - Float
-     - 0–4000 W
-     - text (read-only metering)
-     - switch (watts; not on/off ``power``)
-   * - ``energy_wh``
-     - Energy
-     - Float
-     - 0–999999 Wh
-     - text (read-only metering)
-     - switch
-   * - ``name``
-     - Name
-     - String
-     - —
-     - text
-     - metadata; no device lists it by default → usually no control
-   * - ``temperature``
-     - Temperature
-     - Float
-     - -40–125 °C, step 0.1
-     - text (read-only)
-     - switch, sensor_temp_humidity
-   * - ``humidity``
-     - Humidity
-     - Float
-     - 0–100 %, step 0.1
-     - text (read-only)
-     - sensor_temp_humidity
-   * - ``illuminance``
-     - Illuminance
-     - Float
-     - 0–100000 lx, step 1
-     - text (read-only)
-     - sensor_illuminance
-   * - ``co2``
-     - CO2
-     - Int
-     - 0–5000 ppm, step 1
-     - text (read-only)
-     - sensor_air_quality
-   * - ``pm25``
-     - PM2.5
-     - Float
-     - 0–1000 µg/m³, step 0.1
-     - text (read-only)
-     - sensor_air_quality
-   * - ``pressure_hpa``
-     - Pressure
-     - Float
-     - 300–1100 hPa, step 0.1
-     - text (read-only)
-     - sensor_air_quality
-   * - ``battery``
-     - Battery
-     - Int
-     - 0–100 %, step 1
-     - text (read-only)
-     - sensor_* (all)
-   * - ``contact``
-     - Contact
-     - Bool
-     - —
-     - text (read-only)
-     - sensor_contact
-   * - ``motion``
-     - Motion
-     - Bool
-     - —
-     - text (read-only)
-     - sensor_motion
-   * - ``leak``
-     - Water leak
-     - Bool
-     - —
-     - text (read-only)
-     - sensor_water
-   * - ``smoke``
-     - Smoke
-     - Bool
-     - —
-     - text (read-only)
-     - sensor_smoke
-   * - ``occupancy``
-     - Occupancy
-     - Bool
-     - —
-     - text (read-only)
-     - sensor_occupancy
-   * - ``tamper``
-     - Tamper
-     - Bool
-     - —
-     - text (read-only)
-     - sensor_tamper
+   What each ``ui_element`` draws.
+
+.. minihub-catalog:: parameters
 
 ``ui.hidden`` = never draw at the type level. Instance ``visible: false`` =
 hide **this** device's param while keeping it in ``props.params``. Read-only
 sensors use instance ``access: "R"`` (shown, not draggable).
+How a shape and a live value combine into one row is in :doc:`data_model`.
 
 Icons and artwork
 -----------------
 
 Device **avatars** are SVG under
 ``components/minihub_device_widget/images/devices/``. The build packs them into
-``/data/images`` on device. Web serves ``GET /img/devices/<name>``;
-``GET /api/device_widgets`` also returns the URL.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 20 40 40
-
-   * - Type
-     - File
-     - Preview
-   * - ``light``
-     - ``images/devices/light.svg``
-     - .. image:: ../_static/catalog/images/devices/light.svg
-          :alt: light device icon
-          :width: 64px
-   * - ``switch``
-     - ``images/devices/switch.svg``
-     - .. image:: ../_static/catalog/images/devices/switch.svg
-          :alt: switch device icon
-          :width: 64px
-   * - ``speaker``
-     - ``images/devices/speaker.svg``
-     - .. image:: ../_static/catalog/images/devices/speaker.svg
-          :alt: speaker device icon
-          :width: 64px
-   * - ``sensor_air_quality``
-     - ``images/devices/sensor_air_quality.svg``
-     - .. image:: ../_static/catalog/images/devices/sensor_air_quality.svg
-          :alt: air quality sensor icon
-          :width: 64px
-   * - ``sensor_contact``
-     - ``images/devices/sensor_contact.svg``
-     - .. image:: ../_static/catalog/images/devices/sensor_contact.svg
-          :alt: contact sensor icon
-          :width: 64px
-   * - ``sensor_illuminance``
-     - ``images/devices/sensor_illuminance.svg``
-     - .. image:: ../_static/catalog/images/devices/sensor_illuminance.svg
-          :alt: illuminance sensor icon
-          :width: 64px
-   * - ``sensor_motion``
-     - ``images/devices/sensor_motion.svg``
-     - .. image:: ../_static/catalog/images/devices/sensor_motion.svg
-          :alt: motion sensor icon
-          :width: 64px
-   * - ``sensor_occupancy``
-     - ``images/devices/sensor_occupancy.svg``
-     - .. image:: ../_static/catalog/images/devices/sensor_occupancy.svg
-          :alt: occupancy sensor icon
-          :width: 64px
-   * - ``sensor_smoke``
-     - ``images/devices/sensor_smoke.svg``
-     - .. image:: ../_static/catalog/images/devices/sensor_smoke.svg
-          :alt: smoke sensor icon
-          :width: 64px
-   * - ``sensor_tamper``
-     - ``images/devices/sensor_tamper.svg``
-     - .. image:: ../_static/catalog/images/devices/sensor_tamper.svg
-          :alt: tamper sensor icon
-          :width: 64px
-   * - ``sensor_temp_humidity``
-     - ``images/devices/sensor_temp_humidity.svg``
-     - .. image:: ../_static/catalog/images/devices/sensor_temp_humidity.svg
-          :alt: temperature / humidity sensor icon
-          :width: 64px
-   * - ``sensor_water``
-     - ``images/devices/sensor_water.svg``
-     - .. image:: ../_static/catalog/images/devices/sensor_water.svg
-          :alt: water-leak sensor icon
-          :width: 64px
+``/data/images`` in the storage partition. Web serves the file named after the type
+under ``/img/devices/``; ``GET /api/device_widgets`` also returns the URL. The icon
+column of the type table above shows those files.
 
 Parameter rows are **not** per-parameter SVGs: controls are CSS widgets from
 ``device_widgets.js`` / ``device_widgets.css``. Optional parameter icons live
@@ -391,29 +128,39 @@ Two layers. Core never owns either CSV.
            UI = catalog ∩ live params
 
 ``devices.csv`` columns: ``device_id``, ``parameters`` (CSV names),
-``primary_param``, ``mandatory_params``, optional ``image`` (class avatar under
-``images/devices/``).
+``primary_param``, ``mandatory_params``, ``image`` (class avatar under
+``images/devices/``). All five headers must be present when you upload the file;
+the ``image`` cells may be empty.
 
 ``parameters.csv`` columns: ``parameter``, ``label_zh``, ``label_en``,
 ``data_type``, ``properties``, ``min`` / ``max`` / ``step`` / ``unit``,
 ``ui_element``, ``options`` (JSON array for dropdown; each item carries a
-``labels`` map rather than a flat ``label``), ``description``, ``css``, optional
-``requires``. A leftover ``visible`` header is ignored; hide with instance
-``visible: false``. Parameter ``image`` is unused today (controls are CSS).
+``labels`` map rather than a flat ``label``), ``description``, ``visible``,
+``css``, ``image`` — these fifteen headers are required on upload — plus
+optional ``requires``. ``visible`` must be there but its value is not read: the
+runtime hides a parameter only from the instance's ``props.params.NAME.visible``.
+Parameter ``image`` is flattened into the runtime table and is the first candidate
+the firmware's control-icon resolver tries, before ``<device>_<parameter>.svg`` and
+``<parameter>.svg``. Yet ``/api/device_widgets`` always answers ``""`` for it: a
+parameter row uses the ``icon`` the plugin instance sets, and the control itself is
+drawn by CSS.
+
+Upload limits: 128 KiB per file, at most 24 columns and 256 rows, and column
+headers match case-insensitively (parameter names do not).
 
 The two label columns are what makes the console bilingual. ``/api/device_widgets``
 serves one ``label`` per parameter, picked from the row's ``labels`` map by the
-``lang`` query (``zh`` / ``en``, falling back to ``Accept-Language``, then to
-``zh``). Adding a language touches five known places — the CSV column, the
+``lang`` query. A ``lang`` value the Hub does not know is served as ``zh``; with no
+``lang`` at all it consults ``Accept-Language`` and defaults to ``en``. Adding a
+language touches five known places — the CSV column, the
 generator's ``LABEL_COLS``, the flattener's column set (``PARAM_REQ_COLS``,
 ``dw_param_cols_t``, ``dw_build_style``), the codes ``dw_request_lang()`` accepts,
 and the console's own language set (``i18n.js`` plus the switch options) — and
 none of the label consumers: the entry struct, the API shape and the card and
 rule renderers stay as they are.
 
-``tools/check_catalog_i18n.py`` runs with the generator and grades the same
-three ways, so a missing translation is visible at build time rather than
-months later:
+``components/minihub_device_widget/tools/check_catalog_i18n.py`` runs with the
+generator and grades the same three ways:
 
 * **error** — a ``label_zh`` / ``label_en`` column missing, an empty
   ``label_zh`` cell, an option item without a ``labels`` map, the console's two
@@ -451,10 +198,25 @@ and again under ``not``.
 Type catalog remote update (needs ``CONFIG_MINIHUB_WEB_UI``):
 ``GET`` / ``PUT /api/dev/catalog/devices.csv`` and
 ``GET`` / ``PUT /api/dev/catalog/parameters.csv``. Both files must be present
-before the Hub flattens them and calls reload. The reload is atomic and
-failure-safe (bad rows skipped, unparseable file keeps the previous table,
-missing/corrupt file self-heals from the embedded copy); see
-:doc:`architecture_overview`.
+before the Hub flattens them and calls reload; uploading only one succeeds with
+``rebuilt: false`` and a hint.
+
+Each stage fails at a different granularity:
+
+* A **PUT** is all-or-nothing. Duplicate ``device_id`` or ``parameter``, an
+  unknown ``ui_element``, or a bad ``requires`` rejects the whole upload with
+  **400** and changes nothing on disk.
+* **Flattening** is also all-or-nothing: one device row naming a parameter that
+  has no ``parameters.csv`` entry aborts the flatten.
+* The flat registry read is where rows are skipped: a row whose fields look
+  shifted, or whose style JSON has no usable ``widget``, is dropped and counted
+  in a log line. If nothing survives, the file is rejected as a whole.
+* A **rejected flat file still gets rewritten.** ``reload`` keeps serving the
+  previous table, then seeds ``/data/config/devices.csv`` from the registry
+  compiled into the firmware — so hand edits to that file are lost after a parse
+  failure, and the same seeding runs at boot when the file is unreadable.
+
+See :doc:`data_flow`.
 
 How to use it when developing
 -----------------------------
@@ -495,19 +257,21 @@ On register (one point per array element):
 * ``type`` = ``devices.json`` ``type`` (must be a catalog ``device_id``)
 * Fill ``props.params`` from ``params`` (``init`` → ``value``; optional
   ``access`` / ``visible`` / ``min`` / ``max`` / ``step`` / ``unit`` / ``requires``)
-* Presentation overrides, per parameter: ``icon`` (must reference a shipped
-  ``./images/...`` icon), ``ui_element`` (one of ``ui.toggle`` / ``ui.slider`` /
-  ``ui.dropdown`` / ``ui.text`` / ``ui.hidden``) and ``css`` (plain class names).
-  Per device: ``icon``. Leave any of them out and the catalog default for the
-  device ``type`` is used. ``generate_devices_property_from_json.py`` rejects
-  unknown icons, widgets outside the closed set, and unsafe ``css``.
+* Presentation overrides, per parameter: ``icon`` (written ``./images/...``, and the
+  file must already exist under ``components/minihub_device_widget/images/`` — a
+  plugin cannot ship its own artwork), ``ui_element`` (one of ``ui.toggle`` /
+  ``ui.slider`` / ``ui.dropdown`` / ``ui.text`` / ``ui.button`` / ``ui.hidden``) and
+  ``css`` (plain class names). Per device: ``icon``. Leave any of them out and the
+  catalog default for the device ``type`` is used.
+  ``generate_devices_property_from_json.py`` rejects unknown icons, widgets outside
+  the closed set, and unsafe ``css``.
 
 A single object (not an array) is still accepted for one-device plugins.
 
 .. only:: not hide_l3
 
    L3: regenerate ``device_desc.gen.h`` after editing JSON — do not hand-edit the
-   header. Demos: ``examples/plugins/color_bulb``, ``examples/plugins/meter_plug``.
+   header. Scaffold an L3 source with ``tools/new_store_module.py --tier l3``.
 
 2. Add a brand-new device type
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -520,6 +284,17 @@ A single object (not an array) is still accepted for one-device plugins.
 Or without reflashing: ``PUT /api/dev/catalog/devices.csv`` and
 ``PUT /api/dev/catalog/parameters.csv`` (both required before flatten + reload;
 ``python3 tools/dev_sync.py --open``).
+
+.. warning::
+
+   These two PUTs replace the **runtime** copy of the catalog on the device, one file at a
+   time. The registry is only rebuilt once both are in place — a response with
+   ``"rebuilt": false`` and a ``hint`` means the pair is still incomplete, and the console
+   keeps rendering the old catalog until you send the other file. A malformed CSV is
+   refused rather than loaded, so the live catalog is never left half-written; to go back,
+   ``DELETE /api/dev/catalog/<file>.csv`` drops the stored copy and the next reload re-seeds
+   the catalog built into the firmware. That fallback is the recovery path — a reboot alone
+   does not undo a bad upload.
 
 For **Zigbee** categories, also extend
 ``components/minihub_zigbee/config/zigbee_cluster_map.json`` (or overlay
@@ -541,7 +316,7 @@ wire to ``props.params`` without editing ``zigbee_adapter.c``. See
    * - ``GET /api/device_widgets``
      - Catalog: labels / widgets / default bounds / avatar URLs
    * - ``POST /api/devices/control``
-     - Devices page: ``device`` = **type** (e.g. ``light``), plus ``parameter``,
+     - Overview page: ``device`` = **type** (e.g. ``light``), plus ``parameter``,
        ``value``; UI also sends ``point_id`` for the instance
    * - ``POST /api/command``
      - Automation: explicit ``point_id`` + ``cmd``; optional ``params.parameter``
@@ -565,7 +340,7 @@ Related
 
 * Points and Hub config: :doc:`data_model`
 * REST examples: :doc:`api/host_rest`
-* End-to-end flow: :doc:`architecture_overview`
+* End-to-end flow: :doc:`data_flow`
 * Type catalog component: ``components/minihub_device_widget/README.md``
 
 .. only:: not hide_l3

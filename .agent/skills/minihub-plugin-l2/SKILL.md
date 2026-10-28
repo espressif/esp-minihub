@@ -41,7 +41,7 @@ Or IDE MCP: `scaffold_plugin` with `tier=l2`. Do not invent `host.*` fields; ask
 ## Data model (when touching points)
 
 - Core is type-agnostic: one device = one `minihub_point_t`; live values in `props.params.<name>`.
-- UI widgets come from Host device-widget catalog (`toggle` / `slider` / `dropdown` / `text` / `hidden`), not from inventing C entity structs.
+- UI widgets come from the Host device-widget catalog: the `ui_element` column validated against `components/minihub_device_widget/model/ui_elements.csv` (read the set there — it is not repeated in this skill), not from inventing C entity structs.
 
 ## JS Host API (do not invent)
 

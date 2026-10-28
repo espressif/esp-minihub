@@ -6,14 +6,15 @@ MCP API
 概述
 ----
 
-设备端 MCP 工具位于 ``components/minihub_mcp_server``，由
-``CONFIG_MINIHUB_MCP_SERVER`` 打开（需要 ``components/esp-claw`` 子模块）。
-本地 MCP 客户端通过产品接线的 MCP 传输访问 Hub。
+Hub 可以把自己变成一个 MCP 服务。助手便可操作一台已经烧好的设备。工具位于
+``components/minihub_mcp_server``，由 ``CONFIG_MINIHUB_MCP_SERVER`` 打开（需要
+``components/esp-claw`` 子模块）。本地 MCP 客户端经产品接线的传输访问 Hub。
 
-工具默认在 MCP 结果中返回 JSON 文本。多数工具要求 Hub 就绪（minihub_mcp_hub_ready）；
-启动或重载过程中可能返回 HUB_NOT_READY。
+工具一律在 MCP 结果里返回 JSON 文本。多数工具要求 Hub 已就绪（minihub_mcp_hub_ready），
+所以在启动或重载过程中调用可能返回 HUB_NOT_READY。
 
-REST 等价接口见 :doc:`host_rest` 与 :doc:`plugin_rest`。
+REST 等价接口见 :doc:`host_rest` 与 :doc:`plugin_rest`；工具可能返回的每个 ``code``
+见 :doc:`errors`。
 
 
 实现：components/minihub_mcp_server/minihub_mcp_server.c（s_tools[]）与
@@ -26,7 +27,8 @@ hub.api
 
    ``hub.api``
 
-白名单 REST 代理。
+白名单 REST 式访问。网关在进程内执行调用（``hub_api_call``），不转发给
+``minihub_web`` 的 HTTP 服务，因此没有局域网客户端也能用，并直接返回 JSON。
 
 .. container:: mh-api-block mh-api-parameters
 
@@ -48,8 +50,8 @@ hub.api
 
    **Returns**
 
-   JSON 文本，内容为对应 REST 响应体；拒绝的路径返回错误（含 /api/ota/upload 及
-   非白名单模块 RPC method）。
+   响应 JSON 文本。被拒路径回 ``DENIED``；在白名单内但网关没有本地处理分支的
+   路径回 ``NOT_IMPLEMENTED``；模块 RPC 的 ``method`` 不在白名单时拒绝执行。
 
 .. container:: mh-api-block mh-api-attention
 
@@ -82,8 +84,8 @@ points.list
 
    **Returns**
 
-   点位快照 JSON 数组（``point_id``、``type``、``value``、``adapter``、
-   ``online``、以及 ``props``，有则含 ``params``）。
+   ``{"ok":true,"points":[…]}``；每个快照含 ``point_id``、``type``、
+   ``value``、``adapter``、``online``，有则含 ``params`` 的 ``props``。
 
 points.get
 ----------
@@ -103,7 +105,8 @@ points.get
 
    **Returns**
 
-   单个点位对象（字段同 ``points.list``）；参数错误或不存在时返回 INVALID_ARG / 未找到。
+   ``{"ok":true,"point":{…}}``，字段同 ``points.list``；参数错误或不存在时返回
+   ``INVALID_ARG`` / ``NOT_FOUND``。
 
 points.history
 --------------
@@ -125,7 +128,11 @@ points.history
 
    **Returns**
 
-   合并本地 Hub 历史与模块 device_log（若可用）的 JSON。
+   ``{"ok":true,"point_id":…,"items":[…]}``，新的在前。每条含 ``ts_ms``、
+   ``old``、``new``、``label`` 与 ``source`` （``local`` 或 ``cloud``）。本地 Hub
+   环形缓冲会与所属适配器提供的 ``device_log`` 合并；云端条目与本地条目同
+   ``label`` 且时间相差 2 秒以内时视为重复并丢弃；取日志失败的原因写入
+   ``cloud_error``。
 
 points.set
 ----------
@@ -147,8 +154,8 @@ points.set
 
    **Returns**
 
-   成功时确认 JSON；对可电源控制类型，on/off/true/false/1/0 亦映射为 turn_on / turn_off
-   （经 command.invoke）。
+   ``{"ok":true}``。对可电源控制的类型，on/off/true/false/1/0 经适配器执行
+   turn_on / turn_off；其他值只写入点位注册表。
 
 command.invoke
 --------------
@@ -173,7 +180,7 @@ command.invoke
 
    **Returns**
 
-   等价 POST /api/command 的结果 JSON。
+   ``{"ok":true}``；适配器拒绝命令时为 ``INVOKE_FAILED``。
 
 rules.list
 ----------
@@ -188,7 +195,7 @@ rules.list
 
    **Returns**
 
-   当前 rules.json 内容 JSON。
+   当前 rules.json 对象，另加 ``"ok":true``。
 
 rules.put
 ---------
@@ -208,7 +215,8 @@ rules.put
 
    **Returns**
 
-   替换规则并热重载规则引擎后的确认 JSON。
+   规则引擎接受并保存后的 ``{"ok":true,"count":N}``；不接受时回
+   ``VALIDATION_FAILED`` / ``RELOAD_FAILED`` / ``SAVE_FAILED``。
 
 adapters.get
 ------------
@@ -223,7 +231,7 @@ adapters.get
 
    **Returns**
 
-   只读 adapters.json 片段 JSON。
+   只读 adapters.json 对象，另加 ``"ok":true``。
 
 hub.reload
 ----------
@@ -259,7 +267,7 @@ store.config.get
 
    **Returns**
 
-   NVS 中 custom_url 与 disable_default JSON。
+   ``{"ok":true,"custom_url":…,"disable_default":…,"default_url":…}``。
 
 store.config.set
 ----------------
@@ -276,48 +284,75 @@ store.config.set
        http(s)://host:port；空字符串清除覆盖。
 
    ``disable_default`` (boolean)
-       true 跳过内置 Store URL。
+       true 跳过内置商店 URL。
 
 .. container:: mh-api-block mh-api-returns
 
    **Returns**
 
-   确认 JSON。
+   与 ``store.config.get`` 相同。
 
 hub.api 白名单
 --------------
 
-网关规则见 hub_api_gateway.c（s_rules[]）：
+网关规则见 hub_api_gateway.c（s_rules[]）。路径先过白名单，再需要对应的本地
+处理分支；没有分支时即使列在白名单里也回 ``NOT_IMPLEMENTED``。
 
-**GET**
+已实现的接口并不是 REST 应答的原样拷贝：网关用同样的核心调用自己拼 JSON。
+这里的 ``GET /api/ota`` 在 ``state`` / ``error`` / ``progress`` /
+``bytes_written`` / ``source`` 之外还多给 ``ok`` 与 ``busy`` （见
+:doc:`host_rest`）；而读取类调用拿不到 REST 路由本会返回的 HTTP 状态码 ——
+被拒绝时，MCP 结果本身是成功的，里面是一个 ``error`` 对象。
 
-* /api/、/api/system、/api/update/notes、/api/points、/api/points/history
-* /api/rules、/api/adapters、/api/config/adapters
-* /api/location、/api/modules、/api/packs、/api/scenes、/api/events
-* /api/store/catalog、/api/store/config、/api/ota
-* /api/matter/status（Matter 构建）
-* /api/thread/status、/api/thread/dataset（Thread 构建）
-* /api/radio/provision、/api/zigbee（Zigbee 构建）
-* /api/modules/ID/preview（路径中的星号仅作通配符）
+**GET — 可用**
 
-**POST 方法**
+* ``/api/system``、``/api/points``、``/api/points/history``、``/api/ota``
+* ``/api/rules``、``/api/adapters``、``/api/config/adapters``、``/api/modules``
+* ``/api/store/catalog``、``/api/store/config``、``/api/radio/provision``
+* ``/api/matter/status`` （Matter 构建）
+* ``/api/zigbee`` （Zigbee 构建）—— 由网关直接组装的 Zigbee 摘要；Host HTTP
+  服务没有对应路由
 
-* /api/command、/api/rules/import、/api/scenes/import、/api/scenes/invoke
-* /api/store/config、/api/store/install、/api/store/upgrade、/api/store/uninstall、/api/store/refresh
-* /api/hub/reload、/api/points/remove、/api/ota
-* /api/thread/start、/api/thread/stop（Thread 构建）
-* Matter / Zigbee / BLE Mesh / Thread 构建相关路径
-* /api/modules/ID/rpc — 仅当 RPC method 在白名单内
+**POST — 可用**
 
-**PUT 方法**
+* ``/api/command``、``/api/rules/import``、``/api/hub/reload``、
+  ``/api/points/remove``、``/api/ota``
+* ``/api/store/config``、``/api/store/install``、``/api/store/upgrade``、
+  ``/api/store/uninstall``、``/api/store/refresh``
+* ``/api/matter/commission``、``/api/matter/devices`` （Matter 构建）
+* ``/api/zigbee/permit_join`` （Zigbee 构建）
+* ``/api/ble_mesh/permit_provision`` （BLE Mesh 构建）
+* ``/api/modules/ID/rpc`` —— 仅当 RPC ``method`` 在白名单内
 
-* /api/config/adapters
+.. warning::
 
-模块 RPC 白名单 (s_rpc_allow[])
---------------------------------
+   这份清单里的写操作意味着：一个 MCP 客户端是 **操作者，不是观察者** 。它可以用
+   ``hub.api`` 整份替换规则文档、删除点位、卸载商店包、发起 OTA、重载 Hub。
+   ``CONFIG_MINIHUB_MCP_SERVER`` 只有一个总开关，没有只读模式；白名单是编译期的表
+   （ ``s_rules[]``），没有可按客户端配置的东西：拿到 token 的人就拿到了全部。只把
+   这个服务器开给你放心让他重配整屋设备的智能体。
 
-status、homes、devices、device_log、prop_get、prop_probe、camera_preview、sync、
-logout、login、session、verify、verify_send、login_retry
+**PUT — 可用**
 
-其他 RPC 方法须直接走局域网 REST，不可经 hub.api。
+* ``/api/config/adapters``
+
+**在白名单内、无本地处理**
+
+这些路径回 ``NOT_IMPLEMENTED``，请直接走局域网 REST（:doc:`host_rest`）：
+
+* GET：``/api/``、``/api/update/notes``、``/api/location``、``/api/packs``、
+  ``/api/scenes``、``/api/events``、``/api/modules/ID/preview``
+* GET：``/api/thread/status``、``/api/thread/dataset`` （Thread 构建）
+* POST：``/api/scenes/import``、``/api/scenes/invoke``
+* POST：``/api/thread/start``、``/api/thread/stop``、``/api/thread/dataset``
+  （Thread 构建）
+
+模块 RPC 白名单（``s_rpc_allow[]``）
+------------------------------------
+
+``status``、``homes``、``devices``、``device_log``、``prop_get``、``prop_probe``、
+``camera_preview``、``sync``、``logout``、``login``、``session``、``verify``、
+``verify_send``、``login_retry``
+
+其他 RPC 方法须直接走局域网 REST，不可经 ``hub.api``。
 

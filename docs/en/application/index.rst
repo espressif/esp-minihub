@@ -3,9 +3,9 @@ Application Products
 
 :link_to_translation:`zh_CN:[中文]`
 
-Each folder under ``application/`` is one ESP-IDF firmware **product**. The
+Each folder under ``application/`` is one ESP-IDF firmware **product**, and the
 chapters below are those products. Read this page before
-:doc:`../host_customization` (how to copy a product and ship an OEM SKU).
+:doc:`../host_customization`, which copies a product to make an OEM SKU.
 
 .. toctree::
    :maxdepth: 1
@@ -14,7 +14,8 @@ chapters below are those products. Read this page before
 
 .. rubric:: What a product is
 
-MiniHub splits **product** from **Core**:
+MiniHub keeps **product** and **Core** apart so that one Core can serve every
+SKU (stock keeping unit):
 
 * ``application/APP/`` — the Host you flash: board, partition table, sdkconfig
   recipe, factory JSON, ``app_main``, and product Kconfig. Folder name is the

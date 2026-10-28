@@ -3,12 +3,17 @@ Deployment and production
 
 :link_to_translation:`zh_CN:[中文]`
 
-OEM release path: factory image, field OTA, and Store packages. First lab
-bring-up: :doc:`getting_started`. Product folder and
-partition planning: :doc:`host_customization`.
+The factory image, field updates, and the Store packages that go with them make
+up the release path. First lab bring-up is :doc:`getting_started`; the product
+folder and its partition planning are :doc:`host_customization`.
 
-Do not bake lab SSID/PSK (``local.overrides``, gitignored) into a production
-image. Do not put cloud passwords in factory ``adapters.json``.
+Lab Wi-Fi credentials belong in ``local.overrides``, the gitignored sdkconfig
+fragment at ``application/APP/configs/sdkconfig/``. The build appends it last,
+and the SSID/PSK then reach every unit flashed from that image.
+
+Cloud account passwords for a vendor service do not belong in the generic
+factory ``adapters.json`` either. After the user logs in, the module keeps the
+credential in its own storage (NVS or a module-private file).
 
 Factory flash
 -------------
@@ -95,9 +100,10 @@ Provisioning at scale
 ---------------------
 
 1. Flash the factory image (no STA creds in NVS)
-2. First boot: Ethernet if cabled; else SoftAP/BLE provisioning when
+2. First boot: Ethernet if cabled; else SoftAP provisioning when
    ``CONFIG_MINIHUB_WIFI_PROVISIONING`` is on — see :doc:`networking`
-3. Operator opens ``http://HUB/``, completes Wi-Fi (if needed) and Store login
+3. Operator opens ``http://HUB/``, signs in as ``admin`` (setting the password on
+   first visit), and completes Wi-Fi if needed
 4. Optional: set the production Store URL (``POST /api/store/config``; see
    :doc:`api/plugin_rest`)
 
@@ -109,21 +115,118 @@ Factory reset
 -------------
 
 When ``factory_reset_gpio61`` (or your product equivalent) is in
-``sdkconfig_features``, holding the configured GPIO erases NVS and reboots.
-LittleFS ``/data`` and ``/store`` are not wiped — use a full ``flash`` if the jig
-needs a clean filesystem.
+``sdkconfig_features``, holding the configured GPIO performs a factory reset and
+reboots. It removes user data; it does not reformat the filesystems:
+
+* ``/data/config/rules.json``, ``scenes.json`` and ``adapters.json``
+  (:file:`components/minihub_config/minihub_config.c:602`)
+* every Store-installed module and pack under ``/store``
+  (:file:`components/minihub_store/minihub_store.c:2140`)
+* NVS as a whole, which takes the Wi-Fi credentials, the custom Store URL and the
+  console login password with it (:file:`components/minihub_provision/minihub_factory_reset.c:34`)
+
+Factory preinstall (``/store/preinstall``) and the Web console (``/data/web``) are
+deliberately left alone, and LittleFS ``/data`` and ``/store`` keep their other
+contents — use a full ``flash`` if the jig needs a clean filesystem.
+
+.. warning::
+
+   After a reset there is **no console password** until someone sets one: the login
+   hash lives in NVS and is erased with everything else, and
+   ``POST /api/auth/setup`` answers without authentication by design so that a fresh
+   device can be configured. The first person to open the console on a reset unit owns
+   it. Treat a reset device as insecure until its own password is set, and have the
+   factory set one rather than shipping units into the field in setup state.
 
 The public ``minihub`` sdkconfig does not enable secure boot, flash encryption,
 or NVS encryption. An OEM may turn those on in the product sdkconfig; follow
 the ESP-IDF security guide for that chip. This guide does not set a factory
 policy for eFuse, serial number, or digital signature.
 
+SBOM and vulnerability scanning
+--------------------------------
+
+The MiniHub tree is Apache-2.0 and built from source, so supply-chain and
+first-party checks belong in your pipeline. Two layers:
+
+SBOM and dependency CVEs
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+`esp-idf-sbom <https://github.com/espressif/esp-idf-sbom>`_ turns a built
+project into an SPDX or CycloneDX bill of materials and checks it against the
+NVD for known CVEs. Install it, build the firmware, then run:
+
+.. code-block:: bash
+
+   pip install esp-idf-sbom
+   ./tools/build_firmware.py --app minihub build
+   esp-idf-sbom create -o minihub.spdx \
+       application/minihub/build/project_description.json
+   esp-idf-sbom check minihub.spdx
+
+``check`` flags CVEs in ESP-IDF and managed components. MiniHub's own components
+(``components/minihub_*``, ``application/minihub/main``) appear in the SBOM as
+packages, but they carry no SBOM metadata and are absent from the NVD, so
+``check`` will not report CVEs in first-party code. To make those packages
+describable, add an ``sbom.yml`` (``version`` / ``license`` / ``supplier``) at
+the project root and in each first-party component.
+
+First-party code scanning
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+First-party code is not in any CVE database, so scan it with static and dynamic
+analysis instead:
+
+* **clang-tidy** (free, Apache-2.0) — the IDF build writes
+  ``application/minihub/build/compile_commands.json``; run clang-tidy against it
+  with a ``.clang-tidy`` config at the repo root.
+
+  The recommended path is the integrated ``lint`` command, which auto-discovers
+  the repo-root ``.clang-tidy`` and scans only first-party sources (it skips the
+  IDF framework, ``managed_components`` and the generated ``build/`` tree):
+
+  .. code-block:: bash
+
+     ./tools/build_firmware.py lint                 # all first-party sources
+     ./tools/build_firmware.py lint --lint          # lint automatically after build
+     ./tools/build_firmware.py lint -j 8 path/to/file.c   # one file, 8 jobs
+
+  **Toolchain**: prefer the ESP-patched clang — ``idf_tools.py install esp-clang``
+  (its ``clang-tidy`` is auto-detected under ``~/.espressif/tools/esp-clang`` and
+  understands the ``esp32s31`` RISC-V target and ESP newlib). A stock LLVM
+  clang-tidy also works: ``lint`` then sanitises the ``compile_commands.json``
+  (rewrites ``-march``/``-mcpu``/``-mtune``, drops GCC-only flags, expands
+  ``@file`` response files and adds the toolchain newlib include dirs) so the
+  frontend can parse the sources — but it still cannot fully parse ESP newlib
+  system headers, so expect some compiler errors from vendored headers.
+
+  Or invoke clang-tidy directly (it also picks up the root ``.clang-tidy``):
+
+  .. code-block:: bash
+
+     clang-tidy -p application/minihub/build \
+         components/minihub_core/src/minihub_core.c
+
+  LLVM's ``run-clang-tidy`` can also scan ``components/minihub_*`` and
+  ``application/minihub/main``. A root ``.clang-tidy`` enabling
+  ``bugprone-*``, ``clang-analyzer-*``, ``cert-*`` and
+  ``cppcoreguidelines-*`` is provided.
+
+* **Fuzzing** (free, open source — LibFuzzer, AFL/AFL++) — target the untrusted
+  parsers: REST/WebSocket JSON, ``adapters.json`` / catalog parsing, and web
+  uploads.
+
+* **CodeQL** — free for open-source and research use only; closed-source or
+  commercial products need a GitHub Advanced Security / commercial license. The
+  Apache-2.0 MiniHub repository itself may use it at no cost.
+
 OTA in the field
 ----------------
 
 Dual-slot OTA (``ota_0`` / ``ota_1``) writes the inactive slot, then reboots.
-If the new app reaches ``minihub_ota_init``, rollback is cancelled; otherwise
-the bootloader returns to the previous slot. Details: :doc:`ota`.
+Confirmation happens in ESP-IDF start-up, just before ``app_main``: an image that
+does not boot at all falls back to the previous slot, while one that reaches
+``app_main`` is kept even if it misbehaves afterwards. Details: :doc:`ota`.
 
 Store vs Host
 -------------

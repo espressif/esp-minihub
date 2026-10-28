@@ -3,15 +3,18 @@ API Reference
 
 :link_to_translation:`zh_CN:[中文]`
 
-MiniHub APIs fall into Host development and Store plugin surfaces.
+Which API you use depends on where your code runs. This reference splits in two:
+one surface for the Hub and the firmware built into it, another for modules
+installed onto it.
 
-OEM products, LAN integration, automation scripts, and **statically linked**
-adapters under ``components/``: REST/MCP against the hub, or implement
-``minihub_adapter_t`` in Host firmware.
+Code that ships inside the firmware — an OEM product, a LAN integration, an
+automation script, or a **statically linked** adapter under ``components/`` —
+talks REST or MCP to the hub, or implements ``minihub_adapter_t`` in Host
+firmware.
 
-L2 (JS) modules under ``examples/plugins/`` or
-``MINIHUB_PLUGIN_DIRS``: use the
-JS ``host`` object, plus REST for install, enable, and RPC.
+An L2 (JS) module under ``examples/plugins/`` or ``MINIHUB_PLUGIN_DIRS`` is not
+linked into the firmware. It works through the JS ``host`` object and uses REST for
+install, enable and RPC.
 
 .. only:: not hide_l3
 
@@ -25,6 +28,7 @@ JS ``host`` object, plus REST for install, enable, and RPC.
    host_rest
    deploy_index
    mcp
+   errors
    net_api
    minihub_core
    minihub_adapter

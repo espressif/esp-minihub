@@ -14,8 +14,8 @@ Plugins
 -------
 
 Every published module is one ``.mhub``. L1 and L2 go under
-``Stores/Common/<id>/``. Native (L3) and hybrid modules are not published:
-``store_buckets_for_module()`` gives them no bucket and a leftover folder is
+``Stores/Common/<id>/``. A native or hybrid module is not a store package:
+``store_buckets_for_module()`` gives it no bucket and a leftover folder is
 deleted, so a store tree holds L1/L2 only. ``catalog.json`` is a single object
 written next to the ``.mhub`` when packed (``tools/sync_store_catalog.py``).
 
@@ -65,7 +65,7 @@ Catalog entry fields
 * ``targets`` — list of chip folder names (e.g. ``["esp32s31"]`` or
   ``["ALL"]``); the chip filter for ``?chip=``.
 * ``runtime`` — ``"pack"`` (config-only L1) or ``"js"`` (L2). ``"hybrid"`` and
-  ``"native"`` describe L3 and are never published.
+  ``"native"`` describe a native module and are never published.
 * ``config_only`` — ``true`` only for config-only L1 packs.
 * ``size`` — byte length of the ``.mhub``.
 * ``sha256`` — 64-digit hex digest of the ``.mhub``.
@@ -212,9 +212,14 @@ On the device, ``minihub_update_check()`` and ``minihub_update_apply()``:
    version is downloaded again when its ``size`` or ``sha256`` differs from
    the last download record.
 4. ``minihub_ota_start_url()`` opens ``url`` and attaches ``mac`` and
-   ``cur_version``. The download checks ``sha256`` against the digest the
-   server advertised and discards a mismatch. The image is then written to the
-   inactive OTA slot and the device reboots; see :doc:`../ota`.
+   ``cur_version``. The firmware stream is **not** compared against ``sha256``:
+   the digest is only metadata used in step 3, so a re-published build under the
+   same version number is re-fetched. What validates the image is
+   ``esp_ota_end()``, which checks the header and sequence checksum after the
+   last write. The image goes to the inactive OTA slot and the device reboots;
+   see :doc:`../ota`.
+
+   Only the asset and web downloads verify ``sha256`` before replacing a file.
 
 Assets and web
 --------------
@@ -222,20 +227,25 @@ Assets and web
 ``python3 tools/gen_deploy_index.py --deploy ROOT`` emits the device-type
 registry from ``model/*.csv`` and ``images/*`` in the device-widget source:
 
-* ``Assets/device_widgets.json`` — per ``device_id``: device icon + each
-  parameter's icon/style/metadata URL.
-* ``Assets/parameters.json`` — the global parameter registry
-  (icon/style/metadata) keyed by parameter name.
-* ``Assets/styles/<param>.css`` — one CSS file per parameter, extracted from
-  ``parameters.csv`` ``css`` column.
+* ``Assets/device_widgets.json`` — per ``device_id``: ``icon`` plus each
+  parameter's ``icon`` and ``meta``.
+* ``Assets/parameters.json`` — the global parameter registry (``icon`` /
+  ``meta``) keyed by parameter name.
+
+No per-parameter stylesheet is published. The ``css`` column of
+``parameters.csv`` holds a **class name**, not CSS text: the console hands it to
+``dwCssClass()`` and the rules themselves live in the bundled
+``device_widgets.css``, which arrives inline with ``GET /api/device_widgets``.
+A stylesheet can still be pushed by hand through the dev panel
+(``PUT /api/dev/assets/styles/...``).
 
 The web and asset manifests (schema ``minihub.deploy.index/1``) are served
 dynamically by ``store_server.py`` as ``GET /api/web`` and ``GET /api/assets``:
 they are built from ``Webs/<version>/`` and ``Assets/`` at request time, so no
 static ``index.json`` is written (mirroring ``GET /api/firmware``).
 
-``--only assets`` rebuilds only the device-type registry after a single icon/style
-file is dropped in — no firmware or plugin rebuild required. ``--sync-source``
+``--only assets`` rebuilds only the device-type registry after a single icon file
+is dropped in — no firmware or plugin rebuild required. ``--sync-source``
 copies ``model/`` and ``images/`` from the device-widget component into the
 deploy root first.
 
@@ -243,7 +253,6 @@ deploy root first.
 
    ROOT/Assets/device_widgets.json
    ROOT/Assets/parameters.json
-   ROOT/Assets/styles/<param>.css
    ROOT/Assets/model/*.csv
    ROOT/Assets/images/{devices,parameters}/*.svg
    ROOT/Webs/<version>/...   (manifest served at GET /api/web)
@@ -257,14 +266,19 @@ deploy root first.
 On-demand device-type assets:
 
 * ``GET /api/assets/device/<device_id>`` — that device's icon + each
-  parameter's icon/style/metadata; 404 when unknown.
+  parameter's icon and metadata; 404 when unknown.
 * ``GET /api/assets/parameter/<param>`` — the generic parameter entry.
 * ``GET /files/...`` — serves the tree and rejects ``..`` / escape.
 
-On the device, ``components/minihub_update`` reuses the HTTP client to fetch
-``/api/assets/device/<id>`` when a type is unknown to the local registry,
-caching icons under ``/data/images`` and styles under ``/data/styles``; the
-rendering layer only reads local storage, so it stays decoupled.
+On the device, ``components/minihub_update/update_assets.c`` does **not** ask for
+metadata first: the avatar is ``<type>.svg`` by convention, so it fetches
+``GET /files/Assets/images/devices/<type>.svg`` directly and keeps it at
+``/data/images/devices/<type>.svg``. That is deliberate — the metadata route is
+driven by ``model/devices.csv``, so it 404s for a plugin-owned type, and such a
+type could never have got an icon. A file already on the device is left alone, so
+the hourly pass costs nothing once a type has been fetched, and repainting the
+artwork on the server does not reach devices that already hold the file.
+Parameter icons are not fetched.
 
 ``GET /files/...`` maps onto the deploy root and rejects a path that
 contains ``..`` or escapes the root.

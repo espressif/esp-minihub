@@ -39,7 +39,7 @@ inventing entity structs.
 - **One device = one point** (`<protocol>.<device>`, e.g. `zigbee.bulb_1`).
 - Live params in `props.params.<name> = { value, optional access / visible / min / max / step / unit }`.
 - Instance list: plugin `devices.json` → generate `device_desc.gen.h` (`tools/generate_devices_property_from_json.py`).
-- Type UI catalog is **Host-side**: `components/minihub_device_widget/model/*.csv` → embed → runtime `/data/config/devices.csv`. Closed widgets: `toggle` / `slider` / `dropdown` / `text` / `hidden`.
+- Type UI catalog is **Host-side**: `components/minihub_device_widget/model/*.csv` → embed → runtime `/data/config/devices.csv`. Closed widget set: read `model/ui_elements.csv`; anything outside it fails the validation in `tools/gen_device_widget.py`, so never copy the list into a module README or this skill.
 - Plugins reuse catalog types (`light`, `switch`, …); do **not** ship labels / widget CSS / icons inside the plugin.
 
 ## Must

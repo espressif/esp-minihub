@@ -16,7 +16,7 @@ description: Develop MiniHub Host firmware products (application folder, Kconfig
 - Shared Core = `components/minihub_*` and bundled adapters in `components/minihub_protocol_adapters/`. Product import: `cmake/minihub_bundle/minihub_import.cmake` + `minihub_register_kconfig()`. One-yml: `path: …/cmake/minihub_bundle`.
 - Seeds: `application/<app>/configs/{adapters,rules,scenes}.json` else repo `configs/`.
 - Manifest: `application/<app>/manifest.yml` extends `configs/minihub_manifest.yml` `_host_base`.
-- Device UI catalog: `components/minihub_device_widget/model/*.csv` (closed widgets: toggle / slider / dropdown / text / hidden) → runtime `/data/config/devices.csv`. Core stays type-agnostic (`minihub_point_t`; one device = one point, params in `props.params`).
+- Device UI catalog: `components/minihub_device_widget/model/*.csv` (the closed widget set is `model/ui_elements.csv`, plus the legacy aliases `gen_device_widget.py` still maps — look them up there, don't recite them here) → runtime `/data/config/devices.csv`. Core stays type-agnostic (`minihub_point_t`; one device = one point, params in `props.params`).
 
 ## Host vs Store (do not confuse)
 

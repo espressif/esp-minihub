@@ -6,10 +6,52 @@ Getting Started
 Requirements
 ------------
 
-* ESP-IDF ~6.2 with ESP32-S31 support
-* Python 3.10+ and PyYAML (``pip install pyyaml``)
+* ESP-IDF 6.2 with ESP32-S31 support, at the revision recorded below
+* Python and the build toolchain — follow the ESP-IDF installation guide:
+  https://docs.espressif.com/projects/esp-idf/en/latest/esp32s31/get-started/index.html#installation
+* PyYAML (``pip install pyyaml``) — required by the build and store-packaging helper
+  scripts
 * Matter (optional; required when ``CONFIG_MINIHUB_MATTER_ADAPTER`` is enabled):
   ``ESP_MATTER_PATH`` pointing at a local `esp-matter` checkout
+
+.. _minihub-toolchain-pin:
+
+Pinned toolchain
+----------------
+
+ESP-IDF is not carried inside this repository (no submodule, no gitlink), so the
+revision actually used during development is stated here instead. Build against
+anything else and an ESP32-S31 failure may simply be a toolchain mismatch.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 48 30
+
+   * - Component
+     - Revision in use
+     - Why it matters
+   * - ESP-IDF
+     - ``master`` at ``434d5fd100b90a03c19018c572809cc29c7db28b``, which
+       ``git describe`` reports as ``qa-test-full-v6.2-20261016-70-g434d5fd100b``
+       (ESP-IDF 6.2.0 plus 70 commits)
+     - ESP32-S31 support is newer than any 6.2 release tag; IDF 5.x has no S31
+       toolchain at all
+   * - Target
+     - ``esp32s31``, always with ``--preview``
+     - The target is still preview, so ``idf.py`` refuses it without the flag
+
+To pin your own build to this exact ESP-IDF instead of guessing:
+
+.. code-block:: bash
+
+   git clone -b master https://github.com/espressif/esp-idf.git
+   cd esp-idf && git checkout 434d5fd100b90a03c19018c572809cc29c7db28b
+   ./install.sh esp32s31 && . ./export.sh
+
+``tools/build_firmware.py`` reads ``$IDF_PATH`` and otherwise uses the
+``esp-idf/`` folder next to the repository (gitignored). A checkout elsewhere
+therefore needs ``export IDF_PATH=...``, or the build silently uses a different
+ESP-IDF than the one recorded above.
 
 Clone and first build
 ---------------------
@@ -26,10 +68,15 @@ applies board defaults, and invokes the IDF build under ``application/minihub/``
 If ``-app`` is another product (for example ``my_app``), the IDF build runs under
 ``application/my_app/``.
 
+The build writes the standard IDF artifacts under ``application/minihub/build/`` —
+the flashable application image is ``application/minihub/build/minihub.bin``, with
+``bootloader/``, ``partition_table/``, and ``flasher_args.json`` alongside it.
+
 Default product (minihub)
 -------------------------
 
-The generic Host in ``application/minihub/`` uses ``configs/sdkconfig/app.yml``:
+The generic Host in ``application/minihub/`` uses
+``application/minihub/configs/sdkconfig/app.yml``:
 Ethernet-first uplink (Wi-Fi STA fallback), USB MSC, RTSP, Modbus, Store
 dynamic modules, and more. Reference board: ``esp32_s31_function_coreboard_1``.
 
@@ -48,21 +95,24 @@ Typical serial lines (search these strings):
 
 ``MiniHub ready`` means features are prepared, not that an IPv4 address is assigned.
 
-Open ``http://HUB/`` for the Web UI (you may be redirected to ``/login``). REST
-base: ``http://HUB/api/``. First visit: username ``admin``, set a password of
-at least 6 characters. Skinning the HTML: :doc:`web_console`.
+.. image:: ../_static/boot/boot_timeline.en.svg
+   :align: center
+   :alt: MiniHub power-on sequence: firmware → storage → uplinks → web → adapters → IP → ready
 
-First checks (replace ``HUB`` with the IPv4 from ``eth got IP`` or ``wifi got IP``):
+``HUB`` in the URLs throughout this guide is the address printed by ``eth got IP``
+or ``wifi got IP`` (for example ``192.168.1.50``). The guide does not register a
+hostname.
 
-.. code-block:: bash
+Open ``http://HUB/`` for the Web UI (you may be redirected to ``/login``). On
+first visit, log in as ``admin`` and set a password of at least 6 characters,
+then use the Web UI to verify the device and operate it. Skinning the HTML:
+:doc:`web_console`.
 
-   curl -s http://HUB/api/
-   curl -s http://HUB/api/system
-   curl -s http://HUB/api/points
-
-When ``CONFIG_MINIHUB_WEB_LOGIN_AUTH`` is on (default), these return HTTP 401
-until you send a session cookie or ``Authorization: Bearer``. Optional token:
-``CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN`` or NVS ``api_token``. See :doc:`faq`.
+When ``CONFIG_MINIHUB_WEB_LOGIN_AUTH`` is on (default), the Web UI prompts for
+login; REST clients must send a session cookie or ``Authorization: Bearer``.
+Optional token: ``CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN`` (which wins when
+non-empty; NVS ``api_token`` is read only if that string is empty).
+See :doc:`faq`.
 
 Network logs: see :doc:`networking` (``eth got IP``, ``wifi got IP``).
 
@@ -87,19 +137,20 @@ happens automatically before compile).
 Compose sdkconfig: ``tools/compose_sdkconfig.py``. Stack list:
 ``cmake/generated/sdkconfig_stacks.gen``.
 
+Directory by directory, including what the build generates: :doc:`source_tree`.
+
 Develop a Store plugin (quick path)
 -----------------------------------
 
-1. Add ``examples/plugins/ID/`` (or a vendor tree via
+1. Add ``examples/plugins/ID/`` (or your own tree via
    ``MINIHUB_PLUGIN_DIRS``; see
    :doc:`plugins/develop_l1` or :doc:`plugins/develop_l2`)
 2. ``python3 tools/pack_store_module.py pack ID``
 3. Run ``python3 tools/store_server.py`` on the PC (the Hub pulls packages over
    LAN; do not run this on the device)
-4. Hub: ``POST /api/store/config`` with ``custom_url`` pointing at that server
-5. ``POST /api/store/refresh`` then ``POST /api/store/install`` with
-   ``{"type":"module","id":"ID"}`` (L1 packs use ``"type":"pack"``) or Web UI →
-   Store
+4. Open the Web UI at ``http://HUB/`` and open **Store**
+5. Set the custom Store URL to that server, then refresh the catalog and
+   install ``ID`` in the Store UI (L1 packs use ``pack`` as the type)
 
 .. only:: not hide_l3
 
@@ -107,11 +158,12 @@ Develop a Store plugin (quick path)
 
 New type / widgets: Host ``model/*.csv`` (rebuild) or
 ``PUT /api/dev/catalog/…`` on a running Hub (:doc:`type_catalog`). Demos:
-L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js``.
+L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js`` / ``meter_plug_js``.
 
 .. only:: not hide_l3
 
-   L3 demos: ``examples/plugins/color_bulb``, ``examples/plugins/meter_plug``.
+   There is no in-tree L3 demo; scaffold one with
+   ``tools/new_store_module.py --tier l3 --id my_native``.
 
 OEM Host product: see :doc:`host_customization`.
 
@@ -132,7 +184,7 @@ Where to read next
 
 * **Vibe coding** — :doc:`vibe_coding`
 * **Understand the Hub** — :doc:`architecture`, then
-  :doc:`architecture_overview`, then :doc:`type_catalog` and :doc:`data_model`
+  :doc:`data_flow`, then :doc:`type_catalog` and :doc:`data_model`
 * **Networking** — :doc:`networking`
 * **Radios and access** — :doc:`radios` (Matter / Thread BR / Zigbee / BLE Mesh)
 * **Hub firmware update** — :doc:`ota`

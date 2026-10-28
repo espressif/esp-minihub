@@ -3,34 +3,59 @@ Develop L3 (Native) Modules
 
 :link_to_translation:`zh_CN:[中文]`
 
-L3 modules ship a **native ELF** ``.so`` inside the outer ``.mhub`` zip. The
-loader expects an **MHMD** header on the ``.so`` payload (see
-``tools/pack_store_module.py mhmd``). Host ``dlopen`` s the image and calls
-``minihub_module_entry``.
+An L3 module is a ``.mhub`` package whose payload is a native ELF ``.so``. Host
+calls ``dlopen`` on that image and then ``minihub_module_entry``, so the binary
+must be built for the exact Host that will load it — nothing translates between
+ABIs at install time. Before packing, wrap the ``.so`` with an **MHMD** header
+(``tools/pack_store_module.py mhmd``); the loader recognises the image by that
+header.
 
 End-to-end workflow
 -------------------
 
+Packing a native module takes two steps more than packing a JS one: the ``.so``
+must be compiled and wrapped before there is anything to zip.
+
 1. **Scaffold** — ``module.json``, sources, optional ``meta.json``
 2. **Compile** the ``.so`` — pick one of the two methods below
-3. **Pack** — ``python3 tools/pack_store_module.py pack ID``
-4. **Catalog** — after ``.mhub`` files are in the store directory, rewrite
-   ``catalog.json`` (the Hub lists modules from that file, not by scanning
-   zips): ``python3 tools/sync_store_catalog.py --from-store``
-5. **Install on device** — Store UI, ``POST /api/store/install``, or factory
-   ``store_preinstall``
-6. **Reload** — ``POST /api/hub/reload``; check serial + ``GET /api/modules``
+3. **Pack** — there is no such step for a native module:
+   ``tools/pack_store_module.py pack ID`` skips ``runtime: native`` and produces
+   no ``.mhub`` at all (``pack_store_module.py:236-239``). The MHMD wrap itself is
+   ``tools/pack_store_module.py mhmd in.so out.so``.
+4. **Publish** — ``tools/sync_store_catalog.py`` gives a native module no
+   ``Stores/`` folder, and ``all`` (repacking from source) deletes one left over
+   from an earlier build; ``--from-store`` leaves it alone, so a hand-written entry
+   survives. To install from the Store you place ``ID.mhub`` in
+   ``Stores/Common/ID/`` and write that directory's ``catalog.json`` yourself —
+   the device does install native packages, the tooling just refuses to publish
+   them.
+5. **Onto the device** — production uses factory ``store_preinstall``:
+   ``module.json`` and the MHMD ``.so`` are staged into the ``modstore`` image,
+   and boot's ``scan_manifests`` loads them — no reload to press. If you place the
+   files under ``/store/modules/ID/`` yourself (``PUT /api/dev/fs/`` cannot write
+   there, so this means reflashing ``modstore`` or a shell on the device), nothing
+   watches that directory: you need ``POST /api/hub/reload``. Installing from the
+   Store reloads as it goes.
+6. **Verify** — ``module 'ID' load ok`` on serial, and ``loaded`` /
+   ``load_blocked`` / ``binary_stale`` / ``abi_version`` in ``GET /api/modules``.
+   A bare ``.so`` is not enough: a directory without ``module.json`` is skipped by
+   the scan, silently.
 
 Two ways to compile
 --------------------
 
+Which one you use depends on whether the MiniHub tree is available to you.
+
 Out-of-tree (standalone)
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-No ESP-IDF and no MiniHub source tree. Use Plugin SDK headers
-(``#include "minihub_plugin_sdk.h"``) and a cross compiler that matches the Host
-(ESP32-S31: ``riscv32-esp-elf-gcc``). Do not mix SDK headers with IDF headers in
-the same translation unit. Header reference: :doc:`../api/plugin_host`
+This path needs no ESP-IDF and no MiniHub source tree. A developer can build against
+the Plugin SDK headers alone (``#include "minihub_plugin_sdk.h"``) with a cross
+compiler that matches the Host (ESP32-S31: ``riscv32-esp-elf-gcc``). Those
+headers describe the Host as it is
+exported, so mixing them with IDF headers in one translation unit gives two
+conflicting pictures of the same symbols — do not. Header reference:
+:doc:`../api/plugin_host`
 (:download:`module_sdk.zip <../../_static/module_sdk.zip>`).
 
 .. code-block:: bash
@@ -136,7 +161,10 @@ when you build the module target. A Host firmware ``build`` does not.
    export MINIHUB_PLUGIN_DIRS="$PWD/examples/plugins"   # demos only
    ./tools/build_firmware.py -app minihub modules
 
-To pack again after the ``.so`` exists: ``python3 tools/pack_store_module.py pack ID``.
+With an MHMD ``.so`` already built there is nothing to recompile:
+``python3 tools/pack_store_module.py mhmd in.so out.so`` only wraps the header.
+``pack`` publishes L1 and L2 — a native package either goes into the store folder
+yourself (steps 3-5 above) or rides in the factory image.
 
 L3 developer scripts
 ^^^^^^^^^^^^^^^^^^^^
@@ -145,10 +173,13 @@ L3 developer scripts
 * ``tools/generate_devices_property_from_json.py`` — ``devices.json`` →
   ``device_desc.gen.h`` (when used)
 * ``tools/build_plugin_standalone.py ID`` — no-IDF CMake build for example demos
-* ``tools/pack_store_module.py mhmd`` / ``pack`` — MHMD wrap + ``.mhub``
-* ``tools/sync_store_catalog.py --from-store`` — after ``.mhub`` files are in
-  the store directory, rewrite ``catalog.json`` (also in ``module_sdk.zip``)
-* ``tools/build_firmware.py … modules`` — compile every in-tree native ``.so``; ``pack`` wraps ``.mhub``
+* ``tools/pack_store_module.py mhmd`` — the MHMD wrap ( ``pack`` skips a native
+  module and emits no ``.mhub``)
+* ``tools/sync_store_catalog.py --from-store`` — rewrite ``catalog.json`` for the
+  ``.mhub`` files already in the store directory (also in ``module_sdk.zip``); a
+  native module gets no folder unless you write the entry yourself
+* ``tools/build_firmware.py … modules`` — compile every in-tree native ``.so`` and
+  wrap it; nothing is published to ``Stores/``
 * ``tools/check_plugin_sdk.py`` — Host-side SDK vs allowlist check
 * IDE MCP: ``python3 tools/minihub_plugin_mcp.py`` (scaffold / validate / pack;
   does not cross-compile ``.so``)
@@ -199,6 +230,10 @@ keeps only runtime/environment info.
 
    extern const minihub_adapter_t my_adapter;
 
+   /* The vtable belongs to Host and is only valid while the module is loaded:
+    * keep it in a file static and call through it from init / start / poll. */
+   static const minihub_module_host_api_t *s_host;
+
    esp_err_t minihub_module_entry(
        const minihub_module_host_api_t *host,
        const cJSON *config,
@@ -207,7 +242,7 @@ keeps only runtime/environment info.
        if (!out_adapter) {
            return ESP_ERR_INVALID_ARG;
        }
-       my_module_set_host(host);   /* save vtable for points/commands */
+       s_host = host;   /* save vtable for points/commands */
        (void)config;
        *out_adapter = &my_adapter;
        return ESP_OK;
@@ -222,7 +257,9 @@ Optional RPC (``POST /api/modules/ID/rpc``):
 Host vtable (``minihub_module_host_api_t``)
 -------------------------------------------
 
-Modules must call Host only through the table passed to ``minihub_module_entry``:
+Prefer the table handed to ``minihub_module_entry`` for Core services: the vtable
+is the versioned contract. Symbols on the export allowlist may be linked directly;
+only symbols outside the allowlist fail to link. The table covers:
 
 * ``point_register`` / ``point_unregister`` / ``point_get`` / ``point_set`` —
   one device one point; put live params in ``props`` (``params.NAME``).
@@ -242,8 +279,10 @@ Vtable types are in that SDK header (and :doc:`../api/module_abi`).
 Symbol allowlist
 ----------------
 
-Undefined symbols in the ``.so`` must resolve against Host exports listed in
-``docs/module_sdk/host_export_allowlist.json``. Declarations come from
+A module runs inside a process it does not control, so it may call only what the
+Host publishes. Every undefined symbol in the ``.so`` has to resolve against the
+Host exports listed in ``docs/module_sdk/host_export_allowlist.json``, and the
+Host refuses to load the image when one does not. Declarations come from
 ``minihub_plugin_sdk.h``; do not write ``extern`` by hand. **Excluded:**
 Wi-Fi / Zigbee / BLE Mesh / Matter radio APIs and httpd URI registration.
 Full list: :ref:`l3-host-export-allowlist`.
@@ -260,19 +299,22 @@ cannot drift from IDF/MiniHub layouts or the allowlist.
 Install and debug
 -----------------
 
+If ``my_native`` is in the store folder because you placed it there yourself
+(step 4), open **Store** in the Web UI at ``http://HUB/``, refresh the catalog and
+install it: the install reloads the Hub as it goes (send ``"reload": false`` to
+skip that). A module that comes in disabled is switched on with **Enable**, which
+reloads the same way. Factory ``store_preinstall`` modules are already loaded at
+boot, so there the console only has to show the card.
+
+A module that crashes while loading would otherwise crash the Hub on every
+restart, so Host writes ``/store/modules/my_native/.load_guard`` = ``loading``
+and skips that module on the next boot. Clear it once the bug is fixed:
+
 .. code-block:: bash
 
-   curl -X POST http://$HUB/api/store/install -H 'Content-Type: application/json' \
-     -d '{"type":"module","id":"my_native"}'
-   curl -X POST http://$HUB/api/modules -H 'Content-Type: application/json' \
-     -d '{"id":"my_native","enabled":true,"reload":true}'
-
-If load crashes, Host writes ``/store/modules/my_native/.load_guard`` = ``loading``
-and skips the module on next boot. Clear it:
-
-.. code-block:: bash
-
-   curl -X POST http://$HUB/api/modules -H 'Content-Type: application/json' \
+   export HUB=<hub-ip>          # from the eth got IP log line; log in once with -c/-b
+   curl -s -b /tmp/mh -X POST http://$HUB/api/modules \
+     -H 'Content-Type: application/json' \
      -d '{"id":"my_native","clear_load_guard":true,"reload":true}'
 
 Common failures:
