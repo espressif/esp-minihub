@@ -20,10 +20,11 @@ nor a Node process.
 
 The differences that bite a JavaScript developer:
 
-* One file, no module system. The Host evaluates ``main.js`` as a global script
-  (``JS_Eval(..., JS_EVAL_TYPE_GLOBAL)`` in ``minihub_js.c``), so ``import`` and
-  ``require`` resolve to nothing, and there is no file-read Host API either — one
-  file really has to be one file.
+* One file, no module system. The Host runs each ``main.js`` inside its own
+  function (``minihub_js.c``), so a top-level ``function`` or ``var`` belongs to
+  that module and does not replace the same name in another module. ``import``
+  and ``require`` still resolve to nothing, and there is no file-read Host API
+  either — one file really has to be one file.
 * No ``console`` and no ``print``. Logging goes to ``host.log.info`` /
   ``host.log.warn`` / ``host.log.error``.
 * No ``fetch``, no ``XMLHttpRequest``, no file system. Outbound HTTP is

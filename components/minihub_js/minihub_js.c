@@ -2543,6 +2543,30 @@ static void dump_exception(JSContext *ctx)
     JS_FreeValue(ctx, exc);
 }
 
+/* Every main.js shares one JSContext. A raw global eval would let the next
+ * module replace function setup / handleCommand, and closures registered by
+ * the previous module would call the new function. Run each file in its own
+ * function so those names stay with that module. The tail publishes setup on
+ * the real global under a reserved key; the caller clears it. */
+static char *wrap_module_source(const char *src, size_t len, size_t *out_len)
+{
+    static const char head[] = "(function(){\n";
+    static const char tail[] =
+        "\n;if(typeof setup==='function')globalThis.__mh_mod_setup=setup;\n})();\n";
+    size_t total = (sizeof(head) - 1) + len + (sizeof(tail) - 1);
+    char *buf = malloc(total + 1);
+    if (!buf) {
+        return NULL;
+    }
+    memcpy(buf, head, sizeof(head) - 1);
+    memcpy(buf + (sizeof(head) - 1), src, len);
+    memcpy(buf + (sizeof(head) - 1) + len, tail, sizeof(tail));
+    if (out_len) {
+        *out_len = total;
+    }
+    return buf;
+}
+
 static esp_err_t run_module_script(const char *id, const char *script_path)
 {
     size_t len = 0;
@@ -2552,17 +2576,30 @@ static esp_err_t run_module_script(const char *id, const char *script_path)
         return ESP_FAIL;
     }
 
-    JSValue ev = JS_Eval(s_ctx, src, len, script_path, JS_EVAL_TYPE_GLOBAL);
+    size_t wrapped_len = 0;
+    char *wrapped = wrap_module_source(src, len, &wrapped_len);
     free(src);
+    if (!wrapped) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    JSValue global = JS_GetGlobalObject(s_ctx);
+    JS_SetPropertyStr(s_ctx, global, "__mh_mod_setup", JS_UNDEFINED);
+
+    /* Filename stays the real main.js. The wrapper adds one line, so exception
+     * line numbers are one past the source. */
+    JSValue ev = JS_Eval(s_ctx, wrapped, wrapped_len, script_path, JS_EVAL_TYPE_GLOBAL);
+    free(wrapped);
     if (JS_IsException(ev)) {
         dump_exception(s_ctx);
         JS_FreeValue(s_ctx, ev);
+        JS_FreeValue(s_ctx, global);
         return ESP_FAIL;
     }
     JS_FreeValue(s_ctx, ev);
 
-    JSValue global = JS_GetGlobalObject(s_ctx);
-    JSValue setup = JS_GetPropertyStr(s_ctx, global, "setup");
+    JSValue setup = JS_GetPropertyStr(s_ctx, global, "__mh_mod_setup");
+    JS_SetPropertyStr(s_ctx, global, "__mh_mod_setup", JS_UNDEFINED);
     JS_FreeValue(s_ctx, global);
     if (!JS_IsFunction(s_ctx, setup)) {
         ESP_LOGW(TAG, "module %s: no setup(host) function", id);

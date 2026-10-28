@@ -28,8 +28,9 @@ host 对象
 模块入口
 --------
 
-Hub 在模块加载及每次 ``POST /api/hub/reload`` 后对 enabled 的 JS 模块调用全局函数
+Hub 在模块加载及每次 ``POST /api/hub/reload`` 后对 enabled 的 JS 模块调用
 ``setup(host)``。``main.js`` 必须定义 ``setup``；缺失则打 warning 并跳过模块。
+每个模块的顶层名字只留在这个模块里。
 
 在 ``setup`` 中为模块 id 使用独立 ``point_id`` 前缀；重载时会再次调用，避免重复注册。
 **一台设备登记一条点** （``模块.设备``），不要按参数再拆点。

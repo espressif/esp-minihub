@@ -18,9 +18,10 @@ L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
 
 真正会绊住 JavaScript 开发者的几点：
 
-* 只有一个文件，没有模块系统。Host 用 ``JS_Eval(..., JS_EVAL_TYPE_GLOBAL)``
-  （见 ``minihub_js.c`` ）把 ``main.js`` 当全局脚本执行，所以 ``import`` 和
-  ``require`` 什么都解析不到；也没有读文件的 Host 接口 —— 一个文件就得真的写完一个文件。
+* 只有一个文件，没有模块系统。Host 把每个 ``main.js`` 放进各自的函数里执行
+  （见 ``minihub_js.c`` ），顶层的 ``function`` 和 ``var`` 只属于这个模块，不会盖掉
+  另一个模块里的同名函数。``import`` 和 ``require`` 仍然什么都解析不到；也没有
+  读文件的 Host 接口 —— 一个文件就得真的写完一个文件。
 * 没有 ``console``，也没有 ``print``。打日志用 ``host.log.info`` /
   ``host.log.warn`` / ``host.log.error``。
 * 没有 ``fetch``、没有 ``XMLHttpRequest``、没有文件系统。出网走

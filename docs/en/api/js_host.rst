@@ -31,9 +31,9 @@ methods under it.
 Module entry
 ------------
 
-Hub calls global ``setup(host)`` once per enabled JS module on load and on each
+Hub calls ``setup(host)`` once per enabled JS module on load and on each
 ``POST /api/hub/reload``. ``main.js`` must define ``setup``; otherwise the module is
-skipped with a warning.
+skipped with a warning. Each module's top-level names stay in that module.
 
 Use a distinct ``point_id`` prefix per module id in ``setup``; reload runs ``setup`` again.
 Register **one point per device** (``module.device``), not one point per parameter.
