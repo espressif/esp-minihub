@@ -159,6 +159,12 @@ def packaged_manifest(
     out.pop("capabilities", None)
     out.pop("ui", None)
     out.pop("ui_file", None)
+    # ABI bounds belong to a native image. A JS manifest that still lists them
+    # would cap core_api_max and fail the loader after a Host ABI bump.
+    if is_js_module(out, module_dir):
+        out.pop("abi_version", None)
+        out.pop("core_api_min", None)
+        out.pop("core_api_max", None)
     need_binary = (
         so
         and so.is_file()

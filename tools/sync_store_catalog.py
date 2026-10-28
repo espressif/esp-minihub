@@ -293,22 +293,6 @@ def catalog_entry(
             entry["adapter_version"] = av
 
     entry["targets"] = targets
-
-    # meta.json is the canonical home for ``ui`` + ``capabilities`` (module.json
-    # keeps only runtime/env info). Surface them into the served catalog so the
-    # web console can render the adapter's login/sync UI from /api/store/catalog.
-    if pkg.is_file():
-        try:
-            with zipfile.ZipFile(pkg) as _zf:
-                if "meta.json" in _zf.namelist():
-                    _meta = json.loads(_zf.read("meta.json"))
-                    if isinstance(_meta.get("ui"), dict):
-                        entry["ui"] = _meta["ui"]
-                    if isinstance(_meta.get("capabilities"), list):
-                        entry["capabilities"] = _meta["capabilities"]
-        except (OSError, zipfile.BadZipFile, json.JSONDecodeError):
-            pass
-
     return entry
 
 

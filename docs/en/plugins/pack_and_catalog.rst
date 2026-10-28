@@ -72,8 +72,9 @@ Pack commands
 After the ``.mhub`` files are already in the store directory (for example
 ``~/workspace/minihub_store/Stores/Common/ble_mesh_pack/ble_mesh_pack.mhub``), run
 ``sync_store_catalog.py`` (``--from-store`` is the default). It walks each
-``Stores/Common/ID/ID.mhub``, reads ``module.json`` and ``meta.json`` (the latter
-holds ``ui`` + ``capabilities``), and writes ``catalog.json`` beside that package.
+``Stores/Common/ID/ID.mhub``, reads ``module.json``, and writes ``catalog.json``
+beside that package. ``ui`` and ``capabilities`` stay in the package
+``meta.json``.
 Plugin sources are not required.
 ``GET /api/catalog`` aggregates those objects;
 copying a zip alone does not update the catalog. Default deploy root is
