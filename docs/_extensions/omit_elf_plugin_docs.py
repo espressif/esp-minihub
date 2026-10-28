@@ -100,6 +100,8 @@ def _on_missing(app, env, node, contnode):
 
 _L3_MARKERS = (
     "L3",
+    "minihub-plugin-l3",
+    "develop_l3",
     "module_abi",
     "plugin_host",
     "plugin_sdk",
@@ -110,13 +112,32 @@ _L3_MARKERS = (
 )
 
 
+def _drop(node: nodes.Node) -> None:
+    """Remove ``node``, and its list too if that list became empty."""
+    parent = node.parent
+    if parent is None:
+        return
+    parent.remove(node)
+    if isinstance(parent, (nodes.bullet_list, nodes.enumerated_list)) and not parent.children:
+        _drop(parent)
+
+
 def _strip_generated(app, doctree, docname) -> None:
-    """Drop L3 sentences that Doxygen copied into the C API pages."""
+    """Drop L3 material from a build that publishes no L3 chapters.
+
+    Filtering sentence by sentence is right for a paragraph and wrong for a bullet:
+    cutting the sentence that carries the tier label leaves a bullet with no label,
+    or an empty ``<li>`` when the paragraph is one sentence (Chinese has no ". ").
+    A bullet goes whole.
+    """
     if "hide_l3" not in app.tags:
         return
     for node in list(doctree.findall(nodes.paragraph)):
         text = node.astext()
         if not any(marker in text for marker in _L3_MARKERS):
+            continue
+        if isinstance(node.parent, nodes.list_item):
+            _drop(node.parent)
             continue
         kept = []
         for sentence in text.split(". "):
@@ -127,7 +148,7 @@ def _strip_generated(app, doctree, docname) -> None:
                 sentence += "."
             kept.append(sentence)
         if not kept:
-            node.parent.remove(node)
+            _drop(node)
             continue
         node.clear()
         node += nodes.Text(" ".join(kept))

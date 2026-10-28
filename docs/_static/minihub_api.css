@@ -60,3 +60,99 @@
   margin-bottom: 0.25em;
   margin-top: 0.25em;
 }
+
+/* Tables — most of the reference pages are tables, so the row grid has to carry
+   the structure instead of a wall of hairlines. Docutils emits
+   <table class="docutils"> inside .rst-content, and the theme sets cell padding
+   and borders through selectors as specific as
+   ``html.writer-html5 .rst-content table.docutils th``, so the rules that have to
+   win against those carry the same prefix. */
+html.writer-html5 .rst-content table.docutils {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+html.writer-html5 .rst-content table.docutils td,
+html.writer-html5 .rst-content table.docutils th {
+  border: none;
+  border-bottom: 1px solid #e1e4e5;
+  padding: 0.55em 0.85em;
+  vertical-align: top;
+}
+
+html.writer-html5 .rst-content table.docutils thead th {
+  background: #eef4f9;
+  border-bottom: 2px solid #6ab0de;
+  font-weight: 700;
+}
+
+table.docutils thead th:first-child {
+  border-top-left-radius: 6px;
+}
+
+table.docutils thead th:last-child {
+  border-top-right-radius: 6px;
+}
+
+table.docutils tbody tr:nth-child(even) {
+  background: #f7f9fa;
+}
+
+table.docutils tbody tr:hover {
+  background: #e7f2fa;
+}
+
+/* Centered figures are the generated diagrams: frame them as a panel so the eye
+   treats the whole drawing as one object. Device-type icons sit in table cells
+   and are never align-center, so they keep their own tile look. */
+img.align-center {
+  display: block;
+  margin: 1em auto;
+  border: 1px solid #dfe3e6;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(20, 32, 46, 0.07);
+}
+
+/* Type-catalog tables: bigger, centered icon column; a left accent bar on hover
+   so a long table still reads as rows the eye can track. */
+html.writer-html5 .rst-content table.docutils.mh-catalog td:first-child {
+  width: 92px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+html.writer-html5 .rst-content table.docutils.mh-catalog td:first-child img {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(20, 32, 46, 0.10);
+}
+
+html.writer-html5 .rst-content table.docutils.mh-catalog tbody tr:hover {
+  background: #e7f2fa;
+  box-shadow: inset 3px 0 0 #1c8fb8;
+}
+
+/* Colorful chips produced by the :chip: role in the generated catalog. The color
+   is set per word by the role (mh-chip-0..9), so this is only the palette. */
+.mh-chip {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 0.82em;
+  font-weight: 600;
+  line-height: 1.7;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.mh-chip-0 { background: #e8362d; }
+.mh-chip-1 { background: #1c8fb8; }
+.mh-chip-2 { background: #0ca678; }
+.mh-chip-3 { background: #c77f0a; }
+.mh-chip-4 { background: #7c5cff; }
+.mh-chip-5 { background: #d6336c; }
+.mh-chip-6 { background: #0a84ff; }
+.mh-chip-7 { background: #30d158; }
+.mh-chip-8 { background: #ff9f0a; }
+.mh-chip-9 { background: #5e5ce6; }

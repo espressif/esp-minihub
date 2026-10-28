@@ -1,6 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <rect width="96" height="96" rx="20" fill="#1C1C1E"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#26262B"/>
+      <stop offset="1" stop-color="#141417"/>
+    </linearGradient>
+    <radialGradient id="hi" cx="0.30" cy="0.24" r="0.95">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.12"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="br" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#64D2FF" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#64D2FF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .br{transform-box:fill-box;transform-origin:center;animation:breathe 4.5s ease-in-out infinite}
+    @keyframes breathe{0%{opacity:.22;transform:scale(.94)}50%{opacity:.58;transform:scale(1.06)}100%{opacity:.22;transform:scale(.94)}}
+    @media (prefers-reduced-motion:reduce){.br{animation:none;opacity:.38}}
+  </style>
+  <rect width="96" height="96" rx="22" fill="url(#bg)"/>
+  <rect width="96" height="96" rx="22" fill="url(#hi)"/>
+  <circle class="br" cx="48" cy="50" r="34" fill="url(#br)"/>
   <path d="M48 22 C48 22 32 40 32 52 a16 16 0 0 0 32 0 C64 40 48 22 48 22 z" fill="#64D2FF"/>
   <circle cx="42" cy="54" r="4" fill="#1C1C1E" opacity="0.55"/>
   <path d="M28 72 q6-5 12 0 t12 0 t12 0" stroke="#64D2FF" stroke-width="4" fill="none" stroke-linecap="round"/>
