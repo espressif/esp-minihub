@@ -37,8 +37,14 @@ Vendor cloud tokens stay in the plugin, never in Host Core.
 Config only. No `main.js`, no `CMakeLists.txt`, no `.so`.
 
 - `type`: `"pack"`, `runtime`: `"pack"` (or `config_only: true`)
-- `inject.adapter` must be an **existing Host** adapter: mqtt, zigbee, ble_mesh, modbus, matter, thread
+- `inject.adapter` names the `adapters.json` block to merge into. The bundled
+  adapters are mqtt, zigbee, ble_mesh, modbus, matter, thread, wifi; the merge
+  creates an unknown key and enables it, but nothing talks to it unless an
+  L2/L3 module registers that adapter name.
 - L1 does **not** add a new radio stack (that is Host or L3)
+- Merge rules: `devices[]` is appended; `provision.uuid_filters` /
+  `provision.bind_models` are appended; every other key is replaced whole
+- A pack is skipped when the target adapter block exists with `enabled: false`
 
 Install: pack `.mhub` → catalog URL on the Hub → refresh + install.
 Store config field is `custom_url`, not `url`.
@@ -47,11 +53,15 @@ Store config field is `custom_url`, not `url`.
 
 Needs Host `CONFIG_MINIHUB_DYNAMIC_MODULES` and `CONFIG_MINIHUB_JS_PLUGINS`.
 
-- `type`: `"module"`, `runtime`: `"js"`
-- Entry: `main.js` (QuickJS). Optional `ui.json` / `web/`
+- `type`: `"module"`, `runtime`: `"js"` (both required — the loader does not
+  infer JS from `main.js`, and it rejects a manifest with no `adapter`)
+- Entry: `main.js` must define a global `setup(host)`; `host` is not a global
+- Optional `meta.json` for `ui` / `capabilities` (falls back to module.json)
 - Only call documented `host.*` APIs (see topic `js_api`)
 - Do **not** call native Wi-Fi / Zigbee / BLE Mesh / OpenThread APIs from JS
-- `host.command.invoke` is `{ point_id, cmd }` only — **no `params` today**
+  (unreachable anyway: JS can only reach the registered `host.*` bindings)
+- `host.command.invoke({ point_id, cmd, params? })` — `params` is passed to the
+  adapter; blocking `host.http.request` occupies the single JS worker
 """,
     "l3": """# L3 native
 
@@ -75,25 +85,42 @@ Load guard: `/store/modules/<id>/.load_guard`. Clear with
     "js_api": """# L2 host.* API (from minihub_js.c — do not invent)
 
 ```
-host.log.info(msg)
-host.log.warn(msg)
-host.log.error(msg)
+host.log.info(msg) / warn(msg) / error(msg)
 
-host.point.register({ point_id, type?, adapter?, value?, online? })
-  // type default "sensor"; adapter default "js"
-host.point.get(point_id) → { point_id, type, value, adapter, online } | null
-host.point.set(point_id, value)
+host.point.register({ point_id, type?, adapter?, value?, online?, props? | params? })
+  // point_id required; type defaults "sensor"; adapter defaults "js";
+  // params is shorthand for { params: <obj> } inside props
+host.point.get(point_id) → { point_id, type, value, adapter, online, props } | null
+host.point.set(point_id, value, props?)      // throws if the point is unknown
+host.point.unregister(point_id)
+host.point.mergeProps(point_id, props)       // keeps other top-level props keys
+host.point.mergeParams(point_id, params)     // writes props.params only
 
-host.command.invoke({ point_id, cmd })   // no params field
+host.command.on(adapter_name, handler)
+host.command.invoke({ point_id, cmd, params? })   // throws on failure
 
-host.http.request({ url, method?, body?, timeout_ms? })
-  → { status, body }
-  // method: GET (default), POST, PUT
+host.event.subscribe(name_or_star, handler)       // max 8 subscriptions
+host.timer.setTimeout(fn, ms) / clearInterval / clearTimeout  // max 16 timers
+host.adapter.poll(fn) / host.adapter.clearPoll()  // max 8, ~5 s tick, runs on the JS worker
+host.time.offsetMin() / host.time.id()
 
-host.config.get() → adapters JSON (or null)
+host.http.request({ url, method?, headers?, body?, timeout_ms?, response_b64? })
+  → { status, body }   // blocking ON THE JS worker; there is no URL allowlist
+host.http.requestAsync(opts) → Promise            // max 4 in flight, I/O off the worker
+
+host.config.get() → merged adapters JSON (or null)
+host.config.save(root)
+
+host.module.rpc(moduleId, method, params?)        // call another module's RPC
+host.module.registerRpc(method, handler)          // only inside setup(host)
+host.net.udp.open({ port }) / close(h) / sendto(h, {…}) / recvfrom(h, { timeout_ms, max_len })
+host.crypto.md5 / sha1 / sha256 / hmacSha256 / aes128CbcEncrypt / aes128CbcDecrypt
 ```
 
-Do not add `host.wifi`, `esp_wifi_*`, or extra command fields.
+All of this runs on one `js_worker` task shared by every L2 module: a blocking
+`host.http.request`, a long poll callback or a slow RPC handler stalls the other
+modules and their timers. Prefer `requestAsync`. Do not invent `host.*` names —
+anything not listed above does not exist.
 """,
     "pack": """# Pack and install
 

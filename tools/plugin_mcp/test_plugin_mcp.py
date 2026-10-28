@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import struct
 import sys
 import tempfile
 import unittest
@@ -14,11 +15,12 @@ TOOLS = Path(__file__).resolve().parent.parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
+from pack_store_module import MHMD_MAGIC
 from plugin_mcp.knowledge import guide
 from plugin_mcp.pack_local import pack_plugin_dir
 from plugin_mcp.scaffold import scaffold_plugin
 from plugin_mcp.server import call_tool, handle
-from plugin_mcp.validate import validate_module_json, validate_plugin_dir
+from plugin_mcp.validate import validate_js_source, validate_module_json, validate_plugin_dir
 
 
 class PluginMcpTests(unittest.TestCase):
@@ -88,6 +90,103 @@ class PluginMcpTests(unittest.TestCase):
         self.assertIsNone(
             handle({"jsonrpc": "2.0", "method": "notifications/initialized"})
         )
+
+    def test_adapter_required_like_loader(self) -> None:
+        """The device rejects a manifest with no adapter — so must we."""
+        issues = validate_module_json(
+            {"id": "my_js", "type": "module", "runtime": "js"}
+        )
+        self.assertTrue(
+            any(i["level"] == "error" and "adapter" in i["message"] for i in issues),
+            issues,
+        )
+
+    def test_runtime_not_inferred_from_main_js(self) -> None:
+        """minihub_js only starts QuickJS for runtime "js"/"hybrid"."""
+        issues = validate_module_json({"id": "my_js", "type": "module", "adapter": "my_js"})
+        self.assertTrue(
+            any(i["level"] == "error" and "runtime" in i["message"] for i in issues),
+            issues,
+        )
+
+    def test_command_invoke_params_is_legal(self) -> None:
+        """minihub_js.c reads params, so flagging it is a false positive."""
+        self.assertEqual(
+            validate_js_source(
+                "function setup(host) {\n"
+                '  host.command.invoke({ point_id: "a.b", cmd: "set", params: { v: 1 } });\n'
+                "}\n"
+            ),
+            [],
+        )
+
+    def test_js_without_setup_and_top_level_host_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "no_setup"
+            scaffold_plugin(tier="l2", module_id="no_setup", out_dir=str(dest), force=True)
+            (dest / "main.js").write_text(
+                'host.log.info("loaded");\n', encoding="utf-8"
+            )
+            msgs = " ".join(i["message"] for i in validate_plugin_dir(dest)["issues"])
+            self.assertIn("setup", msgs)
+            self.assertIn("file level", msgs)
+
+    def test_l2_template_satisfies_the_loader(self) -> None:
+        """A scaffolded L2 must actually load: adapter present, setup(host) defined,
+        and no host.* use before setup."""
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "scaffold_js"
+            result = scaffold_plugin(tier="l2", module_id="scaffold_js", out_dir=str(dest))
+            manifest = json.loads((dest / "module.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest.get("adapter"), "scaffold_js")
+            self.assertEqual(manifest.get("runtime"), "js")
+            self.assertIn("function setup(host)", result["files"]["main.js"])
+            report = validate_plugin_dir(dest)
+            self.assertTrue(report["ok"], report)
+
+    def test_pack_carries_meta_json(self) -> None:
+        """meta.json is the canonical home of ui + capabilities."""
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "pack_js"
+            scaffold_plugin(tier="l2", module_id="pack_js", out_dir=str(dest))
+            packed = pack_plugin_dir(dest)
+            self.assertTrue(packed["ok"], packed)
+            with zipfile.ZipFile(packed["pack"]) as zf:
+                self.assertIn("meta.json", zf.namelist())
+                # ui/capabilities must not stay in the packaged module.json
+                manifest = json.loads(zf.read("module.json").decode("utf-8"))
+                self.assertNotIn("capabilities", manifest)
+                self.assertNotIn("ui", manifest)
+
+    def test_pack_wraps_native_so_with_mhmd(self) -> None:
+        """The device validates the MHMD header on the packed .so — a bare linker
+        output installs with ESP_ERR_INVALID_CRC."""
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "my_native"
+            dest.mkdir()
+            (dest / "module.json").write_text(
+                json.dumps(
+                    {
+                        "id": "my_native",
+                        "name": "Native",
+                        "version": "0.1.0",
+                        "type": "module",
+                        "runtime": "native",
+                        "adapter": "my_native",
+                        "binary": "my_native.so",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (dest / "my_native.so").write_bytes(b"\x7fELF" + b"\x00" * 64)
+            packed = pack_plugin_dir(dest)
+            self.assertTrue(packed["ok"], packed)
+            with zipfile.ZipFile(packed["pack"]) as zf:
+                payload = zf.read("my_native.so")
+                manifest = json.loads(zf.read("module.json").decode("utf-8"))
+            self.assertEqual(struct.unpack("<I", payload[:4])[0], MHMD_MAGIC)
+            self.assertEqual(manifest.get("binary"), "my_native.so")
+            self.assertEqual(manifest.get("binary_size"), len(payload))
 
 
 if __name__ == "__main__":

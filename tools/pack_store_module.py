@@ -177,6 +177,39 @@ def packaged_manifest(
     return out
 
 
+def build_package_meta(module_dir: Path, manifest: dict) -> dict:
+    """Assemble meta.json for the package.
+
+    Read meta.json from the module dir (preferred); fall back to legacy
+    module.json capabilities + ui.json for old sources.
+    """
+    meta: dict = {}
+    meta_path = module_dir / "meta.json"
+    if meta_path.is_file():
+        try:
+            loaded = json.loads(meta_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                meta = loaded
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"WARN: bad {meta_path}: {exc}", file=sys.stderr)
+    if "capabilities" not in meta:
+        caps = manifest.get("capabilities")
+        if isinstance(caps, list):
+            meta["capabilities"] = caps
+    if "ui" not in meta:
+        if isinstance(manifest.get("ui"), dict):
+            meta["ui"] = manifest["ui"]
+        else:
+            ui_fname = manifest.get("ui_file") or "ui.json"
+            ui_file = module_dir / ui_fname
+            if ui_file.is_file():
+                try:
+                    meta["ui"] = json.loads(ui_file.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    print(f"WARN: bad {ui_file}: {exc}", file=sys.stderr)
+    return meta
+
+
 def pack_store_module(
     module_id: str,
     *,
@@ -221,32 +254,8 @@ def pack_store_module(
     )
 
     # meta.json: canonical home for ui + capabilities (module.json keeps only
-    # runtime/environment info). Read meta.json from the module dir (preferred);
-    # fall back to legacy module.json capabilities + ui.json for old sources.
-    meta: dict = {}
-    meta_path = module_dir / "meta.json"
-    if meta_path.is_file():
-        try:
-            loaded = json.loads(meta_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                meta = loaded
-        except (OSError, json.JSONDecodeError) as exc:
-            print(f"WARN: bad {meta_path}: {exc}", file=sys.stderr)
-    if "capabilities" not in meta:
-        caps = manifest.get("capabilities")
-        if isinstance(caps, list):
-            meta["capabilities"] = caps
-    if "ui" not in meta:
-        if isinstance(manifest.get("ui"), dict):
-            meta["ui"] = manifest["ui"]
-        else:
-            ui_fname = manifest.get("ui_file") or "ui.json"
-            ui_file = module_dir / ui_fname
-            if ui_file.is_file():
-                try:
-                    meta["ui"] = json.loads(ui_file.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError) as exc:
-                    print(f"WARN: bad {ui_file}: {exc}", file=sys.stderr)
+    # runtime/environment info).
+    meta = build_package_meta(module_dir, manifest)
 
     with zipfile.ZipFile(pkg_path, "w", compression=compression) as zf:
         zf.writestr(
@@ -355,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_pack = sub.add_parser(
         "pack",
-        help="Pack plugin dir → Stores/<chip-or-Common>/<id>/<id>.mhub",
+        help="Pack L1/L2 plugin dir → Stores/Common/<id>/<id>.mhub",
     )
     p_pack.add_argument("module_id", nargs="+", help="module id(s), or 'all'")
     p_pack.add_argument(

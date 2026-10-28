@@ -19,7 +19,8 @@ fails at generation time instead of rendering silently wrong on the Hub:
               Plugins cannot ship their own artwork, so anything unknown is an
               error, not a broken image later.
 * ``ui_element`` must come from the closed widget set
-              (ui.toggle / ui.slider / ui.dropdown / ui.text / ui.hidden).
+              (ui.toggle / ui.slider / ui.dropdown / ui.text / ui.hidden /
+              ui.button).
 * ``css``     must be plain class names (``[A-Za-z0-9_-]`` plus spaces). Anything
               else could smuggle markup into the page.
 
@@ -36,7 +37,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE_DIR = ROOT / "components" / "minihub_device_widget" / "images"
 
-CLOSED_UI = {"ui.toggle", "ui.slider", "ui.dropdown", "ui.text", "ui.hidden"}
+CLOSED_UI = {"ui.toggle", "ui.slider", "ui.dropdown", "ui.text", "ui.hidden",
+             "ui.button"}
 CSS_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*(?: [A-Za-z0-9][A-Za-z0-9_-]*)*$")
 
 # Everything a plugin may set on a parameter entry.  Anything else is a typo

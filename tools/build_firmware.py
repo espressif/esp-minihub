@@ -10,6 +10,7 @@ Usage:
   ./tools/build_firmware.py modules
   ./tools/build_firmware.py pack [all|<id> ...]
   ./tools/build_firmware.py merge
+  ./tools/build_firmware.py lint [-j N] [<file> ...]   (clang-tidy over the IDF build)
 
 Apps (-app / --app; folder under application/):
   minihub         Generic Host (default)
@@ -40,8 +41,12 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
+import tempfile
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # Allow `from build_store_modules import …` when run as ./tools/build_firmware.py
@@ -144,6 +149,7 @@ def usage(code: int = 0) -> None:
   ./tools/build_firmware.py modules
   ./tools/build_firmware.py pack [all|<id> ...]
   ./tools/build_firmware.py merge
+  ./tools/build_firmware.py lint [-j N] [<file> ...]   (clang-tidy over the IDF build)
 
 Apps: minihub (default)
 Product: -app / MINIHUB_APP (application/<name>/)
@@ -208,10 +214,12 @@ def parse_argv(argv: list[str]) -> tuple[str, str, list[str], list[str]]:
             seen_sep = True
             i += 1
             continue
-        if not seen_sep and a in {"module", "modules", "pack"}:
+        if not seen_sep and a in {"module", "modules", "pack", "lint", "clang-tidy"}:
             app = resolve_app(cli_app)
             rest = argv[i + 1 :]
             # `modules` compiles every native plugin .so (no ids). `pack` only wraps.
+            if a in {"lint", "clang-tidy"}:
+                return app, [], ["__lint__", *rest]
             if a == "modules":
                 if rest:
                     print(
@@ -618,6 +626,28 @@ def ensure_thread_stack(stacks: list[str]) -> list[str]:
     return out
 
 
+def ensure_zigbee_stack(stacks: list[str]) -> list[str]:
+    """If ZIGBEE_SDK=y in sdkconfig, pull in the zigbee stack automatically.
+
+    Parity with ensure_thread_stack: a stack enabled in sdkconfig must be present
+    in the resolved list so validate_stacks() can reject a zigbee+thread conflict
+    even when the user only passed the other stack on the CLI (e.g.
+    `tools/build_firmware.py thread build`).
+    """
+    if "zigbee" in stacks:
+        return stacks
+    if not sdkconfig_has("CONFIG_MINIHUB_ZIGBEE_SDK"):
+        return stacks
+    out = list(stacks)
+    out.append("zigbee")
+    print(
+        "CONFIG_MINIHUB_ZIGBEE_SDK=y → adding stack 'zigbee' "
+        "(clear the Kconfig option to build without Zigbee)",
+        flush=True,
+    )
+    return out
+
+
 def sdkconfig_defaults(stacks: list[str]) -> str:
     # Do not list board_manager.defaults here. esp_board_manager 0.5+ injects it.
     features, _board = app_feature_list(ROOT, APP_NAME)
@@ -801,6 +831,10 @@ def shell_bmgr_codegen() -> list[str]:
 
 def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True) -> int:
     local_verbs, idf_args = split_local_verbs(idf_args)
+    # --lint: run clang-tidy over first-party sources after a successful build.
+    do_lint = "--lint" in idf_args or os.environ.get("MINIHUB_LINT") in {"1", "true", "yes"}
+    if "--lint" in idf_args:
+        idf_args = [a for a in idf_args if a != "--lint"]
 
     # merge-only: no idf.py invocation
     if not idf_args:
@@ -812,6 +846,7 @@ def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True
     stacks = drop_sdkconfig_disabled_stacks(stacks)
     stacks = ensure_matter_stack(stacks)
     stacks = ensure_thread_stack(stacks)
+    stacks = ensure_zigbee_stack(stacks)
     validate_stacks(stacks)
     write_stacks_gen(stacks)
     sync_stack_symbols_in_sdkconfig(stacks)
@@ -911,6 +946,9 @@ def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True
     if rc == 0 and "merge" in local_verbs:
         print()
         rc = run_merge_bin()
+    if do_lint and rc == 0:
+        print()
+        rc = run_lint([])
     return rc
 
 
@@ -972,6 +1010,329 @@ def run_module_compile(raw: list[str]) -> int:
     return run_build(list(DEFAULT_STACKS), targets, pack_after=False)
 
 
+# First-party scope mirrors the .clang-tidy HeaderFilterRegex:
+# only components/minihub_* and application/<app>/main are MiniHub-owned code.
+_FIRST_PARTY_RE = re.compile(r"components/minihub_.*|application/[^/]+/main/")
+# Detect the GCC toolchain path so we can point clang at its newlib sysroot.
+_GCC_RE = re.compile(r"(.*)/bin/[^/]*-gcc$")
+
+# GCC / ESP-only flags that stock clang (from Homebrew/apt LLVM) rejects outright.
+# clang-tidy parses with the clang frontend, which does not know these.
+_SANITIZE_DROP_EXACT = {
+    "-fno-tree-switch-conversion",
+    "-fstrict-volatile-bitfields",
+    "-fzero-init-padding-bits=all",
+    "-fno-malloc-dce",
+    "-mno-cm-popret",
+    "-freorder-blocks",
+    "-menable-experimental-extensions",
+    "-fconserve-stack",
+    "-fno-delete-null-pointer-checks",
+    "-fno-allow-store-data-races",
+    "-fno-var-tracking-assignments",
+    "-femit-struct-debug-baseonly",
+    "-fno-ipa-sra",
+    "-fno-ipa-cp-clone",
+    "-fno-partial-inlining",
+    "-fno-optimize-sibling-calls",
+    "-fno-tree-vrp",
+    "-fno-tree-dse",
+    "-fallocation-dce",
+    "-fno-tree-dominator-opts",
+    "-fno-tree-cselim",
+    "-fno-tree-phiprop",
+    "-fno-tree-ccp",
+    "-fno-tree-copy-prop",
+    "-fno-tree-dce",
+    "-fno-tree-fre",
+    "-fno-tree-sink",
+    "-fno-tree-loop-if-convert",
+    "-fno-tree-loop-distribution",
+    "-fno-tree-loop-vectorize",
+    "-fno-tree-slp-vectorize",
+    "-fno-tree-switch-conversion",
+    "-fno-tree-tail-merge",
+    "-fno-tree-pre",
+    "-fno-tree-forwprop",
+    "-fno-tree-phiopt",
+    "-fno-tree-pta",
+    "-fno-tree-ealias",
+    "-fno-tree-store-ccp",
+    "-fno-tree-store-copy-prop",
+    "-fgcse",
+    "-fgcse-sm",
+    "-fgcse-las",
+    "-fno-tree-loop-im",
+    "-fno-tree-loop-unswitch",
+    "-fno-tree-loop-unroll",
+    "-fno-tree-loop-ivcanon",
+    "-fno-tree-loop-optimize",
+    "-fno-tree-ch",
+    "-fno-tree-ssa",
+    "-fno-tree-coalesce-vars",
+    "-fno-tree-copyrename",
+    "-fno-tree-sra",
+    "-fno-tree-ter",
+    "-fno-tree-lrs",
+    "-fno-tree-sink",
+    "-fno-tree-dse",
+    "-fno-tree-dce",
+}
+
+_WARN_VALUE_RE = re.compile(r"^-W[^=]+=.*$")
+
+
+def _sanitize_command(cmd: str, clang: str = "clang") -> str:
+    """Rewrite a GCC compile command so stock clang can parse it.
+
+    Strips GCC/ESP-only flags, neutralises the ESP RISC-V target/extensions, and
+    switches the driver to a generic ``riscv32`` so clang-tidy can build an AST.
+    The goal is parseability, not faithful codegen — clang-tidy only needs the AST.
+
+    The original compiler token (position 0) is replaced by *clang* (the sibling of
+    clang-tidy). clang-tidy discards position 0 anyway, but keeping a real clang
+    path there prevents it from mis-parsing the command and falling back to an
+    auto-detected compile_commands.json. ``-target riscv32`` is then a normal flag
+    after the compiler.
+
+    GCC ``@file`` response files (used by IDF's toolchain/cflags) are expanded and
+    sanitised too — they commonly hide the ESP ``-march``/``-mcpu`` flags.
+    """
+    try:
+        toks = shlex.split(cmd)
+    except ValueError:
+        toks = cmd.split()
+    if not toks:
+        return cmd
+    # Expand @file response files into the flat token list.
+    expanded: list[str] = []
+    for t in toks:
+        if t.startswith("@"):
+            rsp = t[1:]
+            try:
+                text = Path(rsp).read_text(encoding="utf-8", errors="replace")
+                expanded.extend(shlex.split(text))
+            except OSError:
+                expanded.append(t)  # leave as-is if unreadable
+        else:
+            expanded.append(t)
+    rest = expanded[1:]
+    out: list[str] = [clang, "-target", "riscv32"]
+    i = 0
+    n = len(rest)
+    while i < n:
+        t = rest[i]
+        if t in _SANITIZE_DROP_EXACT:
+            i += 1
+            continue
+        # Drop all -Wno-* (unknown to stock clang => hard error) and -W<name>=<val>.
+        if t.startswith("-Wno-") or _WARN_VALUE_RE.match(t):
+            i += 1
+            continue
+        # Drop -Werror so compiler warnings don't fail clang-tidy.
+        if t == "-Werror" or t.startswith("-Werror="):
+            i += 1
+            continue
+        # Rewrite the ESP RISC-V -march (xesploop/xespv extensions are unknown).
+        if t.startswith("-march="):
+            out.append("-march=rv32imac_zicsr_zifencei")
+            i += 1
+            continue
+        if t == "-march":
+            if i + 1 < n:
+                out.append("-march=rv32imac_zicsr_zifencei")
+                i += 2
+                continue
+        # Neutralise the unknown -mcpu / -mtune (esp32s31).
+        if t.startswith("-mcpu=") or t.startswith("-mtune="):
+            i += 1
+            continue
+        if t == "-mcpu" or t == "-mtune":
+            i += 2
+            continue
+        # Drop GCC -specs= files (picolibc.specs etc.) — unused by clang.
+        if t.startswith("-specs="):
+            i += 1
+            continue
+        out.append(t)
+        i += 1
+    # Point clang at the GCC toolchain's newlib include dirs so system headers
+    # (e.g. <sys/features.h>) resolve — clang does not auto-add gcc's sysroot.
+    for t in expanded:
+        m = _GCC_RE.search(t)
+        if m:
+            root = m.group(1)
+            out.extend(
+                [
+                    "-isystem",
+                    f"{root}/riscv32-esp-elf/include",
+                    "-isystem",
+                    f"{root}/riscv32-esp-elf/sys-include",
+                ]
+            )
+            break
+    return shlex.join(out)
+
+
+def _write_sanitized_compile_commands(src: Path, dst_dir: Path, clang: str = "clang") -> Path:
+    """Copy compile_commands.json, sanitising each command for stock clang."""
+    data = json.loads(src.read_text(encoding="utf-8"))
+    for entry in data:
+        if "command" in entry and entry["command"]:
+            entry["command"] = _sanitize_command(entry["command"], clang)
+    dst = dst_dir / "compile_commands.json"
+    dst.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    return dst
+
+
+def _find_esp_clang_tidy() -> str | None:
+    """Return an ESP-patched clang-tidy (under ~/.espressif/tools/esp-clang) if present."""
+    base = Path(os.path.expanduser("~")) / ".espressif" / "tools" / "esp-clang"
+    if base.is_dir():
+        hits = sorted(base.glob("*/*/bin/clang-tidy"))
+        if hits:
+            return str(hits[0])
+    return None
+
+
+def _project_sources_from_compile_commands(cc: Path) -> list[str]:
+    """First-party source files (components/minihub_* and application/<app>/main)."""
+    data = json.loads(cc.read_text(encoding="utf-8"))
+    seen: set[str] = set()
+    out: list[str] = []
+    for entry in data:
+        f = entry.get("file")
+        if not f:
+            continue
+        ap = os.path.abspath(f)
+        if not _FIRST_PARTY_RE.search(ap):
+            continue
+        if ap in seen:
+            continue
+        seen.add(ap)
+        out.append(ap)
+    return sorted(out)
+
+
+def run_lint(raw: list[str]) -> int:
+    """Run clang-tidy over project sources using the IDF build's compile_commands.json.
+
+    Usage::
+
+        ./tools/build_firmware.py lint                 # all first-party sources
+        ./tools/build_firmware.py lint path/to/file.c  # one or more files
+        ./tools/build_firmware.py lint -j 8           # parallelism
+
+    Requires a successful build first (writes
+    ``application/<app>/build/compile_commands.json``). The repo-root ``.clang-tidy``
+    is auto-discovered; clang-tidy's exit code propagates so CI can gate on it.
+    """
+    cc = BUILD_DIR / "compile_commands.json"
+    if not cc.is_file():
+        print(
+            "ERROR: compile_commands.json not found at "
+            f"{cc}.\nRun a build first: ./tools/build_firmware.py build",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Parse -j/--jobs and explicit file args.
+    jobs = int(os.environ.get("MINIHUB_LINT_JOBS", "4"))
+    explicit: list[str] = []
+    i = 0
+    while i < len(raw):
+        a = raw[i]
+        if a in ("-j", "--jobs") and i + 1 < len(raw):
+            jobs = int(raw[i + 1])
+            i += 2
+            continue
+        if a.startswith("--jobs="):
+            jobs = int(a.split("=", 1)[1])
+            i += 1
+            continue
+        explicit.append(a)
+        i += 1
+
+    if explicit:
+        files = sorted({str(Path(a).resolve()) for a in explicit})
+    else:
+        files = _project_sources_from_compile_commands(cc)
+        if not files:
+            print("No first-party sources found in compile_commands.json.", file=sys.stderr)
+            return 1
+
+    # Prefer the ESP-patched clang-tidy (knows esp32s31). Fall back to stock
+    # clang-tidy and sanitise compile_commands so stock clang can parse it.
+    clang_tidy = _find_esp_clang_tidy()
+    cc_dir = BUILD_DIR
+    tmpdir = None
+    if clang_tidy is None:
+        clang_tidy = shutil.which("clang-tidy")
+        if clang_tidy is None:
+            print(
+                "ERROR: clang-tidy not found on PATH. Install it:\n"
+                "  macOS:   brew install llvm            (stock; parses via sanitised flags)\n"
+                "  Linux:   sudo apt install clang-tidy\n"
+                "  preferred: idf_tools.py install esp-clang   (native esp32s31 support)\n"
+                "Then re-run with clang-tidy on PATH, e.g.\n"
+                '  export PATH="$(brew --prefix llvm)/bin:$PATH"',
+                file=sys.stderr,
+            )
+            return 1
+        tmpdir = tempfile.mkdtemp(prefix="minihub-lint-")
+        clang_bin = str(Path(clang_tidy).with_name("clang"))
+        if not os.path.isfile(clang_bin):
+            clang_bin = "clang"
+        _write_sanitized_compile_commands(cc, Path(tmpdir), clang_bin)
+        cc_dir = Path(tmpdir)
+
+    print("=== clang-tidy ===")
+    print(f"clang-tidy : {clang_tidy}")
+    print(f"build dir  : {BUILD_DIR}")
+    print(f"sources    : {len(files)} file(s)")
+    print(f"jobs       : {jobs}")
+    print("config     : auto-discovered .clang-tidy at repo root")
+    if tmpdir:
+        print("note       : stock clang-tidy — compile_commands sanitised for parseability")
+    print(flush=True)
+
+    failed: list[str] = []
+    lock = threading.Lock()
+
+    def _run(fpath: str) -> int:
+        proc = subprocess.run(
+            [clang_tidy, "-p", str(cc_dir), fpath],
+            cwd=str(ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        out = proc.stdout or ""
+        with lock:
+            if out.strip():
+                print(out.rstrip(), flush=True)
+            if proc.returncode != 0:
+                failed.append(fpath)
+        return proc.returncode
+
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, jobs)) as ex:
+            list(ex.map(_run, files))
+    finally:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    print(flush=True)
+    if failed:
+        print(
+            f"clang-tidy reported issues in {len(failed)} file(s).",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"clang-tidy: clean ({len(files)} file(s), 0 issues).")
+    return 0
+
+
 def main() -> None:
     app, stacks, idf_args = parse_argv(sys.argv[1:])
     set_app(app)
@@ -980,6 +1341,8 @@ def main() -> None:
         raise SystemExit(run_pack(idf_args[1:]))
     if idf_args and idf_args[0] == "__module__":
         raise SystemExit(run_module_compile(idf_args[1:]))
+    if idf_args and idf_args[0] == "__lint__":
+        raise SystemExit(run_lint(idf_args[1:]))
     raise SystemExit(run_build(stacks, idf_args))
 
 

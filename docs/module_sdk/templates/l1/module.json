@@ -6,7 +6,7 @@
   "enabled": true,
   "type": "pack",
   "runtime": "pack",
-  "description": "L1 pack: inject demo MQTT device (Host mqtt adapter must be enabled).",
+  "description": "L1 pack: inject demo MQTT device. The merge creates the adapters.mqtt key if it is missing and enables it.",
   "inject": {
     "adapter": "mqtt",
     "devices": [
