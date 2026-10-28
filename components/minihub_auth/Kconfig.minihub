@@ -9,5 +9,16 @@ menu "Auth"
         string "REST Bearer token (empty = cookie only)"
         depends on MINIHUB_WEB_LOGIN_AUTH
         default ""
+        help
+            Scripts and LAN integrators authenticate with
+            "Authorization: Bearer <this>". Empty by default, so a build from this
+            tree accepts session cookies and the NVS key api_token (namespace
+            minihub) and no shared string at all: a value compiled in here wins
+            over NVS and would be the same on every unit, which is what makes it a
+            product secret rather than a device secret.
+
+            Set it only when every integrator of that deployment is meant to share
+            one token; otherwise leave it empty and provision api_token per device.
+            Clearing it does not disable REST auth: login is still required.
 
 endmenu

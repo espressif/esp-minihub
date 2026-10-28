@@ -89,7 +89,8 @@ const char *minihub_paths_packs_dir(void)
 
 /**
  * Legacy: adapters.thread held Matter devices[].
- * New: adapters.thread is RF/TBR (enabled/dataset/channel) — keep the object.
+ * New: adapters.thread is RF/TBR (enabled + dataset; channel is status-only and
+ * comes from GET /api/thread/status) — keep the object.
  * Migrate devices into matter and strip devices from thread.
  */
 static bool migrate_thread_to_matter(cJSON *adapters_root)

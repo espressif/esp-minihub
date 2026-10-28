@@ -1,5 +1,6 @@
 /*
- * device_widgets.js - data-driven device control surface.
+ * device_widgets.js - data-driven device control surface: the parameter rows in
+ * the device detail modal, plus the catalog lookups Overview and Rules share.
  *
  * HA-like mapping (no per-type C structs):
  *   MiniHub type (e.g. light)     ≈ HA domain
@@ -18,8 +19,8 @@
  *   2. Type catalog from GET /api/device_widgets (labels, widgets, bounds,
  *      device avatar URL). Parameter controls are CSS classes in
  *      device_widgets.css — not /img/parameters mockups.
- * The UI intersects them: only registered, visible params of a live instance
- * are shown. Unreported catalog names stay off the card and the detail.
+ * The UI intersects them: only registered, visible params of a live instance are
+ * shown. Unreported catalog names stay off the detail panel.
  * label/widget come from the catalog keyed by (type, parameter).
  * min/max/step/unit/access default from the catalog style; instance param
  * props override those fields when present (devices.json need not copy the
@@ -38,13 +39,9 @@
 
 let dwCatalog = null;
 
-let dwInstances = [];
-
 let deviceDetailId = null;
 
 let deviceDetailPanel = 'controls';
-
-let dwExpandedKeys = Object.create(null);
 
 const DW_PRIMARY_PARAM = 'power';
 
@@ -320,33 +317,6 @@ async function ensureDwCatalog() {
     return dwCatalog;
 }
 
-async function loadDeviceWidgets() {
-    const el = document.getElementById('devices-content');
-    if (!el) return;
-    try {
-        const [wr, pr] = await Promise.all([
-            fetch(window.mhCatalogUrl('/api/device_widgets')),
-            fetch('/api/points')
-        ]);
-        if (!wr.ok) throw new Error('http ' + wr.status);
-        dwCatalog = await wr.json();
-        let points = [];
-        if (pr.ok) {
-            const next = await pr.json();
-            if (Array.isArray(next)) points = next;
-        }
-
-        if (!points.length && typeof pts !== 'undefined' && Array.isArray(pts) && pts.length) {
-            points = pts;
-        }
-        dwInstances = dwBuildInstances(points);
-    } catch (e) {
-        el.innerHTML = '<div class="modal-hint">' + t('dw.catalog_load_failed', { error: esc(String(e)) }) + '</div>';
-        return;
-    }
-    renderDeviceWidgets();
-}
-
 function dwFindInstance(pointId, points) {
     if (!pointId) return null;
     const list = dwBuildInstances(points != null ? points : (typeof pts !== 'undefined' ? pts : []));
@@ -392,23 +362,6 @@ function toggleDeviceDetailInfo() {
     if (!deviceDetailId) return;
     deviceDetailPanel = deviceDetailPanel === 'info' ? 'controls' : 'info';
     refreshDeviceDetail();
-}
-
-function dwFindModuleForInst(inst) {
-    const list = (typeof modules !== 'undefined' && Array.isArray(modules)) ? modules : [];
-    if (!inst || !list.length) return null;
-    const ad = inst.adapter ? String(inst.adapter) : '';
-    const endpoint = inst.endpoint ? String(inst.endpoint) : '';
-    let m = ad ? list.find(function (x) {
-        return x && (x.adapter === ad || x.id === ad);
-    }) : null;
-    if (m) return m;
-    if (endpoint) {
-        m = list.find(function (x) {
-            return x && (x.id === endpoint || x.adapter === endpoint);
-        });
-    }
-    return m || null;
 }
 
 function dwInfoRowHtml(label, value, opts) {
@@ -715,11 +668,10 @@ function dwFallbackCatalogParam(pname) {
             label: base.label != null ? base.label : pname,
             widget: base.widget || '',
             style: base.style || '{}',
-            image: base.image || '',
-            _fallback: true
+            image: base.image || ''
         };
     }
-    return { parameter: pname, label: pname, widget: '', style: '{}', _fallback: true };
+    return { parameter: pname, label: pname, widget: '', style: '{}' };
 }
 
 function dwLiveIsOn(live) {
@@ -869,7 +821,7 @@ function dwParamRowHtml(type, p, live, opts) {
         (live && (live.min != null || live.max != null || live.step != null)))) {
         widget = 'slider';
     }
-    const isBar = !readOnly && (widget === 'slider' || widget === 'stepper');
+    const isBar = !readOnly && widget === 'slider';
     const gated = dwControlGated(p, opts.inst, readOnly);
     const extraCss = dwCssClass(live && live.css);
     const paramIcon = dwIconUrl(live && live.icon);
@@ -892,7 +844,6 @@ function dwParamRowHtml(type, p, live, opts) {
 
 function dwInstanceCardBody(inst, cat) {
     let visibleCount = 0;
-    let fallbackCount = 0;
     let primary = '';
     let extra = '';
     const order = cat && cat.params ? Object.keys(cat.params) : Object.keys(inst.params || {});
@@ -925,7 +876,6 @@ function dwInstanceCardBody(inst, cat) {
         const row = dwParamRowHtml(inst.type || '', p, live, { inst: inst });
         if (!row) return;
         visibleCount++;
-        if (p && p._fallback) fallbackCount++;
         if (pname === DW_PRIMARY_PARAM) primary += row;
         else extra += row;
     }
@@ -941,105 +891,9 @@ function dwInstanceCardBody(inst, cat) {
     });
     return {
         visibleCount: visibleCount,
-        fallbackCount: fallbackCount,
         primary: primary,
         extra: extra
     };
-}
-
-function dwToggleCardExpand(key, ev) {
-    if (ev) {
-        const t = ev.target;
-        if (t && (t.closest('.dw-ctl') || t.closest('.toggle') || t.closest('input') ||
-            t.closest('button.chip') || t.closest('select') || t.closest('label'))) {
-            return;
-        }
-        ev.preventDefault();
-        ev.stopPropagation();
-    }
-    if (!key) return;
-    if (dwExpandedKeys[key]) delete dwExpandedKeys[key];
-    else dwExpandedKeys[key] = true;
-    const sel = '.dcard.dw-card[data-key="' +
-        String(key).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
-    const card = document.querySelector(sel);
-    if (card) {
-        const open = !!dwExpandedKeys[key];
-        card.classList.toggle('expanded', open);
-        const extra = card.querySelector('.dw-params-extra');
-        if (extra) extra.hidden = !open;
-        const chev = card.querySelector('.dw-expand');
-        if (chev) {
-            chev.setAttribute('aria-expanded', open ? 'true' : 'false');
-            chev.title = open ? t('dw.collapse_params') : t('dw.expand_params');
-        }
-    }
-}
-
-function renderDeviceWidgets() {
-    const el = document.getElementById('devices-content');
-    if (!el) return;
-    const byType = dwCatalogIndex();
-    if (!dwInstances.length) {
-        el.innerHTML = '<div class="modal-hint">' + t('dw.no_devices') + '</div>';
-        return;
-    }
-
-    let html = '';
-    let shown = 0;
-    dwInstances.forEach(function (inst) {
-        const cat = dwCatalogForType(byType, inst.type);
-        const built = dwInstanceCardBody(inst, cat);
-        if (!built.visibleCount) return;
-        shown++;
-        /* Device icon: plugin override (props.icon) > catalog > /img/devices/<type>.svg. */
-        const devIcon = dwIconUrl(inst.props && inst.props.icon);
-        const key = inst.key || inst.point_id || inst.endpoint || '';
-        const expanded = !!dwExpandedKeys[key];
-        const hasExtra = !!built.extra;
-        const offline = inst.online ? '' : ' offline';
-        const image = devIcon || (cat ? cat.image : '');
-        /* Type not in the catalog: rows are built from raw parameter names.
-         * Say so on the card rather than looking like a corrupt catalog. */
-        const missBadge = built.fallbackCount
-            ? '<span class="badge warn" title="' + escAttr(t('dw.type_unregistered_tip')) + '">' + t('dw.type_unregistered') + '</span>'
-            : '';
-        const expandBtn = hasExtra
-            ? ('<button type="button" class="dw-expand" aria-expanded="' +
-                (expanded ? 'true' : 'false') + '" title="' +
-                (expanded ? t('dw.collapse_params') : t('dw.expand_params')) +
-                '" onclick="dwToggleCardExpand(\'' + escAttr(key) + '\', event)"></button>')
-            : '';
-        html += '<div class="dcard dw-card' + offline + (expanded ? ' expanded' : '') +
-            '" data-key="' + escAttr(key) + '"' +
-            (hasExtra ? ' onclick="dwToggleCardExpand(\'' + escAttr(key) + '\', event)"' : '') +
-            '><div class="card-top">' +
-            dwDeviceIconHtml(image) +
-            '<div class="card-name">' +
-            esc((typeof pointDisplayName === 'function')
-                ? pointDisplayName({ point_id: inst.point_id, props: inst.props })
-                : (inst.endpoint || inst.key)) + '</div>' +
-            '<span class="badge">' + esc(inst.type || inst.protocol || 'device') +
-            ' · ' + built.visibleCount + '</span>' +
-            missBadge +
-            expandBtn +
-            '</div>';
-
-        if (built.primary) {
-            html += '<div class="dw-params dw-params-primary">' + built.primary + '</div>';
-        }
-        if (hasExtra) {
-            html += '<div class="dw-params dw-params-extra"' +
-                (expanded ? '' : ' hidden') + '>' + built.extra + '</div>';
-        }
-        html += '</div>';
-    });
-
-    if (!shown) {
-        el.innerHTML = '<div class="modal-hint">' + t('dw.all_params_hidden') + '</div>';
-        return;
-    }
-    el.innerHTML = html;
 }
 
 function dwMergedStyle(p, live) {
@@ -1154,7 +1008,7 @@ function dwParamControl(type, p, live, gated) {
         return '<span class="dw-val">' + esc(display) + esc(unit) + '</span>';
     }
 
-    if (widget === 'slider' || widget === 'stepper') {
+    if (widget === 'slider') {
         const min = (s.min != null) ? s.min : 0;
         const max = (s.max != null) ? s.max : 100;
         const step = (s.step != null) ? s.step : 1;
@@ -1307,11 +1161,6 @@ async function dwSend(device, parameter, value, pointId) {
     } catch (e) {
         toast(t('dw.control_failed', { error: e }));
     }
-}
-
-function dwHuePreview(id, hue) {
-    const el = document.getElementById(id);
-    if (el) el.style.background = 'hsl(' + hue + ',100%,50%)';
 }
 
 function dwRangePreview(id, unit, value) {

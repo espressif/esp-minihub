@@ -1160,6 +1160,12 @@ static void parse_rule(const cJSON *item, rule_t *rule)
                 strncpy(rule->time_at, at->valuestring, sizeof(rule->time_at) - 1);
             }
         }
+        /* when.delay_sec postpones step 0 after the trigger; absent or <= 0 means
+         * run immediately. */
+        const cJSON *when_delay = cJSON_GetObjectItem(when, "delay_sec");
+        if (cJSON_IsNumber(when_delay) && when_delay->valueint > 0) {
+            rule->when_delay_sec = when_delay->valueint;
+        }
     }
 
     if (cJSON_IsArray(if_arr)) {

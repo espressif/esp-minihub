@@ -17,6 +17,10 @@
 
 static const char *TAG = "point_registry";
 
+/* state_store.c keeps per-index publish/debounce timestamps; compaction has to
+ * move them alongside s_points or a reused index inherits a stale window. */
+extern void minihub_point_debounce_shift(size_t from);
+
 #define HASH_SLOTS MINIHUB_MAX_POINTS
 
 EXT_RAM_BSS_ATTR static minihub_point_t s_points[MINIHUB_MAX_POINTS];
@@ -158,6 +162,7 @@ esp_err_t minihub_point_unregister(const char *point_id)
     }
     memset(&s_points[s_point_count - 1], 0, sizeof(minihub_point_t));
     s_point_count--;
+    minihub_point_debounce_shift((size_t)idx);
     hash_rebuild();
     xSemaphoreGive(s_mutex);
     cJSON *data = cJSON_CreateObject();
@@ -197,6 +202,7 @@ esp_err_t minihub_point_unregister_by_adapter(const char *adapter)
         }
         memset(&s_points[s_point_count - 1], 0, sizeof(minihub_point_t));
         s_point_count--;
+        minihub_point_debounce_shift(i);
     }
     if (removed > 0) {
         hash_rebuild();

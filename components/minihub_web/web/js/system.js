@@ -252,8 +252,9 @@ window.hubTzOffsetMin = 0;
 
 function hubTzLabel(id) {
     if (!id || id === 'UTC') return t('sys.tz.utc');
-    const m = /^UTC([+-])(\d+)$/.exec(String(id));
-    if (!m) return String(id);
+    const m = /^UTC([+-])(\d{1,2})(?::(\d{2}))?$/.exec(String(id));
+    // 东/西N区 only names whole hours; a half or quarter hour speaks for itself
+    if (!m || m[3]) return String(id);
     const hour = parseInt(m[2], 10);
     const cn = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四'];
     const zh = window.mhLang && String(window.mhLang).indexOf('zh') === 0;

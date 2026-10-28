@@ -11,7 +11,12 @@ menu "RTSP camera"
     config MINIHUB_RTSP_CAM_DEFAULT_URL
         string "Default RTSP URL"
         depends on MINIHUB_RTSP_CAM
-        default "rtsp://172.168.51.89:554/stream1"
+        default ""
+        help
+            Empty by default: the recorder starts only from a URL that was set at
+            runtime (Web UI, RPC or command, persisted in NVS) and refuses a start
+            otherwise. A compiled-in URL would ship the same camera address in
+            every unit built from this tree.
 
     config MINIHUB_RTSP_CAM_DEFAULT_SEGMENT_SEC
         int "Default segment length (seconds)"

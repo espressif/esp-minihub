@@ -420,13 +420,16 @@ void minihub_event_bus_set_current_owner(const char *owner);
 const char *minihub_event_bus_current_owner(void);
 
 /**
- * @brief Publish an event; ownership of data transfers to Host
+ * @brief Publish an event on the Hub event bus
  *
+ * @note The payload is duplicated into the queued event, so the caller keeps
+ *       ownership of @p data and must free it itself.
  * @note Do not run lengthy work in event handlers; defer to a lower-priority task.
  *
  * @return
- *     - ESP_OK: succeed
- *     - ESP_ERR_NO_MEM: queue full (event may be dropped)
+ *     - ESP_OK: queued
+ *     - ESP_ERR_INVALID_ARG: event_type is NULL
+ *     - ESP_ERR_NO_MEM: queue full (this event dropped)
  */
 esp_err_t minihub_event_bus_publish(const char *event_type, cJSON *data);
 

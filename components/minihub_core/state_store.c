@@ -78,6 +78,29 @@ esp_err_t minihub_point_debounce_init(void)
 }
 #endif
 
+/**
+ * The registry compacts s_points by left-shifting entries from @p from, so this
+ * per-index bookkeeping must move with them. Without it, a point registered into
+ * a freed index inherits the previous occupant's timestamps and its first
+ * minihub_point_set() is silently swallowed (no point.updated, no history).
+ */
+void minihub_point_debounce_shift(size_t from)
+{
+    if (from >= MINIHUB_MAX_POINTS) {
+        return;
+    }
+    for (size_t i = from; i + 1 < MINIHUB_MAX_POINTS; i++) {
+        s_last_publish_ms[i] = s_last_publish_ms[i + 1];
+#if CONFIG_MINIHUB_POINT_DEBOUNCE_MS > 0
+        s_pending_ms[i] = s_pending_ms[i + 1];
+#endif
+    }
+    s_last_publish_ms[MINIHUB_MAX_POINTS - 1] = 0;
+#if CONFIG_MINIHUB_POINT_DEBOUNCE_MS > 0
+    s_pending_ms[MINIHUB_MAX_POINTS - 1] = 0;
+#endif
+}
+
 static bool props_equal(const cJSON *a, const cJSON *b)
 {
     if (a == b) {
