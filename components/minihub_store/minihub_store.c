@@ -24,6 +24,9 @@
 #include "hub_zip.h"
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+#include "esp_crt_bundle.h"
+#endif
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -129,9 +132,8 @@ static void store_default_base_url(char *out, size_t out_len)
         return;
     }
 #if CONFIG_MINIHUB_STORE
-    snprintf(out, out_len, "http://%s:%d",
-             CONFIG_MINIHUB_STORE_SERVER,
-             CONFIG_MINIHUB_STORE_PORT);
+    snprintf(out, out_len, "%s", CONFIG_MINIHUB_STORE_URL);
+    normalize_base_url(out);
 #else
     out[0] = '\0';
 #endif
@@ -709,6 +711,9 @@ static esp_err_t http_get_body(const char *url, char **out_body, size_t *out_len
         .url = url,
         .timeout_ms = 5000,
         .buffer_size = 4096,
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+        .crt_bundle_attach = esp_crt_bundle_attach,
+#endif
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
@@ -717,6 +722,9 @@ static esp_err_t http_get_body(const char *url, char **out_body, size_t *out_len
 
     esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
+        int sock_err = esp_http_client_get_errno(client);
+        ESP_LOGE(TAG, "http_get_body open failed: url=%s err=%s sock_errno=%d (%s)",
+                 url, esp_err_to_name(err), sock_err, strerror(sock_err));
         esp_http_client_cleanup(client);
         return err;
     }
@@ -802,6 +810,9 @@ static esp_err_t http_download_file(const char *url, const char *path)
         .url = url,
         .timeout_ms = 120000,
         .buffer_size = 1024,
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+        .crt_bundle_attach = esp_crt_bundle_attach,
+#endif
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
@@ -1340,6 +1351,9 @@ static esp_err_t http_download_to_psram(const char *url, uint8_t **out, size_t *
         .url = url,
         .timeout_ms = 120000,
         .buffer_size = 1024,
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+        .crt_bundle_attach = esp_crt_bundle_attach,
+#endif
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {

@@ -93,7 +93,7 @@ Deploy layout
    DEPLOY/Stores/Common/ID/ID.mhub
 
 Default ``store_server.py`` listen address: ``http://0.0.0.0:8080``
-(override with ``--port`` or ``MINIHUB_STORE_PORT``).
+(override with ``--port``).
 
 Outer container format: **zip** (``MHUB_PACK_FORMAT``, default ``zip``). Host
 unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).

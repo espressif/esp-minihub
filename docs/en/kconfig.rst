@@ -128,11 +128,12 @@ not a tuning knob:
   become visible and the erase scope in :doc:`production` applies.
 * ``MINIHUB_WEB_LOGIN_AUTH`` — default on. Off, LAN REST is open to anyone who can reach
   port 80.
-* ``MINIHUB_STORE_SERVER`` / ``MINIHUB_STORE_PORT`` — where a device looks for its catalog
-  and firmware. The default is a private lab address (``172.168.10.13:8080``) carried over
-  from development, so a first boot from this tree points at a server most customers do not
-  run; the runtime value is set from the console or ``PUT /api/store/config`` and the
-  compiled default is only the fallback.
+* ``MINIHUB_STORE_URL`` — full URL (scheme + host, no trailing path) where a device looks
+  for its catalog and firmware, e.g. ``https://minihub.espressif.com``. The default points at
+  the public Espressif Store; the runtime value is set from the console or
+  ``PUT /api/store/config`` and the compiled default is only the fallback. The device appends
+  ``/api/catalog`` and ``/files/...`` to this base, so do not include a path such as
+  ``/api/v1/plugins``.
 * The radio-stack symbols (``MINIHUB_MATTER_ADAPTER``, ``MINIHUB_THREAD_ADAPTER``,
   ``MINIHUB_ZIGBEE_SDK``, ``MINIHUB_BLE_MESH_SDK``) — each pulls in a large component and
   changes what ``menuconfig`` can select, so they belong in a product's feature list rather

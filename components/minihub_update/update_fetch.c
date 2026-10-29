@@ -12,6 +12,9 @@
 #include <unistd.h>
 
 #include "esp_http_client.h"
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+#include "esp_crt_bundle.h"
+#endif
 #include "esp_log.h"
 #include "mbedtls/md.h"
 #include "update_internal.h"
@@ -140,6 +143,9 @@ esp_err_t mh_update_http_get(const char *url, char **body, size_t *len, size_t m
         .url = url,
         .timeout_ms = 15000,
         .buffer_size = 4096,
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+        .crt_bundle_attach = esp_crt_bundle_attach,
+#endif
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
@@ -214,6 +220,9 @@ esp_err_t mh_update_download_verified(const char *url, const char *dest,
         .url = url,
         .timeout_ms = 120000,
         .buffer_size = 1024,
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+        .crt_bundle_attach = esp_crt_bundle_attach,
+#endif
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {

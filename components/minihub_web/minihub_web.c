@@ -3021,6 +3021,7 @@ static esp_err_t rules_http_get_body(const char *url, char **out_body, size_t *o
         .url = url,
         .timeout_ms = 8000,
         .buffer_size = 4096,
+        .crt_bundle_attach = esp_crt_bundle_attach,
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {

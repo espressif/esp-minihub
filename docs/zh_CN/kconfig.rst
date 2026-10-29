@@ -118,10 +118,10 @@ MiniHub 的每一个构建选项都在这里，文档构建时直接从 Kconfig 
   :doc:`production`。
 * ``MINIHUB_WEB_LOGIN_AUTH``——缺省开启。关掉之后，局域网 REST 对所有能访问 80 端口的
   人敞开。
-* ``MINIHUB_STORE_SERVER`` / ``MINIHUB_STORE_PORT``——设备去哪里找目录与固件。缺省是一个
-  私有实验室地址（ ``172.168.10.13:8080``），从开发阶段一路带过来，所以第一次从这份
-  仓库启动的设备指向的多半不是你自己跑的服务器；运行时的值由控制台或
-  ``PUT /api/store/config`` 设置，编译期的缺省只兜底。
+* ``MINIHUB_STORE_URL``——设备去哪里找目录与固件的完整 URL（含 scheme 与主机，不带末尾
+  路径），例如 ``https://minihub.espressif.com``。缺省指向 Espressif 公共商店；运行时的值由
+  控制台或 ``PUT /api/store/config`` 设置，编译期的缺省只兜底。设备会在该 base 后追加
+  ``/api/catalog`` 与 ``/files/...``，因此不要填入 ``/api/v1/plugins`` 这类路径。
 * 射频栈符号（``MINIHUB_MATTER_ADAPTER``、``MINIHUB_THREAD_ADAPTER``、
   ``MINIHUB_ZIGBEE_SDK``、``MINIHUB_BLE_MESH_SDK``）——每一个都会拉进一个很大的组件，
   并改变 ``menuconfig`` 能选什么，所以它们属于产品的特性列表，而不是每次构建。

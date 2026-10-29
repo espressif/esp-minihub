@@ -123,9 +123,9 @@ ROWS: list[tuple] = [
     ("web", "WebSocket clients", "WebSocket 并发客户端", "8", 8,
      ("define", "components/minihub_web/minihub_web_ws.c", "WS_MAX_CLIENTS")),
     ("web", "URL OTA request body", "URL OTA 请求体", "256 B", 256,
-     ("line", "components/minihub_web/minihub_web.c", 3549, "char buf[256]")),
+     ("line", "components/minihub_web/minihub_web.c", 3550, "char buf[256]")),
     ("web", "OTA upload chunk body", "OTA 上传分块请求体", "4 KiB", 4096,
-     ("line", "components/minihub_web/minihub_web.c", 3729, "char buf[4096]")),
+     ("line", "components/minihub_web/minihub_web.c", 3730, "char buf[4096]")),
 
     ("auth", "Web username", "Web 登录用户名", "admin", None,
      ("define", "components/minihub_auth/include/minihub_auth.h", "MINIHUB_WEB_USERNAME")),
