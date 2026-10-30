@@ -52,6 +52,9 @@ static esp_netif_t *s_sta_netif;
 static volatile bool s_wifi_hold_reconnect;
 static EventGroupHandle_t s_wifi_idle_eg;
 #define WIFI_STA_IDLE_BIT BIT0
+/* When true, STA stays disconnected and never auto-reconnects (set by an empty
+ * SSID in minihub_net_set_wifi_sta). */
+static bool s_wifi_sta_disabled;
 #endif
 
 /* Optional hooks — weak so RainMaker / web / LCD can override when linked. */
@@ -197,12 +200,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         /* While the provisioning manager is up it owns connect; auto-connect
          * here races set_config and yields ESP_ERR_WIFI_STATE. */
-        if (!minihub_provision_busy()) {
+        if (!minihub_provision_busy() && !s_wifi_sta_disabled) {
             esp_wifi_connect();
         }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         refresh_default_netif();
-        if (s_wifi_hold_reconnect) {
+        if (s_wifi_sta_disabled) {
+            /* Wi-Fi explicitly disabled (empty SSID); stay disconnected. */
+        } else if (s_wifi_hold_reconnect) {
             if (s_wifi_idle_eg) {
                 xEventGroupSetBits(s_wifi_idle_eg, WIFI_STA_IDLE_BIT);
             }
@@ -258,6 +263,16 @@ static esp_err_t start_wifi_sta(void)
     wifi_config_t wifi_config = {0};
     esp_err_t err = minihub_provision_load_credentials(&wifi_config);
     if (err == ESP_OK) {
+        if (wifi_config.sta.ssid[0] == '\0') {
+            /* Wi-Fi disabled (empty credentials): bring STA up idle so the
+             * driver is ready but no uplink connection is attempted, and keep
+             * it that way across reconnect/disconnect events. */
+            s_wifi_sta_disabled = true;
+            ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "set mode");
+            ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config), TAG, "set config");
+            ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
+            return ESP_OK;
+        }
         ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "set mode");
         ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config), TAG, "set config");
         ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
@@ -649,9 +664,29 @@ esp_err_t minihub_net_set_wifi_sta(const char *ssid, const char *password, bool 
     (void)open_network;
     return ESP_ERR_NOT_SUPPORTED;
 #else
-    if (!ssid || ssid[0] == '\0') {
+    if (!ssid) {
         return ESP_ERR_INVALID_ARG;
     }
+
+    /* Empty SSID => disable Wi-Fi STA: clear saved credentials, disconnect any
+     * current uplink, and keep the interface disconnected (no auto-reconnect).
+     * This lets the hub drop Wi-Fi (e.g. to rely on Ethernet) and stay that way
+     * across reboots. */
+    if (ssid[0] == '\0') {
+        s_wifi_sta_disabled = true;
+        esp_err_t cerr = minihub_provision_clear_credentials();
+        if (cerr != ESP_OK) {
+            ESP_LOGW(TAG, "clear Wi-Fi credentials: %s", esp_err_to_name(cerr));
+        }
+        wifi_mode_t mode = WIFI_MODE_NULL;
+        if (esp_wifi_get_mode(&mode) != ESP_ERR_WIFI_NOT_INIT && !minihub_provision_busy()) {
+            (void)esp_wifi_disconnect();
+        }
+        ESP_LOGI(TAG, "Wi-Fi STA disabled (empty SSID)");
+        return ESP_OK;
+    }
+
+    s_wifi_sta_disabled = false;
 
     char pass_buf[sizeof(((wifi_config_t *)0)->sta.password)];
     pass_buf[0] = '\0';

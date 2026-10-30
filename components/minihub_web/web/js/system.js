@@ -564,12 +564,14 @@ async function sysApplyWifi() {
     const ssid = (document.getElementById('sys-wifi-ssid').value || '').trim();
     const password = document.getElementById('sys-wifi-pass').value || '';
     const open = document.getElementById('sys-wifi-open').checked;
-    if (!ssid) {
-        toast(t('sys.enter_ssid'));
-        return;
-    }
-    if (!window.confirm(t('sys.wifi_reconnect_confirm', { ssid: ssid }))) {
-        return;
+    if (ssid) {
+        if (!window.confirm(t('sys.wifi_reconnect_confirm', { ssid: ssid }))) {
+            return;
+        }
+    } else {
+        if (!window.confirm(t('sys.wifi_disable_confirm'))) {
+            return;
+        }
     }
     toast(t('sys.saving_wifi'));
     try {
@@ -585,20 +587,25 @@ async function sysApplyWifi() {
             })
         });
         const j = await r.json().catch(() => ({}));
-        if (r.ok && j.result === 'ok') {
-            toast(t('sys.saved_reconnecting'));
+        if ((r.ok && j.result === 'ok') || !ssid) {
             document.getElementById('sys-wifi-pass').value = '';
-            /* GOT_IP is often 3–5 s after reconnect; one early refresh stays blank. */
-            for (let i = 0; i < 12; i++) {
-                await new Promise(res => setTimeout(res, ONE_SECOND_MS));
-                await loadSystem();
-                const st = sysSnap && sysSnap.net && sysSnap.net.wifi;
-                if (st && st.ip) {
-                    toast(t('sys.wifi_connected_ip', { ip: st.ip }));
-                    return;
+            if (ssid) {
+                toast(t('sys.saved_reconnecting'));
+                /* GOT_IP is often 3–5 s after reconnect; one early refresh stays blank. */
+                for (let i = 0; i < 12; i++) {
+                    await new Promise(res => setTimeout(res, ONE_SECOND_MS));
+                    await loadSystem();
+                    const st = sysSnap && sysSnap.net && sysSnap.net.wifi;
+                    if (st && st.ip) {
+                        toast(t('sys.wifi_connected_ip', { ip: st.ip }));
+                        return;
+                    }
                 }
+                toast(t('sys.no_address_yet'));
+            } else {
+                toast(t('sys.wifi_disabled'));
+                await loadSystem();
             }
-            toast(t('sys.no_address_yet'));
         } else {
             toast(t('sys.failed') + (j.error ? ': ' + j.error : ''));
         }

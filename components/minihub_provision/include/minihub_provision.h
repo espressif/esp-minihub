@@ -23,6 +23,10 @@ esp_err_t minihub_provision_load_credentials(wifi_config_t *out_sta_cfg);
  */
 esp_err_t minihub_provision_save_credentials(const char *ssid, const char *password);
 
+/** Clear stored STA credentials (write a zeroed config to NVS). Used to disable
+ * Wi-Fi: the empty SSID makes minihub_net stay disconnected across reboots. */
+esp_err_t minihub_provision_clear_credentials(void);
+
 /**
  * Start SoftAP provisioning through the ESP-IDF provisioning manager.
  *
