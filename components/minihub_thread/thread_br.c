@@ -22,7 +22,6 @@
 #include "esp_openthread_types.h"
 #include "esp_ot_config.h"
 #include "esp_vfs_eventfd.h"
-#include "mdns.h"
 #if CONFIG_ESP_COEX_SW_COEXIST_ENABLE
 #include "esp_coexist.h"
 #endif
@@ -223,30 +222,7 @@ static esp_err_t ensure_eventfd(void)
     return err;
 }
 
-/* ESP OT BR advertising proxy publishes SRP hosts via esp-idf mdns.
- * Without this, Host delete/add is REFUSED (DNS code 5) and Matter
- * FindOperational times out after Thread join. Matches ot_br example.
- * Prefer Matter starting first so CHIP EspDnssdInit sees mdns_init()==OK;
- * if Thread runs first, treat already-inited as success. */
-static esp_err_t ensure_mdns(void)
-{
-    esp_err_t err = mdns_init();
-    if (err == ESP_ERR_INVALID_STATE) {
-        err = ESP_OK; /* already running (e.g. Matter EspDnssdInit) */
-    }
-    if (err != ESP_OK) {
-        return err;
-    }
-    char host[64] = {0};
-    if (mdns_hostname_get(host) == ESP_OK && host[0] != '\0') {
-        return ESP_OK;
-    }
-    err = mdns_hostname_set("minihub");
-    if (err == ESP_ERR_INVALID_STATE) {
-        err = ESP_OK;
-    }
-    return err;
-}
+
 
 static esp_err_t apply_or_form_dataset(otOperationalDatasetTlvs *from_cfg, bool have_cfg)
 {
@@ -402,12 +378,6 @@ static esp_err_t start_stack(void)
                 .port_config = ESP_OPENTHREAD_DEFAULT_PORT_CONFIG(),
             },
     };
-    err = ensure_mdns();
-    if (err != ESP_OK) {
-        set_error("mdns_init failed");
-        return err;
-    }
-
     err = esp_openthread_start(&config);
     if (err == ESP_ERR_INVALID_STATE) {
         /* Platform already up (e.g. stop cleared our flag incompletely). */
