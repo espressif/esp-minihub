@@ -4,6 +4,18 @@ menu "Web UI"
         bool "Enable Host Web UI (browser dashboard)"
         default y
 
+    config MINIHUB_CUSTOM_WEB_SRC
+        string "Custom Web console source directory"
+        depends on MINIHUB_WEB_UI
+        help
+            Override the Web console source tree bundled into the storage
+            image. Empty (default) uses components/minihub_web/web. Set a
+            repo-relative path (e.g. application/myhub/web) or an absolute
+            path to bundle an OEM skin instead of the in-tree console. The
+            path must contain an index.html; the build fails otherwise.
+            Resolved in application/<app>/main/CMakeLists.txt, which minifies
+            the tree into /data/web/.
+
     config MINIHUB_MODULE_THIRD_PARTY_UI_WEB
         bool "Enable third-party module web UI pages"
         depends on MINIHUB_WEB_UI
@@ -19,14 +31,23 @@ menu "Web UI"
             not a compile-time dependency on MINIHUB_LCD_UI.
 
     config MINIHUB_WEB_VERSION
-        string "Web bundle version (deploy folder)"
+        string "Web bundle version"
         default MINIHUB_VERSION
         help
-            Version of the deployed Web bundle: the Webs/v<version>/ folder name
-            under the deploy root and the window.mhWebVersion baked into the web
-            assets. Kept separate from MINIHUB_VERSION because web and firmware
-            releases are usually not in sync -- a web-only fix bumps this without
-            touching the firmware. Used by tools/deploy.sh as the --web-version
-            default. Defaults to MINIHUB_VERSION (defined in the MiniHub menu).
+            Version of the Web console bundle -- the only source of truth for it;
+            do not hand-edit a version file in the source tree. Write it without
+            the leading "v"; the folder name adds that as UI style. Everything
+            else is derived:
+
+            * tools/deploy.sh publishes Webs/v<version>/ and stamps the bundle.
+            * application/<app>/main/CMakeLists.txt stamps the same value into
+              the storage image when CONFIG_MINIHUB_WEB_UI is on.
+
+            The stamp writes version.txt and window.mhWebVersion, which
+            minihub_update reads to compare installed vs published, so both
+            paths must produce one string. Kept separate from MINIHUB_VERSION
+            because web and firmware releases are usually not in sync -- a
+            web-only fix bumps this without touching the firmware.
+            Defaults to MINIHUB_VERSION (defined in the MiniHub menu).
 
 endmenu

@@ -160,7 +160,8 @@ CSV 新加一列、生成器的 ``LABEL_COLS``、扁平化那一侧的列集合�
 里的对象要写成带引号的 JSON 单元格。同一个名字不能出现两次，也不能同时出现在
 ``all`` 或 ``any`` 和 ``not`` 里。
 
-类型目录远程更新 （需 ``CONFIG_MINIHUB_WEB_UI``）：
+类型目录远程更新—— Web 控制台没有对应页面，走 REST 开发路由（仍需
+``CONFIG_MINIHUB_WEB_UI`` 才能提供文件）：
 ``GET`` / ``PUT /api/dev/catalog/devices.csv`` 与
 ``GET`` / ``PUT /api/dev/catalog/parameters.csv``。两份都齐后才会扁平化并
 reload；只传一份时 PUT 仍然成功，但回 ``rebuilt: false`` 并带一条提示。
@@ -240,7 +241,7 @@ reload；只传一份时 PUT 仍然成功，但回 ``rebuilt: false`` 并带一�
 2. ``python3 components/minihub_device_widget/tools/gen_device_widget.py --check``
 3. 重编 Host 固件
 
-或不重烧：``PUT /api/dev/catalog/devices.csv`` 与
+或不重烧（REST，无 Web 页面）：``PUT /api/dev/catalog/devices.csv`` 与
 ``PUT /api/dev/catalog/parameters.csv`` （两份都齐才扁平化并 reload；
 ``python3 tools/dev_sync.py --open``）。
 

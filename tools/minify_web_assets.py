@@ -6,6 +6,10 @@
 Conservative: removes block comments, full-line //, HTML comments, and
 extra blank lines. Does not touch inline // (avoids http:// and regex).
 
+The bundle version is never hand-edited in this tree: --web-version comes from
+CONFIG_MINIHUB_WEB_VERSION in both callers (deploy.sh and the Host's
+main/CMakeLists.txt) and is stamped into version.txt + window.mhWebVersion.
+
   python3 tools/minify_web_assets.py --src components/minihub_web/web --dst /tmp/web
   python3 tools/minify_web_assets.py --src components/minihub_web/web --in-place
   python3 tools/minify_web_assets.py --src components/minihub_web/web \\
@@ -234,9 +238,25 @@ def process_tree(src: Path, dst: Path | None, *, in_place: bool,
     return files, bin_in, bout, gz_out
 
 
-def stamp_web_version(dst: Path, version: str) -> None:
-    """Make the published bundle's version string match Webs/<version>/."""
+def canonical_version(version: str) -> str:
+    """Deploy folder names carry a UI "v" prefix (Webs/v0.1.0/); the bundle's own
+    version.txt and window.mhWebVersion must not, because minihub_update compares
+    them against what is already installed. Strip it once here so every stamped
+    artifact agrees with CONFIG_MINIHUB_WEB_VERSION."""
     text = version.strip()
+    if len(text) > 1 and text[0] in "vV" and text[1].isdigit():
+        return text[1:]
+    return text
+
+
+def stamp_web_version(dst: Path, version: str) -> None:
+    """Make the published bundle's version string match the Webs/<version>/ folder.
+
+    Version flow: CONFIG_MINIHUB_WEB_VERSION -> deploy.sh (folder gets the "v")
+    or main/CMakeLists.txt (storage image) -> here. Both end up writing the same
+    canonical string into version.txt and window.mhWebVersion.
+    """
+    text = canonical_version(version)
     (dst / "version.txt").write_text(text + "\n", encoding="utf-8")
     boot = dst / "js" / "boot.js"
     if not boot.is_file():
@@ -257,7 +277,11 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="with --web-version, write Webs/<version>/ under this deploy root",
     )
-    ap.add_argument("--web-version", help="version folder name under <deploy-root>/Webs/")
+    ap.add_argument(
+        "--web-version",
+        help="bundle version (also the <deploy-root>/Webs/ folder name); a leading "
+             '"v" is UI style and is stripped from the stamped files',
+    )
     ap.add_argument(
         "--notes",
         type=Path,
@@ -270,13 +294,18 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     src = args.src.resolve()
     if args.deploy_root or args.web_version:
-        if not args.deploy_root or not args.web_version:
-            raise SystemExit("--deploy-root and --web-version are used together")
-        if args.dst or args.in_place:
-            raise SystemExit("--deploy-root/--web-version replace --dst and --in-place")
-        if "/" in args.web_version or args.web_version.startswith("."):
+        # Publishing goes through --deploy-root; a plain --dst (the Host storage
+        # image built by main/CMakeLists.txt) may also carry a stamp.
+        if args.deploy_root and not args.web_version:
+            raise SystemExit("--deploy-root needs --web-version")
+        if args.deploy_root and args.dst:
+            raise SystemExit("--deploy-root replaces --dst")
+        if args.web_version and args.in_place:
+            raise SystemExit("--web-version needs --dst or --deploy-root, not --in-place")
+        if args.web_version and ("/" in args.web_version or args.web_version.startswith(".")):
             raise SystemExit("--web-version must be a single folder name")
-        args.dst = args.deploy_root.expanduser() / "Webs" / args.web_version
+        if args.deploy_root:
+            args.dst = args.deploy_root.expanduser() / "Webs" / args.web_version
     notes_bytes: bytes | None = None
     if args.notes is not None:
         if not args.deploy_root or not args.web_version:
@@ -302,6 +331,10 @@ def main(argv: list[str] | None = None) -> int:
         n, a, b, g = process_tree(src, dst, in_place=False, gzip_files=args.gzip)
         if args.web_version:
             stamp_web_version(dst, args.web_version)
+        elif (src / "version.txt").is_file():
+            # No explicit version (e.g. a Host skin copied with --dst): keep the
+            # source tree's own marker, and make boot.js agree with it.
+            stamp_web_version(dst, (src / "version.txt").read_text(encoding="utf-8"))
         if notes_bytes is not None:
             (dst / "release_notes.txt").write_bytes(notes_bytes)
     if not args.quiet:

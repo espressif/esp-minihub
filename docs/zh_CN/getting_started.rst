@@ -145,8 +145,8 @@ IDF 构建。
 
    L3 原生模块见 :doc:`plugins/develop_l3`。打包前先编译 ``.so``。
 
-新类型 / 控件：改 Host ``model/*.csv`` 后重编，或在已运行 Hub 上
-``PUT /api/dev/catalog/…`` （:doc:`type_catalog`）。演示：L1
+新类型 / 控件：改 Host ``model/*.csv`` 后重编，或在已运行 Hub 上用 REST 上传两份
+CSV （``PUT /api/dev/catalog/…``；无 Web 页面—— :doc:`type_catalog`）。演示：L1
 ``examples/plugins/ble_mesh_pack``，L2 ``color_bulb_js`` / ``meter_plug_js``。
 
 .. only:: not hide_l3

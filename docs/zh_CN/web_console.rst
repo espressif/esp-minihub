@@ -28,6 +28,12 @@
 ``application/minihub/main/CMakeLists.txt`` 把该目录压缩进 ``storage`` 镜像，对应
 ``/data/web/``。
 
+要用自定义界面替代内置控制台，把 ``MINIHUB_CUSTOM_WEB_SRC`` （``menuconfig`` →
+MiniHub → Web UI）设成仓库相对路径或绝对路径即可，留空则用默认。该路径必须含
+``index.html`` ，否则构建会失败。同样的 :file:`tools/minify_web_assets.py` 步骤会用
+``CONFIG_MINIHUB_WEB_VERSION`` 给打上版本号，所以自定义皮肤也沿用 Web 版本号的唯一
+来源。
+
 .. list-table::
    :header-rows: 1
    :widths: 28 72
@@ -88,7 +94,7 @@ Kconfig 与登录
 浏览器控制台会记下这次缺失（ :doc:`type_catalog`）。写入走
 ``POST /api/devices/control`` （``device`` 是类型；UI 同时带上卡片的
 ``point_id``，同类型多台可各自控制）。
-类型目录 CSV 可不重编固件：``PUT /api/dev/catalog/…`` 或
+类型目录 CSV 可不重编固件，直接走 REST（``PUT /api/dev/catalog/…``）或
 ``python3 tools/dev_sync.py --open``。
 
 打开登录后，``PUT /api/dev/web/`` 也要鉴权。常见顺序：先在浏览器打开一次
@@ -117,6 +123,10 @@ Kconfig 与登录
 
 运行中替换（不必重烧）
 ------------------------
+
+Web 控制台也可在界面里更新：配置好自定义插件服务器后，进入 **系统 → 检查更新**
+并点“更新网页”，Hub 会拉取新包（``POST /api/update/apply`` 配 ``"type":"web"``）。
+下面的 ``PUT /api/dev/web/`` 是开发 / 实验室手动写入的替代方式：
 
 ``PUT /api/dev/web/`` 加上相对路径，把请求体写入 ``/data/web/``
 下对应文件（最大 512 KiB）。相对路径不得含 ``..``。

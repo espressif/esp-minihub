@@ -29,6 +29,13 @@ In-tree source (generic Host):
 When ``CONFIG_MINIHUB_WEB_UI`` is on, ``application/minihub/main/CMakeLists.txt``
 minifies that directory into the ``storage`` image as ``/data/web/``.
 
+To bundle a custom UI instead of the in-tree console, set
+``MINIHUB_CUSTOM_WEB_SRC`` (``menuconfig`` → MiniHub → Web UI) to a repo-relative
+path or an absolute path; leave it empty for the default. The path must contain
+an ``index.html`` or the build fails. The same :file:`tools/minify_web_assets.py`
+step stamps the bundle version from ``CONFIG_MINIHUB_WEB_VERSION``, so a custom
+skin still inherits the single source of truth for the web version.
+
 .. list-table::
    :header-rows: 1
    :widths: 28 72
@@ -96,7 +103,7 @@ draws its parameter rows in the device detail; the browser console logs the miss
 (:doc:`type_catalog`). Writes go to
 ``POST /api/devices/control`` (``device`` is the type; UI also sends the card's
 ``point_id`` so same-type instances stay distinct). Type-catalog CSVs can
-be updated without a firmware rebuild: ``PUT /api/dev/catalog/…`` or
+be updated without a firmware rebuild via REST (``PUT /api/dev/catalog/…``) or
 ``python3 tools/dev_sync.py --open``.
 
 ``PUT /api/dev/web/`` is authenticated when login is on. Typical order: open
@@ -128,6 +135,12 @@ The generic Host copies from ``components/minihub_web/web/`` only. There is no
 
 Replace on a running Hub (no reflash)
 -------------------------------------
+
+The Web console can also be updated from the UI: with a custom plugin server
+configured, open **System → Check for updates** and apply the web update -- the
+Hub pulls the new bundle (``POST /api/update/apply`` with ``"type":"web"``). The
+``PUT /api/dev/web/`` route below is the developer/manual alternative for lab
+work:
 
 ``PUT /api/dev/web/`` followed by a relative path writes the body under
 ``/data/web/`` (max 512 KiB). The relative path must not contain ``..``.

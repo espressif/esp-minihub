@@ -16,10 +16,10 @@
 控制台侧栏显示的内容。它不是 ``git describe`` ：commit 单独上报，所以「版本号没动的
 重新编译」会表现为同一版本下的另一个 commit。
 
-控制台走自己的发布线。``MINIHUB_WEB_VERSION``
-（ :file:`components/minihub_web/Kconfig.minihub` ）决定 ``Webs/<version>/`` 目录名，
-并被烤进静态资源里的 ``window.mhWebVersion`` 。它的缺省值跟着 ``MINIHUB_VERSION`` ，
-但两者是刻意分开的：只改前端的修复抬高它就够，不必动固件。
+控制台走自己的发布线。``MINIHUB_WEB_VERSION`` （ :file:`components/minihub_web/Kconfig.minihub` ）
+是它的**唯一**来源：固件构建和发布都从它派生，两边永远一致。填写时不带前面的 ``v``
+（只有部署目录名会加）。它的缺省值跟着 ``MINIHUB_VERSION`` ，但两者刻意分开：只改前端的
+修复抬高它就够，不必动固件。源码头里没有、也别手写 ``version.txt`` —— 它是构建时生成的。
 
 所以 **一台 Hub 合理地上报两个版本** ，分两步升级过的设备通常就是如此。拿设备跟本指南
 对比之前，两个都看：

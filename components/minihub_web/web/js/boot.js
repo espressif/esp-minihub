@@ -1,6 +1,7 @@
 /* MiniHub web — startup */
 window.mhWebBuild = '2026-10-28-16:35:00';
-window.mhWebVersion = '0.1.0';
+// Replaced by minify_web_assets.py from CONFIG_MINIHUB_WEB_VERSION (never edit by hand):
+window.mhWebVersion = 'dev';
 
 function toggleSecret(btn) {
     const field = btn && btn.closest ? btn.closest('.secret-field') : null;

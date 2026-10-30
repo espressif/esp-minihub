@@ -69,7 +69,8 @@ Core 是共用的，一台出货设备和通用 Host 的差别只有几处：跑
 
    类型文案与控件 **不是** 产品 JSON，而在 Host
    ``components/minihub_device_widget/model/*.csv``。新类型改那里，或在已运行
-   Hub 上 ``PUT /api/dev/catalog/…``。设备实例仍各登记一条点
+   Hub 上用 REST 上传两份 CSV （``PUT /api/dev/catalog/…``；Web 控制台无对应页面）。
+   设备实例仍各登记一条点
    （:doc:`data_model`；类型目录见 :doc:`type_catalog`）。
 
 5. **添加自己的代码**
@@ -93,7 +94,9 @@ Core 是共用的，一台出货设备和通用 Host 的差别只有几处：跑
 
    Web 版本单独由 ``MINIHUB_WEB_VERSION`` 管理（``Webs/v<ver>/`` 文件夹与
    ``window.mhWebVersion``）。Web 与固件发布常不同步，可在 ``menuconfig`` 里单独
-   设置，默认跟随 ``MINIHUB_VERSION``；``tools/deploy.sh`` 发布时分别读取这两个值。
+   设置，默认跟随 ``MINIHUB_VERSION``；``tools/deploy.sh`` 发布时分别读取这两个值，
+   Host 编译时也把同一个值打进 ``storage`` 里的控制台。源码树上没有第二处 Web 版本，
+   详见 :doc:`versions`。
 
 6. **编译烧录**
 
