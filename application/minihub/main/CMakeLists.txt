@@ -137,11 +137,11 @@ if(CONFIG_MINIHUB_LCD_UI AND EXISTS ${MINIHUB_REPO_ROOT}/components/minihub_lcd/
     set(_minihub_ui_dep ${MINIHUB_FS_DIR}/ui/.stamp)
 endif()
 
-# Host Web console → /data/web/ (source dir from CONFIG_MINIHUB_WEB_STATIC_SRC).
+# Host Web console → /data/web/ (source dir from CONFIG_MINIHUB_CUSTOM_WEB_SRC).
 # Minify at build time so edits under components/minihub_web/web rebuild storage.bin.
 set(_minihub_web_dep)
 if(CONFIG_MINIHUB_WEB_UI)
-    set(_MINIHUB_WEB_REL "${CONFIG_MINIHUB_WEB_STATIC_SRC}")
+    set(_MINIHUB_WEB_REL "${CONFIG_MINIHUB_CUSTOM_WEB_SRC}")
     if(NOT _MINIHUB_WEB_REL)
         set(_MINIHUB_WEB_REL "components/minihub_web/web")
     endif()
@@ -153,16 +153,21 @@ if(CONFIG_MINIHUB_WEB_UI)
     get_filename_component(_MINIHUB_WEB_SRC "${_MINIHUB_WEB_SRC}" ABSOLUTE)
     if(NOT EXISTS "${_MINIHUB_WEB_SRC}/index.html")
         message(FATAL_ERROR
-            "CONFIG_MINIHUB_WEB_STATIC_SRC='${_MINIHUB_WEB_REL}': missing index.html at ${_MINIHUB_WEB_SRC}. "
+            "CONFIG_MINIHUB_CUSTOM_WEB_SRC='${_MINIHUB_WEB_REL}': missing index.html at ${_MINIHUB_WEB_SRC}. "
             "Set a repo-relative or absolute path that contains the Host Web console.")
     endif()
     file(GLOB_RECURSE _minihub_web_src CONFIGURE_DEPENDS ${_MINIHUB_WEB_SRC}/*)
+    # Single source of truth for the bundle version: CONFIG_MINIHUB_WEB_VERSION,
+    # the same Kconfig tools/deploy.sh uses for Webs/v<version>/. It is stamped
+    # into version.txt and window.mhWebVersion here, so a freshly flashed Hub and
+    # the published bundle report the same value (no phantom "new web" hint).
     add_custom_command(
         OUTPUT ${MINIHUB_FS_DIR}/web/.stamp
         COMMAND ${CMAKE_COMMAND} -E rm -rf ${MINIHUB_FS_DIR}/web
         COMMAND ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/minify_web_assets.py
                 --src ${_MINIHUB_WEB_SRC}
                 --dst ${MINIHUB_FS_DIR}/web
+                --web-version "${CONFIG_MINIHUB_WEB_VERSION}"
                 --gzip
                 -q
         COMMAND ${CMAKE_COMMAND} -E touch ${MINIHUB_FS_DIR}/web/.stamp

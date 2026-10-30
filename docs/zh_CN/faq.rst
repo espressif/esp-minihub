@@ -82,8 +82,10 @@ adapters.json 在哪？
 ---------------------
 
 设备运行时： ``/data/config/adapters.json``。出厂配置：
-``application/minihub/configs/adapters.json`` 或产品专用树。可通过 Web UI 或
-``PUT /api/config/adapters`` 编辑，必要时 ``POST /api/hub/reload``。
+``application/minihub/configs/adapters.json`` 或产品专用树。此文件是 ``/data/config``
+下的运行时配置，不在在线更新范围内（在线更新只含固件、Web 控制台、设备资源）；它随
+出厂 / storage 镜像下发，否则用 REST 编辑： ``PUT /api/config/adapters``，必要时
+``POST /api/hub/reload``。
 完整 JSON 字段： :doc:`data_model`。
 
 如何新增设备类型或改控件？
@@ -91,15 +93,16 @@ adapters.json 在哪？
 
 改 Host ``components/minihub_device_widget/model/*.csv`` （封闭
 ``ui_element``）后重编，**或** 在已运行 Hub 上上传两份 CSV
-（``PUT /api/dev/catalog/devices.csv`` 与 ``parameters.csv``，需 Web UI）。
+（``PUT /api/dev/catalog/devices.csv`` 与 ``parameters.csv``；仅 REST，Web 控制台无对应页面）。
 适配器仍 **一台设备登记一条点**，并把实时值写入 ``props.params``。
 不要按类型加 C 结构。见 :doc:`type_catalog`。
 
 如何替换 Web 控制台？
 ------------------------
 
-改 ``components/minihub_web/web/`` 后 ``storage-flash``，或在已运行的 Hub 上
-``PUT /api/dev/web/``。``app-flash`` 不会更新 ``/data/web``。见 :doc:`web_console`。
+改 ``components/minihub_web/web/`` 后 ``storage-flash``，或配置自定义插件服务器后在
+界面里更新（**系统 → 检查更新** → 更新网页）；已运行 Hub 上的 ``PUT /api/dev/web/``
+是开发用 REST 手动写入。``app-flash`` 不会更新 ``/data/web``。见 :doc:`web_console`。
 
 如何烧工厂镜像 / 做 OTA？
 --------------------------

@@ -140,11 +140,12 @@ function sysFillNet() {
 }
 
 let otaTimer = null;
+/* Set while a firmware update was started from the version row (更新固件 /
+ * 重新安装): its progress is painted there instead of the custom-OTA card, so
+ * the two entry points never overwrite each other's status. */
+let fwRowProgressOn = false;
 
 function sysOtaRender(j) {
-    const st = document.getElementById('sys-ota-status');
-    const bar = document.getElementById('sys-ota-bar');
-    if (!st || !bar) return;
     const state = j.state | 0;
     const prog = j.progress;
     const src = j.source || 'none';
@@ -165,8 +166,31 @@ function sysOtaRender(j) {
     if (prog != null && prog >= 0) line += ' · ' + prog + '%';
     if (j.bytes_written) line += ' · ' + j.bytes_written + ' B';
     if (err) line += ' · ' + err;
-    st.textContent = line;
-    bar.style.width = (prog != null && prog >= 0) ? (prog + '%') : (state === 1 ? '15%' : '0%');
+    const paintCustom = function() {
+        const st = document.getElementById('sys-ota-status');
+        const bar = document.getElementById('sys-ota-bar');
+        if (!st || !bar) return;
+        st.textContent = line;
+        bar.style.width = (prog != null && prog >= 0) ? (prog + '%') : (state === 1 ? '15%' : '0%');
+    };
+    if (fwRowProgressOn) {
+        /* Started from 更新固件 / 重新安装: mirror the progress into the version
+         * row and leave the custom-OTA card alone until the run finishes. */
+        const row = document.getElementById('fw-upd-progress');
+        if (row) {
+            let txt = stateLabel;
+            if (state === 1 && prog != null && prog >= 0) txt += ' ' + prog + '%';
+            if (state === 3 && err) txt += ' · ' + err;
+            row.textContent = txt;
+            row.hidden = (state === 0);
+        }
+        if (state !== 1) {
+            fwRowProgressOn = false;
+            paintCustom();
+        }
+    } else {
+        paintCustom();
+    }
     if (state === 1) {
         if (!otaTimer) otaTimer = setInterval(sysOtaPoll, ONE_SECOND_MS);
     } else if (otaTimer) {
@@ -208,6 +232,7 @@ async function sysOtaStartUrl() {
             return;
         }
         toast(t('sys.download_started'));
+        fwRowProgressOn = false;
         sysOtaPoll();
     } catch (e) {
         toast(t('sys.network_error'));
@@ -237,13 +262,16 @@ async function sysOtaUpload() {
             /* Named `detail`, not `t`: a local `t` would shadow the i18n helper. */
             const detail = await r.text().catch(() => '');
             toast(t('sys.upload_failed', { detail: detail || r.status }));
+            fwRowProgressOn = false;
             sysOtaPoll();
             return;
         }
         toast(t('sys.upload_done_reboot'));
+        fwRowProgressOn = false;
         sysOtaPoll();
     } catch (e) {
         toast(t('sys.upload_error'));
+        fwRowProgressOn = false;
         sysOtaPoll();
     }
 }
@@ -366,7 +394,7 @@ async function loadSystem() {
                 '<div class="ver-row"><div class="ver-meta"><div class="ver-title">' + t('sys.card_firmware_version') + '</div>' +
                 '<div class="ver-val">' + esc(hostVer || t('sys.none')) + '</div>' +
                 '<div class="ver-extra">' + esc([idfLine, commitLine, productLine].filter(Boolean).join(' · ')) + '</div></div>' +
-                '<div class="ver-actions">' + fwNew + fwUp + fwReinstall + '</div></div>' +
+                '<div class="ver-actions"><span id="fw-upd-progress" class="fw-upd-progress" hidden></span>' + fwNew + fwUp + fwReinstall + '</div></div>' +
                 '<div class="ver-row"><div class="ver-meta"><div class="ver-title">' + t('sys.card_web_version') + '</div>' +
                 '<div class="ver-val">' + esc(webVer || t('sys.none')) + '</div></div>' +
                 '<div class="ver-actions">' + webNew + webUp + webReinstall + '</div></div>' +
@@ -625,6 +653,7 @@ async function sysUpdateApply(kind, force) {
         if (!r.ok) { toast(t('sys.failed')); return; }
         toast(t('sys.applied_update', { name: name }));
         if (kind === 'firmware') {
+            fwRowProgressOn = true;
             sysOtaPoll();
         } else {
             /* Re-probe so the cached hint state reflects what we just applied

@@ -19,10 +19,12 @@ rebuild without a version bump is visible as a different commit under the same
 version.
 
 The console ships on its own train. ``MINIHUB_WEB_VERSION``
-(:file:`components/minihub_web/Kconfig.minihub`) names the ``Webs/<version>/``
-folder and is baked into the assets as ``window.mhWebVersion``. It defaults to
-``MINIHUB_VERSION`` but is deliberately separate: a web-only fix bumps it and
-leaves the firmware version alone.
+(:file:`components/minihub_web/Kconfig.minihub`) is its **single** source: both the
+firmware build and the deploy step derive from it, so a freshly flashed Hub and the
+published bundle always agree. Write it without the leading ``v`` (only the deploy
+folder name adds that). It defaults to ``MINIHUB_VERSION`` but is deliberately
+separate: a web-only fix bumps it and leaves the firmware version alone. Do not
+hand-edit a ``version.txt`` in the tree -- it is generated at build time.
 
 So **a Hub can legitimately report two versions**, and a device that was updated in
 two steps usually does. Before you compare a device against this guide, check both:

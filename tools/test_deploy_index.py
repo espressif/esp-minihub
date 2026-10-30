@@ -288,9 +288,11 @@ def main() -> int:
         boot_js = (web_root / "Webs" / "v0.1.0" / "js" / "boot.js").read_text(encoding="utf-8")
         assert "drop me" not in boot_js
         assert "const x = 1;" in boot_js
-        assert "window.mhWebVersion = 'v0.1.0'" in boot_js
+        # Stamped files carry the canonical version (no "v"); only the Webs/
+        # folder name does.
+        assert "window.mhWebVersion = '0.1.0'" in boot_js
         assert "old" not in boot_js
-        assert (web_root / "Webs" / "v0.1.0" / "version.txt").read_text(encoding="utf-8") == "v0.1.0\n"
+        assert (web_root / "Webs" / "v0.1.0" / "version.txt").read_text(encoding="utf-8") == "0.1.0\n"
         bare = deploy / "web_bare"
         bare.mkdir()
         (bare / "index.html").write_text("<p>ok</p>\n", encoding="utf-8")
@@ -309,7 +311,27 @@ def main() -> int:
         assert not (deploy / "web_plain_root" / "Webs" / "v0.1.0" / "release_notes.txt").exists()
         assert (
             deploy / "web_plain_root" / "Webs" / "v0.1.0" / "version.txt"
-        ).read_text(encoding="utf-8") == "v0.1.0\n"
+        ).read_text(encoding="utf-8") == "0.1.0\n"
+        # The Host build path (main/CMakeLists.txt) minifies to a plain dst with
+        # no Webs/ folder: it must stamp the same canonical string, otherwise a
+        # freshly flashed Hub reports a different version than the deploy tree.
+        rc = minify_web_assets.main(
+            [
+                "--src",
+                str(web_src),
+                "--dst",
+                str(deploy / "web_storage_image"),
+                "--web-version",
+                "0.1.0",
+                "-q",
+            ]
+        )
+        assert rc == 0
+        storage_ver = deploy / "web_storage_image" / "version.txt"
+        assert storage_ver.read_text(encoding="utf-8") == "0.1.0\n"
+        assert "window.mhWebVersion = '0.1.0'" in (
+            deploy / "web_storage_image" / "js" / "boot.js"
+        ).read_text(encoding="utf-8")
         notes_idx = gen_deploy_index.build_web_index(web_root)
         by_url = {item["url"]: item for item in notes_idx["items"]}
         note_item = by_url["v0.1.0/release_notes.txt"]

@@ -87,8 +87,11 @@ Where is adapters.json?
 -----------------------
 
 Runtime copy: ``/data/config/adapters.json`` on device. Factory JSON:
-``application/minihub/configs/adapters.json`` or product-specific tree. Edit via
-Web UI or ``PUT /api/config/adapters``, then ``POST /api/hub/reload`` if needed.
+``application/minihub/configs/adapters.json`` or product-specific tree. This file
+is runtime config in ``/data/config`` and is NOT covered by the online update
+(only firmware, the web console, and device assets are); it ships in the
+factory/storage image, or edit via REST: ``PUT /api/config/adapters``, then
+``POST /api/hub/reload`` if needed.
 Full JSON schemas: :doc:`data_model`.
 
 How do I add a device type or change widgets?
@@ -96,15 +99,17 @@ How do I add a device type or change widgets?
 
 Edit Host ``components/minihub_device_widget/model/*.csv`` (closed
 ``ui_element`` set) and rebuild, **or** upload both CSVs on a running Hub
-(``PUT /api/dev/catalog/devices.csv`` and ``parameters.csv``, needs Web UI).
+(``PUT /api/dev/catalog/devices.csv`` and ``parameters.csv``; REST only -- the Web console has no page for this).
 Adapters still register **one point per device** and fill ``props.params``.
 Do not add a C struct per type. Details: :doc:`type_catalog`.
 
 How do I replace the Web console?
 ----------------------------------
 
-Edit ``components/minihub_web/web/`` then ``storage-flash``, or
-``PUT /api/dev/web/`` on a running Hub. ``app-flash`` does not update
+Edit ``components/minihub_web/web/`` then ``storage-flash``, or update from the
+UI with a custom plugin server (**System → Check for updates** → apply web); the
+developer REST route ``PUT /api/dev/web/`` on a running Hub is the manual
+alternative. ``app-flash`` does not update
 ``/data/web``. Details: :doc:`web_console`.
 
 How do I flash a factory image / run OTA?

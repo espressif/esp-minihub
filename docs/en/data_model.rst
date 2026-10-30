@@ -222,8 +222,11 @@ On device after first boot the live copies are:
 * ``/data/config/devices.csv`` — flattened **type catalog** (labels / widgets)
 * ``/data/config/model/`` — optional uploaded ``devices.csv`` + ``parameters.csv``
 
-Edit live JSON via Web UI or REST (``PUT /api/config/adapters``,
-``POST /api/rules/import``, ``POST /api/scenes/import``), then
+Edit live JSON. ``adapters.json`` is runtime config in ``/data/config`` and is
+NOT part of the online update (which covers only firmware, the web console, and
+device assets) -- it ships in the factory/storage image, or you edit it directly
+via REST (``PUT /api/config/adapters``). Import rules and scenes from their pages
+or via ``POST /api/rules/import`` / ``POST /api/scenes/import``. Then
 ``POST /api/hub/reload`` when the API does not reload for you.
 
 Remote catalog CSV updates and column details: :doc:`type_catalog`.

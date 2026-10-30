@@ -195,7 +195,8 @@ that device. In ``parameters.csv`` the object must be a quoted JSON cell.
 The same name cannot appear twice, including once under ``all`` or ``any``
 and again under ``not``.
 
-Type catalog remote update (needs ``CONFIG_MINIHUB_WEB_UI``):
+Type catalog remote update -- the Web console has no page for this, so use the
+REST developer route (still needs ``CONFIG_MINIHUB_WEB_UI`` to serve the files):
 ``GET`` / ``PUT /api/dev/catalog/devices.csv`` and
 ``GET`` / ``PUT /api/dev/catalog/parameters.csv``. Both files must be present
 before the Hub flattens them and calls reload; uploading only one succeeds with
@@ -281,7 +282,7 @@ A single object (not an array) is still accepted for one-device plugins.
 2. ``python3 components/minihub_device_widget/tools/gen_device_widget.py --check``
 3. Rebuild Host firmware
 
-Or without reflashing: ``PUT /api/dev/catalog/devices.csv`` and
+Or without reflashing -- REST, no Web page -- ``PUT /api/dev/catalog/devices.csv`` and
 ``PUT /api/dev/catalog/parameters.csv`` (both required before flatten + reload;
 ``python3 tools/dev_sync.py --open``).
 

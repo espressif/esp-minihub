@@ -25,6 +25,8 @@
 # The web bundle version (Webs/<vX>/ and window.mhWebVersion) has its OWN Kconfig,
 # CONFIG_MINIHUB_WEB_VERSION, because web and firmware releases are usually not in
 # sync -- a web-only fix bumps the web version without touching the firmware.
+# It is also what the Host build stamps into the storage image, so published and
+# freshly flashed bundles always report the same version.
 # Both are read from the built sdkconfig; see the "Release versions" note right
 # after the argument parsing.
 #
@@ -88,8 +90,10 @@ FW_CHIP="$(printf '%s' "$FW_CHIP" | tr '[:upper:]' '[:lower:]')"
 # Manage both under `idf.py menuconfig` > MiniHub:
 #   CONFIG_MINIHUB_VERSION      firmware folder / reported firmware_version
 #                               (<ver>, no leading "v")
-#   CONFIG_MINIHUB_WEB_VERSION  web bundle folder / window.mhWebVersion
-#                               (v<ver>, leading "v" UI style)
+#   CONFIG_MINIHUB_WEB_VERSION  web bundle version -- single source of truth.
+#                               Webs/v<ver>/ folder name (the leading "v" is UI
+#                               style) and the value stamped into the bundle as
+#                               version.txt + window.mhWebVersion (<ver>, no "v")
 # Both default to MINIHUB_VERSION (which also drives the product/sidebar
 # version); each can still be overridden per-run with --fw-version / --web-version.
 sdkconfig_value() {  # $1 = sdkconfig path, $2 = config key

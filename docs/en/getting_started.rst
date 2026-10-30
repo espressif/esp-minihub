@@ -156,8 +156,9 @@ Develop a Store plugin (quick path)
 
    L3 native modules: :doc:`plugins/develop_l3`. Compile the ``.so`` before pack.
 
-New type / widgets: Host ``model/*.csv`` (rebuild) or
-``PUT /api/dev/catalog/…`` on a running Hub (:doc:`type_catalog`). Demos:
+New type / widgets: Host ``model/*.csv`` (rebuild) or upload both CSVs via REST
+on a running Hub (``PUT /api/dev/catalog/…``; no Web page -- :doc:`type_catalog`).
+Demos:
 L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js`` / ``meter_plug_js``.
 
 .. only:: not hide_l3

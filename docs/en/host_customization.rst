@@ -74,7 +74,8 @@ Step-by-step: create ``myhub``
 
    Type labels and widgets are **not** product JSON. They live in Host
    ``components/minihub_device_widget/model/*.csv``. Add a type there, or
-   ``PUT /api/dev/catalog/…`` on a running Hub. Device instances still
+   upload both CSVs via REST on a running Hub (``PUT /api/dev/catalog/…``; the
+   Web console has no page for this). Device instances still
    register one point each (:doc:`data_model`; catalog: :doc:`type_catalog`).
 
 5. **Add your own code**
@@ -105,7 +106,9 @@ Step-by-step: create ``myhub``
    (``Webs/v<ver>/`` and ``window.mhWebVersion``). Web and firmware releases are
    usually not in sync, so set it separately in ``menuconfig`` (defaults to
    ``MINIHUB_VERSION``). ``tools/deploy.sh`` reads both ``MINIHUB_VERSION`` and
-   ``MINIHUB_WEB_VERSION`` at publish time.
+   ``MINIHUB_WEB_VERSION`` at publish time, and the Host build stamps the same
+   value into the console it puts in ``storage``; nothing else in the tree
+   carries a web version. See :doc:`versions`.
 
 6. **Build and flash**
 
