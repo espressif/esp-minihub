@@ -5,7 +5,7 @@
 
 PC 部署根（``MINIHUB_PLUGINS_DEPLOY_DIR``，默认 ``~/workspace/minihub_store`` ）
 集中存放插件、固件、资源与 Web 控制台。``python3 tools/store_server.py
---deploy ROOT`` 在该目录上以 8080 端口（ ``MINIHUB_STORE_PORT`` ）提供服务。
+--deploy ROOT`` 在该目录上以 8080 端口（可用 ``--port`` 覆盖）提供服务。
 完整的索引格式与 ``/api/*`` 协议以仓库根目录的
 ``minihub_website_internal/README.txt`` 为单一真相。
 

@@ -6,7 +6,7 @@ Deploy Index
 The PC deploy root (``MINIHUB_PLUGINS_DEPLOY_DIR``, default
 ``~/workspace/minihub_store``) holds plugins, firmware, assets, and the
 web console. ``python3 tools/store_server.py --deploy ROOT`` serves that
-tree on port 8080 (``MINIHUB_STORE_PORT``). The full contract (every index
+tree on port 8080 (override with ``--port``). The full contract (every index
 format and the ``/api/*`` protocol) is the single source
 of truth in ``minihub_website_internal/README.txt`` at the repository root.
 

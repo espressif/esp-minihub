@@ -88,7 +88,7 @@
    DEPLOY/Stores/Common/ID/ID.mhub
 
 默认 ``store_server.py`` 监听 ``http://0.0.0.0:8080``
-(可用 ``--port`` 或 ``MINIHUB_STORE_PORT`` 覆盖)。
+(可用 ``--port`` 覆盖)。
 
 外层容器：**zip** (``MHUB_PACK_FORMAT``，默认 ``zip``)。Host 解压：
 ``components/minihub_store/hub_zip.c`` (目前仅 zip)。

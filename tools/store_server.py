@@ -647,8 +647,8 @@ def make_handler(deploy: Path, access_log=None):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default=os.environ.get("MINIHUB_STORE_BIND", "0.0.0.0"))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("MINIHUB_STORE_PORT", "8080")))
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8080)
     parser.add_argument(
         "--deploy",
         type=Path,

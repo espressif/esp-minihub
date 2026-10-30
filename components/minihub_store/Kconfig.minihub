@@ -4,15 +4,9 @@ menu "Store"
         bool "Enable MiniHub Store (catalog download for packs/modules)"
         default y
 
-    config MINIHUB_STORE_SERVER
-        string "MiniHub Store server IP or hostname"
+    config MINIHUB_STORE_URL
+        string "MiniHub Store server URL (full URL, including scheme, e.g. https://minihub.espressif.com)"
         depends on MINIHUB_STORE
-        default "172.168.10.13"
-
-    config MINIHUB_STORE_PORT
-        int "MiniHub Store server port"
-        depends on MINIHUB_STORE
-        default 8080
-        range 1 65535
+        default "https://minihub.espressif.com"
 
 endmenu
