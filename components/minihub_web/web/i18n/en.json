@@ -193,6 +193,8 @@
   "mdl.matter_title": "Add Matter device",
   "mdl.matter_wifi_password": "Wi-Fi password",
   "mdl.matter_wifi_toggle": "Configure Wi-Fi",
+  "mdl.matter_name_label": "Device name (optional)",
+  "mdl.matter_name_ph": "Leave blank for default name",
   "mdl.net_dhcp_mode": "DHCP mode",
   "mdl.net_dns1": "Primary DNS",
   "mdl.net_dns2": "Secondary DNS",

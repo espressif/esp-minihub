@@ -193,6 +193,8 @@
   "mdl.matter_title": "添加 Matter 设备",
   "mdl.matter_wifi_password": "Wi-Fi 密码",
   "mdl.matter_wifi_toggle": "是否配置 Wi-Fi 信息",
+  "mdl.matter_name_label": "设备名称（可选）",
+  "mdl.matter_name_ph": "不填则使用默认名",
   "mdl.net_dhcp_mode": "DHCP 模式",
   "mdl.net_dns1": "DNS 主",
   "mdl.net_dns2": "DNS 备",

@@ -182,6 +182,13 @@ static void make_point_id(uint64_t node_id, uint16_t endpoint_id, const char *tr
     snprintf(out, out_len, "%s.matter_n%" PRIu64 "_ep%u", proto, node_id, (unsigned)endpoint_id);
 }
 
+esp_err_t minihub_matter_point_id(uint64_t node_id, uint16_t endpoint_id, const char *transport,
+                                  char *out, size_t out_len)
+{
+    make_point_id(node_id, endpoint_id, transport, out, out_len);
+    return ESP_OK;
+}
+
 esp_err_t minihub_matter_next_node_id(uint64_t *out_node_id)
 {
     if (!out_node_id) {
