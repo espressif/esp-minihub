@@ -17,12 +17,14 @@ void minihub_mcp_set_hub_ready(bool ready);
 bool minihub_mcp_hub_ready(void);
 
 /**
- * In-process MiniHub MCP tools (no HTTP to self / no esp-claw patch).
+ * @brief In-process MiniHub MCP tools (no HTTP to self / no esp-claw patch).
  * `arguments_json` may be NULL or "{}" for tools with no args.
  * On success, writes tool JSON text into `out`.
  */
 esp_err_t minihub_mcp_local_call_tool(const char *tool_name, const char *arguments_json,
                                       char *out, size_t out_len);
 
-/** Format a compact tools/list text for the on-device agent. */
+/**
+ * @brief Format a compact tools/list text for the on-device agent.
+ */
 esp_err_t minihub_mcp_local_list_tools(char *out, size_t out_len);

@@ -21,7 +21,9 @@
 #define MINIHUB_BM_UUID_FILTER_MAX 8
 #define MINIHUB_BM_UUID_FILTER_BYTES_MAX 16
 #define MINIHUB_BM_BIND_MODEL_MAX 12
-/** SIG models use company_id == MINIHUB_BM_CID_SIG */
+/**
+ * @brief SIG models use company_id == MINIHUB_BM_CID_SIG.
+ */
 #define MINIHUB_BM_CID_SIG 0xFFFF
 
 typedef struct {
@@ -36,7 +38,9 @@ typedef struct {
     uint16_t vid; /* Version ID */
 } minihub_ble_mesh_device_t;
 
-/** Device UUID prefix filter (OR'd). accept_all or empty filter_count → any UUID. */
+/**
+ * @brief Device UUID prefix filter (OR'd). accept_all or empty filter_count → any UUID.
+ */
 typedef struct {
     uint8_t bytes[MINIHUB_BM_UUID_FILTER_BYTES_MAX];
     uint8_t len;

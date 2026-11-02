@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 MiniHub Contributors
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
  * minihub_device_widget - device UI control descriptor registry (runtime-loaded).
  *
  * Source of truth is the data model CSVs (model/devices.csv, services.csv,
@@ -39,249 +45,404 @@
 extern "C" {
 #endif
 
-/* Device / control icon storage. SVGs are staged into the `storage` littlefs
- * partition at /data/images at build time (see application/minihub/main/
- * CMakeLists.txt), so icons are NOT in the firmware and can be added/replaced
- * at runtime next to /data/config/devices.csv. This is the single source of
- * truth for both the firmware resolver (minihub_device_widget_image_name) and
- * the Web console GET /img/<name> route. Overridable for host builds / tests.
+/**
+ * @brief Icon directory on the `storage` LittleFS partition.
  *
- * The directory is split by WHAT the icon depicts - a device is not a control:
- *   <dir>/devices/<device>.svg                   device-class icon (avatar)
- *   <dir>/parameters/<device>_<parameter>.svg    control icon (mockup)
- * The resolver returns the path relative to MINIHUB_DW_IMAGES_DIR (e.g.
- * "devices/light.svg"), so appending it to MINIHUB_IMAGES_URI_PREFIX
- * yields the URL the Web console serves. */
+ * SVGs are staged at build time and are not linked into the firmware.
+ * Overridable for host builds and tests.
+ */
 #ifndef MINIHUB_DW_IMAGES_DIR
 #define MINIHUB_DW_IMAGES_DIR "/data/images"
 #endif
+
+/**
+ * @brief Subdirectory of device-class icons, `<device>.svg`.
+ */
 #define MINIHUB_DW_IMAGES_DEVICES_SUBDIR    "devices"
+
+/**
+ * @brief Subdirectory of control icons, `<device>_<parameter>.svg`.
+ */
 #define MINIHUB_DW_IMAGES_PARAMETERS_SUBDIR "parameters"
 
-/* Flat runtime registry (generated / remote-updated). Prefer this over the
- * embedded fallback when present on littlefs. */
+/**
+ * @brief Flat runtime registry loaded in preference to the embedded CSV.
+ */
 #ifndef MINIHUB_DW_CSV_PATH
 #define MINIHUB_DW_CSV_PATH "/data/config/devices.csv"
 #endif
-/* Editable model CSVs persisted by PUT /api/dev/catalog/ (devices.csv +
- * parameters.csv). When both exist, firmware flattens them into
- * MINIHUB_DW_CSV_PATH and calls minihub_device_widget_reload(). */
+
+/**
+ * @brief Directory of the editable model CSVs from `PUT /api/dev/catalog/`.
+ */
 #ifndef MINIHUB_DW_MODEL_DIR
 #define MINIHUB_DW_MODEL_DIR "/data/config/model"
 #endif
+
+/**
+ * @brief Stored `devices.csv` model file.
+ */
 #define MINIHUB_DW_MODEL_DEVICES_PATH    MINIHUB_DW_MODEL_DIR "/devices.csv"
+
+/**
+ * @brief Stored `parameters.csv` model file.
+ */
 #define MINIHUB_DW_MODEL_PARAMETERS_PATH MINIHUB_DW_MODEL_DIR "/parameters.csv"
+
+/**
+ * @brief Capacity of a model-path buffer, including the NUL.
+ */
 #define MINIHUB_DW_MODEL_PATH_MAX        128
-/* Smallest buffer that always holds a resolved icon path
- * (<subdir> + "/" + <name> + NUL). */
+
+/**
+ * @brief Smallest buffer that holds a resolved icon path, including the NUL.
+ *
+ * The path is `<subdir>/<name>` relative to `MINIHUB_DW_IMAGES_DIR`.
+ */
 #define MINIHUB_DW_IMAGE_PATH_MAX 96
-/* Web console URI prefix mapped to MINIHUB_DW_IMAGES_DIR by GET /img/<name>. */
+
+/**
+ * @brief Alias of `MINIHUB_DW_IMAGES_DIR`.
+ */
 #define MINIHUB_IMAGES_DIR        MINIHUB_DW_IMAGES_DIR
+
+/**
+ * @brief Web console prefix mapped onto `MINIHUB_DW_IMAGES_DIR` by `GET /img/<name>`.
+ */
 #define MINIHUB_IMAGES_URI_PREFIX "/img/"
 
-/* One (device, parameter) row from the table.
- * NOTE: the private dw_entry_t in minihub_device_widget.c MUST keep the exact
- * same field order AND size so the loader can reinterpret dw_entry_t* as this
- * type. A mismatched stride (e.g. an extra private pointer) shifts every
- * entries[j] field and /api/device_widgets serves garbage (paths / JSON /
- * labels in `parameter`, empty `widget`). */
+/**
+ * @brief One `(device, parameter)` row from the flat registry.
+ *
+ * @note
+ *     - The private `dw_entry_t` in `minihub_device_widget.c` must keep this
+ *       field order and size. The loader reinterprets that type as this one.
+ *     - There is no `visible` member. Whether a control is shown is
+ *       `props.visible` on the registered point.
+ *     - There is no protocol member. The transport prefix belongs to device
+ *       registration, not to this catalog.
+ */
 typedef struct {
-    const char *device;        /* e.g. "light"            */
-    const char *parameter;     /* technical id, e.g. "on_off" (transport key) */
-    const char *label;         /* display name, e.g. "电源" (UI / rules)      */
-    const char *style_json;    /* full widget descriptor + css JSON           */
-    const char *image;         /* explicit control-icon file name (optional,
-                                  overrides the attribute lookup)             */
-    const char *device_image;  /* optional device-class icon override; repeated
-                                  on every row of the type. Prefer the parent
-                                  minihub_device_widget_device_t.image.        */
-    /* No `visible` field: whether a control is shown is a property of the
-     * registered POINT (props.visible, set by a plugin's device descriptor),
-     * not of the device TYPE. Every type parameter is offered to the UI and the
-     * UI intersects it with the live points. */
-    /* No protocol field: device display is protocol-independent. The transport
-     * prefix is a property of the device REGISTRATION, not of this catalog. */
+    const char *device;       /*!< Device type id, for example `light`. */
+    const char *parameter;    /*!< Technical id, for example `on_off`. */
+    const char *label;        /*!< Display name, for example "电源". */
+    const char *style_json;   /*!< Widget descriptor and CSS JSON. */
+    const char *image;        /*!< Explicit control-icon file name. */
+                              /*!< Overrides the attribute lookup. */
+    const char *device_image; /*!< Optional device-class icon override. */
+                              /*!< Repeated on every row of the type. */
+                              /*!< Prefer `minihub_device_widget_device_t.image`. */
 } minihub_device_widget_entry_t;
 
-/* All parameters belonging to one device. */
+/**
+ * @brief Every parameter that belongs to one device type.
+ *
+ * @note There is no protocol member. Resolve a control with
+ *       `minihub_point_resolve_by_type_param()` instead of storing a transport
+ *       prefix here.
+ */
 typedef struct {
-    const char *device;
-    const minihub_device_widget_entry_t *entries;
-    size_t count;
-    const char *image;         /* explicit device-class icon file name in
-                                  storage (optional, overrides the
-                                  devices/<device>.svg convention)           */
-    /* No protocol field: this is a TYPE descriptor for rendering only. The
-     * transport prefix (thread / zigbee / ...) belongs to the device
-     * REGISTRATION - resolve the control target with
-     * minihub_point_resolve_by_type_param() instead of storing it here. */
+    const char *device;                        /*!< Device type id. */
+    const minihub_device_widget_entry_t *entries; /*!< Parameter rows for `device`. */
+    size_t count;                              /*!< Number of `entries`. */
+    const char *image;                         /*!< Device-class icon file name. */
+                                               /*!< Overrides `devices/<device>.svg`. */
 } minihub_device_widget_device_t;
 
-/* ---- Runtime loading (replaces the old compile-time table) ---- */
-
-/* Load the registry from the default path (/data/config/devices.csv). If the
- * file is missing or unreadable, falls back to the compiled-in embedded CSV so
- * the device still boots. Call once at startup (after LittleFS mount).
- * Idempotent: calling again without free() is a no-op. */
+/**
+ * @brief Load the registry from `MINIHUB_DW_CSV_PATH`.
+ *
+ * Call once after LittleFS is mounted. A missing or unreadable file is seeded
+ * from the embedded CSV, and that embedded CSV is loaded directly when the
+ * seed cannot be read back. A later call without `minihub_device_widget_free()`
+ * does not reload.
+ *
+ * @return
+ *     - ESP_OK: The registry is loaded.
+ *     - ESP_ERR_INVALID_ARG: The on-disk CSV and the embedded CSV are unusable
+ *       or have no usable row.
+ *     - ESP_ERR_NO_MEM: Neither table could be allocated.
+ */
 esp_err_t minihub_device_widget_init(void);
 
-/* Load (or replace) the registry from an explicit CSV file path. */
+/**
+ * @brief Replace the registry with the table parsed from `path`.
+ *
+ * @param path CSV file to load.
+ *
+ * @return
+ *     - ESP_OK: The parsed table is now serving.
+ *     - ESP_ERR_NOT_FOUND: `path` could not be read.
+ *     - ESP_ERR_INVALID_ARG: The CSV text is unusable or has no usable row.
+ *     - ESP_ERR_NO_MEM: The table could not be allocated.
+ */
 esp_err_t minihub_device_widget_load(const char *path);
 
-/* Reload from `path` (or the default path when NULL). Use after editing the
- * CSV on /data to pick up new device types without reflashing.
+/**
+ * @brief Reload from `path`, or from `MINIHUB_DW_CSV_PATH` when `path` is NULL.
  *
- * Atomic: the replacement table is parsed first and only swapped in on
- * success, so a broken CSV never leaves a half-built (or empty) registry
- * behind - the previous table keeps serving concurrent readers. On failure the
- * embedded registry is re-seeded and loaded as a last resort; if that fails
- * too, the previous table stays up and the error is returned. */
+ * The replacement is parsed before it is published, so a broken CSV does not
+ * clear the table that concurrent readers are using. When `path` fails, the
+ * embedded registry is written back and loaded. If that also fails, the
+ * previous table stays up.
+ *
+ * @param path CSV file to load. NULL selects `MINIHUB_DW_CSV_PATH`.
+ *
+ * @return
+ *     - ESP_OK: The replacement, the re-seeded file, or the embedded registry
+ *       is now serving.
+ *     - ESP_ERR_INVALID_ARG: The requested CSV and the embedded CSV have no
+ *       usable row.
+ *     - ESP_ERR_NO_MEM: Neither table could be allocated.
+ */
 esp_err_t minihub_device_widget_reload(const char *path);
 
-/* Release all registry memory. */
+/**
+ * @brief Release the active and retired registry snapshots.
+ */
 void minihub_device_widget_free(void);
 
-/* ---- Remote model catalog (devices.csv + parameters.csv) ----
+/**
+ * @brief Store one model CSV and, when both exist, flatten and reload.
  *
- * Upload the same model-shaped CSVs developers edit under model/. Firmware
- * validates (required columns, closed ui_element set, every device parameter
- * has a catalog row), stores them under MINIHUB_DW_MODEL_DIR, flattens to
- * MINIHUB_DW_CSV_PATH, and reloads the in-memory registry so
- * GET /api/device_widgets updates without reboot.
+ * `which` must be `devices.csv` or `parameters.csv`. Validation runs before
+ * the file is written, so a rejected body leaves the files on disk unchanged.
+ * When the other model file is still missing the body is stored and `rebuilt`
+ * stays false.
  *
- * `which` must be "devices.csv" or "parameters.csv". On validation failure no
- * files are overwritten for that PUT body (peer on disk is left alone). When
- * only one of the two model files is present, the PUT still stores the file
- * and returns ESP_OK with *rebuilt=false. */
+ * @param which `devices.csv` or `parameters.csv`.
+ * @param data CSV body.
+ * @param len Size of `data`.
+ * @param rebuilt Set true only after both files flatten and the registry
+ *                reloads. NULL is accepted.
+ * @param errbuf Optional failure message. NULL is accepted.
+ * @param errbuf_len Size of `errbuf`.
+ *
+ * @return
+ *     - ESP_OK: The file is stored. `rebuilt` is true only after a reload.
+ *     - ESP_ERR_INVALID_ARG: `which` is not a model file name, `data` is NULL,
+ *       or the CSV fails validation.
+ *     - ESP_ERR_INVALID_SIZE: The body is empty or larger than 128 KiB.
+ *     - ESP_ERR_NO_MEM: Parsing could not allocate.
+ *     - ESP_FAIL: The model file or the flattened catalog could not be written.
+ */
 esp_err_t minihub_device_widget_put_model(const char *which, const void *data, size_t len,
                                           bool *rebuilt, char *errbuf, size_t errbuf_len);
 
-/* Read a previously stored model file. Caller frees *out. */
+/**
+ * @brief Read a stored model file.
+ *
+ * @param which `devices.csv` or `parameters.csv`.
+ * @param out Receives the file text. The caller frees it.
+ * @param out_len Receives the file size, excluding the terminating NUL.
+ *
+ * @return
+ *     - ESP_OK: `out` holds the file.
+ *     - ESP_ERR_INVALID_ARG: `which` is not a model file name, or `out` or
+ *       `out_len` is NULL.
+ *     - ESP_ERR_NOT_FOUND: The model file is not on disk.
+ *     - ESP_ERR_INVALID_SIZE: The file is larger than 128 KiB.
+ *     - ESP_ERR_NO_MEM: The file buffer could not be allocated.
+ *     - ESP_FAIL: The file could not be seeked or read.
+ */
 esp_err_t minihub_device_widget_get_model(const char *which, char **out, size_t *out_len);
 
-/* Flatten both stored model CSVs onto MINIHUB_DW_CSV_PATH. Does not reload.
- * ESP_ERR_NOT_FOUND when either model file is missing (nothing is written).
- * Boot calls this so a newer firmware rewrites a flat catalog that an older
- * build produced without columns such as `requires`. */
+/**
+ * @brief Flatten both stored model CSVs onto `MINIHUB_DW_CSV_PATH`.
+ *
+ * Does not reload. Boot calls this so a newer firmware rewrites a flat
+ * catalog that an older build produced without columns such as `requires`.
+ *
+ * @param errbuf Optional failure message. NULL is accepted.
+ * @param errbuf_len Size of `errbuf`.
+ *
+ * @return
+ *     - ESP_OK: The flat catalog was written.
+ *     - ESP_ERR_NOT_FOUND: Either model file is missing. Nothing is written.
+ *     - ESP_ERR_INVALID_ARG: A stored model CSV failed validation.
+ *     - ESP_ERR_NO_MEM: Parsing could not allocate.
+ *     - ESP_FAIL: A model file or the flat catalog could not be read or written.
+ */
 esp_err_t minihub_device_widget_flatten_stored_model(char *errbuf, size_t errbuf_len);
 
-/* ---- Queries (operate on the loaded runtime table) ----
+/**
+ * @brief Look up one device type in the loaded registry.
  *
- * These return pointers INTO the registry (no copy). A reload can happen on
- * another task (PUT /api/dev/catalog/, hub soft reload); the registry keeps the
- * superseded snapshot alive, so a pointer stays valid at least until the next
- * successful reload. Do not cache them across a reload - re-look-up instead.
- * Prefer copying the few strings you need when the value must outlive that
- * window (minihub_device_widget_image_name() does exactly that). */
-
-/* Look up a device's full control set. NULL if unknown. */
+ * The pointer refers into the registry. A reload keeps the superseded
+ * snapshot alive, so the pointer stays valid at least until the next
+ * successful reload. Do not cache it across a reload.
+ *
+ * @param device Device type id.
+ *
+ * @return The device, or NULL when `device` is NULL or unknown.
+ */
 const minihub_device_widget_device_t *
 minihub_device_widget_get(const char *device);
 
-/* ---- Cloud fallback for unknown device types ----
+/**
+ * @brief Fetch the device-class icon for one device type.
  *
- * When a device type is not in the local registry (minihub_device_widget_get
- * returns NULL), the data/update layer may fetch its icon + style + metadata from
- * the deploy root (GET /api/assets/device/<id>) and cache them under /data. The
- * fetcher is a weak symbol so this component stays decoupled from the HTTP stack:
- * minihub_update supplies the real implementation; when it is not linked this
- * returns ESP_ERR_NOT_SUPPORTED.
+ * Weak symbol. `minihub_update` writes `devices/<device_id>.svg` under
+ * `MINIHUB_DW_IMAGES_DIR`. The stub is used when that component is not linked.
+ * A file that is already present is left in place.
  *
- * @return ESP_OK if the assets were fetched (icons now under /data/images),
- *         ESP_ERR_NOT_FOUND if the server has no such type (negative-cached),
- *         ESP_ERR_NOT_SUPPORTED if no fetcher is linked. */
+ * @param base_url Deploy root. NULL or empty uses the configured store URL.
+ * @param device_id Device type id. Letters, digits, `_`, and `-`, shorter
+ *                  than 64 characters.
+ *
+ * @return
+ *     - ESP_OK: The icon is already present or was downloaded.
+ *     - ESP_ERR_INVALID_STATE: `base_url` is empty and no store URL is set.
+ *     - ESP_ERR_INVALID_ARG: `device_id` is missing or not a type token.
+ *     - ESP_ERR_INVALID_SIZE: The request or destination path does not fit.
+ *     - ESP_ERR_NO_MEM: The download could not allocate.
+ *     - ESP_FAIL: The server response was not HTTP 200, including a missing
+ *       icon.
+ *     - ESP_ERR_NOT_SUPPORTED: No fetcher is linked.
+ */
 esp_err_t minihub_dw_cloud_fetch_default(const char *base_url, const char *device_id);
 
-/* Like minihub_device_widget_get, but triggers a one-shot cloud fetch when the
- * type is unknown (no-op if already known, or if a previous fetch already failed
- * for this type). Returns the registry entry when locally known, otherwise NULL.
- * `base_url` may be NULL to use the configured store URL. */
+/**
+ * @brief Look up a device type, fetching its icon when the local table misses.
+ *
+ * A previous `ESP_ERR_NOT_FOUND` from the fetcher is not requested again.
+ * Other fetch errors are not cached. The icon fetch does not insert the type
+ * into the registry.
+ *
+ * @param base_url Deploy root passed to `minihub_dw_cloud_fetch_default()`.
+ *                 NULL or empty uses the configured store URL.
+ * @param device Device type id.
+ *
+ * @return The registry entry when the type is known locally, otherwise NULL.
+ */
 const minihub_device_widget_device_t *
 minihub_device_widget_get_or_fetch(const char *base_url, const char *device);
 
-/* Indexed access to the loaded device list (0 <= index < device_count()).
- * Useful for enumeration / serialization (e.g. serving the UI catalog). */
+/**
+ * @brief Return one loaded device type by index.
+ *
+ * The pointer lifetime matches `minihub_device_widget_get()`.
+ *
+ * @param index Index in the loaded device list.
+ *
+ * @return The device at `index`, or NULL when `index` is out of range.
+ */
 const minihub_device_widget_device_t *
 minihub_device_widget_device_at(size_t index);
 
-/* Look up a single (device, parameter) control. NULL if not found. */
+/**
+ * @brief Look up one `(device, parameter)` row.
+ *
+ * The pointer lifetime matches `minihub_device_widget_get()`.
+ *
+ * @param device Device type id.
+ * @param parameter Technical parameter id.
+ *
+ * @return The row, or NULL when either argument is NULL or the row is absent.
+ */
 const minihub_device_widget_entry_t *
 minihub_device_widget_find(const char *device, const char *parameter);
 
-/* Total number of devices / entries in the table (for enumeration). */
+/**
+ * @brief Count the device types in the loaded table.
+ *
+ * @return Device type count.
+ */
 size_t minihub_device_widget_device_count(void);
+
+/**
+ * @brief Count the parameter rows in the loaded table.
+ *
+ * @return Parameter row count.
+ */
 size_t minihub_device_widget_entry_count(void);
 
-/* Global parameter catalog: a cJSON object keyed by parameter name covering
- * EVERY known parameter (the whole parameters.csv), not just those attached to a
- * registered device type. The web falls back to this map for unknown device
- * types so their controls still render with the localized label / widget
- * instead of the raw key (Athena SGVAXfjc: rules / device pages showed English
- * parameter names for devices absent from devices.csv). The returned object is
- * owned by the caller; it is empty (never NULL) when the model parameters.csv is
- * unavailable, so callers can fall back to the per-device entries. */
+/**
+ * @brief Build a caller-owned object of every parameter in `parameters.csv`.
+ *
+ * The web uses this map for a device type that is absent from `devices.csv`,
+ * so the control still has a label and widget. A missing `lang` key uses `zh`.
+ *
+ * @param lang Language key in each parameter's `labels` object.
+ *
+ * @return
+ *     - cJSON object: Caller-owned map keyed by parameter name. Empty when
+ *       `parameters.csv` is missing, unreadable, or not a CSV.
+ *     - NULL: The object could not be created.
+ */
 cJSON *minihub_device_widget_global_params_json(const char *lang);
 
-/* Build the transport key for a (device, parameter).
- *   minihub_device_widget_path("thread", "light", "on_off", buf, n)
- * writes "thread.light.on_off" — the key a concrete device uses when it
- * reports a parameter over the transport. `prefix` may be NULL/"" for a bare
- * "device.parameter" key. Returns buf, or NULL if it does not fit in size.
+/**
+ * @brief Write the transport key for one `(device, parameter)` pair.
  *
- * NOTE: the catalog carries no `protocol` (device display is protocol
- * independent). Callers that know the transport pass it as `prefix`; control
- * commands resolve the registered point_id via
- * minihub_point_resolve_by_type_param() rather than building it from here. */
+ * The catalog has no protocol. Pass the transport as `prefix`. A control
+ * command resolves the registered point with
+ * `minihub_point_resolve_by_type_param()` rather than with this key.
+ *
+ * @param prefix Transport prefix. NULL or empty writes `device.parameter`.
+ * @param device Device type id.
+ * @param parameter Technical parameter id.
+ * @param buf Destination.
+ * @param size Size of `buf`, including the NUL.
+ *
+ * @return `buf`, or NULL when an argument is missing or the key does not fit.
+ */
 char *minihub_device_widget_path(const char *prefix,
                                  const char *device,
                                  const char *parameter,
                                  char *buf, size_t size);
 
-/* Build a report/control payload JSON for (device, parameter).
- * `seq` (message sequence / dedup id) is placed as the FIRST key, followed by
- * device, parameter, and the wrapped `value_json`. Example:
- *   {"seq":12,"device":"light","parameter":"on_off","value":true}
- * Returns buf, or NULL if it does not fit. `value_json` may be NULL/"" for a
- * bare key report. The transport address is NOT part of this payload: the
- * catalog is protocol-agnostic, so the caller resolves the registered point_id
- * (minihub_point_resolve_by_type_param) to get <protocol>.<device>; the
- * parameter key is applied inside that point's props.params. */
+/**
+ * @brief Write a report or control payload for one `(device, parameter)` pair.
+ *
+ * `seq` is the first key, then `device`, `parameter`, and `value`. Example:
+ * `{"seq":12,"device":"light","parameter":"on_off","value":true}`.
+ * The transport address is not part of the payload. The caller resolves
+ * `<protocol>.<device>` and applies `parameter` inside that point's
+ * `props.params`.
+ *
+ * @param seq Message sequence used for deduplication.
+ * @param device Device type id.
+ * @param parameter Technical parameter id.
+ * @param value_json JSON text placed at `value`. NULL or empty is inserted as
+ *                   an empty string.
+ * @param buf Destination.
+ * @param size Size of `buf`, including the NUL.
+ *
+ * @return `buf`, or NULL when a required argument is missing or the payload
+ *         does not fit.
+ */
 char *minihub_device_widget_report_payload(uint32_t seq,
                                            const char *device,
                                            const char *parameter,
                                            const char *value_json,
                                            char *buf, size_t size);
 
-/* ---- Icon lookup (storage-backed, attribute-driven) ----
+/**
+ * @brief Resolve an icon path relative to `MINIHUB_DW_IMAGES_DIR`.
  *
- * Icons live in storage (default /data/images, staged at build from
- * components/minihub_device_widget/images) so they can be added or replaced at
- * runtime, exactly like devices.csv. Which file to use is resolved from the
- * attributes when the UI is rendered; candidates are tried in order and only a
- * file that actually exists in storage wins.
+ * A candidate is used only when that file exists. There is no compiled-in
+ * fallback, and a control icon does not fall back to the device-class icon.
+ * A `-` in an id is mapped to `_` in the file name.
  *
- * With a `parameter` (control icon, searched under <dir>/parameters/):
- *   1. the row's `image` column (explicit override; legacy "images/x.svg"
- *      values are reduced to their basename; the subdir is NOT taken from it)
- *   2. <device>_<parameter>.svg   e.g. "light_brightness.svg"
- *   3. <parameter>.svg            icon shared by the parameter name
+ * With a parameter, under `parameters/`:
+ *     1. The row's `image` column, reduced to its basename.
+ *     2. `<device>_<parameter>.svg`.
+ *     3. `<parameter>.svg`.
  *
- * With `parameter` NULL/"" (device-class icon, searched under <dir>/devices/):
- *   1. the device's `image` column (explicit override, devices.csv)
- *   2. <device>.svg               e.g. "light.svg"
+ * With `parameter` NULL or empty, under `devices/`:
+ *     1. The device `image` column, reduced to its basename.
+ *     2. `<device>.svg`.
  *
- * There is deliberately NO fallback from a control to the device-class icon:
- * the two directories hold different artwork (avatar vs control mockup).
+ * @param device Device type id.
+ * @param parameter Technical parameter id. NULL or empty selects the
+ *                  device-class icon.
+ * @param buf Destination. Use at least `MINIHUB_DW_IMAGE_PATH_MAX` bytes.
+ * @param size Size of `buf`, including the NUL.
  *
- * A "-" in the parameter id maps to "_" when resolving the file name, because
- * icon file names are underscore-only while ids are not.
- *
- * buf receives the path RELATIVE to MINIHUB_DW_IMAGES_DIR (e.g.
- * "parameters/light_brightness.svg", "devices/light.svg"); size
- * includes the NUL and should be >= MINIHUB_DW_IMAGE_PATH_MAX. Returns buf, or
- * NULL when no candidate exists in storage / the path does not fit. There is no
- * compiled-in fallback: a missing icon simply yields NULL and the caller renders
- * without one. */
+ * @return `buf`, or NULL when `device` or `buf` is missing, no candidate
+ *         exists, or the path does not fit.
+ */
 char *minihub_device_widget_image_name(const char *device,
                                        const char *parameter,
                                        char *buf, size_t size);

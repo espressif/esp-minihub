@@ -6,7 +6,9 @@
 
 #pragma once
 
-/** LittleFS mount point (partition label: storage) */
+/**
+ * @brief LittleFS mount point (partition label: storage).
+ */
 #define MINIHUB_VFS_MOUNT       "/data"
 
 #define MINIHUB_CONFIG_DIR        MINIHUB_VFS_MOUNT "/config"
@@ -17,7 +19,7 @@
 #define MINIHUB_MODULE_TMP_DIR    MINIHUB_VFS_MOUNT "/tmp"
 
 /**
- * Device / control icons (SVG) live in storage, not in the firmware: the build
+ * @brief Device / control icons (SVG) live in storage, not in the firmware: the build
  * stages components/minihub_device_widget/images into the `storage` partition
  * (littlefs) at /data/images, so icons can be added/replaced at runtime next to
  * /data/config/devices.csv. That directory is split by what an icon depicts:
@@ -30,49 +32,65 @@
  * header only documents the on-device layout.
  */
 
-/** LittleFS partition for store downloads (.mhub / pack JSON) */
+/**
+ * @brief LittleFS partition for store downloads (.mhub / pack JSON).
+ */
 #define MINIHUB_STORE_MOUNT       "/store"
 #define MINIHUB_STORE_MODULES_DIR MINIHUB_STORE_MOUNT "/modules"
 #define MINIHUB_STORE_PACKS_DIR   MINIHUB_STORE_MOUNT "/packs"
 /**
- * Module packages live under `/store/modules/<id>/`:
+ * @brief Module packages live under `/store/modules/<id>/`:
  *   module.json, <id>.mhub, optional ui.json
  * Legacy flat `/store/modules/<id>.json` + `<id>.mhub` still accepted by the loader.
- * Source of truth in tree: examples/plugins/<id>/ or MINIHUB_PLUGIN_DIRS
+ * Source of truth in tree: examples/plugins/<id>/ or MINIHUB_PLUGIN_DIRS.
  */
 #define MINIHUB_MODULES_DIR       MINIHUB_STORE_MODULES_DIR
-/** Default search path for relative "binary" names (prefer per-module dir) */
+/**
+ * @brief Default search path for relative "binary" names (prefer per-module dir).
+ */
 #define MINIHUB_MODULES_BIN_DIR   MINIHUB_STORE_MODULES_DIR
-/** Per-module static UI assets (served when CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB) */
+/**
+ * @brief Per-module static UI assets (served when CONFIG_MINIHUB_MODULE_THIRD_PARTY_UI_WEB).
+ */
 #define MINIHUB_MODULE_WEB_SUBDIR "web"
 
 /**
- * Host Web console (OEM-skinnable) on storage — staged into the `storage`
+ * @brief Host Web console (OEM-skinnable) on storage — staged into the `storage`
  * LittleFS image at build as /data/web/. PUT /api/dev/web writes here.
  */
 #define MINIHUB_WEB_DIR              MINIHUB_VFS_MOUNT "/web"
 #define MINIHUB_WEB_INDEX            MINIHUB_WEB_DIR "/index.html"
 #define MINIHUB_WEB_LOGIN            MINIHUB_WEB_DIR "/login.html"
 
-/** Store factory preinstall (product_params quirks, zigbee map, …) on /store */
+/**
+ * @brief Store factory preinstall (product_params quirks, zigbee map, …) on /store.
+ */
 #define MINIHUB_PREINSTALL_DIR       MINIHUB_STORE_MOUNT "/preinstall"
-/** Legacy Web path (pre-storage migration); HTTP read fallback only */
+/**
+ * @brief Legacy Web path (pre-storage migration); HTTP read fallback only.
+ */
 #define MINIHUB_PREINSTALL_WEB_DIR   MINIHUB_PREINSTALL_DIR "/web"
 #define MINIHUB_PREINSTALL_WEB_INDEX MINIHUB_PREINSTALL_WEB_DIR "/index.html"
 #define MINIHUB_PREINSTALL_WEB_LOGIN MINIHUB_PREINSTALL_WEB_DIR "/login.html"
 
 /**
- * Shared buffer sizes (include trailing NUL).
+ * @brief Shared buffer sizes (include trailing NUL).
  * Prefer these over ad-hoc array lengths in store / module / JS path code.
  */
-#define MINIHUB_MODULE_ID_MAX          48 /**< /store/modules/<id>/ directory name */
-/** `/store/modules/<id>` — sizeof(dir) includes NUL; covers '/' before id */
+#define MINIHUB_MODULE_ID_MAX          48 /*!< `/store/modules/<id>/` directory name. */
+/**
+ * @brief `/store/modules/<id>` — sizeof(dir) includes NUL; covers '/' before id.
+ */
 #define MINIHUB_MODULE_PKG_PATH_MAX    (sizeof(MINIHUB_MODULES_DIR) + MINIHUB_MODULE_ID_MAX)
-/** `/store/modules/<id>.staging` */
+/**
+ * @brief `/store/modules/<id>.staging`.
+ */
 #define MINIHUB_MODULE_STAGING_PATH_MAX (MINIHUB_MODULE_PKG_PATH_MAX + 8)
-/** staging/module.json or staging/<id>.mhub / main.js */
+/**
+ * @brief Staging/module.json or staging/<id>.mhub / main.js.
+ */
 #define MINIHUB_MODULE_FILE_PATH_MAX   (MINIHUB_MODULE_STAGING_PATH_MAX + MINIHUB_MODULE_ID_MAX + 8)
-#define MINIHUB_PATH_MAX               256 /**< general VFS path under /store or /data */
-#define MINIHUB_STORE_BASE_URL_MAX     96  /**< http://host:port */
-#define MINIHUB_STORE_URL_MAX          256 /**< catalog url path, e.g. /files/x.hub */
+#define MINIHUB_PATH_MAX               256 /*!< General VFS path under /store or /data. */
+#define MINIHUB_STORE_BASE_URL_MAX     96  /*!< `http://host:port`. */
+#define MINIHUB_STORE_URL_MAX          256 /*!< Catalog url path, e.g. /files/x.hub. */
 #define MINIHUB_STORE_ABS_URL_MAX      (MINIHUB_STORE_BASE_URL_MAX + MINIHUB_STORE_URL_MAX)

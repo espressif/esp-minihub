@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 MiniHub Contributors
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
  * Model CSV (devices.csv + parameters.csv) → flat runtime /data/config/devices.csv.
  * Mirrors tools/gen_device_widget.py build_runtime_entries / emit_csv (no services).
  */

@@ -1,5 +1,6 @@
 /*
  * SPDX-FileCopyrightText: 2026 MiniHub Contributors
+ *
  * SPDX-License-Identifier: Apache-2.0
  *
  * Device-class icons, fetched one file per device type.

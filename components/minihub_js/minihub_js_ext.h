@@ -13,6 +13,8 @@
 #if CONFIG_MINIHUB_JS_PLUGINS
 #include "quickjs.h"
 
-/** Attach host.net and host.crypto onto an existing host object. */
+/**
+ * @brief Attach host.net and host.crypto onto an existing host object.
+ */
 void minihub_js_attach_net_crypto(JSContext *ctx, JSValue host);
 #endif

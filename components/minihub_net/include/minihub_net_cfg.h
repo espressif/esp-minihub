@@ -16,21 +16,21 @@ extern "C" {
 #endif
 
 /**
- * @brief Persistent Ethernet / Wi-Fi interface configuration (NVS)
+ * @brief Persistent Ethernet / Wi-Fi interface configuration (NVS).
  *
  * Used by REST POST /api/net/config. Modules should use minihub_net_* or REST, not esp_wifi_*.
  */
 
 /**
- * @brief Network interface selector
+ * @brief Network interface selector.
  */
 typedef enum {
-    MINIHUB_NET_IF_ETH = 0,  /**< Ethernet uplink */
-    MINIHUB_NET_IF_WIFI = 1, /**< Wi-Fi STA uplink */
+    MINIHUB_NET_IF_ETH = 0,  /*!< Ethernet uplink. */
+    MINIHUB_NET_IF_WIFI = 1, /*!< Wi-Fi STA uplink. */
 } minihub_net_iface_t;
 
 /**
- * @brief Runtime interface status snapshot
+ * @brief Runtime interface status snapshot.
  */
 typedef struct {
     bool present;
@@ -44,7 +44,7 @@ typedef struct {
 } minihub_net_iface_status_t;
 
 /**
- * @brief Interface configuration to save or apply
+ * @brief Interface configuration to save or apply.
  */
 typedef struct {
     bool dhcp;
@@ -56,23 +56,23 @@ typedef struct {
 } minihub_net_iface_config_t;
 
 /**
- * @brief Read link/DHCP/address status for an interface
+ * @brief Read link/DHCP/address status for an interface.
  *
- * @param iface Target interface
- * @param out   Output status
+ * @param iface Target interface.
+ * @param out   Output status.
  */
 esp_err_t minihub_net_get_iface_status(minihub_net_iface_t iface, minihub_net_iface_status_t *out);
 
 /**
- * @brief Save interface config to NVS and apply immediately
+ * @brief Save interface config to NVS and apply immediately.
  *
- * @param iface Target interface
- * @param cfg   Configuration
+ * @param iface Target interface.
+ * @param cfg   Configuration.
  */
 esp_err_t minihub_net_set_iface_config(minihub_net_iface_t iface, const minihub_net_iface_config_t *cfg);
 
 /**
- * @brief Re-apply NVS-saved configs after uplinks start
+ * @brief Re-apply NVS-saved configs after uplinks start.
  */
 esp_err_t minihub_net_apply_saved_configs(void);
 

@@ -28,18 +28,26 @@ esp_err_t minihub_rtsp_cam_stop(void);
 bool minihub_rtsp_cam_recording(void);
 const char *minihub_rtsp_cam_last_error(void);
 
-/** Caller owns returned object. */
+/**
+ * @brief Caller owns returned object.
+ */
 cJSON *minihub_rtsp_cam_status_json(void);
 cJSON *minihub_rtsp_cam_list_files_json(int limit);
-/** params: JSON array of basenames. Caller owns returned object. */
+/**
+ * @brief Params: JSON array of basenames. Caller owns returned object.
+ */
 cJSON *minihub_rtsp_cam_delete_files_json(const cJSON *names);
 
-/** Resolve a safe basename under the cam record dir into an absolute path. */
+/**
+ * @brief Resolve a safe basename under the cam record dir into an absolute path.
+ */
 esp_err_t minihub_rtsp_cam_resolve_file(const char *name, char *path_out, size_t path_len);
 
 esp_err_t minihub_rtsp_cam_rpc(const char *method, const cJSON *params, cJSON **out);
 esp_err_t minihub_rtsp_cam_register_rpc(void);
-/** Register GET download URI on the Host httpd (files under cam record dir). */
+/**
+ * @brief Register GET download URI on the Host httpd (files under cam record dir).
+ */
 esp_err_t minihub_rtsp_cam_register_http(void *httpd_handle);
 
 #ifdef __cplusplus

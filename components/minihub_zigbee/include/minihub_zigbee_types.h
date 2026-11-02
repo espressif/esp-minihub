@@ -19,11 +19,15 @@
 #define MINIHUB_ZB_CAP_ENERGY      (1u << 5) /* Simple Metering 0x0702 */
 #define MINIHUB_ZB_MAX_DEVICES     16
 
-/** Sensors that are not on/off actuators (temp/humidity/contact). */
+/**
+ * @brief Sensors that are not on/off actuators (temp/humidity/contact).
+ */
 #define MINIHUB_ZB_CAP_SENSOR_MASK \
     (MINIHUB_ZB_CAP_TEMP | MINIHUB_ZB_CAP_HUMIDITY | MINIHUB_ZB_CAP_IAS_ZONE)
 
-/** Plug metering clusters (stay on switch points; not in SENSOR_MASK). */
+/**
+ * @brief Plug metering clusters (stay on switch points; not in SENSOR_MASK).
+ */
 #define MINIHUB_ZB_CAP_METERING_MASK \
     (MINIHUB_ZB_CAP_ELECTRICAL | MINIHUB_ZB_CAP_ENERGY)
 
