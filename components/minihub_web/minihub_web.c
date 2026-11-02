@@ -4845,6 +4845,11 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     const cJSON *disc = cJSON_GetObjectItem(root, "discovery");
     const cJSON *ssid = cJSON_GetObjectItem(root, "wifi_ssid");
     const cJSON *wpass = cJSON_GetObjectItem(root, "wifi_password");
+    const cJSON *name_j = cJSON_GetObjectItem(root, "name");
+    char name_buf[49] = {0};
+    if (cJSON_IsString(name_j) && name_j->valuestring && name_j->valuestring[0]) {
+        strncpy(name_buf, name_j->valuestring, sizeof(name_buf) - 1);
+    }
     bool merge_existing = !cJSON_IsBool(merge) || cJSON_IsTrue(merge);
 
     uint64_t node_id = 0;
@@ -4932,6 +4937,16 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
         size_t synced = 0;
         esp_err_t commission_err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing,
                                                                  &synced, transport);
+        if (commission_err == ESP_OK && name_buf[0]) {
+            /* Apply the user-supplied name to every endpoint's point_id. The
+             * name overlay wins over the adapter's default at display time, so
+             * the custom name shows immediately and survives commissioning. */
+            for (size_t ei = 0; ei < ep_count; ei++) {
+                char pid[64];
+                minihub_matter_point_id(node_id, endpoints[ei], transport, pid, sizeof(pid));
+                (void)minihub_device_name_set(pid, name_buf);
+            }
+        }
         if (commission_err == ESP_OK) {
             commission_err = minihub_matter_devices_set_commission_phase(node_id, "waiting", NULL);
         }
@@ -4988,6 +5003,13 @@ static esp_err_t handle_api_matter_devices(httpd_req_t *req)
     /* No pairing_code: upsert only (no commission). */
     size_t synced = 0;
     err = minihub_matter_devices_upsert(node_id, endpoints, ep_count, merge_existing, &synced, transport);
+    if (err == ESP_OK && name_buf[0]) {
+        for (size_t ei = 0; ei < ep_count; ei++) {
+            char pid[64];
+            minihub_matter_point_id(node_id, endpoints[ei], transport, pid, sizeof(pid));
+            (void)minihub_device_name_set(pid, name_buf);
+        }
+    }
     cJSON_Delete(root);
     if (err != ESP_OK) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));

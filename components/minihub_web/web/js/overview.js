@@ -1877,6 +1877,8 @@ function openMatterAdd() {
     document.getElementById('matter-code').value = '';
     document.getElementById('matter-node').value = '';
     document.getElementById('matter-eps').value = '1';
+    const nameEl = document.getElementById('matter-name');
+    if (nameEl) nameEl.value = '';
     const pref = (matterStatus && matterStatus.wifi_prefill) || {};
     document.getElementById('matter-wifi-ssid').value = pref.ssid || '';
     document.getElementById('matter-wifi-pass').value = '';
@@ -2013,6 +2015,8 @@ async function submitMatterAdd() {
     const passEl = document.getElementById('matter-wifi-pass');
     const ssid = ssidEl && !ssidEl.disabled ? ssidEl.value.trim() : '';
     const wpass = passEl && !passEl.disabled ? passEl.value : '';
+    const nameEl = document.getElementById('matter-name');
+    const name = nameEl ? nameEl.value.trim() : '';
     const hint = document.getElementById('matter-add-hint');
     const submitBtn = document.getElementById('matter-add-submit');
     if (!code) {
@@ -2025,6 +2029,14 @@ async function submitMatterAdd() {
         hint.textContent = t('ov.ssid_required');
         return;
     }
+    if (name) {
+        const nb = (typeof TextEncoder === 'function') ? new TextEncoder().encode(name).length : name.length;
+        if (nb > 48) {
+            hint.hidden = false;
+            hint.textContent = t('ov.name_too_long');
+            return;
+        }
+    }
     toast(t('ov.adding'));
     const body = {
         pairing_code: code,
@@ -2034,6 +2046,7 @@ async function submitMatterAdd() {
         discovery
     };
     if (node) body.node_id = node;
+    if (name) body.name = name;
     if (discovery === 'ble_wifi') {
         body.wifi_ssid = ssid;
         if (wpass) body.wifi_password = wpass;

@@ -178,6 +178,12 @@ esp_err_t minihub_matter_next_node_id(uint64_t *out_node_id);
 esp_err_t minihub_matter_devices_upsert(uint64_t node_id, const uint16_t *endpoints, size_t endpoint_count,
                                         bool merge_existing, size_t *synced_count, const char *transport);
 
+/* Compute the point_id string for a Matter node/endpoint under a transport,
+ * mirroring the format used when upserting devices. Lets callers (e.g. the web
+ * API) record an external name/override keyed by the same id. */
+esp_err_t minihub_matter_point_id(uint64_t node_id, uint16_t endpoint_id, const char *transport,
+                                  char *out, size_t out_len);
+
 /**
  * Set commission UI phase on all matter.devices[] rows for node_id.
  * @param phase  "waiting" | "failed" | NULL/"" to clear (device is commissioned).
