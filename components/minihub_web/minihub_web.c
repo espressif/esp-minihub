@@ -1648,10 +1648,14 @@ static esp_err_t handle_api_net_wifi(httpd_req_t *req)
     }
 
     const cJSON *ssid_j = cJSON_GetObjectItem(root, "ssid");
-    if (!cJSON_IsString(ssid_j) || !ssid_j->valuestring || ssid_j->valuestring[0] == '\0' ||
-        strlen(ssid_j->valuestring) > 32) {
+    if (!cJSON_IsString(ssid_j)) {
         cJSON_Delete(root);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "ssid required");
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "ssid must be a string");
+    }
+    const char *ssid_val = ssid_j->valuestring ? ssid_j->valuestring : "";
+    if (strlen(ssid_val) > 32) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "ssid too long");
     }
 
     const cJSON *pass_j = cJSON_GetObjectItem(root, "password");
@@ -1664,7 +1668,7 @@ static esp_err_t handle_api_net_wifi(httpd_req_t *req)
 
     char ssid[33];
     char pass_buf[65];
-    strncpy(ssid, ssid_j->valuestring, sizeof(ssid) - 1);
+    strncpy(ssid, ssid_val, sizeof(ssid) - 1);
     ssid[sizeof(ssid) - 1] = '\0';
     strncpy(pass_buf, password, sizeof(pass_buf) - 1);
     pass_buf[sizeof(pass_buf) - 1] = '\0';

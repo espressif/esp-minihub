@@ -92,6 +92,12 @@ esp_err_t minihub_provision_save_credentials(const char *ssid, const char *passw
     return save_wifi_to_nvs(&cfg);
 }
 
+esp_err_t minihub_provision_clear_credentials(void)
+{
+    wifi_config_t cfg = {0};
+    return save_wifi_to_nvs(&cfg);
+}
+
 #if CONFIG_MINIHUB_WIFI_PROVISIONING
 static void publish_provision_event(const char *type)
 {
