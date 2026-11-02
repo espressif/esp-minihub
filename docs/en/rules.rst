@@ -226,7 +226,7 @@ Limits (fixed in firmware):
    :widths: 34 66
 
    * - What
-     - Cap and behaviour when exceeded
+     - Cap and behavior when exceeded
    * - Rules per document
      - 16 — later entries are dropped silently
    * - Steps per rule

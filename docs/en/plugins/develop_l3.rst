@@ -300,7 +300,7 @@ Install and debug
 -----------------
 
 If ``my_native`` is in the store folder because you placed it there yourself
-(step 4), open **Store** in the Web UI at ``http://HUB/``, refresh the catalog and
+(step 4), open ``Store`` in the Web UI at ``http://HUB/``, refresh the catalog and
 install it: the install reloads the Hub as it goes (send ``"reload": false`` to
 skip that). A module that comes in disabled is switched on with **Enable**, which
 reloads the same way. Factory ``store_preinstall`` modules are already loaded at

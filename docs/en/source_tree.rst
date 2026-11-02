@@ -36,7 +36,7 @@ Top level
    * - ``components/``
      - Shared Core, services, and adapters. Every product links these; do not
        copy them into a product.
-     - You are changing Host behaviour
+     - You are changing Host behavior
    * - ``configs/``
      - ``minihub_manifest.yml`` (the ``_host_base`` manifest all products
        extend), ``adapters.json``, ``rules.json``, ``scenes.json``,

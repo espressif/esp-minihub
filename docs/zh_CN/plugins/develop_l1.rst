@@ -90,7 +90,7 @@ L1 模块是 **纯配置** 的 ``.mhub`` 包：不含 ``main.js`` 或原生 ``.s
 ``pack`` 自己就会在包旁边写 ``catalog.json`` ，只有手工放好的 ``.mhub`` 或改过条目之后
 才需要 ``sync_store_catalog.py`` 。
 
-设备上，在 Web UI（ ``http://HUB/`` ）中打开 **商店**，把自定义商店 URL 设为
+设备上，在 Web UI（ ``http://HUB/`` ）中打开 ``商店``，把自定义商店 URL 设为
 ``store_server.py`` 打印出的地址，刷新目录并安装 ``my_pack``，Hub 会自动重载。
 仓库内的 L1 示例是 ``examples/plugins/ble_mesh_pack``。
 

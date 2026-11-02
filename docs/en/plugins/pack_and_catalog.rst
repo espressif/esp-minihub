@@ -122,7 +122,7 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
   pack is ``config_only: true`` (a ``.json`` install URL works too);
   ``runtime: "pack"`` is written alongside and is what the package classifier
   and the loader use to route the package to ``minihub_pack`` rather than
-  treat it as a loadable module. A hand-written ``"type": "pack"`` is honoured
+  treat it as a loadable module. A hand-written ``"type": "pack"`` is honored
   only where the Hub reports installed state — it cannot be *installed*: the
   catalog lookup lets a ``pack`` request find a ``module`` entry (and the
   reverse) only for ``config_only`` items, and an entry whose ``url`` ends in
@@ -154,7 +154,7 @@ says ``pack``.
 Install on a running Hub
 ------------------------
 
-**From local Store server** (Web UI → Store → refresh catalog → install).
+**From local Store server** (Web UI > ``Store`` > refresh catalog > install).
 
 **Web UI** — open ``http://HUB/`` and go to **Store**, set the custom Store URL
 to your local server, refresh the catalog, then install ``color_bulb_js``. The

@@ -137,7 +137,7 @@ IDF 构建。
    :doc:`plugins/develop_l2` ）
 2. ``python3 tools/pack_store_module.py pack ID``
 3. 本机运行 ``python3 tools/store_server.py`` （Hub 通过局域网拉包，不是在设备上跑）
-4. 打开 Web UI（ ``http://HUB/`` ）并进入 **商店**
+4. 打开 Web UI（ ``http://HUB/`` ）并进入 ``商店``
 5. 在商店中将 自定义商店 URL 设为该服务，刷新目录后在商店 UI 中
    安装 ``ID`` （L1 用 ``pack`` 作为类型）
 

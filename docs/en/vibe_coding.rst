@@ -64,7 +64,7 @@ server described below is a separate thing: it talks to a Hub over the network.
 On-device MCP
 -------------
 
-A Hub can serve MCP itself. Enable ``CONFIG_MINIHUB_MCP_SERVER`` and initialise
+A Hub can serve MCP itself. Enable ``CONFIG_MINIHUB_MCP_SERVER`` and initialize
 the ``components/esp-claw`` submodule; a local MCP client then reaches the Hub
 over the transport the product wires up, and every tool answers with JSON text.
 

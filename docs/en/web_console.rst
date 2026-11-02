@@ -137,7 +137,7 @@ Replace on a running Hub (no reflash)
 -------------------------------------
 
 The Web console can also be updated from the UI: with a custom plugin server
-configured, open **System → Check for updates** and apply the web update -- the
+configured, open ``System`` > ``Check for updates`` and apply the web update -- the
 Hub pulls the new bundle (``POST /api/update/apply`` with ``"type":"web"``). The
 ``PUT /api/dev/web/`` route below is the developer/manual alternative for lab
 work:

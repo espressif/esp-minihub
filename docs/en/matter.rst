@@ -292,7 +292,7 @@ Each cap below, with the line of code that sets it, is listed in :doc:`limits`.
   so 64 endpoints across all radios is the real ceiling on the point registry,
   well below what the Matter tables allow.
 * **Boolean attributes only.** A report whose TLV does not decode as a bool is dropped.
-  OnOff is the only attribute armed; level, colour and cover position each need their own
+  OnOff is the only attribute armed; level, color and cover position each need their own
   decode plus a per-cluster value mapping.
 * **Re-read after each (re)arm.** ``minihub_matter_read_onoff()`` is called by the
   adapter right after every subscription arm, so a dropped subscription that clobbered

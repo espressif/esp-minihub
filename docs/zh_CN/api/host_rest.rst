@@ -656,7 +656,7 @@ GET /api/update/notes
 
    ``GET /api/update/hints · POST /api/update/check · GET /api/update/check · POST /api/update/apply``
 
-这些是 **系统** 页更新角标背后的 REST 调用。``hints`` 只返回缓存的更新项：
+这些是 ``系统`` 页更新角标背后的 REST 调用。``hints`` 只返回缓存的更新项：
 ``firmware``、``web``、``assets`` （对象或 ``null``）与 ``plugins`` （数组），
 不会发起任何请求。``POST /api/update/check`` 启动后台探测并回
 ``{"result":"pending"}``，已有探测在跑时回 ``"unavailable"``；

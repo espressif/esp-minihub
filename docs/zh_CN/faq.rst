@@ -101,7 +101,7 @@ adapters.json 在哪？
 ------------------------
 
 改 ``components/minihub_web/web/`` 后 ``storage-flash``，或配置自定义插件服务器后在
-界面里更新（**系统 → 检查更新** → 更新网页）；已运行 Hub 上的 ``PUT /api/dev/web/``
+界面里更新（``系统`` > ``检查更新`` > 更新网页）；已运行 Hub 上的 ``PUT /api/dev/web/``
 是开发用 REST 手动写入。``app-flash`` 不会更新 ``/data/web``。见 :doc:`web_console`。
 
 如何烧工厂镜像 / 做 OTA？

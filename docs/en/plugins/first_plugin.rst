@@ -25,7 +25,7 @@ rest are generated or read by someone else:
      - you (identity, ``runtime``)
      - the loader, to decide whether the package may load on this Host
    * - ``main.js``
-     - you (all behaviour)
+     - you (all behavior)
      - the embedded QuickJS engine, inside ``setup(host)``
    * - ``meta.json``
      - you (``ui`` labels, ``capabilities``)
@@ -66,7 +66,7 @@ And you need a writable deploy directory, by default ``~/workspace/minihub_store
 ``--id`` is both the directory name and the module id: lowercase, underscores.
 Nothing is compiled at this point, and nothing is installed.
 
-2. Write the behaviour
+2. Write the behavior
 ----------------------
 
 ``main.js`` exposes one function; the Host calls it on load and on every reload:
@@ -134,7 +134,7 @@ server sees it before touching the Hub:
 4. Install on the Hub
 ---------------------
 
-In the Web UI at ``http://HUB/``, open **Store**, set the custom Store URL to
+In the Web UI at ``http://HUB/``, open ``Store``, set the custom Store URL to
 ``http://YOUR_PC:8080``, then refresh the catalog and install ``my_js``.
 
 5. See it running

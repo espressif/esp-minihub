@@ -21,7 +21,7 @@ the body is the shortest thing the handler had to say about the failure.
 
 .. minihub-errors:: http
 
-Three of those codes carry behaviour the status line alone does not:
+Three of those codes carry behavior the status line alone does not:
 
 * A **401** also clears the ``mh_sess`` cookie in the response, so a console that has
   been left open falls back to the login screen instead of retrying with a dead session.
