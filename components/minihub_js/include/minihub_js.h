@@ -11,15 +11,19 @@
 extern "C" {
 #endif
 
-/** Load/reload enabled L2 JS modules under /store/modules (Host API v0). */
+/**
+ * @brief Load/reload enabled L2 JS modules under /store/modules (Host API v0).
+ */
 esp_err_t minihub_js_reload(void);
 
-/** Tear down JS realms (before module unload / shutdown). */
+/**
+ * @brief Tear down JS realms (before module unload / shutdown).
+ */
 void minihub_js_unload_all(void);
 
 #if CONFIG_MINIHUB_JS_PLUGINS
 /**
- * Submit a job to run on the JS worker WITHOUT blocking the caller. The worker
+ * @brief Submit a job to run on the JS worker WITHOUT blocking the caller. The worker
  * drains the queue each loop iteration. Used by the web server so a long module
  * RPC (e.g. miot_js sync) never stalls the single httpd task — the response is
  * delivered by the job itself once the worker finishes.

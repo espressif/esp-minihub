@@ -102,7 +102,7 @@ Scripts (scaffold → pack → catalog → serve):
 ``sync_store_catalog.py`` is only needed for a ``.mhub`` you placed by hand or
 after editing an entry.
 
-On the device, in the Web UI at ``http://HUB/``, open **Store**, set the custom
+On the device, in the Web UI at ``http://HUB/``, open ``Store``, set the custom
 Store URL to the address ``store_server.py`` printed, refresh the catalog, and
 install ``my_pack``; the Hub reloads automatically. The in-tree L1 example is
 ``examples/plugins/ble_mesh_pack``.

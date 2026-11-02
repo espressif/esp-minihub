@@ -697,7 +697,7 @@ Update check and apply
 
    ``GET /api/update/hints · POST /api/update/check · GET /api/update/check · POST /api/update/apply``
 
-These are the REST calls behind the **System** page update badge. ``hints``
+These are the REST calls behind the ``System`` page update badge. ``hints``
 returns the cached offers as ``firmware``, ``web``, ``assets`` (objects or
 ``null``) and ``plugins`` (array); nothing is fetched here.
 ``POST /api/update/check`` starts a background probe and answers

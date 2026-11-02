@@ -19,7 +19,7 @@ or one 802.15.4 stack. A Zigbee or Thread Hub therefore takes its IP uplink from
 Ethernet. ``minihub_adapter_start_all()`` starts Wi-Fi first, then 802.15.4, then
 BLE Mesh; adapters that hold no radio (Modbus, for example) start last. The Wi-Fi
 group wins: when ``adapters.json`` asks for Wi-Fi or BLE Mesh together with
-Zigbee/Thread, the 802.15.4 adapter is the loser — it is not initialised, not
+Zigbee/Thread, the 802.15.4 adapter is the loser — it is not initialized, not
 started, publishes no points, is never polled, a ``radio mutex`` warning is
 logged, and the file is not rewritten. Zigbee and Thread are also held apart at
 build time: ``tools/build_firmware.py`` refuses a configuration that turns

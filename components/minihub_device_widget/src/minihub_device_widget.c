@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 MiniHub Contributors
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
  * minihub_device_widget - runtime-loaded device control descriptor registry.
  *
  * The registry is parsed from a CSV (default /data/config/devices.csv, with a

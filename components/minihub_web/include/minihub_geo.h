@@ -21,14 +21,22 @@ typedef struct {
 
 esp_err_t minihub_web_get_geo(minihub_geo_t *out);
 
-/** Read cached geolocation only (never blocks on HTTP). */
+/**
+ * @brief Read cached geolocation only (never blocks on HTTP).
+ */
 esp_err_t minihub_web_peek_geo(minihub_geo_t *out);
 
-/** True when STA netif exists and has a non-zero IPv4 address (safe for HTTP/DNS). */
+/**
+ * @brief True if STA netif exists and has a non-zero IPv4 address (safe for HTTP/DNS); false otherwise.
+ */
 bool minihub_web_sta_has_ip(void);
 
-/** Copy STA IPv4 dotted string into buf (empty if unavailable). Returns true when written. */
+/**
+ * @brief Copy STA IPv4 dotted string into buf (empty if unavailable). Returns true when written.
+ */
 bool minihub_web_get_sta_ip(char *buf, size_t len);
 
-/** Re-fetch IP geolocation after network is up (async; safe from Wi-Fi event handlers). */
+/**
+ * @brief Re-fetch IP geolocation after network is up (async; safe from Wi-Fi event handlers).
+ */
 esp_err_t minihub_web_refresh_geo_async(void);

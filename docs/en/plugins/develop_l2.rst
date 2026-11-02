@@ -182,7 +182,7 @@ Pack, deploy, test
    python3 tools/sync_store_catalog.py --from-store
    python3 tools/store_server.py
 
-Then in the Web UI at ``http://HUB/``, open **Store**, set the custom Store URL
+Then in the Web UI at ``http://HUB/``, open ``Store``, set the custom Store URL
 to ``http://YOUR_PC:8080``, refresh the catalog, and install ``demo_js``. The
 Hub reloads the module automatically.
 

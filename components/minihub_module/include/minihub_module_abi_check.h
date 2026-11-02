@@ -21,11 +21,13 @@
 extern "C" {
 #endif
 
-/** True when `hash` is one of the hashes the firmware accepts for host symbol `name`. */
+/**
+ * @brief True if `hash` is one of the hashes the firmware accepts for host symbol `name`; false otherwise.
+ */
 bool minihub_module_abi_acceptable(const char *name, const char *hash);
 
 /**
- * Validate a plugin catalog ``abi`` object
+ * @brief Validate a plugin catalog `abi` object
  * ({"abi_version":N,"symbols":{name:hash}}).
  *
  * Returns ESP_OK when every declared symbol hash is in the baked acceptable set,

@@ -167,7 +167,7 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
    python3 tools/sync_store_catalog.py --from-store
    python3 tools/store_server.py
 
-然后在 Web UI（ ``http://HUB/`` ）中打开 **商店**，将 自定义商店 URL 设为
+然后在 Web UI（ ``http://HUB/`` ）中打开 ``商店``，将自定义商店 URL 设为
 ``http://YOUR_PC:8080``，刷新目录并安装 ``demo_js``。Hub 会自动重载模块。
 
 验证：

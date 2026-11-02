@@ -148,7 +148,7 @@ Develop a Store plugin (quick path)
 2. ``python3 tools/pack_store_module.py pack ID``
 3. Run ``python3 tools/store_server.py`` on the PC (the Hub pulls packages over
    LAN; do not run this on the device)
-4. Open the Web UI at ``http://HUB/`` and open **Store**
+4. Open the Web UI at ``http://HUB/`` and open ``Store``
 5. Set the custom Store URL to that server, then refresh the catalog and
    install ``ID`` in the Store UI (L1 packs use ``pack`` as the type)
 

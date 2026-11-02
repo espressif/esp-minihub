@@ -19,32 +19,32 @@ typedef enum {
 } minihub_update_kind_t;
 
 /**
- * Compare the deploy server at ``base_url`` (origin, no trailing path) with
+ * @brief Compare the deploy server at `base_url` (origin, no trailing path) with
  * what is already on the device.
  *
  * Returns 0 when nothing is newer, a positive count of pending items, or a
- * negative value on failure (``-(int)esp_err_t``; ``ESP_FAIL`` is already
+ * negative value on failure (`-(int)esp_err_t`; `ESP_FAIL` is already
  * negative). Firmware counts as one item: the highest version whose
- * ``targets`` include this chip (or ``*``). Asset and web items compare
+ * `targets` include this chip (or `*`). Asset and web items compare
  * size and sha256 of the local file.
  */
 int minihub_update_check(minihub_update_kind_t kind, const char *base_url);
 
 /**
- * Download and apply whatever minihub_update_check() would report.
- * Firmware hands the bin URL to ``minihub_ota_start_url()`` and returns
- * without waiting for the reboot. Asset ``devices.csv`` / ``parameters.csv``
- * go through ``minihub_device_widget_put_model()``. Other model files land
- * in ``/data/config/model``, images in ``/data/images``, web files in
- * ``/data/web``.
+ * @brief Download and apply whatever minihub_update_check() would report.
+ * Firmware hands the bin URL to `minihub_ota_start_url()` and returns
+ * without waiting for the reboot. Asset `devices.csv` / `parameters.csv`
+ * go through `minihub_device_widget_put_model()`. Other model files land
+ * in `/data/config/model`, images in `/data/images`, web files in
+ * `/data/web`.
  *
  * Returns 0 on success, or a negative value on failure (same encoding as
- * ``minihub_update_check``).
+ * `minihub_update_check`).
  */
 int minihub_update_apply(minihub_update_kind_t kind, const char *base_url);
 
 /**
- * Like minihub_update_apply(), but re-fetches every selected item even when the
+ * @brief Like minihub_update_apply(), but re-fetches every selected item even when the
  * local file already matches (same-version re-install / repair). File-based
  * items are streamed to a same-directory "<dest>.part" temp file and only
  * renamed over the existing file after the sha256/size check passes, so an
@@ -54,21 +54,21 @@ int minihub_update_apply(minihub_update_kind_t kind, const char *base_url);
 int minihub_update_apply_force(minihub_update_kind_t kind, const char *base_url, bool force);
 
 /**
- * After the network has an address, compare deploy firmware and installed
+ * @brief After the network has an address, compare deploy firmware and installed
  * plugin versions once, then again every hour. Records a hint list only.
  * Does not start OTA or install plugins. Uses the store deploy URL.
  */
 void minihub_update_hint_start(void);
 
 /**
- * Last hint list. Object ``{ "firmware": null|{version,current,note},
+ * @brief Last hint list. Object ``{ "firmware": null|{version,current,note},
  * "plugins": [...], "web": null|{version,current,note},
  * "assets": null|{pending} }``. Caller deletes. Empty when nothing is pending.
  */
 cJSON *minihub_update_hints_json(void);
 
 /**
- * Ask the resident hint task to re-check firmware, plugins, web and device
+ * @brief Ask the resident hint task to re-check firmware, plugins, web and device
  * assets now. Non-blocking: it never runs the probes on the caller's task (they
  * would block an httpd handler for the full select() timeout against an
  * unreachable deploy server) and it never spawns a second task, so the hint
@@ -80,26 +80,30 @@ cJSON *minihub_update_hints_json(void);
  */
 esp_err_t minihub_update_hints_refresh_async(void);
 
-/** True while a hint probe is running, or one was requested and not yet served
- *  (e.g. there is still no IP, so the probes cannot run). */
+/**
+ * @brief Report whether a hint probe is running.
+ *
+ * `*busy` is true while a probe is running, or one was requested and not yet
+ * served (for example, there is still no IP, so the probes cannot run).
+ */
 void minihub_update_hints_refresh_status(bool *busy);
 
 /**
- * Local versions and release notes for the console.
- * Object ``{firmware_version, firmware_note, web_version, web_note}``.
+ * @brief Local versions and release notes for the console.
+ * Object `{firmware_version, firmware_note, web_version, web_note}`.
  * Strings are empty when that piece is not on the device yet. Caller deletes.
  * Does not contact the deploy server.
  */
 cJSON *minihub_update_notes_json(void);
 
 /**
- * Fetch one device type's avatar straight from the deploy root
- * (``GET <base>/files/Assets/images/devices/<type>.svg``) into
+ * @brief Fetch one device type's avatar straight from the deploy root
+ * (`GET <base>/files/Assets/images/devices/<type>.svg`) into
  * /data/images/devices/<type>.svg -- the path GET /img/ serves.
  *
  * The name is derived from the type by convention, so no metadata request is
  * needed; this also covers a plugin-owned type that the shared model does not
- * know. ``base_url`` may be NULL to use the configured store URL.
+ * know. `base_url` may be NULL to use the configured store URL.
  *
  * A type with no artwork is a 404 and leaves the tree untouched. An icon that is
  * already present (non-empty regular file) is NOT fetched again -- so replacing

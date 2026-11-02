@@ -14,7 +14,7 @@ stored on the device and evaluated there
 (:doc:`rules`), and the web console, the REST API and the WebSocket stream are
 served by the device as well, so LAN control survives an internet outage.
 
-Protocol or cloud behaviour that is not in your firmware can still arrive later,
+Protocol or cloud behavior that is not in your firmware can still arrive later,
 because a Store module is installed at run time and needs no rebuild
 (:doc:`plugins/overview`). The console and your own integration use the same
 REST, WebSocket and JavaScript surface (:doc:`api/index`), which is also what
@@ -32,7 +32,7 @@ Who reads this guide
      - What you are deciding
      - Chapters that matter
    * - Evaluating the platform
-     - Protocol coverage, offline behaviour, licence, limitations
+     - Protocol coverage, offline behavior, license, limitations
      - This page, :doc:`architecture`, :doc:`radios`, :doc:`faq`
    * - Product engineer
      - Board, partitions, feature flags, factory config, field update

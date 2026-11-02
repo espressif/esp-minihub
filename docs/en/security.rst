@@ -5,7 +5,7 @@ Security Model
 
 This chapter says what the Host protects, what it assumes about your network, and
 what an OEM has to add before a unit ships. It is a description of shipped
-behaviour, not a promise: the public build is written for a trusted LAN.
+behavior, not a promise: the public build is written for a trusted LAN.
 
 What is on by default
 ---------------------
@@ -121,7 +121,7 @@ Decide these yourself; none of them is a switch you can turn on later:
   there are no test reports, no antenna or matching guidance, and no CE / FCC / SRRC /
   TELEC module certificates, so nothing here is evidence that a device built from it
   complies with anything. Country and channel plan, transmit power and coexistence
-  behaviour are set through ESP-IDF's Wi-Fi driver — MiniHub never overrides them — and
+  behavior are set through ESP-IDF's Wi-Fi driver — MiniHub never overrides them — and
   the resulting certification work belongs to your hardware team and the target market.
 
 Related: :doc:`web_console` (login and sessions), :doc:`production` (flash, eFuse

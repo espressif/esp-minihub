@@ -29,17 +29,21 @@ esp_err_t minihub_ota_init(void);
 minihub_ota_state_t minihub_ota_get_state(void);
 const char *minihub_ota_get_error(void);
 minihub_ota_source_t minihub_ota_get_source(void);
-/** Progress 0–100, or -1 if unknown. */
+/**
+ * @brief Progress 0–100, or -1 if unknown.
+ */
 int minihub_ota_get_progress(void);
 size_t minihub_ota_get_bytes_written(void);
 bool minihub_ota_is_busy(void);
 const char *minihub_ota_source_str(minihub_ota_source_t src);
 
-/** Async URL download OTA. Returns ESP_ERR_INVALID_STATE if busy. */
+/**
+ * @brief Async URL download OTA. Returns ESP_ERR_INVALID_STATE if busy.
+ */
 esp_err_t minihub_ota_start_url(const char *url);
 
 /**
- * Streaming upload: begin → write* → finish/abort.
+ * @brief Streaming upload: begin → write* → finish/abort.
  * begin returns ESP_ERR_INVALID_STATE if busy.
  */
 esp_err_t minihub_ota_upload_begin(size_t expected_size);
@@ -48,7 +52,7 @@ esp_err_t minihub_ota_upload_finish(void);
 void minihub_ota_upload_abort(const char *err);
 
 /**
- * RainMaker bridge: claim / release unified status without writing flash here.
+ * @brief RainMaker bridge: claim / release unified status without writing flash here.
  * try_begin returns false if local OTA holds the lock.
  */
 bool minihub_ota_rainmaker_try_begin(size_t expected_size);

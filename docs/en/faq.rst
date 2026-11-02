@@ -107,7 +107,7 @@ How do I replace the Web console?
 ----------------------------------
 
 Edit ``components/minihub_web/web/`` then ``storage-flash``, or update from the
-UI with a custom plugin server (**System → Check for updates** → apply web); the
+UI with a custom plugin server (``System`` > ``Check for updates`` > apply web); the
 developer REST route ``PUT /api/dev/web/`` on a running Hub is the manual
 alternative. ``app-flash`` does not update
 ``/data/web``. Details: :doc:`web_console`.

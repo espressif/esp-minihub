@@ -17,13 +17,15 @@ extern "C" {
 #endif
 
 /**
- * @brief Store L3 native module binary ABI
+ * @brief Store L3 native module binary ABI.
  *
  * Modules export minihub_module_entry and use minihub_module_host_api_t to call Core
  * services without linking minihub_core.
  */
 
-/** @brief Host ↔ module ABI version; bump on incompatible vtable changes */
+/**
+ * @brief Host ↔ module ABI version; bump on incompatible vtable changes.
+ */
 #define MINIHUB_MODULE_ABI_VERSION  1
 
 /*
@@ -40,16 +42,24 @@ extern "C" {
  * - Extend minihub_module_host_api_t only at the tail; modules must honor struct_size.
  */
 
-/** @brief Module image magic ("MHMD") */
+/**
+ * @brief Module image magic ("MHMD").
+ */
 #define MINIHUB_MODULE_MAGIC  0x4D484D44U
 
-/** @brief Exported module entry symbol name (resolved by elf_loader) */
+/**
+ * @brief Exported module entry symbol name (resolved by elf_loader).
+ */
 #define MINIHUB_MODULE_ENTRY_SYMBOL  "minihub_module_entry"
 
-/** @brief Optional module RPC symbol (POST /api/modules/{id}/rpc) */
+/**
+ * @brief Optional module RPC symbol (POST /api/modules/{id}/rpc).
+ */
 #define MINIHUB_MODULE_RPC_SYMBOL    "minihub_module_rpc"
 
-/** @brief Module RPC dispatch callback (optional symbol MINIHUB_MODULE_RPC_SYMBOL) */
+/**
+ * @brief Module RPC dispatch callback (optional symbol MINIHUB_MODULE_RPC_SYMBOL).
+ */
 typedef esp_err_t (*minihub_module_rpc_fn)(const char *method, const cJSON *params, cJSON **out);
 
 /**
@@ -58,12 +68,12 @@ typedef esp_err_t (*minihub_module_rpc_fn)(const char *method, const cJSON *para
  * Resolves the install dir via the module registry (adapter_name to the
  * manifest parent dir). Does not accept absolute paths from the plugin.
  *
- * @param adapter_name Module adapter name (usually equals module id)
+ * @param adapter_name Module adapter name (usually equals module id).
  * @param rel_name     Relative name under that dir (e.g. "devices.json").
  *                     Rejects absolute paths and ".." segments.
  * @param[out] out     Malloc'd NUL-terminated buffer; caller must free().
  * @param[out] out_len Optional length excluding NUL (may be NULL).
- * @return ESP_OK, ESP_ERR_INVALID_ARG, ESP_ERR_NOT_FOUND, ESP_ERR_NO_MEM, ESP_FAIL
+ * @return ESP_OK, ESP_ERR_INVALID_ARG, ESP_ERR_NOT_FOUND, ESP_ERR_NO_MEM, ESP_FAIL.
  */
 typedef esp_err_t (*minihub_module_read_file_fn)(const char *adapter_name, const char *rel_name,
                                                  char **out, size_t *out_len);
@@ -73,10 +83,10 @@ typedef esp_err_t (*minihub_module_read_file_fn)(const char *adapter_name, const
  *
  * Appended at the vtable tail. Check struct_size before calling on older Hosts.
  *
- * @param event_type Event name
- * @param handler    Callback
- * @param user_data  Passed through to handler
- * @return ESP_OK on success
+ * @param event_type Event name.
+ * @param handler    Callback.
+ * @param user_data  Passed through to handler.
+ * @return ESP_OK on success.
  */
 typedef esp_err_t (*minihub_module_event_subscribe_fn)(const char *event_type,
                                                        minihub_event_handler_t handler,
@@ -87,10 +97,10 @@ typedef esp_err_t (*minihub_module_event_subscribe_fn)(const char *event_type,
  *
  * Appended at the vtable tail. Check struct_size before calling on older Hosts.
  *
- * @param point_id Device point id
- * @param value    Optional compact summary; may be NULL
- * @param params   Params object to merge
- * @return ESP_OK on success
+ * @param point_id Device point id.
+ * @param value    Optional compact summary; may be NULL.
+ * @param params   Params object to merge.
+ * @return ESP_OK on success.
  */
 typedef esp_err_t (*minihub_module_point_merge_params_fn)(const char *point_id, const char *value,
                                                           cJSON *params);
@@ -100,24 +110,24 @@ typedef esp_err_t (*minihub_module_point_merge_params_fn)(const char *point_id, 
  *
  * Appended at the vtable tail. Check struct_size before calling on older Hosts.
  *
- * @param point_id     Device point id
- * @param value        Optional compact summary; may be NULL
- * @param props_patch  Top-level props keys to merge
- * @return ESP_OK on success
+ * @param point_id     Device point id.
+ * @param value        Optional compact summary; may be NULL.
+ * @param props_patch  Top-level props keys to merge.
+ * @return ESP_OK on success.
  */
 typedef esp_err_t (*minihub_module_point_merge_props_fn)(const char *point_id, const char *value,
                                                          cJSON *props_patch);
 
 /**
- * @brief Core services Host exposes to dynamic modules
+ * @brief Core services Host exposes to dynamic modules.
  *
  * Modules must not link minihub_core; call only through this vtable.
  * Check host->struct_size before calling pointers appended in newer Host versions.
  */
 typedef struct {
-    uint32_t struct_size;     /**< Size of vtable filled by Host */
-    uint32_t abi_version;     /**< Must equal MINIHUB_MODULE_ABI_VERSION */
-    uint32_t core_api_version; /**< Host MINIHUB_CORE_API_VERSION */
+    uint32_t struct_size;     /*!< Size of vtable filled by Host. */
+    uint32_t abi_version;     /*!< Must equal MINIHUB_MODULE_ABI_VERSION. */
+    uint32_t core_api_version; /*!< Host MINIHUB_CORE_API_VERSION. */
 
     esp_err_t (*point_register)(const minihub_point_t *point);
     esp_err_t (*point_unregister)(const char *point_id);
@@ -132,13 +142,15 @@ typedef struct {
     esp_err_t (*hub_reload)(void);
     esp_err_t (*adapter_soft_reload)(const char *adapter_name);
 
-    minihub_module_read_file_fn module_read_file;           /**< See minihub_module_read_file_fn */
-    minihub_module_event_subscribe_fn event_subscribe;     /**< See minihub_module_event_subscribe_fn */
-    minihub_module_point_merge_params_fn point_merge_params; /**< See minihub_module_point_merge_params_fn */
-    minihub_module_point_merge_props_fn point_merge_props; /**< See minihub_module_point_merge_props_fn */
+    minihub_module_read_file_fn module_read_file;           /*!< See minihub_module_read_file_fn. */
+    minihub_module_event_subscribe_fn event_subscribe;     /*!< See minihub_module_event_subscribe_fn. */
+    minihub_module_point_merge_params_fn point_merge_params; /*!< See minihub_module_point_merge_params_fn. */
+    minihub_module_point_merge_props_fn point_merge_props; /*!< See minihub_module_point_merge_props_fn. */
 } minihub_module_host_api_t;
 
-/** @brief Module metadata (manifest / runtime registry) */
+/**
+ * @brief Module metadata (manifest / runtime registry).
+ */
 typedef struct {
     char id[32];
     char name[64];
@@ -152,14 +164,16 @@ typedef struct {
 } minihub_module_info_t;
 
 /**
- * @brief Required module entry export (symbol MINIHUB_MODULE_ENTRY_SYMBOL)
+ * @brief Required module entry export (symbol MINIHUB_MODULE_ENTRY_SYMBOL).
  */
 typedef esp_err_t (*minihub_module_entry_fn)(
     const minihub_module_host_api_t *host,
     const cJSON *config,
     const minihub_adapter_t **out_adapter);
 
-/** @brief .mhub image header (little-endian, prepended to ELF) */
+/**
+ * @brief .Mhub image header (little-endian, prepended to ELF).
+ */
 typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t abi_version;

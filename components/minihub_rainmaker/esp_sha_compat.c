@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 MiniHub Contributors
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
  * Software fallback implementation of esp_sha().
  *
  * The MiniHub project deliberately runs mbedTLS in software-crypto mode:

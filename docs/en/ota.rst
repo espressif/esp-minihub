@@ -33,19 +33,19 @@ linker reports the app does not fit, grow ``ota_0`` / ``ota_1`` (see
 Pull from the OTA server
 -------------------------
 
-Triggered manually in the Web UI: on the **System** page, the Hub queries the
-configured **OTA server (deploy root)** for an update matching its chip; when one
+Triggered manually in the Web UI: on the ``System`` page, the Hub queries the
+configured OTA server (deploy root) for an update matching its chip; when one
 is available, the firmware version row shows a "new version vX" badge, and clicking
-**Update firmware** pulls the firmware from that server and flashes it. This path
+``Update firmware`` pulls the firmware from that server and flashes it. This path
 does **not** go through the plugin Store, nor does it use the manual URL OTA
 (``POST /api/ota``).
 
 Web UI steps:
 
-1. Open ``http://HUB/`` and go to the **System** page.
+1. Open ``http://HUB/`` and go to the ``System`` page.
 2. If the firmware version row shows a "new version vX" badge, an update for the
    device's chip is available on the OTA server; click the badge for release notes,
-   then click **Update firmware** to start the download and flash.
+   then click ``Update firmware`` to start the download and flash.
 3. Progress shows in the OTA status bar; the device reboots automatically when done,
    and the version updates.
 
@@ -66,9 +66,9 @@ stalled read is reported as a failure. The write target is the inactive app slot
 than up front (:doc:`production`).
 
 URL OTA and upload OTA below are the manual paths; you can also trigger them from
-the **System** page in the Web UI by entering a firmware URL or choosing a ``.bin``
+the ``System`` page in the Web UI by entering a firmware URL or choosing a ``.bin``
 file. The device does not police the URL scheme: plain ``http`` works on a lab LAN.
-For anything a third party can reach, use **HTTPS** — certificate validation needs
+For anything a third party can reach, use HTTPS — certificate validation needs
 the trust-store bundle (``CONFIG_MBEDTLS_CERTIFICATE_BUNDLE``), which is on in the
 default build (uplink: :doc:`networking`).
 
@@ -95,8 +95,8 @@ confirm which slot came up.
 URL OTA
 -------
 
-Web UI: on the **System** page, enter a firmware URL in the firmware-update area
-and click **Start update**.
+Web UI: on the ``System`` page, enter a firmware URL in the firmware-update area
+and click ``Start update``.
 
 REST alternative (auxiliary): ``POST /api/ota`` with a JSON body. **HTTP 200**
 starts the job; **409** (plain-text body ``busy``) if another OTA is already
@@ -128,8 +128,8 @@ This is the direct-to-device push path: connect straight to the device (for
 example, open ``http://HUB/`` on its LAN) and push the firmware ``.bin`` to it
 directly, with no OTA server in between.
 
-Web UI: on the **System** page, choose a ``.bin`` file in the firmware-update
-area and click **Upload**; the device reboots after the write. This path is not on
+Web UI: on the ``System`` page, choose a ``.bin`` file in the firmware-update
+area and click ``Upload``; the device reboots after the write. This path is not on
 the MCP ``hub.api`` allowlist, so use the Web UI or a LAN client, not ``hub.api``.
 
 REST alternative (auxiliary): ``POST /api/ota/upload`` accepts the raw ``.bin``
