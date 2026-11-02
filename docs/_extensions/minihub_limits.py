@@ -3,10 +3,14 @@
 """Fixed-limits tables, read back out of the code they document.
 
 Every row names where the number lives — a ``#define``, a Kconfig ``default``, or
-the line with a bare ``char buf[256]``. Rendering re-reads that source and refuses
-the build when the value no longer matches, so a constant that moves cannot leave
+a regex anchor into the source. Rendering re-reads that source and refuses the
+build when the value no longer matches, so a constant that moves cannot leave
 a stale number in the guide (``./tools/build_docs.sh`` treats Sphinx warnings as
-failure).
+failure). The ``("line", rel, PATTERN)`` rows search the file for PATTERN (a regex whose
+last ``(\\d+)`` group is the value, and whose optional leading group names a
+stable anchor such as a function or symbol) instead of a hard-coded line number,
+so neither the build nor the rendered citation couples to source line positions —
+only a genuine value change is caught by verify().
 
 Add a row when the guide quotes a cap. Keep the label to what the reader is
 bounded by; put the explanation in the prose next to the table.
@@ -27,7 +31,7 @@ from minihub_catalog_tables import _table
 ROOT = Path(__file__).resolve().parents[2]
 
 # group, en label, zh label, displayed value, numeric value, source spec
-# source spec: ("define", rel, SYMBOL) | ("kconfig", rel, SYMBOL) | ("line", rel, N, TEXT)
+# source spec: ("define", rel, SYMBOL) | ("kconfig", rel, SYMBOL) | ("line", rel, PATTERN)
 ROWS: list[tuple] = [
     ("core", "Registered points, all radios together", "所有射频合计的注册点位", "64", 64,
      ("define", "components/minihub_core/include/minihub_core.h", "MINIHUB_MAX_POINTS")),
@@ -53,7 +57,7 @@ ROWS: list[tuple] = [
      "160", 160,
      ("define", "components/minihub_core/point_history.c", "POINT_HISTORY_GLOBAL")),
     ("core", "Entries one history read returns", "单次历史读取返回的条数", "64", 64,
-     ("line", "components/minihub_core/point_history.c", 93, "64")),
+     ("line", "components/minihub_core/point_history.c", r"if \(limit == 0 \|\| limit > (\d+)\)")),
     ("core", "State-store debounce window", "状态防抖窗口", "1000 ms", 1000,
      ("kconfig", "components/minihub_core/Kconfig.minihub", "MINIHUB_POINT_DEBOUNCE_MS")),
     ("core", "HTTP worker queue", "HTTP worker 队列", "4", 4,
@@ -61,7 +65,7 @@ ROWS: list[tuple] = [
     ("core", "Timezone offset range", "时区偏移范围", "±14 h", 840,
      ("define", "components/minihub_core/minihub_tz.c", "TZ_OFF_MAX")),
     ("core", "Timezone offset step", "时区偏移的粒度", "15 min", 15,
-     ("line", "components/minihub_core/minihub_tz.c", 78, "if (min % 15)")),
+     ("line", "components/minihub_core/minihub_tz.c", r"if \(min % (\d+)\)")),
 
     ("rules", "Rules in one document", "一份文档内的规则数", "16", 16,
      ("define", "components/minihub_rules/minihub_rules.c", "MAX_RULES")),
@@ -123,9 +127,11 @@ ROWS: list[tuple] = [
     ("web", "WebSocket clients", "WebSocket 并发客户端", "8", 8,
      ("define", "components/minihub_web/minihub_web_ws.c", "WS_MAX_CLIENTS")),
     ("web", "URL OTA request body", "URL OTA 请求体", "256 B", 256,
-     ("line", "components/minihub_web/minihub_web.c", 3550, "char buf[256]")),
+     ("line", "components/minihub_web/minihub_web.c",
+      r"(handle_api_ota_start)\(httpd_req_t \*\s*req\)\s*\{.*?char buf\[(\d+)\]")),
     ("web", "OTA upload chunk body", "OTA 上传分块请求体", "4 KiB", 4096,
-     ("line", "components/minihub_web/minihub_web.c", 3730, "char buf[4096]")),
+     ("line", "components/minihub_web/minihub_web.c",
+      r"(minihub_ota_upload_begin)\(expected\);.*?char buf\[(\d+)\]")),
 
     ("auth", "Web username", "Web 登录用户名", "admin", None,
      ("define", "components/minihub_auth/include/minihub_auth.h", "MINIHUB_WEB_USERNAME")),
@@ -140,7 +146,7 @@ ROWS: list[tuple] = [
      "8", 8, ("define", "components/minihub_matter/matter_project_config.h",
               "CHIP_CONFIG_CONTROLLER_MAX_ACTIVE_DEVICES")),
     ("matter", "Endpoints per node, and per commissioning", "单节点端点数 / 单次配网端点数",
-     "16", 16, ("line", "components/minihub_matter/matter_ctrl.cpp", 83, "= 16")),
+     "16", 16, ("line", "components/minihub_matter/matter_ctrl.cpp", r"(k_pending_ep_max) = (\d+)")),
     ("matter", "Commission watchdog", "配网看门狗", "300 s", 300000,
      ("kconfig", "components/minihub_matter/Kconfig.minihub", "MINIHUB_MATTER_COMMISSION_WAIT_MS")),
     ("matter", "Subscription report interval", "订阅上报间隔", "5–30 s", 5,
@@ -269,10 +275,12 @@ def _read(rel: str) -> list[str]:
 
 
 def actual_value(spec) -> tuple[int | str | None, str]:
-    """Return (value, ``file:line``) for one source spec, or (None, reason).
+    """Return (value, citation) for one source spec, or (None, reason).
 
-    The citation is resolved here rather than stored in the table, so the line the
-    guide prints is the line the value was read from.
+    The citation is resolved here rather than stored in the table. It names the
+    file and, where available, a stable anchor (a ``#define``/Kconfig symbol or a
+    captured function name) — never a line number, so the guide does not have to
+    track source line positions.
     """
     kind = spec[0]
     if kind == "define":
@@ -283,7 +291,7 @@ def actual_value(spec) -> tuple[int | str | None, str]:
             if m:
                 raw = m.group(1).split("/*")[0].strip()
                 n = _num(raw)
-                return (n if n is not None else raw.strip('"'), f"{rel}:{i}")
+                return (n if n is not None else raw.strip('"'), f"{rel} ({symbol})")
         return None, f"{rel}: no #define {symbol}"
     if kind == "kconfig":
         _, rel, symbol = spec
@@ -294,19 +302,24 @@ def actual_value(spec) -> tuple[int | str | None, str]:
                     m = re.match(r"\s+default\s+(\S+)", follow)
                     if m:
                         n = _num(m.group(1))
-                        return (n if n is not None else m.group(1), f"{rel}:{i + 1}")
+                        return (n if n is not None else m.group(1), f"{rel} ({symbol})")
                 return None, f"{rel}: config {symbol} has no default"
         return None, f"{rel}: no config {symbol}"
     if kind == "line":
-        _, rel, lineno, text = spec
-        lines = _read(rel)
-        if lineno > len(lines):
-            return None, f"{rel}:{lineno} past end of file"
-        hit = lines[lineno - 1]
-        if text not in hit:
-            return None, f"{rel}:{lineno} no longer reads {text!r} (got {hit.strip()!r})"
-        m = re.search(r"\d+", text)
-        return (int(m.group()) if m else text, f"{rel}:{lineno}")
+        _, rel, pattern = spec
+        text = "\n".join(_read(rel))
+        m = re.search(pattern, text, re.DOTALL)
+        if not m:
+            return None, f"{rel}: no match for {pattern!r}"
+        groups = m.groups()
+        raw = groups[-1]
+        val = _num(raw) if _num(raw) is not None else raw
+        # An optional leading capture group names a stable anchor (function or
+        # symbol); otherwise the file alone is cited. No line number is ever
+        # emitted, so the guide does not couple to source line positions.
+        name = groups[0] if len(groups) > 1 else None
+        cite = f"{rel} ({name})" if name else rel
+        return (val, cite)
     return None, f"unknown source kind {kind}"
 
 
@@ -324,8 +337,10 @@ def verify() -> list[str]:
 
 
 def rows_rst(group: str, lang: str) -> list[str]:
-    """One captioned table per group. Every row cites the line it was read from,
-    resolved at build time, so the citation cannot drift from the value either."""
+    """One captioned table per group. Every row cites where it is defined (file,
+    plus a stable symbol/function name where one exists) with no line number, so
+    the table does not couple to source line positions and only the value is
+    enforced by verify()."""
     zh = lang.startswith("zh")
     en_head, zh_head = _HEADINGS[group]
     header = (["上限项", "数值", "定义位置"] if zh else ["Bound", "Value", "Defined at"])
