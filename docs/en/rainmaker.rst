@@ -1,6 +1,8 @@
 RainMaker
 =========
 
+:link_to_translation:`zh_CN:[中文]`
+
 The optional ESP RainMaker bridge (:doc:`source_tree` —
 ``components/minihub_rainmaker``) is off by default. Enable it with
 ``CONFIG_MINIHUB_RAINMAKER``. The hub then registers itself as a RainMaker node

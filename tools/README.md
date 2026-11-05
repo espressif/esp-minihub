@@ -226,10 +226,13 @@ python3 tools/check_plugin_sdk.py
 
 ### `preview_docs.py`
 
-Serve `docs/_build/` HTML locally (default `127.0.0.1:8765`).
+Serve `docs/_build/` HTML locally (default `127.0.0.1:8765`), at
+`/<lang>/<version>/<page>.html` — the same URL shape the docs host publishes —
+plus the flat `/<lang>/<page>.html` form. `/` redirects to the default language.
 
 ```bash
 python3 tools/preview_docs.py
+python3 tools/preview_docs.py --docs-version preview-my_branch --lang en
 ```
 
 ---

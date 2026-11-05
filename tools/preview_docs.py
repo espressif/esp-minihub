@@ -9,6 +9,11 @@ so the published layout has no target segment, so both are accepted::
     docs/_build/en/html/          (what ./tools/build_docs.sh leaves behind)
     docs/_build/en/esp32s31/html/ (what build-docs writes before the move)
 
+Deployed URLs carry a version segment (``/<lang>/<version>/<page>.html``) that
+the local HTML tree does not have. Both shapes are served: the flat
+``/<lang>/<page>.html`` and the deployed ``/<lang>/<version>/<page>.html``.
+Language-switch links built for the docs host therefore work in preview too.
+
 Usage::
 
     python3 tools/preview_docs.py
@@ -20,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import mimetypes
+import os
 import sys
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -79,7 +85,7 @@ def safe_join(base: Path, rel: str) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def make_handler(roots: dict[str, Path], default_lang: str):
+def make_handler(roots: dict[str, Path], default_lang: str, version: str):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args) -> None:
             sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
@@ -96,7 +102,7 @@ def make_handler(roots: dict[str, Path], default_lang: str):
 
             if path in ("/", "/index.html"):
                 self.send_response(302)
-                self.send_header("Location", f"/{default_lang}/")
+                self.send_header("Location", f"/{default_lang}/{version}/")
                 self.end_headers()
                 return
 
@@ -111,6 +117,19 @@ def make_handler(roots: dict[str, Path], default_lang: str):
             if lang is None or lang not in roots:
                 self.send_error(404, "Not found")
                 return
+
+            # The deployed tree has a <version> directory; the local build does
+            # not. Drop only that leading segment, keeping flat /<lang>/ URLs.
+            head, sep, tail = rest.partition("/")
+            if head == version:
+                if not sep:
+                    # A trailing slash is required: without it the browser
+                    # resolves the page's relative _static/ links one level up.
+                    self.send_response(302)
+                    self.send_header("Location", f"/{lang}/{version}/")
+                    self.end_headers()
+                    return
+                rest = tail
 
             file_path = safe_join(roots[lang], rest)
             if file_path is None:
@@ -141,6 +160,11 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--lang", choices=LANGS, default="zh_CN", help="redirect / to this language")
+    parser.add_argument(
+        "--docs-version",
+        default=os.environ.get("MINIHUB_DOCS_VERSION", "latest"),
+        help="version segment in deployed-style URLs (default: $MINIHUB_DOCS_VERSION or latest)",
+    )
     parser.add_argument("--open", action="store_true", help="open default browser")
     args = parser.parse_args()
 
@@ -148,13 +172,13 @@ def main() -> int:
     if args.lang not in roots:
         args.lang = next(iter(roots))
 
-    handler = make_handler(roots, args.lang)
+    handler = make_handler(roots, args.lang, args.docs_version)
     httpd = ThreadingHTTPServer((args.host, args.port), handler)
-    url = f"http://{args.host}:{args.port}/{args.lang}/"
+    url = f"http://{args.host}:{args.port}/{args.lang}/{args.docs_version}/"
     print("Preview (built HTML only; rebuild after RST/header changes):")
     for lang in LANGS:
         if lang in roots:
-            print(f"  http://{args.host}:{args.port}/{lang}/")
+            print(f"  http://{args.host}:{args.port}/{lang}/{args.docs_version}/")
     print(f"Listening on {args.host}:{args.port}  (Ctrl+C to stop)")
     if args.open:
         webbrowser.open(url)

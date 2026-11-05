@@ -1,17 +1,22 @@
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Flat language-switch links for MiniHub docs deploy.
+"""Language-switch links for the MiniHub docs deploy layout.
 
-esp-docs ``:link_to_translation:`` builds URLs like
-``../../../zh_CN/<release>/<target>/page.html`` (docs.espressif.com layout).
+MiniHub publishes HTML as::
 
-MiniHub serves HTML as::
+    /<lang>/<version>/<page>.html
 
-    /en/<page>.html
-    /zh_CN/<page>.html
+(``tools/publish_docs.sh``, ``.gitlab/ci/deploy_docs.yml``), for example
+``/en/latest/architecture.html``. A switch has to climb out of both
+``<version>`` and ``<lang>`` and re-enter at the same version::
 
-(``preview_docs.py``, ``ci_artifacts/docs/``). This transform runs before the
-stock esp-docs one and emits sibling-language relative links.
+    ../../zh_CN/latest/architecture.html        (top-level page)
+    ../../../zh_CN/latest/api/host_rest.html   (page under api/)
+
+The stock esp-docs ``:link_to_translation:`` transform inserts a ``<target>``
+segment; MiniHub has no target segment. This transform runs before it
+(priority -1) and emits the deployed path. ``conf_common.py`` stamps ``release``
+from ``MINIHUB_DOCS_VERSION``, the same value the deploy job publishes under.
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ from sphinx.transforms.post_transforms import SphinxPostTransform
 from esp_docs.esp_extensions.link_roles import translation_link
 
 
-class MinihubFlatTranslationLinkTransform(SphinxPostTransform):
+class MinihubTranslationLinkTransform(SphinxPostTransform):
     # Before esp-docs TranslationLinkNodeTransform (priority 0).
     default_priority = -1
 
@@ -36,14 +41,15 @@ class MinihubFlatTranslationLinkTransform(SphinxPostTransform):
             env = self.document.settings.env
             docname = env.docname
             doc_path = env.doc2path(docname, False)
-            return_path = "../" * doc_path.count("/")
-            # From /en/api/foo.html → ../../zh_CN/api/foo.html → /zh_CN/api/foo.html
-            url = f"{return_path}../{language}/{docname}.html".replace("\\", "/")
+            # One ".." for <version>, one for <lang>, plus one per docname dir.
+            return_path = "../" * (2 + doc_path.count("/"))
+            version = env.config.release or "latest"
+            url = f"{return_path}{language}/{version}/{docname}.html".replace("\\", "/")
             node.replace_self(nodes.reference(rawtext, link_text, refuri=url, **options))
 
 
 def setup(app):
-    app.add_post_transform(MinihubFlatTranslationLinkTransform)
+    app.add_post_transform(MinihubTranslationLinkTransform)
     return {
         "parallel_read_safe": True,
         "parallel_write_safe": True,
