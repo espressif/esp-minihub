@@ -1,6 +1,8 @@
 RainMaker
 =========
 
+:link_to_translation:`en:[English]`
+
 可选的 ESP RainMaker 桥（:doc:`source_tree` 中的
 ``components/minihub_rainmaker``）默认关闭，用 ``CONFIG_MINIHUB_RAINMAKER``
 打开。打开后，中枢会把自己注册成一个类型为 ``Gateway`` 的 RainMaker 节点，并把

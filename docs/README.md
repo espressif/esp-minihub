@@ -73,12 +73,16 @@ Open locally, for example: `docs/_build/zh_CN/esp32s31/html/index.html`.
 HTTP preview (after a successful build):
 
 ```bash
-python3 tools/preview_docs.py          # http://127.0.0.1:8765/zh_CN/
+python3 tools/preview_docs.py          # http://127.0.0.1:8765/zh_CN/latest/
 python3 tools/preview_docs.py --open # also open the browser
 python3 tools/preview_docs.py --build-dir ~/website/MiniHub_docs --host 0.0.0.0
 ```
 
-`/` redirects to ``/zh_CN/`` (``--lang en`` to prefer English). Rebuild after RST or Doxygen header changes.
+`/` redirects to ``/zh_CN/latest/`` (``--lang en`` to prefer English). The
+version segment mirrors the deployed ``/<lang>/<version>/`` tree, so the in-page
+language switch resolves exactly as it does on the docs host; flat
+``/zh_CN/<page>.html`` URLs still work. Override with ``--docs-version``.
+Rebuild after RST or Doxygen header changes.
 
 `build-docs` treats Sphinx warnings as failures (same as CI). Avoid `` ``
 literals that contain `<...>` (Sphinx treats them as roles). Prefer `APP` /

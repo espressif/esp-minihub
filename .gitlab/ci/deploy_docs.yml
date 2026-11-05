@@ -15,6 +15,10 @@
 #   production: DOCS_PROD_PRIVATEKEY     DOCS_PROD_SERVER     DOCS_PROD_SERVER_USER
 #               DOCS_PROD_PATH           DOCS_PROD_URL_BASE
 #
+# DOCS_<PREVIEW|PROD>_URL_BASE is the public HTTP base for the deployed tree
+# (without a trailing slash). It is optional for the deploy itself; when set,
+# the job prints the browsable URLs as its last log lines, one per language.
+#
 # A job whose variables are unset logs a warning and exits 0 (the docs host is
 # not wired for every mirror / fork); set the variables and it deploys for real.
 
@@ -55,10 +59,22 @@
         dest="${DOCS_DEPLOY_PATH}/${lang}/${version}"
         ssh -o BatchMode=yes "${remote}" -x "mkdir -p '${dest}'"
         rsync -rlptvz --delete "${publish}/${lang}/${version}/" "${remote}:${dest}/"
-        if [ -n "${DOCS_DEPLOY_URL_BASE:-}" ]; then
-          echo "[docs ${TYPE}][${lang}] ${DOCS_DEPLOY_URL_BASE}/${lang}/${version}/index.html"
-        fi
       done
+
+      # Print the browsable URLs last: rsync's per-file log is long and would
+      # otherwise bury them. Both languages ship as one guide.
+      url_base="${DOCS_DEPLOY_URL_BASE:-}"
+      url_base="${url_base%/}"
+      echo
+      if [ -z "${url_base}" ]; then
+        echo "WARNING: docs ${TYPE} deployed, but DOCS_DEPLOY_URL_BASE is unset;" >&2
+        echo "         set it to get a clickable URL in the job log." >&2
+      else
+        echo "=== docs ${TYPE} URL ==="
+        for lang in en zh_CN; do
+          echo "  ${lang}: ${url_base}/${lang}/${version}/index.html"
+        done
+      fi
 
 deploy:docs_preview:
   extends:

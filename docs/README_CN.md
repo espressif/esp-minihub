@@ -64,11 +64,14 @@ HTML 输出：`docs/_build/en/esp32s31/html/` 与 `docs/_build/zh_CN/esp32s31/ht
 HTTP 预览（先成功构建）：
 
 ```bash
-python3 tools/preview_docs.py          # http://127.0.0.1:8765/zh_CN/
+python3 tools/preview_docs.py          # http://127.0.0.1:8765/zh_CN/latest/
 python3 tools/preview_docs.py --open # 同时打开浏览器
 ```
 
-`/` 会跳到 ``/zh_CN/``（``--lang en`` 则跳英文）。改 RST 或 Doxygen 头文件后需重新 ``./tools/build_docs.sh``。
+`/` 会跳到 ``/zh_CN/latest/``（``--lang en`` 则跳英文）。这个版本段与线上
+``/<lang>/<version>/`` 目录一致，页面里的中英文切换链接在预览和线上解析结果相同；
+扁平的 ``/zh_CN/<page>.html`` 也仍然可用。版本名可用 ``--docs-version`` 覆盖。
+改 RST 或 Doxygen 头文件后需重新 ``./tools/build_docs.sh``。
 
 `build-docs` 把 Sphinx warning 当作失败（与 CI 一致）。避免在 `` `` 字面量里写
 `<...>`（Sphinx 会当成 role）；占位符用 `APP` / `ID`。中文标题下划线按东亚字符宽度计，需长于标题显示宽度。
