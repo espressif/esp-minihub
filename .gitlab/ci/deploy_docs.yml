@@ -1,0 +1,89 @@
+# Docs deploy (pattern from espressif/esp-at .gitlab/ci/deploy.yml).
+# https://github.com/espressif/esp-at/blob/master/.gitlab/ci/deploy.yml
+#
+#   deploy_docs_preview     branch push / merge request  -> preview host
+#   deploy_docs_production  master / release/vX.Y.Z      -> public host
+#
+# Both take the docs:html artifact, lay it out as <lang>/<version>/ with
+# tools/publish_docs.sh (the layout sphinx_idf_theme's version switcher expects),
+# and rsync that version directory to the docs host. Nothing outside
+# <lang>/<version>/ is touched, so publishing one version never disturbs another.
+#
+# Required CI/CD variables (Settings > CI/CD > Variables, masked + protected):
+#   preview:    DOCS_PREVIEW_PRIVATEKEY  DOCS_PREVIEW_SERVER  DOCS_PREVIEW_SERVER_USER
+#               DOCS_PREVIEW_PATH        DOCS_PREVIEW_URL_BASE
+#   production: DOCS_PROD_PRIVATEKEY     DOCS_PROD_SERVER     DOCS_PROD_SERVER_USER
+#               DOCS_PROD_PATH           DOCS_PROD_URL_BASE
+#
+# A job whose variables are unset logs a warning and exits 0 (the docs host is
+# not wired for every mirror / fork); set the variables and it deploys for real.
+
+.deploy_docs_template:
+  stage: deploy
+  image: python:3.12-bookworm
+  needs:
+    - job: "docs:html"
+      artifacts: true
+  before_script:
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-client rsync git
+    - git config --global --add safe.directory "$CI_PROJECT_DIR" || true
+    - source .gitlab/ci/utils.sh
+  script:
+    - |
+      set -euo pipefail
+      missing=""
+      for name in DOCS_DEPLOY_PRIVATEKEY DOCS_DEPLOY_SERVER DOCS_DEPLOY_SERVER_USER DOCS_DEPLOY_PATH; do
+        if [ -z "${!name:-}" ]; then
+          missing="${missing} ${name}"
+        fi
+      done
+      if [ -n "${missing}" ]; then
+        echo "WARNING: docs ${TYPE} deploy skipped, not configured:${missing}" >&2
+        exit 0
+      fi
+
+      version="$(minihub_docs_version)"
+      publish="${CI_PROJECT_DIR}/docs/_build/publish"
+      remote="${DOCS_DEPLOY_SERVER_USER}@${DOCS_DEPLOY_SERVER}"
+      echo "docs ${TYPE} deploy: version=${version} -> ${remote}:${DOCS_DEPLOY_PATH}"
+
+      ./tools/publish_docs.sh "${version}" "${publish}"
+      add_doc_server_ssh_keys "${DOCS_DEPLOY_PRIVATEKEY}" "${DOCS_DEPLOY_SERVER}" "${DOCS_DEPLOY_SERVER_USER}"
+
+      for lang in en zh_CN; do
+        dest="${DOCS_DEPLOY_PATH}/${lang}/${version}"
+        ssh -o BatchMode=yes "${remote}" -x "mkdir -p '${dest}'"
+        rsync -rlptvz --delete "${publish}/${lang}/${version}/" "${remote}:${dest}/"
+        if [ -n "${DOCS_DEPLOY_URL_BASE:-}" ]; then
+          echo "[docs ${TYPE}][${lang}] ${DOCS_DEPLOY_URL_BASE}/${lang}/${version}/index.html"
+        fi
+      done
+
+deploy:docs_preview:
+  extends:
+    - .deploy_docs_template
+    - .rules:deploy:docs_preview
+  variables:
+    TYPE: "preview"
+    DOCS_DEPLOY_PRIVATEKEY: "$DOCS_PREVIEW_PRIVATEKEY"
+    DOCS_DEPLOY_SERVER: "$DOCS_PREVIEW_SERVER"
+    DOCS_DEPLOY_SERVER_USER: "$DOCS_PREVIEW_SERVER_USER"
+    DOCS_DEPLOY_PATH: "$DOCS_PREVIEW_PATH"
+    DOCS_DEPLOY_URL_BASE: "$DOCS_PREVIEW_URL_BASE"
+  environment:
+    name: docs-preview/${CI_COMMIT_REF_SLUG}
+
+deploy_docs_production:
+  extends:
+    - .deploy_docs_template
+    - .rules:deploy:docs_production
+  variables:
+    TYPE: "production"
+    DOCS_DEPLOY_PRIVATEKEY: "$DOCS_PROD_PRIVATEKEY"
+    DOCS_DEPLOY_SERVER: "$DOCS_PROD_SERVER"
+    DOCS_DEPLOY_SERVER_USER: "$DOCS_PROD_SERVER_USER"
+    DOCS_DEPLOY_PATH: "$DOCS_PROD_PATH"
+    DOCS_DEPLOY_URL_BASE: "$DOCS_PROD_URL_BASE"
+  environment:
+    name: docs-production

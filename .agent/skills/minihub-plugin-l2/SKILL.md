@@ -207,8 +207,8 @@ IDE MCP `pack_plugin` can zip L2 the same way (no `.so`).
 ## Artifacts
 
 ```text
-$MINIHUB_PLUGINS_DEPLOY_DIR/catalog.json
-$MINIHUB_PLUGINS_DEPLOY_DIR/my_js/my_js.mhub   # zip: module.json + main.js [+ ui/web]
+$MINIHUB_PLUGINS_DEPLOY_DIR/Stores/Common/my_js/my_js.mhub   # zip: module.json + main.js [+ ui/web]
+$MINIHUB_PLUGINS_DEPLOY_DIR/Stores/Common/my_js/catalog.json
 ```
 
 ## Install

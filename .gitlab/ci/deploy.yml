@@ -1,0 +1,37 @@
+# Push protected branches to GitHub (espressif/esp-at .gitlab/ci/deploy.yml
+# push_to_github).
+# https://github.com/espressif/esp-at/blob/master/.gitlab/ci/deploy.yml
+#
+# Runs only on master and release/vX.Y.Z. The for-each-ref snippet pushes the
+# ref whose tip is this pipeline's commit, so a master pipeline updates
+# github master and a release pipeline updates that release branch. Annotated
+# tags reachable from the commit go with it (--follow-tags).
+#
+# Required CI/CD variable (Settings > CI/CD > Variables, masked):
+#   GH_PUSH_KEY   base64 of the SSH private key that can push to
+#                 git@github.com:espressif/esp-minihub.git
+# The job is tagged "internet" because github.com is off the internal network.
+# GIT_DEPTH 0 overrides the shallow default so the GitHub branch is a full
+# history, not the 50-commit clone used by the firmware jobs.
+
+push_to_github:
+  extends:
+    - .rules:protected
+  stage: deploy
+  tags:
+    - internet
+  image: python:3.12-bookworm
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: "0"
+    GITHUB_PUSH_REFS: refs/remotes/origin/release refs/remotes/origin/master
+  before_script:
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-client git
+    - git config --global --add safe.directory "$CI_PROJECT_DIR" || true
+    - source .gitlab/ci/utils.sh
+  script:
+    - add_github_ssh_keys
+    - git remote remove github >/dev/null 2>&1 || true
+    - git remote add github git@github.com:espressif/esp-minihub.git
+    - eval $(git for-each-ref --shell bash --format 'if [ $CI_COMMIT_SHA == %(objectname) ]; then git checkout -B %(refname:strip=3); git push --follow-tags github %(refname:strip=3); fi;' $GITHUB_PUSH_REFS)

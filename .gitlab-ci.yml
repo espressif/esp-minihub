@@ -1,6 +1,10 @@
 # Firmware: ./tools/build_firmware.py --app $MINIHUB_APP build merge
 # Store pack: ./tools/build_firmware.py --app $MINIHUB_APP pack all
 # Docs: ./tools/build_docs.sh
+# Docs CI: .gitlab/ci/{rules,build_docs,deploy_docs}.yml — branch push / MR only
+# previews, master / release/vX.Y.Z publishes.
+# GitHub: .gitlab/ci/deploy.yml push_to_github mirrors those protected refs to
+# git@github.com:espressif/esp-minihub.git (GH_PUSH_KEY, internet runner).
 # Products: .app_matrix (application/<name>/). Add a folder name to the list.
 #
 # IDF: ESP32-S31 / MiniHub expects IDF ~6.2. Override IDF_CI_IMAGE in GitLab
@@ -38,7 +42,11 @@ variables:
   MINIHUB_PLUGINS_DIR: "$CI_PROJECT_DIR/esp-minihub-plugins"
 
 include:
+  - local: .gitlab/ci/rules.yml
   - local: .gitlab/ci/pre_check.yml
+  - local: .gitlab/ci/build_docs.yml
+  - local: .gitlab/ci/deploy_docs.yml
+  - local: .gitlab/ci/deploy.yml
 
 .app_matrix:
   parallel:

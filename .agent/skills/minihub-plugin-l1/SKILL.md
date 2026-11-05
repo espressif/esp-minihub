@@ -65,8 +65,8 @@ python3 tools/store_server.py --port 8080
 ## Artifacts
 
 ```text
-$MINIHUB_PLUGINS_DEPLOY_DIR/catalog.json
-$MINIHUB_PLUGINS_DEPLOY_DIR/my_pack/my_pack.mhub   # zip: module.json
+$MINIHUB_PLUGINS_DEPLOY_DIR/Stores/Common/my_pack/my_pack.mhub   # zip: module.json
+$MINIHUB_PLUGINS_DEPLOY_DIR/Stores/Common/my_pack/catalog.json
 ```
 
 ## Install
