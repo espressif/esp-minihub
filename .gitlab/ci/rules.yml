@@ -1,0 +1,49 @@
+# Shared job rules (pattern from espressif/esp-at .gitlab/ci/rules.yml).
+# https://github.com/espressif/esp-at/blob/master/.gitlab/ci/rules.yml
+#
+# Two audiences, mutually exclusive:
+#   protected (master, release/vX.Y.Z)              -> build + deploy docs
+#   everything else (branch push, merge request)    -> build + preview docs
+# A push to master therefore never creates a preview, and an MR never touches
+# the published docs.
+
+.if-protected: &if-protected
+  if: '($CI_COMMIT_REF_NAME == "master" || $CI_COMMIT_BRANCH =~ /^release\/v/)'
+
+.if-dev-push: &if-dev-push
+  if: '$CI_COMMIT_REF_NAME != "master" && $CI_COMMIT_BRANCH !~ /^release\/v/ && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web")'
+
+# Files that can change the rendered guide: the RST tree, the C headers whose
+# Doxygen comments generate the API pages, the build/publish scripts, and CI.
+.patterns-docs: &patterns-docs
+  - "docs/**/*"
+  - "components/**/include/**/*.h"
+  - "tools/build_docs.sh"
+  - "tools/publish_docs.sh"
+  - "tools/preview_docs.py"
+  - ".gitlab/ci/rules.yml"
+  - ".gitlab/ci/build_docs.yml"
+  - ".gitlab/ci/deploy_docs.yml"
+  - ".gitlab-ci.yml"
+
+# Protected branches publish, so always build; a dev branch only rebuilds when
+# something that affects the HTML changed (drop `changes:` to always build).
+.rules:build:build_doc:
+  rules:
+    - <<: *if-protected
+    - <<: *if-dev-push
+      changes: *patterns-docs
+
+.rules:deploy:docs_preview:
+  rules:
+    - <<: *if-dev-push
+      changes: *patterns-docs
+
+.rules:deploy:docs_production:
+  rules:
+    - <<: *if-protected
+
+# master and release/vX.Y.Z. Same gate esp-at uses for push_to_github.
+.rules:protected:
+  rules:
+    - <<: *if-protected

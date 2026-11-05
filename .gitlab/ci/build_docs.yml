@@ -1,0 +1,33 @@
+# Programming Guide (esp-docs HTML), both languages, built once per pipeline.
+# Moved out of pre_check.yml so build / preview / deploy docs share one artifact
+# and one version stamp (esp-at keeps .gitlab/ci/build_docs.yml separate too).
+#
+# MINIHUB_DOCS_VERSION is the <version> segment the deploy jobs publish under
+# (see .gitlab/ci/utils.sh:minihub_docs_version). Stamping it here makes the
+# theme's version switcher pre-select the row being published.
+
+docs:html:
+  extends:
+    - .rules:build:build_doc
+  stage: build
+  image: python:3.12-bookworm
+  needs: []
+  before_script:
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq doxygen graphviz git
+    - pip install -r docs/requirements.txt
+    - git config --global --add safe.directory "$CI_PROJECT_DIR" || true
+    - source .gitlab/ci/utils.sh
+    - export MINIHUB_DOCS_VERSION="$(minihub_docs_version)"
+    - echo "MINIHUB_DOCS_VERSION=${MINIHUB_DOCS_VERSION}"
+  script:
+    - ./tools/build_docs.sh
+  artifacts:
+    when: on_success
+    expire_in: 30 days
+    name: "minihub-docs-$CI_COMMIT_SHORT_SHA"
+    # ./tools/build_docs.sh relocates esp-docs output to <lang>/html (no target
+    # segment); tools/publish_docs.sh consumes exactly this layout.
+    paths:
+      - docs/_build/en/html/
+      - docs/_build/zh_CN/html/

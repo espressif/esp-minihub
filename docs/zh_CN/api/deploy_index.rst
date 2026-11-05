@@ -6,8 +6,9 @@
 PC 部署根（``MINIHUB_PLUGINS_DEPLOY_DIR``，默认 ``~/workspace/minihub_store`` ）
 集中存放插件、固件、资源与 Web 控制台。``python3 tools/store_server.py
 --deploy ROOT`` 在该目录上以 8080 端口（可用 ``--port`` 覆盖）提供服务。
-完整的索引格式与 ``/api/*`` 协议以仓库根目录的
-``minihub_website_internal/README.txt`` 为单一真相。
+本页就是这套契约。 ``https://minihub.espressif.com`` 是
+``MINIHUB_STORE_URL`` 的编译期缺省，它是同一组接口的另一个实现，所以从响应里
+读到的下载 URL 要原样使用：商店给的地址可以带版本号，跟导入目录里的路径不一样。
 
 插件
 ----
@@ -22,8 +23,11 @@ PC 部署根（``MINIHUB_PLUGINS_DEPLOY_DIR``，默认 ``~/workspace/minihub_sto
    ROOT/Stores/Common/ID/ID.mhub
    ROOT/Stores/Common/ID/catalog.json
 
-``url`` 与目录一致，例如 ``/files/Stores/Common/ID/ID.mhub``。``GET /api/catalog`` 遍历
-``Stores/Common``，返回兼容的插件（见下）。Hub 商店客户端下载响应中的 ``url``。
+``tools/sync_store_catalog.py`` 把 ``url`` 写成目录路径，例如
+``/files/Stores/Common/ID/ID.mhub``。``GET /api/catalog`` 遍历 ``Stores/Common``，
+返回兼容的插件（见下）。Hub 商店客户端原样下载响应里的 ``url``，不自己拼路径：
+公共门户把同一个包放在带版本的地址上，例如
+``/files/Stores/Common/ID/releases/1.0.0/ID.mhub``。
 
 一个插件 catalog 条目形如（由 ``tools/sync_store_catalog.py`` 依据构建出的
 ``.mhub`` 生成）：
@@ -55,7 +59,8 @@ catalog 条目字段
 * ``description`` —— module.json 的 ``description``。
 * ``adapter`` —— Host 会创建/启用的 ``adapters.json`` 键；取自 ``adapter``、
   ``inject.adapter`` 或首个 ``requires`` 项。
-* ``url`` —— ``/files/Stores/<bucket>/<id>/<id>.mhub``，下载路径。
+* ``url`` —— 下载路径。本地部署树用 ``/files/Stores/<bucket>/<id>/<id>.mhub``，
+  商店也可以把它按版本编址。
 * ``targets`` —— 芯片目录名列表（如 ``["esp32s31"]`` 或 ``["ALL"]`` ），即
   ``?chip=`` 的过滤依据。
 * ``runtime`` —— ``"pack"`` （纯配置 L1）或 ``"js"`` （L2）。``"hybrid"`` 与
@@ -99,7 +104,7 @@ catalog 条目字段
 请求示例
 --------
 
-商店默认听在 ``http://127.0.0.1:8080``。
+商店默认听在 ``http://0.0.0.0:8080``，局域网里的设备可以直连（用 ``--host`` 可覆盖监听地址）。
 
 .. code-block:: bash
 
