@@ -20,6 +20,9 @@
  *   host.http.request({ url, method?, body?, headers?, timeout_ms? })
  *   host.net.udp.open/sendto/recvfrom/close
  *   host.crypto.md5/sha1/sha256/hmacSha256/aes128CbcEncrypt|Decrypt
+ *   host.ble.ensureScan/releaseScan/getAds (shared passive scan, minihub_js_ble.c)
+ *   host.mdns.resolve({service,proto,timeout_ms,max_results}) (minihub_js_mdns.c)
+ *   host.mqtt.subscribe(filter) / getMessages() / publish(topic,payload) (minihub_js_mqtt.c)
  *   host.time.offsetMin() / host.time.id() — hub timezone, minutes east of UTC
  *   host.config.get() / host.config.save(adaptersRoot)
  *   host.module.rpc(moduleId, method, params?) / host.module.registerRpc(method, fn)
@@ -339,6 +342,12 @@ static void js_worker(void *arg)
         if (s_js_poll_pending) {
             s_js_poll_pending = false;
             js_polls_fire();
+        }
+        /* MQTT messages enqueued by the esp-mqtt task are delivered as JS
+         * callbacks here (on the worker), so a plugin never polls for them. */
+        if (minihub_js_mqtt_has_pending()) {
+            minihub_js_mqtt_clear_pending();
+            minihub_js_mqtt_dispatch(s_ctx);
         }
         js_job_t *job = s_js_job;
         if (job && job->fn) {
@@ -933,6 +942,31 @@ static JSValue js_point_set(JSContext *ctx, JSValueConst this_val, int argc, JSV
         return JS_ThrowInternalError(ctx, "point_set failed %s", esp_err_to_name(err));
     }
     return JS_UNDEFINED;
+}
+
+static JSValue js_point_set_online(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_ThrowTypeError(ctx, "setOnline(id, online)");
+    }
+    const char *pid = JS_ToCString(ctx, argv[0]);
+    if (!pid || !pid[0]) {
+        if (pid) {
+            JS_FreeCString(ctx, pid);
+        }
+        return JS_ThrowTypeError(ctx, "point_id required");
+    }
+    bool online = argc >= 2 && JS_ToBool(ctx, argv[1]);
+    esp_err_t err = minihub_point_set_online(pid, online);
+    JS_FreeCString(ctx, pid);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return JS_NewBool(ctx, false); /* not yet discovered; harmless for LWT */
+    }
+    if (err != ESP_OK) {
+        return JS_ThrowInternalError(ctx, "point_set_online failed %s", esp_err_to_name(err));
+    }
+    return JS_NewBool(ctx, true);
 }
 
 static JSValue js_point_unregister(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -2437,7 +2471,7 @@ static JSValue js_time_id(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     return JS_NewString(ctx, minihub_tz_id());
 }
 
-static JSValue make_host_object(JSContext *ctx)
+static JSValue make_host_object(JSContext *ctx, const char *module_id)
 {
     JSValue host = JS_NewObject(ctx);
     JSValue log = JS_NewObject(ctx);
@@ -2450,6 +2484,7 @@ static JSValue make_host_object(JSContext *ctx)
     JS_SetPropertyStr(ctx, point, "register", JS_NewCFunction(ctx, js_point_register, "register", 1));
     JS_SetPropertyStr(ctx, point, "get", JS_NewCFunction(ctx, js_point_get, "get", 1));
     JS_SetPropertyStr(ctx, point, "set", JS_NewCFunction(ctx, js_point_set, "set", 2));
+    JS_SetPropertyStr(ctx, point, "setOnline", JS_NewCFunction(ctx, js_point_set_online, "setOnline", 2));
     JS_SetPropertyStr(ctx, point, "unregister", JS_NewCFunction(ctx, js_point_unregister, "unregister", 1));
     JS_SetPropertyStr(ctx, point, "mergeProps", JS_NewCFunction(ctx, js_point_merge_props, "mergeProps", 2));
     JS_SetPropertyStr(ctx, point, "mergeParams", JS_NewCFunction(ctx, js_point_merge_params, "mergeParams", 2));
@@ -2500,7 +2535,11 @@ static JSValue make_host_object(JSContext *ctx)
     JS_SetPropertyStr(ctx, time_obj, "id", JS_NewCFunction(ctx, js_time_id, "id", 0));
     JS_SetPropertyStr(ctx, host, "time", time_obj);
 
-    minihub_js_attach_net_crypto(ctx, host);
+    minihub_js_attach_crypto(ctx, host);
+    minihub_js_attach_net(ctx, host);
+    minihub_js_attach_ble(ctx, host);
+    minihub_js_attach_mdns(ctx, host);
+    minihub_js_attach_mqtt(ctx, host, module_id);
     return host;
 }
 
@@ -2541,6 +2580,13 @@ static void dump_exception(JSContext *ctx)
         JS_FreeCString(ctx, s);
     }
     JS_FreeValue(ctx, exc);
+}
+
+/* Exported wrapper so other Host-binding TUs (e.g. minihub_js_mqtt.c) can log a
+ * pending JS exception without exposing the static helper above. */
+void js_dump_exception(JSContext *ctx)
+{
+    dump_exception(ctx);
 }
 
 /* Every main.js shares one JSContext. A raw global eval would let the next
@@ -2607,7 +2653,7 @@ static esp_err_t run_module_script(const char *id, const char *script_path)
         return ESP_OK;
     }
 
-    JSValue host = make_host_object(s_ctx);
+    JSValue host = make_host_object(s_ctx, id);
     strncpy(s_setup_module_id, id, sizeof(s_setup_module_id) - 1);
     s_setup_module_id[sizeof(s_setup_module_id) - 1] = '\0';
     JSValue args[1] = { host };
@@ -2681,6 +2727,7 @@ static esp_err_t js_unload_job(void *arg)
         js_timers_clear_all(s_ctx);
         js_polls_clear_all(s_ctx);
         js_http_inflight_cancel_all(s_ctx);
+        minihub_js_mqtt_reset(s_ctx); /* must precede JS_FreeContext: frees C-side hook state */
         JS_FreeContext(s_ctx);
         s_ctx = NULL;
     } else {
@@ -2688,6 +2735,7 @@ static esp_err_t js_unload_job(void *arg)
         clear_js_rpc_handlers(NULL);
         js_timers_clear_all(NULL);
         js_polls_clear_all(NULL);
+        minihub_js_mqtt_reset(NULL);
     }
     if (s_rt) {
         JS_FreeRuntime(s_rt);

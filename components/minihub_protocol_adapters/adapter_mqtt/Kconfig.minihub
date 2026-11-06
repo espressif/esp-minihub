@@ -2,9 +2,13 @@ menu "MQTT adapter"
 
     config MINIHUB_MQTT_ADAPTER
         bool "Enable MQTT Hub adapter"
+        depends on MINIHUB_MQTT_BROKER
         default y
         help
-            Local MQTT broker client for Hub points. Disable on products that
-            do not use adapter_mqtt.
+            MQTT client for the Hub's own broker. It connects to 127.0.0.1 on
+            the port in adapters.mqtt_broker and carries the host.mqtt bridge
+            that L2 plugins use, so it only exists while the on-device broker is
+            compiled in; there is no external-broker mode. Whether it runs is
+            the same adapters.mqtt_broker.enabled flag that starts the listener.
 
 endmenu
