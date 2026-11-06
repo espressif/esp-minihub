@@ -9,10 +9,10 @@ git-diffable, meant to be extended by developers):
   model/services.csv     RainMaker system services (service_id, rainmaker_type, ...)
   model/parameters.csv   parameter catalog       (parameter, label_zh, label_en,
                                   data_type, ui_element, ...)
-  model/ui_elements.csv  closed UI enum          (id, label, description, binds)
+  model/ui_elements.csv  closed UI enum          (id, label_zh, label_en, description_zh, description_en, binds_zh, binds_en)
 
-They mirror the ESP RainMaker four layers Device -> Service -> Parameter ->
-UI Element (see STANDARD_TYPES.md), exactly as upstream draws them:
+They mirror the MiniHub device model layers Device -> Service -> Parameter ->
+UI Element (see docs/en/type_catalog.rst):
 
   - Upstream lists a device type's parameters ON THE DEVICE
     (`esp.device.lightbulb` -> Name, Power*, Brightness, ...), so a device
@@ -94,7 +94,7 @@ SERVICE_COLS = ["service_id", "parameters"]
 PARAM_COLS = ["parameter", "label_zh", "label_en", "data_type", "properties", "min",
               "max", "step", "unit", "ui_element", "options", "description",
               "visible", "css", "image", "requires"]
-UI_COLS = ["id", "label", "description", "binds"]
+UI_COLS = ["id", "label_zh", "description_zh", "binds_zh"]
 
 # CSV label column -> language code used in style_json.labels and in the
 # ?lang= query of /api/device_widgets. This is the list for the Python side
@@ -488,9 +488,9 @@ def emit_json(dev_rows, services, param_defs, ui_rows, entries, path):
         parameters.setdefault("", {}).update(catalog)
 
     ui_elements = [{"id": _s(r.get("id")),
-                    "label": _s(r.get("label")),
-                    "description": _s(r.get("description")),
-                    "binds": _s(r.get("binds"))} for r in ui_rows]
+                    "label": _s(r.get("label_zh")),
+                    "description": _s(r.get("description_zh")),
+                    "binds": _s(r.get("binds_zh"))} for r in ui_rows]
 
     payload = {
         "devices": devices,

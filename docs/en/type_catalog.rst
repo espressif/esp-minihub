@@ -38,14 +38,13 @@ a particular unit, not a type, so they live on top-level ``props``
 Built-in device types and parameters
 ------------------------------------
 
-Source of truth: ``components/minihub_device_widget/model/*.csv``. Full tables:
-``components/minihub_device_widget/STANDARD_TYPES.md``.
+Source of truth: ``components/minihub_device_widget/model/*.csv``. This page
+renders the device types, parameters and UI elements from those CSVs.
 
 * :download:`devices.csv <../_static/catalog/model/devices.csv>`
 * :download:`parameters.csv <../_static/catalog/model/parameters.csv>`
 * :download:`ui_elements.csv <../_static/catalog/model/ui_elements.csv>`
 * :download:`services.csv <../_static/catalog/model/services.csv>` — reference only (RainMaker system services); not part of the widget registry
-* :download:`STANDARD_TYPES.md <../_static/catalog/STANDARD_TYPES.md>`
 * :download:`catalog.zip <../_static/catalog.zip>`
 
 Built-in device types
@@ -96,6 +95,22 @@ comes from CSS.
 hide **this** device's param while keeping it in ``props.params``. Read-only
 sensors use instance ``access: "R"`` (shown, not draggable).
 How a shape and a live value combine into one row is in :doc:`data_model`.
+
+UI elements
++++++++++++
+
+The closed set of UI elements, and what each draws:
+
+.. minihub-catalog:: ui_elements
+
+Read-only telemetry such as ``wifi_signal`` (WiFi RSSI, dBm) lives in the catalog
+as a ``ui.text`` parameter. MQTT adapters (ESPHome, Tasmota) attach it to a device
+point as an *instance* parameter rather than a built-in type column, and set
+``access: "R"``; the detail panel then shows the value and offers no control. Add
+any such read-only sensor the same way: a ``parameters.csv`` row with
+``ui_element: ui.text`` plus ``access: "R"`` on the instance entry. ESPHome adds
+it from its ``sensor.wifi_signal`` entity; for the one-point-per-device
+registration contract see :doc:`data_model`.
 
 Icons and artwork
 -----------------
@@ -228,7 +243,7 @@ How to use it when developing
 Do not edit Host CSV. Write plugin ``devices.json``; parameter names must already
 exist in the catalog:
 
-.. code-block:: json
+.. code-block:: JSON
 
    [
      {
@@ -271,8 +286,8 @@ A single object (not an array) is still accepted for one-device plugins.
 
 .. only:: not hide_l3
 
-   L3: regenerate ``device_desc.gen.h`` after editing JSON — do not hand-edit the
-   header. Scaffold an L3 source with ``tools/new_store_module.py --tier l3``.
+   ELF: regenerate ``device_desc.gen.h`` after editing JSON — do not hand-edit the
+   header. Scaffold an ELF source with ``tools/new_store_module.py --tier l3``.
 
 2. Add a brand-new device type
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -346,4 +361,4 @@ Related
 
 .. only:: not hide_l3
 
-   * L3 plugins: :doc:`plugins/develop_l3`
+   * ELF plugins: :doc:`plugins/develop_elf`

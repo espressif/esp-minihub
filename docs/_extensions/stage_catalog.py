@@ -39,11 +39,6 @@ def stage_catalog_assets() -> Path:
         for svg in sorted(images.glob("*.svg")):
             _copy_file(svg, _STAGED / "images" / "devices" / svg.name)
 
-    for name in ("STANDARD_TYPES.md", "STANDARD_TYPES_CN.md"):
-        src = _WIDGET / name
-        if src.is_file():
-            _copy_file(src, _STAGED / name)
-
     zip_path = _DOCS_DIR / "_static" / "catalog.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for path in sorted(_STAGED.rglob("*")):

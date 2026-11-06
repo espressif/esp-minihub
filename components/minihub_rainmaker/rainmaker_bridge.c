@@ -48,7 +48,7 @@ typedef struct {
     bool has_recording;
 } bridge_entry_t;
 
-/* ---- MiniHub device_widget catalog mapping (see STANDARD_TYPES.md) ----
+/* ---- MiniHub device_widget catalog mapping (see docs/en/type_catalog.rst) ----
  * The bridge previously hardcoded type strings ("sensor") and param keys
  * ("temperature" for color temperature) that no longer match the new model
  * (components/minihub_device_widget/model/<name>.csv). We now build RainMaker
