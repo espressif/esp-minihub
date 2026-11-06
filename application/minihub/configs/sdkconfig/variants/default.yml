@@ -10,5 +10,6 @@ features:
   - rtsp_cam
   - dynamic_modules
   - modbus
+  - mqtt_broker
   - factory_reset_gpio61
   - main_task_stack

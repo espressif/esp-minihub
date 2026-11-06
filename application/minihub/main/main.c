@@ -29,6 +29,9 @@
 #include "minihub_ota.h"
 #include "minihub_provision.h"
 #include "minihub_net.h"
+#if CONFIG_MINIHUB_MQTT_BROKER
+#include "minihub_mqtt_broker.h"
+#endif
 #if CONFIG_MINIHUB_LCD_UI
 #include "minihub_lcd.h"
 #endif
@@ -237,6 +240,15 @@ void app_main(void)
     if (err != ESP_OK) {
         return;
     }
+
+#if CONFIG_MINIHUB_MQTT_BROKER
+    /* Site broker before the radio stacks: they can take a while to come up, and
+     * a refused bind here retries on its own task instead of failing the boot. */
+    err = minihub_mqtt_broker_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "MQTT broker init failed: %s", esp_err_to_name(err));
+    }
+#endif
 
     err = minihub_adapter_start_all();
     if (err != ESP_OK) {

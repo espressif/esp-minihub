@@ -1,0 +1,7 @@
+## The mosquitto port is pulled only when CONFIG_MINIHUB_MQTT_BROKER=y
+## (Component Manager $CONFIG has no CONFIG_ prefix).
+dependencies:
+  espressif/mosquitto:
+    version: "2.0.20~9"
+    rules:
+      - if: "$CONFIG{MINIHUB_MQTT_BROKER} == True"

@@ -3,11 +3,12 @@
     "wifi": {
       "enabled": true
     },
-    "mqtt": {
+    "mqtt_broker": {
       "enabled": false,
-      "broker": "127.0.0.1",
       "port": 1883,
-      "devices": []
+      "allow_anonymous": true,
+      "users": [],
+      "connect_rate_limit": 16
     },
     "thread": {
       "enabled": false,

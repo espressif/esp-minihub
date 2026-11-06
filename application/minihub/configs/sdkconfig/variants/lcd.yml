@@ -10,3 +10,4 @@ features:
   - lcd_brookesia_storage
   - dynamic_modules
   - modbus
+  - mqtt_broker

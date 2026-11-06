@@ -34,6 +34,7 @@ profiles:
       - minihub_thread
       - minihub_rainmaker
       - minihub_net
+      - minihub_mqtt_broker
       - gen_bmgr_codes
       - adapter_mqtt
       - adapter_wifi
