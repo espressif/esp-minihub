@@ -6,7 +6,7 @@ Plugin SDK — mbedtls
 Overview
 --------
 
-mbedtls message-digest, HMAC, and base64 symbols Host exports to L3 plugins.
+mbedtls message-digest, HMAC, and base64 symbols Host exports to ELF plugins.
 
 .. include-build-file:: inc/mbedtls.inc
 

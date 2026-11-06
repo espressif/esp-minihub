@@ -32,7 +32,7 @@ two steps usually does. Before you compare a device against this guide, check bo
 .. code-block:: bash
 
    curl -s -H "Authorization: Bearer $MINIHUB_TOKEN" http://HUB/api/system \
-     | python3 -m json.tool   # version, commit
+     | python3 -m JSON.tool   # version, commit
    # the console's own value is in window.mhWebVersion, shown in the sidebar
 
 A firmware that is newer than the console it runs against is normal; a console

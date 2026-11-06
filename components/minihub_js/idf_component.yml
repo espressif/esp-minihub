@@ -3,3 +3,5 @@ dependencies:
     version: ">=5.3"
   espressif/quickjs-ng: "0.14.0"
   espressif/cjson: "1.7.19~2"
+  # host.mdns.resolve() needs the mDNS responder; mdns left IDF core in 5.x.
+  espressif/mdns: "1.13.1"

@@ -85,7 +85,7 @@ Or flash ``minihub_merged.bin`` / ``storage-flash`` / ``modstore-flash`` on the 
 
 .. only:: not hide_l3
 
-   In-tree L3 needs ``CONFIG_MINIHUB_DYNAMIC_MODULES`` and ``build`` (emits the
+   In-tree ELF needs ``CONFIG_MINIHUB_DYNAMIC_MODULES`` and ``build`` (emits the
    ``.so`` and packs). When artifacts already exist:
 
    .. code-block:: bash
@@ -107,7 +107,7 @@ Provisioning at scale
 4. Optional: set the production Store URL (``POST /api/store/config``; see
    :doc:`api/plugin_rest`)
 
-   .. code-block:: json
+   .. code-block:: JSON
 
       { "custom_url": "https://store.example", "disable_default": true }
 
@@ -233,7 +233,7 @@ Store vs Host
 
 .. only:: not hide_l3
 
-   An L3 ``.so`` resolves Host symbols through the Plugin SDK and export
+   An ELF ``.so`` resolves Host symbols through the Plugin SDK and export
    allowlist; it is not tied to a particular firmware build. ``module.json``
    ``abi_version`` and ``core_api_min`` / ``core_api_max`` must bracket the running
    Host, and the chip architecture must match. You do not rebuild modules for every

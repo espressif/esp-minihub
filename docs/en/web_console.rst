@@ -168,7 +168,7 @@ This is **not** ``PUT /api/dev/fs/`` (LCD JSON under ``/data/ui/``, gated by
 .. warning::
 
    Each PUT replaces **one file**. Nothing about this route knows that ``index.html`` and
-   ``js/app.js`` belong to the same build, so a partial push leaves a console made of two
+   ``JS/app.js`` belong to the same build, so a partial push leaves a console made of two
    generations — usually one that loads and then fails in the browser console, because the
    HTML and the JS no longer agree. Push every file you changed, or reflash the storage
    partition (``storage-flash``) to get back to the console that shipped with the image:
@@ -208,4 +208,4 @@ Module UIs
 
 A Store module may ship ``web/`` under ``/store/modules/ID/web/`` (served as
 ``/modules/ID/web/…``). That is separate from the Host console. Plugin UI:
-:doc:`plugins/develop_l2`.
+:doc:`plugins/develop_js`.

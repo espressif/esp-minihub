@@ -1,5 +1,5 @@
-Module ABI (L3 native plugins)
-==============================
+Module ABI (native ELF plugins)
+================================
 
 :link_to_translation:`zh_CN:[中文]`
 
@@ -7,10 +7,10 @@ Overview
 --------
 
 A native module is loaded into a Hub that is already running, so the two sides
-have to agree on a binary contract before either can call the other. Store **L3**
+have to agree on a binary contract before either can call the other. Store **ELF**
 modules (``module.json`` plus an MHMD ``.so``) meet Host through that ABI: the
 module exports ``minihub_module_entry``, keeps the ``minihub_module_host_api_t``
-vtable it is handed, and returns a ``minihub_adapter_t``. L2 JS is
+vtable it is handed, and returns a ``minihub_adapter_t``. JS is
 :doc:`js_host`. REST install/RPC: :doc:`plugin_rest`.
 
 The contract holds only when every one of the following is true:
@@ -39,7 +39,7 @@ API Reference
 Symbol allowlist
 ----------------
 
-L3 ``.so`` must not link the Host application. Every undefined ELF symbol must
+ELF ``.so`` must not link the Host application. Every undefined ELF symbol must
 appear in the list below (same file as ``docs/module_sdk/host_export_allowlist.json``).
 Host resolves them with ``esp_elf_register_symbol``. Addresses are firmware-local —
 do not hardcode.
@@ -102,7 +102,7 @@ Link flags: ``cmake/minihub_module_so.cmake``.
 Full snapshot (keep this JSON as the source of truth):
 
 .. literalinclude:: ../../module_sdk/host_export_allowlist.json
-   :language: json
+   :language: JSON
 
 C prototypes: :doc:`plugin_host` (do not re-declare these symbols).
-Implementation guide: :doc:`../plugins/develop_l3`.
+Implementation guide: :doc:`../plugins/develop_elf`.

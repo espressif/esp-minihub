@@ -5,7 +5,7 @@ BLE Mesh
 
 MiniHub runs BLE Mesh as a **Host adapter**. Devices live under
 ``adapters.ble_mesh``. JSON field details (including ``provision.uuid_filters``
-and ``provision.bind_models``) are in :doc:`data_model` (:ref:`adapters-json`).
+and ``provision.bind_models``) are in :doc:`data_model` (:ref:`adapters-JSON`).
 
 Enable ``CONFIG_MINIHUB_BLE_MESH_SDK`` in ``sdkconfig`` / menuconfig, then build
 (the default stacks already include BLE Mesh; a disabled option is dropped):
@@ -30,7 +30,7 @@ Runtime configuration
 
 Enable in ``/data/config/adapters.json``:
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -45,7 +45,7 @@ Enable in ``/data/config/adapters.json``:
 Set ``adapters.ble_mesh.enabled``. Provisioning policy lives under
 ``provision`` (``uuid_filters`` / ``bind_models``). Bound nodes are in
 ``devices[]``. Entries with ``type`` ``sensor`` are skipped. Fields:
-:ref:`adapters-json`. L1 packs may **merge** extra bind/filter defaults
+:ref:`adapters-JSON`. JSON packs may **merge** extra bind/filter defaults
 (demo ``examples/plugins/ble_mesh_pack``); they must not invent
 ``devices[]``.
 
@@ -86,7 +86,7 @@ Remove devices (legacy)
 ``POST /api/ble_mesh/devices`` removes devices. If the body omits ``adapter``,
 the handler injects ``ble_mesh``. Same remove semantics as Hub points remove.
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "point_id": "mesh.light.1" }
 
@@ -126,7 +126,7 @@ Telemetry (including CTL temperature / lightness) uses
 the whole ``props`` object, or uuid / manufacturer / ``owner`` / ``ota`` are
 wiped.
 
-Plugins (L2) match ``props.manufacturer`` (local filter, e.g.
+Plugins (JS) match ``props.manufacturer`` (local filter, e.g.
 packed ``catalog.json``) on that same ``point_id``:
 
 * **Associate** — set ``props.owner`` to the plugin ``adapter`` name. Overview

@@ -6,7 +6,7 @@ Plugin SDK — mbedtls
 概述
 ----
 
-Host 向 L3 插件导出的 mbedtls 消息摘要、HMAC 与 base64 符号。
+Host 向 ELF 插件导出的 mbedtls 消息摘要、HMAC 与 base64 符号。
 
 .. include-build-file:: inc/mbedtls.inc
 

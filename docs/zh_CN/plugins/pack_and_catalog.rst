@@ -8,19 +8,19 @@
 前置条件
 --------
 
-* L1 / L2 打包不需要编 Host 固件
-* Hub 加载 L2 时，烧进去的固件也必须打开
+* JSON / JS 打包不需要编 Host 固件
+* Hub 加载 JS 时，烧进去的固件也必须打开
   ``CONFIG_MINIHUB_DYNAMIC_MODULES``
 * 脚本缺 PyYAML 时在仓库根目录 ``pip install pyyaml``
 * 可选：``export MINIHUB_PLUGINS_DEPLOY_DIR=~/workspace/minihub_store``
 
 .. only:: not hide_l3
 
-   * L3 **仓库外** 交叉编译：只要有 MHMD ``.so`` （见 :doc:`develop_l3` ），不必编固件
-   * L3 **仓库内** 跟固件一起编：产品须打开 ``CONFIG_MINIHUB_DYNAMIC_MODULES``
+   * ELF **仓库外** 交叉编译：只要有 MHMD ``.so`` （见 :doc:`develop_elf` ），不必编固件
+   * ELF **仓库内** 跟固件一起编：产品须打开 ``CONFIG_MINIHUB_DYNAMIC_MODULES``
      （ ``app.yml`` 的 ``dynamic_modules`` ），否则 CMake 不会生成
      ``libadapter_*.so``
-   * Hub **加载** L3 时，烧进去的固件也必须打开上述选项
+   * Hub **加载** ELF 时，烧进去的固件也必须打开上述选项
 
 打包命令
 --------
@@ -55,7 +55,7 @@
       # 手动 MHMD（通常 pack 已包含）
       python3 tools/pack_store_module.py mhmd in.so out.so
 
-      # 无 IDF 编译 L3 模块（仓库内无示例，先用脚手架生成）
+      # 无 IDF 编译 ELF 模块（仓库内无示例，先用脚手架生成）
       python3 tools/build_plugin_standalone.py my_native
 
    ``./tools/build_firmware.py … modules`` 编译同时含 ``module.json`` 与
@@ -100,7 +100,7 @@
 ``catalog.json`` 条目 (由 ``sync_store_catalog.py`` 生成)
 --------------------------------------------------------------
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "type": "module",
@@ -113,7 +113,7 @@
      "size": 3762
    }
 
-* ``type`` — 生成的目录里恒为 ``module``。标记纯配置 L1 的是 ``config_only: true``
+* ``type`` — 生成的目录里恒为 ``module``。标记纯配置 JSON 的是 ``config_only: true``
   （安装 URL 以 ``.json`` 结尾也算）；打包器同时写 ``runtime: "pack"``，包类型判定器
   与加载器都读它，据此把包交给 ``minihub_pack``，而不是按可加载模块处理。
   手写 ``"type": "pack"`` 只在 Hub 报告已安装状态时被认，**装不了** ：目录查找只在
@@ -136,7 +136,7 @@
   ``components/minihub_update/`` 的固件与资源记录里。
 
 两个文件里的 ``type`` 含义不同：生成的 ``catalog.json`` 每一层都写 ``module``，
-而 L1 包内的 ``module.json`` 写的是 ``pack``。
+而 JSON 包内的 ``module.json`` 写的是 ``pack``。
 
 在运行中的 Hub 上安装
 ---------------------
@@ -146,7 +146,7 @@
 **Web UI** — 打开 ``http://HUB/`` 并进入 ``商店``，将自定义商店 URL 设为本地
 服务，刷新目录后安装 ``color_bulb_js``。安装后 Hub 会自动重载模块。
 
-L1 包在商店 UI 中显示为 pack 条目。
+JSON 包在商店 UI 中显示为 pack 条目。
 
 验证安装
 --------

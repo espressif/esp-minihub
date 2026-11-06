@@ -144,26 +144,26 @@ Develop a Store plugin (quick path)
 
 1. Add ``examples/plugins/ID/`` (or your own tree via
    ``MINIHUB_PLUGIN_DIRS``; see
-   :doc:`plugins/develop_l1` or :doc:`plugins/develop_l2`)
+   :doc:`plugins/develop_json` or :doc:`plugins/develop_js`)
 2. ``python3 tools/pack_store_module.py pack ID``
 3. Run ``python3 tools/store_server.py`` on the PC (the Hub pulls packages over
    LAN; do not run this on the device)
 4. Open the Web UI at ``http://HUB/`` and open ``Store``
 5. Set the custom Store URL to that server, then refresh the catalog and
-   install ``ID`` in the Store UI (L1 packs use ``pack`` as the type)
+   install ``ID`` in the Store UI (JSON packs use ``pack`` as the type)
 
 .. only:: not hide_l3
 
-   L3 native modules: :doc:`plugins/develop_l3`. Compile the ``.so`` before pack.
+   ELF native modules: :doc:`plugins/develop_elf`. Compile the ``.so`` before pack.
 
 New type / widgets: Host ``model/*.csv`` (rebuild) or upload both CSVs via REST
 on a running Hub (``PUT /api/dev/catalog/…``; no Web page -- :doc:`type_catalog`).
 Demos:
-L1 ``examples/plugins/ble_mesh_pack``, L2 ``color_bulb_js`` / ``meter_plug_js``.
+JSON ``examples/plugins/ble_mesh_pack``, JS ``color_bulb_js`` / ``meter_plug_js``.
 
 .. only:: not hide_l3
 
-   There is no in-tree L3 demo; scaffold one with
+   There is no in-tree ELF demo; scaffold one with
    ``tools/new_store_module.py --tier l3 --id my_native``.
 
 OEM Host product: see :doc:`host_customization`.

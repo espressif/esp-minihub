@@ -22,7 +22,7 @@ Static Host adapters call these functions directly. Adapter registration and
 
 .. only:: not hide_l3
 
-   Store **L3** modules must use the vtable in :doc:`module_abi` instead.
+   Store **ELF** modules must use the vtable in :doc:`module_abi` instead.
 
 .. include-build-file:: inc/minihub_core.inc
 

@@ -1,9 +1,9 @@
-开发 L2（JS）模块
-=================
+开发 JS（JavaScript）插件
+=========================
 
 :link_to_translation:`en:[English]`
 
-L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软重载
+JS 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软重载
 （``POST /api/hub/reload`` ）时加载 ``main.js``。实现见
 ``components/minihub_js/minihub_js.c``。
 
@@ -14,7 +14,7 @@ L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
 ``espressif/quickjs-ng`` 组件固定在 0.14.0。语法跟着该构建走，所以 ``class``、
 ``async`` / ``await``、 ``Proxy``、可选链都能用。要确认边界就去查 ``quickjs-ng``
 的文档，别信这里写的版本号。MiniHub 只多加了四个定时器全局和一个 ``host`` 对象，
-其余什么都没有，所以 L2 模块既不是浏览器页面，也不是 Node 进程。
+其余什么都没有，所以 JS 模块既不是浏览器页面，也不是 Node 进程。
 
 真正会绊住 JavaScript 开发者的几点：
 
@@ -33,7 +33,7 @@ L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
 * 工作线程栈是 ``CONFIG_MINIHUB_JS_WORKER_STACK_SIZE`` （默认 32768 字节，开在
   PSRAM 上），QuickJS 的递归上限按 ``CONFIG_MINIHUB_JS_WORKER_STACK_BUDGET``
   （默认 24576）设，让递归先撞到引擎限制而不是真实栈。
-* L2 需要 ``CONFIG_MINIHUB_JS_PLUGINS``，打开 ``CONFIG_MINIHUB_DYNAMIC_MODULES``
+* JS 需要 ``CONFIG_MINIHUB_JS_PLUGINS``，打开 ``CONFIG_MINIHUB_DYNAMIC_MODULES``
   后它默认就是开的。
 
 适用场景
@@ -44,7 +44,7 @@ L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
 
 .. only:: not hide_l3
 
-   * 在投入 L3 之前快速验证想法
+   * 在投入 ELF 之前快速验证想法
 
 要求：产品 sdkconfig 打开 ``CONFIG_MINIHUB_DYNAMIC_MODULES`` （``app.yml`` 中
 ``dynamic_modules`` 特性）。
@@ -64,7 +64,7 @@ L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
 ``module.json`` 示例
 --------------------
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "id": "demo_js",
@@ -77,15 +77,15 @@ L2 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
      "targets": ["ALL"]
    }
 
-L2 manifest 不带 ``abi_version`` —— 那属于原生包。``ui`` 与 ``capabilities``
+JS manifest 不带 ``abi_version`` —— 那属于原生包。``ui`` 与 ``capabilities``
 随包里有 ``meta.json`` 时从它读，没有则回落到 ``module.json`` 里的同名字段。
 
 **``runtime: "js"`` 是必填。** 省略它并不会被当成 JS：加载时运行时只在
-``runtime`` 恰为字符串 ``js`` （或 ``hybrid``）时才启动 QuickJS，既没有
+``runtime`` 恰为字符串 ``JS`` （或 ``hybrid``）时才启动 QuickJS，既没有
 ``runtime`` 又没有 ``binary`` 的 manifest 会走原生那条路，报
 “no binary or builtin” 而失败。别处可能看到过的「有 ``main.js``、无
 ``CMakeLists.txt`` 就算 JS」那个启发式，是 **打包器与目录生成器** 给源码树分级用的，
-Hub 不用它。``adapter`` 同样必填 —— 适配器名为空的 manifest 通不过校验，L2 也不例外。
+Hub 不用它。``adapter`` 同样必填 —— 适配器名为空的 manifest 通不过校验，JS 也不例外。
 
 ``main.js`` 约定
 ----------------
@@ -106,7 +106,7 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
 * ``host.adapter.poll(fn)`` — 在约 5 秒的适配器轮询节拍下运行 ``fn``，整个运行时
   最多 8 个；``host.adapter.clearPoll()`` 会清掉全部回调
 * ``host.http.request({ url, method, headers, body, timeout_ms, response_b64 })``
-  —— 同步 HTTP **跑在 JS worker 上**，这期间整个 L2 运行时都被它占住。设备里没有
+  —— 同步 HTTP **跑在 JS worker 上**，这期间整个 JS 运行时都被它占住。设备里没有
   URL 白名单这回事：能不能连通、以及 ``https`` 的证书信任根，就是全部限制。
   ``response_b64`` 让响应体按 base64 返回，而不是当 UTF-8 字符串
 * ``host.http.requestAsync(opts)`` — ``opts`` 同上，返回 **Promise**，socket 收发不占用
@@ -150,7 +150,7 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
 
 增加适配器块（``devices`` 可为空）：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -176,8 +176,8 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
 * ``GET /api/points`` — 可见 ``demo_js.hello``
 * 串口：``JS module 'demo_js' setup ok``
 
-L2 可选模块 RPC；更推荐 ``host.command`` 或 REST。API 详解 :doc:`../api/js_host`。
+JS 可选模块 RPC；更推荐 ``host.command`` 或 REST。API 详解 :doc:`../api/js_host`。
 
 .. only:: not hide_l3
 
-   L3 RPC 见 :doc:`develop_l3`。
+   ELF RPC 见 :doc:`develop_elf`。

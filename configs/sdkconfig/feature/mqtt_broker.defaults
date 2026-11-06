@@ -1,0 +1,5 @@
+# On-device MQTT broker: the Hub is the site's broker (pure transport, no points).
+# Compiled in here; whether it listens is the runtime adapters.mqtt_broker.enabled
+# (factory seed false). Independent of the MQTT client adapter pinned in
+# feature/dynamic_modules.defaults.
+CONFIG_MINIHUB_MQTT_BROKER=y

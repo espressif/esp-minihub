@@ -9,7 +9,7 @@ ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
 
 # Host adapters an L1 pack may inject into (no new radio stacks from L1).
 INJECT_ADAPTERS = (
-    "mqtt",
+    "mqtt_broker",
     "zigbee",
     "ble_mesh",
     "modbus",

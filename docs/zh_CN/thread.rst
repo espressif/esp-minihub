@@ -18,7 +18,7 @@ Border Router 负责转发、并不拥有设备，所以这个适配器 **不** 
 dataset 走 ``GET`` / ``POST /api/thread/dataset``；当前角色、信道与
 ``dataset_set`` 由 ``GET /api/thread/status`` 报出 —— 出厂 JSON 里那个
 ``adapters.thread.channel`` 没有任何代码读它。字段见 :doc:`data_model`
-（:ref:`adapters-json`）。
+（:ref:`adapters-JSON`）。
 
 启停 Border Router（无请求体；鉴权与其它写接口相同）。仅在打开上述选项时存在：
 
@@ -26,7 +26,7 @@ dataset 走 ``GET`` / ``POST /api/thread/dataset``；当前角色、信道与
   失败时可能带 ``message``
 * ``POST /api/thread/stop`` — 同样的 ``status``；协议栈本来就没开时也是 ``ok``
 
-用 L1 往 Thread 注入 ``devices[]``，只会造出没人能通信的纸面设备；
+用 JSON 往 Thread 注入 ``devices[]``，只会造出没人能通信的纸面设备；
 ``thread_ota`` 插件也没有任何东西可升级，所以不要发布这样的 pack。这是约定，
 不是强制限制：校验器把 ``thread`` 列为可注入的 Host 适配器，Host 的 pack
 加载器也会把设备合并进 ``adapters.thread``，而 Border Router 直接忽略它们。

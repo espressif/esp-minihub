@@ -99,5 +99,5 @@ Thread 在构建期也被拦下： ``tools/build_firmware.py`` 会拒绝两者�
 端设备 OTA REST：``POST /api/devices/ota`` （:doc:`api/host_rest`）。Hub
 **自身** 固件升级是另一条路径：:doc:`ota`。
 
-L1 不要往 ``zigbee`` / ``matter`` / ``ble_mesh`` 的 ``devices[]`` 里编造纸面设备，
-也不要给 Thread 发明设备列表。见 :doc:`plugins/develop_l1`。
+JSON 不要往 ``zigbee`` / ``matter`` / ``ble_mesh`` 的 ``devices[]`` 里编造纸面设备，
+也不要给 Thread 发明设备列表。见 :doc:`plugins/develop_json`。

@@ -1,9 +1,9 @@
-Develop L3 (Native) Modules
-===========================
+Develop ELF (Native) Plugins
+============================
 
 :link_to_translation:`zh_CN:[中文]`
 
-An L3 module is a ``.mhub`` package whose payload is a native ELF ``.so``. Host
+An ELF module is a ``.mhub`` package whose payload is a native ELF ``.so``. Host
 calls ``dlopen`` on that image and then ``minihub_module_entry``, so the binary
 must be built for the exact Host that will load it — nothing translates between
 ABIs at install time. Before packing, wrap the ``.so`` with an **MHMD** header
@@ -131,7 +131,7 @@ Prefer ``-B build`` inside the plugin directory.
 configure, build, and can ``--pack``. Host in-tree builds still write
 ``application/minihub/build/<id>.so``.
 
-A scaffolded L3 plugin (dual path)
+A scaffolded ELF plugin (dual path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Splitting the source with ``if(ESP_PLATFORM)`` / a standalone ``include()`` of
@@ -163,11 +163,11 @@ when you build the module target. A Host firmware ``build`` does not.
 
 With an MHMD ``.so`` already built there is nothing to recompile:
 ``python3 tools/pack_store_module.py mhmd in.so out.so`` only wraps the header.
-``pack`` publishes L1 and L2 — a native package either goes into the store folder
+``pack`` publishes JSON and JS — a native package either goes into the store folder
 yourself (steps 3-5 above) or rides in the factory image.
 
-L3 developer scripts
-^^^^^^^^^^^^^^^^^^^^
+ELF developer scripts
+^^^^^^^^^^^^^^^^^^^^^^
 
 * ``tools/new_store_module.py --tier l3 --id ID`` — scaffold
 * ``tools/generate_devices_property_from_json.py`` — ``devices.json`` →
@@ -198,10 +198,10 @@ Directory layout (scaffold ``my_native``)
      CMakeLists.txt
      meta.json            # optional ui + capabilities
 
-``module.json`` (L3)
---------------------
+``module.json`` (ELF)
+----------------------
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "id": "my_native",

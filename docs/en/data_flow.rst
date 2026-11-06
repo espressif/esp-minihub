@@ -72,7 +72,7 @@ The stages below walk the same loop one hop at a time.
    Every command source converges on the same router
    (``minihub_command_invoke``): the widget POST above, ``POST /api/command``
    (explicit ``point_id``, optional ``params.parameter``), rule ``command`` /
-   ``command_by_type`` actions, and L2 JS ``host.command.invoke`` /
+   ``command_by_type`` actions, and JS ``host.command.invoke`` /
    ``host.command.on``. The adapter for the resolved point then delivers the
    command over the radio.
 
@@ -154,14 +154,14 @@ The stages below walk the same loop one hop at a time.
    Third-party behavior is delivered as **Store modules** under
    ``/store/modules/ID/``:
 
-   * **L1** ``minihub_pack`` — injects into an existing adapter (no new radio
+   * **JSON** ``minihub_pack`` — injects into an existing adapter (no new radio
      stack).
-   * **L2** ``minihub_module`` — a JavaScript plugin (``main.js``, QuickJS via
+   * **JS** ``minihub_module`` — a JavaScript plugin (``main.js``, QuickJS via
      ``minihub_js``); may ship ``web/`` served at ``/modules/ID/web/…``.
 
 .. only:: not hide_l3
 
-   * **L3** ``minihub_module`` — a native ``.so`` loaded at runtime.
+   * **ELF** ``minihub_module`` — a native ``.so`` loaded at runtime.
 
 Modules subscribe with ``host.event.subscribe(type, fn)`` (internally one
 wildcard subscription, filtered in JS), call Host APIs, and register points —
@@ -309,7 +309,7 @@ API surface quick reference
    * - ``GET /api/modules/*/preview``
      - Module UI preview
    * - ``GET /api/packs``, ``POST /api/packs``
-     - L1 pack list / manage
+     - JSON pack list / manage
    * - ``GET /api/scenes``, ``POST /api/scenes/import``, ``POST /api/scenes/invoke``
      - Scenes management
    * - ``GET /api/events``, WebSocket ``/ws/events``
@@ -326,5 +326,5 @@ Where to go next
 * :doc:`data_model` — the point model plus adapters / scenes.
 * :doc:`rules` — ``when`` / ``if`` / ``then`` and comparison ops.
 * :doc:`web_console` — replacing or skinning the Web console.
-* :doc:`plugins/index` — authoring L1/L2 Store modules.
+* :doc:`plugins/index` — authoring JSON/JS Store modules.
 * :doc:`api/index` — full REST / JS / MCP / C ABI reference.

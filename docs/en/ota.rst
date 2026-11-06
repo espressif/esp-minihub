@@ -114,7 +114,7 @@ Two things about the URL you pass in:
 
 * The body is read into a 256-byte buffer, so the JSON, quotes and key included,
   leaves roughly 245 characters for the URL. A longer body is truncated and comes
-  back as **400** ``invalid json``.
+  back as **400** ``invalid JSON``.
 * The device appends ``mac=``, ``chip=``, and ``cur_version=`` to the URL before
   fetching. That is handy for per-device gating, but it changes the query string —
   a pre-signed or expiring CDN URL will no longer match its signature. Serve such

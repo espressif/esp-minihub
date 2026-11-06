@@ -39,7 +39,7 @@ Runtime configuration
 
 Enable in ``/data/config/adapters.json`` (factory JSON: ``application/minihub/configs/adapters.json``):
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -57,7 +57,7 @@ Enable in ``/data/config/adapters.json`` (factory JSON: ``application/minihub/co
      }
    }
 
-JSON fields: :ref:`adapters-json`.
+JSON fields: :ref:`adapters-JSON`.
 
 REST endpoints
 --------------
@@ -80,7 +80,7 @@ Commission (pairing only)
 
 **BLE + device Wi-Fi** (first-time; requires ``pairing_code``, not ``setup_pin``):
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "node_id": 2,
@@ -92,7 +92,7 @@ Commission (pairing only)
 
 **Response**
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "status": "started" }
 
@@ -134,7 +134,7 @@ figure you may find in notes is stale. Poll ``GET /api/matter/status`` for
 ``commission``: ``idle`` | ``running`` | ``ok`` | ``failed``. Omitting
 ``pairing_code`` still upserts without commissioning (``commission: "skipped"``).
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "pairing_code": "MT:...",
@@ -154,7 +154,7 @@ figure you may find in notes is stale. Poll ``GET /api/matter/status`` for
 
 **Immediate response (commission started)**
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "result": "ok",
@@ -169,7 +169,7 @@ overview card drops the waiting state.
 
 **Delete example**
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "delete": true, "point_id": "matter.light.2", "reload": true }
 
@@ -214,7 +214,7 @@ Whether reports are arriving
 
    curl -s http://HUB/api/matter/status
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "ready": true,

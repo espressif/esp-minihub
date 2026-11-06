@@ -1,9 +1,9 @@
-开发 L1（配置包）
-=================
+开发 JSON 插件（配置包）
+========================
 
 :link_to_translation:`en:[English]`
 
-L1 模块是 **纯配置** 的 ``.mhub`` 包：不含 ``main.js`` 或原生 ``.so``。
+JSON 模块是 **纯配置** 的 ``.mhub`` 包：不含 ``main.js`` 或原生 ``.so``。
 ``minihub_pack_merge_into_adapters()`` 把它的 JSON 折进 Host **内存里** 那棵适配器树，
 不会把 ``adapters.json`` 写回磁盘。所以这次合并只出现在 ``GET /api/config/adapters`` ，
 ``/data`` 上那份文件仍是出厂时那份 —— 开机和每次软重载都会重新应用一次这个包。
@@ -11,7 +11,7 @@ L1 模块是 **纯配置** 的 ``.mhub`` 包：不含 ``main.js`` 或原生 ``.s
 适用场景
 --------
 
-适配器默认参数需要送到已经出厂的设备时，用 L1。它按名字改一个适配器配置块：
+适配器默认参数需要送到已经出厂的设备时，用 JSON。它按名字改一个适配器配置块：
 这个名字在树里还不存在时，合并会 **新建** 一个，并置 ``enabled: true`` （串口日志
 ``created adapter '<name>' for pack '<id>'`` ）；已存在且写着 ``enabled: false`` 时，
 这个包被跳过（ ``skip pack '<id>': adapter '<name>' disabled`` ）—— 停用中的适配器
@@ -27,19 +27,19 @@ L1 模块是 **纯配置** 的 ``.mhub`` 包：不含 ``main.js`` 或原生 ``.s
 
 * ``zigbee`` / ``matter`` / ``ble_mesh`` 的 ``devices[]``。
   这些设备由射频入网（或配网）后由 Host 登记点（如
-  ``zigbee.zb_7d4b``）。L1 往 ``devices[]`` 追加，等于在 JSON 里再造一台
-  「纸面设备」。``thread`` **没有** ``devices[]`` （只做 BR）；不要用 L1
+  ``zigbee.zb_7d4b``）。JSON 往 ``devices[]`` 追加，等于在 JSON 里再造一台
+  「纸面设备」。``thread`` **没有** ``devices[]`` （只做 BR）；不要用 JSON
   给 Thread 发明设备列表。
 * 厂商、品类、``owner``、``ota`` —— 那是点位顶层 ``props``，由 Host 访谈或
-  L2 ``merge_props`` 写入，不是 ``adapters.json`` 字段。
-* 云端 API、新适配器、关联已有 Zigbee 点 —— 用 :doc:`develop_l2`。
+  JS ``merge_props`` 写入，不是 ``adapters.json`` 字段。
+* 云端 API、新适配器、关联已有 Zigbee 点 —— 用 :doc:`develop_js`。
 
 .. only:: not hide_l3
 
-   L3 也可以用 ``merge_props`` 写这些字段，并增加新适配器。见 :doc:`develop_l3`。
+   ELF 也可以用 ``merge_props`` 写这些字段，并增加新适配器。见 :doc:`develop_elf`。
 
 校验允许 ``inject.adapter`` 为 ``zigbee`` 等，是为了可以改 **provision
-类键**，不是允许用 L1 发设备列表。
+类键**，不是允许用 JSON 发设备列表。
 
 ``inject`` 只写在 ``module.json``，别处不认 —— 没有单独的 ``inject.json``
 加载路径。因此包目录只要有这一个文件。
@@ -51,7 +51,7 @@ L1 模块是 **纯配置** 的 ``.mhub`` 包：不含 ``main.js`` 或原生 ``.s
 
 最小 ``module.json`` （``runtime: pack`` ）：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "id": "my_pack",
@@ -92,7 +92,7 @@ L1 模块是 **纯配置** 的 ``.mhub`` 包：不含 ``main.js`` 或原生 ``.s
 
 设备上，在 Web UI（ ``http://HUB/`` ）中打开 ``商店``，把自定义商店 URL 设为
 ``store_server.py`` 打印出的地址，刷新目录并安装 ``my_pack``，Hub 会自动重载。
-仓库内的 L1 示例是 ``examples/plugins/ble_mesh_pack``。
+仓库内的 JSON 示例是 ``examples/plugins/ble_mesh_pack``。
 
 用 ``GET /api/packs`` 与 ``GET /api/config/adapters`` 验证。
 

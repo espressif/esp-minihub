@@ -27,7 +27,7 @@
 .. code-block:: bash
 
    curl -s -H "Authorization: Bearer $MINIHUB_TOKEN" http://HUB/api/system \
-     | python3 -m json.tool   # version、commit
+     | python3 -m JSON.tool   # version、commit
    # 控制台自己的值是 window.mhWebVersion ，侧栏也会显示
 
 固件比控制台新是正常的；控制台比固件新，通常说明 ``app-flash`` 只换了应用，

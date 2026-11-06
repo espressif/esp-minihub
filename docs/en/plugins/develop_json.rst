@@ -1,19 +1,19 @@
-Develop L1 (Config) Packs
-=========================
+Develop JSON (Config) Plugins
+=============================
 
 :link_to_translation:`zh_CN:[中文]`
 
-An L1 pack is a ``.mhub`` package with nothing in it but configuration: no
+A JSON pack is a ``.mhub`` package with nothing in it but configuration: no
 ``main.js``, no native ``.so``. ``minihub_pack_merge_into_adapters()`` folds its
 JSON into the adapter tree the Host works from **in memory**; it never writes
 ``adapters.json`` back. The merge is therefore visible in
 ``GET /api/config/adapters`` while the file on ``/data`` stays exactly what the
 product shipped — the pack is applied again at boot and on every reload.
 
-When to use L1
----------------
+When to use JSON
+------------------
 
-Use L1 when adapter defaults need to reach a device that has already been
+Use JSON when adapter defaults need to reach a device that has already been
 flashed. It patches one adapter block by name. If that name is not in the tree
 yet, the merge **creates** it with ``enabled: true`` (serial log
 ``created adapter '<name>' for pack '<id>'``); if the block exists and says
@@ -32,22 +32,22 @@ carries no code, so it cannot register points, run logic or call the cloud.
 
 * ``devices[]`` on ``zigbee`` / ``matter`` / ``ble_mesh``.
   Those devices join over the radio (or provisioning). Host then registers
-  **one** point (e.g. ``zigbee.zb_7d4b``). Appending ``devices[]`` from L1
+  **one** point (e.g. ``zigbee.zb_7d4b``). Appending ``devices[]`` from JSON
   invents a paper device. ``thread`` has **no** ``devices[]`` (BR only);
-  do not invent a Thread device list from L1.
+  do not invent a Thread device list from JSON.
 * ``manufacturer``, ``category``, ``owner``, ``ota`` — those are top-level
-  point ``props`` from Host interview or L2 ``merge_props``, not
+  point ``props`` from Host interview or JS ``merge_props``, not
   ``adapters.json`` keys.
 * Cloud APIs, a new adapter, or associating an existing Zigbee point — use
-  :doc:`develop_l2`.
+  :doc:`develop_js`.
 
 .. only:: not hide_l3
 
-   L3 can also set those props with ``merge_props``, and can add a new
-   adapter. See :doc:`develop_l3`.
+   ELF can also set those props with ``merge_props``, and can add a new
+   adapter. See :doc:`develop_elf`.
 
 Validation allows ``inject.adapter`` ``zigbee`` so you can set **provision
-keys**, not so L1 can ship a device list.
+keys**, not so JSON can ship a device list.
 
 ``inject`` goes in ``module.json`` and nowhere else, because there is no
 ``inject.json`` loader. A pack directory therefore needs that one file.
@@ -59,7 +59,7 @@ Mesh ``devices[]``. Public Host ``store_preinstall`` stays empty.
 
 Minimal ``module.json`` (``runtime: pack``):
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "id": "my_pack",
@@ -104,7 +104,7 @@ after editing an entry.
 
 On the device, in the Web UI at ``http://HUB/``, open ``Store``, set the custom
 Store URL to the address ``store_server.py`` printed, refresh the catalog, and
-install ``my_pack``; the Hub reloads automatically. The in-tree L1 example is
+install ``my_pack``; the Hub reloads automatically. The in-tree JSON example is
 ``examples/plugins/ble_mesh_pack``.
 
 Verify with ``GET /api/packs`` and ``GET /api/config/adapters``.

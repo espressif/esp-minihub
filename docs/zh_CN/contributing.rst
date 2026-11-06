@@ -83,12 +83,12 @@ Git 工作流
 
 .. only:: not hide_l3
 
-   * L3 模块：``./tools/build_firmware.py -app minihub modules`` （编译全部原生 ``.so``；打包用 ``pack``）
-   * L3 演示单独编译（不编 IDF 工程）：``python3 tools/test_build_plugin_standalone.py -v``
+   * ELF 模块：``./tools/build_firmware.py -app minihub modules`` （编译全部原生 ``.so``；打包用 ``pack``）
+   * ELF 演示单独编译（不编 IDF 工程）：``python3 tools/test_build_plugin_standalone.py -v``
      （GitLab 任务 ``build:plugin_standalone``；需要 ``riscv32-esp-elf-gcc`` 与 ``cmake``）
-   * 若变更 L3 模块可见的 Host 符号，需更新
+   * 若变更 ELF 模块可见的 Host 符号，需更新
      ``docs/module_sdk/host_export_allowlist.json`` 并运行
-     ``python3 tools/gen_host_export_symbols.py`` （见 :doc:`plugins/develop_l3` ）。
+     ``python3 tools/gen_host_export_symbols.py`` （见 :doc:`plugins/develop_elf` ）。
 
 评审要点
 --------

@@ -469,7 +469,7 @@ POST /api/hub/reload
 
    ``POST /api/hub/reload``
 
-Soft-reload Hub: re-read JSON, reload L1 packs and Store modules, restart adapters
+Soft-reload Hub: re-read JSON, reload JSON packs and Store modules, restart adapters
 and JS without full reboot. See :doc:`../architecture`.
 
 .. container:: mh-api-block mh-api-parameters
@@ -836,7 +836,7 @@ none. The socket forwards **any** name published on the bus
 
 .. only:: not hide_l3
 
-   L3 modules publish with ``event_publish``.
+   ELF modules publish with ``event_publish``.
 
 Host-published ``event_type`` values:
 
@@ -904,7 +904,7 @@ The ESP-IDF provisioning manager publishes ``wifi.provisioning``,
 Wi-Fi from the open ``PROV_MiniHub`` AP instead, so those three appear only on a
 product that calls ``minihub_provision_start()`` (:doc:`../networking`).
 
-L2 JS ``host.event.subscribe`` accepts a name or ``*`` (all events). There is
+JS ``host.event.subscribe`` accepts a name or ``*`` (all events). There is
 no Host-side filter list: subscribe to the types you need.
 
 .. container:: mh-api-block mh-api-attention

@@ -38,7 +38,7 @@ Thread 侧 dataset 见 ``GET/POST /api/thread/dataset``，再配网 Thread 终�
 在 ``/data/config/adapters.json`` 中启用（出厂配置：
 ``application/minihub/configs/adapters.json``）：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -56,7 +56,7 @@ Thread 侧 dataset 见 ``GET/POST /api/thread/dataset``，再配网 Thread 终�
      }
    }
 
-JSON 字段见 :ref:`adapters-json`。
+JSON 字段见 :ref:`adapters-JSON`。
 
 REST 接口
 ---------
@@ -79,7 +79,7 @@ REST 接口
 
 **BLE + 设备 Wi-Fi** （首次；须 ``pairing_code``，不可用 ``setup_pin``）：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "node_id": 2,
@@ -91,7 +91,7 @@ REST 接口
 
 **响应**
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "status": "started" }
 
@@ -127,7 +127,7 @@ Web 添加对话框始终走 BLE 配网并注入凭据，入网后再在 fabric 
 ``running`` | ``ok`` | ``failed``。省略 ``pairing_code`` 时仍只 upsert、不配网
 （``commission: "skipped"``）。
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "pairing_code": "MT:...",
@@ -147,7 +147,7 @@ Web 添加对话框始终走 BLE 配网并注入凭据，入网后再在 fabric 
 
 **立即响应（配网已启动）**
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "result": "ok",
@@ -162,7 +162,7 @@ Web 添加对话框始终走 BLE 配网并注入凭据，入网后再在 fabric 
 
 **删除示例**
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "delete": true, "point_id": "matter.light.2", "reload": true }
 
@@ -205,7 +205,7 @@ Matter 适配器为每个已配网 node 建立 **一条** 订阅，覆盖该 nod
 
    curl -s http://HUB/api/matter/status
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "ready": true,
@@ -314,7 +314,7 @@ Information（cluster ``0x0028``，尽力而为；失败不阻断配网）：
 身份只 ``minihub_point_merge_props``，**不** 写进 ``adapters.json``。同一
 node 的多个 endpoint 点合并同一份 Basic Information。
 
-插件（L2）按 ``props.manufacturer`` 匹配，写在同一 ``point_id`` 上：
+插件（JS）按 ``props.manufacturer`` 匹配，写在同一 ``point_id`` 上：
 
 * **关联** — ``props.owner`` = 插件 ``adapter`` 名，由插件自己写；**不需要** 云端目录。
 * **OTA 标记** — 插件按自己的判定 merge ``props.ota``；``POST /api/devices/ota``

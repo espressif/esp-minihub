@@ -3,7 +3,7 @@
 
 :link_to_translation:`en:[English]`
 
-从空目录到插件在 Hub 上跑起来，再到不改固件地改它，走一遍。示例用 L2
+从空目录到插件在 Hub 上跑起来，再到不改固件地改它，走一遍。示例用 JS
 （QuickJS 上跑 JavaScript），因为它不需要交叉编译。换层时改的只有第 1 步的
 ``--tier`` 和第 2 步写的内容。
 
@@ -95,7 +95,7 @@
   ``device_id``，否则概览页没有控件（:doc:`../type_catalog`）。
 * 命令按 ``point.register()`` 里传的 ``adapter`` 字段路由，你用
   ``host.command.on(adapter, fn)`` 绑它。省略这个字段，点就落在加载器默认的
-  ``js`` 适配器上，那时 ``host.command.on('my_js', …)`` 永远不会被调到。
+  ``JS`` 适配器上，那时 ``host.command.on('my_js', …)`` 永远不会被调到。
 * 一台物理设备一条点，参数放在 ``props.params`` 下 —— 绝不做成一条参数一条点
   （:doc:`../data_model`）。
 * 引擎单线程且所有 JS 模块共用：回调里不许死循环。耗时的活交给
@@ -111,8 +111,8 @@
    python3 tools/store_server.py --port 8080
 
 第一条写到 ``~/workspace/minihub_store/Stores/Common/my_js/my_js.mhub``，并在它旁边
-把 ``catalog.json`` 一起写好（ ``pack_store_module.py:323-326`` ）；L1、
-L2 一律在 ``Common`` 下，原生模块不是商店包，所以 ``pack`` 会跳过它。第二条是你手工放了包、
+把 ``catalog.json`` 一起写好（ ``pack_store_module.py:323-326`` ）；JSON、
+JS 一律在 ``Common`` 下，原生模块不是商店包，所以 ``pack`` 会跳过它。第二条是你手工放了包、
 或改过条目之后才需要跑的 —— 在 ``pack`` 之后它是多余的，留着也无害。那份
 ``catalog.json`` 是商店侧唯一的索引， ``/api/catalog`` 是请求时聚合
 这些逐插件文件。第三条把两者一起提供服务。动 Hub 之前先确认服务端能看到：
@@ -190,15 +190,15 @@ Web 登录默认开启，写操作需要会话。第 4 步的安装已经把模�
 换到另一层
 ----------
 
-L1 是同一个循环，只把第 2 步换成在 ``module.json`` 里写 ``inject``：没有代码、
-没有 ``setup``，而且只能给 Host 已有的适配器补默认参数（见 :doc:`develop_l1` ）。
+JSON 是同一个循环，只把第 2 步换成在 ``module.json`` 里写 ``inject``：没有代码、
+没有 ``setup``，而且只能给 Host 已有的适配器补默认参数（见 :doc:`develop_json` ）。
 
 .. only:: not hide_l3
 
-   L3 把第 2 步换成 C 源文件，并在打包前多一步编译：先产出 ``.so``，用
+   ELF 把第 2 步换成 C 源文件，并在打包前多一步编译：先产出 ``.so``，用
    ``python3 tools/build_plugin_standalone.py``，或者与 Host 一起编译时改用
    ``./tools/build_firmware.py modules``。MHMD 头是另一条命令套上去的：
    ``pack_store_module.py mhmd in.so out.so`` —— ``pack`` 只负责把已经封装好的
-   ``.so`` 装进包里（见 :doc:`develop_l3` ）。
+   ``.so`` 装进包里（见 :doc:`develop_elf` ）。
 
-每步的完整细节：:doc:`develop_l2`、:doc:`pack_and_catalog`、:doc:`../api/host_rest`。
+每步的完整细节：:doc:`develop_js`、:doc:`pack_and_catalog`、:doc:`../api/host_rest`。

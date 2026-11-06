@@ -16,6 +16,44 @@ menu "JS plugins"
             single known stack. Raise if a large L2 script overflows during
             compile; lower only if PSRAM is scarce.
 
+    config MINIHUB_JS_BLE
+        bool "L2 host.ble: shared passive BLE advertisement scanner"
+        depends on MINIHUB_JS_PLUGINS
+        default n
+        help
+            Exposes host.ble.ensureScan() / releaseScan() / getAds() to L2
+            plugins. All BLE vendor plugins share ONE NimBLE scan, reference
+            counted, so enabling several of them does not restart the radio.
+            Requires CONFIG_BT_NIMBLE_ENABLED and GATT client. When disabled
+            the methods still exist but throw a clear "disabled" error, so
+            plugin setup() can degrade gracefully.
+
+    config MINIHUB_JS_MDNS
+        bool "L2 host.mdns: one-shot mDNS service discovery"
+        depends on MINIHUB_JS_PLUGINS
+        default n
+        help
+            Exposes host.mdns.resolve({ service, proto, timeout_ms,
+            max_results }), a blocking PTR/A query for LAN discovery.
+            mDNS is initialised lazily and idempotently, so a Matter/Thread
+            responder already running is left alone. Disabled by default to
+            keep the firmware image unchanged for existing configurations.
+
+    config MINIHUB_JS_MQTT
+        bool "L2 host.mqtt: wildcard MQTT subscriptions for dynamic discovery"
+        depends on MINIHUB_JS_PLUGINS && MINIHUB_MQTT_ADAPTER
+        default n
+        help
+            Exposes host.mqtt.subscribe() / unsubscribe() / getMessages() /
+            publish() / isConnected() / stats() to L2 plugins, backed by the
+            bundled MQTT adapter's single esp-mqtt client. Filters may use
+            MQTT '+' / '#' wildcards and are re-subscribed on broker reconnect.
+            Messages matching a filter are copied into a bounded 24-slot ring
+            buffer (2 KB payload cap); JS pulls them with getMessages() so no
+            JSValue crosses the esp-mqtt task boundary. Disabled by default to
+            keep the firmware image unchanged for existing configurations;
+            when off the methods throw a clear "host.mqtt disabled" error.
+
     config MINIHUB_JS_WORKER_STACK_BUDGET
         int "QuickJS C-stack budget on js_worker (bytes)"
         default 24576

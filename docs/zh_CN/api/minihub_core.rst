@@ -20,7 +20,7 @@ Host 内静态适配器直接调用本页 API。
 
 .. only:: not hide_l3
 
-   商店 **L3** 模块须改用 :doc:`module_abi` 虚表。
+   商店 **ELF** 模块须改用 :doc:`module_abi` 虚表。
 
 .. include-build-file:: inc/minihub_core.inc
 

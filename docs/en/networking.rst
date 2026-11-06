@@ -22,8 +22,11 @@ Kconfig
 * ``CONFIG_MINIHUB_NET_ETH`` — Native EMAC + PHY (S31 Function CoreBoard: YT8531)
 * ``CONFIG_MINIHUB_NET_WIFI_SOFTAP`` — SoftAP/STA owned outside ``minihub_net``
 * ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — SoftAP provisioning when no NVS creds
+* ``CONFIG_MINIHUB_MQTT_BROKER`` — On-device MQTT broker; runtime config decides
+  whether it listens
 
-Fragments: ``configs/sdkconfig/feature/wifi_sta.defaults``, ``eth.defaults``.
+Fragments: ``configs/sdkconfig/feature/wifi_sta.defaults``, ``eth.defaults``,
+``mqtt_broker.defaults``.
 
 Boot order
 ----------
@@ -76,6 +79,61 @@ another port; ``CONFIG_MINIHUB_WIFI_PROVISIONING=n`` drops the open AP too, and 
 device with no credentials then only logs
 ``no Wi-Fi credentials and provisioning disabled``.
 
+MQTT broker
+-----------
+
+``components/minihub_mqtt_broker`` runs an
+`mosquitto <https://components.espressif.com/components/espressif/mosquitto>`_
+broker on the Hub, so the MQTT devices at a site connect to the Hub instead of a
+separate always-on machine. It is a transport service only: it registers no
+points. Turning it on also starts the Hub's own MQTT client on ``127.0.0.1`` —
+``components/minihub_protocol_adapters/adapter_mqtt``, registered under the same
+``mqtt_broker`` name — because that client is what carries ``host.mqtt`` for JS
+plugins. There is no external-broker mode: with the broker off, no client is
+created.
+
+The firmware carries the broker whenever ``CONFIG_MINIHUB_MQTT_BROKER`` is on,
+which is the default. Whether it listens is decided at run time by
+``adapters.mqtt_broker`` (:ref:`adapters-JSON`), and the factory seed has it off:
+
+.. code-block:: JSON
+
+   "mqtt_broker": {
+     "enabled": false,
+     "port": 1883,
+     "allow_anonymous": true,
+     "users": [],
+     "connect_rate_limit": 16
+   }
+
+* ``enabled`` — ``false`` in the factory seed: no listener task, no open port,
+  and no loopback client
+* ``port`` — TCP listener, 1–65535, default 1883
+* ``allow_anonymous`` — default ``true``, so a client that sends no username is
+  accepted. A client that does send a username is always checked against
+  ``users``, and an unknown one is refused. Once it is ``false`` the Hub's own
+  client logs in as ``users[0]``, so an empty ``users[]`` leaves ``host.mqtt``
+  disconnected and logs a warning
+* ``users`` — at most 4 ``{"name": …, "pass": …}`` entries, each field at most 31
+  bytes; extras are dropped with a warning
+* ``connect_rate_limit`` — CONNECT packets accepted per 10 s window, default 16.
+  There is no cap on simultaneous clients
+
+The listener binds ``0.0.0.0``, so it answers on Ethernet, on the Wi-Fi STA
+address, and on the provisioning AP (``192.168.4.1``). With the default posture —
+anonymous allowed, no per-topic **access control list (ACL)** — any device that can reach the Hub can
+publish and subscribe to every topic. Set ``allow_anonymous`` to ``false`` and
+list users before a unit ships; the network assumptions are in :doc:`security`.
+
+A reload restarts the broker only when the ``mqtt_broker`` subtree changed, so
+editing another adapter leaves MQTT clients connected. A restart does disconnect
+them. Retained messages and offline sessions live in RAM only and are gone after
+a reboot or a restart.
+
+Not in this version: TLS, WebSocket, bridging, persistence, per-topic ACL, and
+more than one listener. ``CONFIG_MOSQ_ENABLE_SYS`` (off by default) is the debug
+switch that publishes the broker's own ``$SYS`` counters to any MQTT client.
+
 REST: network configuration
 ---------------------------
 
@@ -83,7 +141,7 @@ REST: network configuration
 
 **Request body**
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "iface": "eth",
@@ -102,7 +160,7 @@ Or use ``dns_main`` / ``dns_backup`` instead of the ``dns`` array.
 
 **Response**
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "result": "ok" }
 
@@ -124,6 +182,8 @@ Expected logs
 * ``eth got IP`` / ``wifi got IP`` — that uplink has IPv4
 * ``MiniHub ready (net=… prov=… web_ui=… lcd_ui=… eth=… wifi=…)`` — features
   prepared, not proof of IPv4
+* ``listening on 0.0.0.0:1883, anonymous allowed, 0 user(s)`` — the MQTT broker
+  task is up (tag ``mqtt_broker``)
 
 Troubleshooting
 ---------------
@@ -148,6 +208,18 @@ should fall back once Wi-Fi has IP (``minihub_net_refresh_default_netif``).
 **REST net config returns fail**
 
 Static IP fields must be valid when ``dhcp`` is false. Body max ~2 KB.
+
+**MQTT device cannot reach the broker**
+
+* ``adapters.mqtt_broker.enabled`` must be ``true``, then reload from the Web
+  console or ``POST /api/hub/reload``
+* ``listening on …`` confirms the bind. ``mosq_broker_run returned …`` means the
+  broker exited and is retrying every 5 s — check whether another service holds
+  the port
+* A client that sends a username is refused unless that username is in
+  ``users``, even while ``allow_anonymous`` is ``true``
+* A device in a reconnect loop can exhaust ``connect_rate_limit`` and then be
+  refused for the rest of that 10 s window
 
 C API
 -----

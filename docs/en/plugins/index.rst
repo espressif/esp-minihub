@@ -14,8 +14,8 @@ the Host type catalog; see :doc:`../type_catalog`. Point contract and
 
    overview
    first_plugin
-   develop_l1
-   develop_l2
+   develop_json
+   develop_js
    pack_and_catalog
 
 .. only:: not hide_l3
@@ -23,4 +23,4 @@ the Host type catalog; see :doc:`../type_catalog`. Point contract and
    .. toctree::
       :maxdepth: 2
 
-      develop_l3
+      develop_elf

@@ -1,6 +1,6 @@
 # minihub_device_widget
 
-[English](README.md) | [中文](README_CN.md) · [Standard types](STANDARD_TYPES.md)
+[English](README.md) | [中文](README_CN.md) · [Standard types](https://docs.espressif.com/projects/esp-minihub/en/latest/type_catalog.html)
 
 Type-catalog for device UI: which parameters a type exposes, and how each
 parameter renders (widget, label, bounds, CSS). Source of truth:
@@ -57,6 +57,9 @@ comes from parameter name + CSS, not extra widget types. Metering params
 (`voltage_v` / `current_a` / `power_w` / `energy_wh`) are `ui.text` with
 catalog `properties: Read` → style `access: R` (read-only value + unit).
 
+Columns are bilingual: `id`, `label_zh` / `label_en`, `description_zh` /
+`description_en`, `binds_zh` / `binds_en`.
+
 | | `ui.hidden` | Instance `visible:false` |
 |--|-------------|--------------------------|
 | Where | `parameters.csv` `ui_element` | Plugin `devices.json` |
@@ -76,7 +79,7 @@ Reference only (RainMaker system services). Not part of the widget registry.
 - **`speaker`** — `power`, `volume` (`volume` requires `power`)
 - **`name`** — in catalog; no device lists it → never a control
 
-Full tables: [`STANDARD_TYPES.md`](STANDARD_TYPES.md).
+Full tables: [Type Catalog](https://docs.espressif.com/projects/esp-minihub/en/latest/type_catalog.html).
 
 <a id="icons"></a>
 ## Icons

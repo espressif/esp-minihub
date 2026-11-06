@@ -152,7 +152,7 @@ Web 控制台也可在界面里更新：配置好自定义插件服务器后，�
 
 .. warning::
 
-   每次 PUT 只替换 **一个文件** 。这个路由不知道 ``index.html`` 和 ``js/app.js`` 属于
+   每次 PUT 只替换 **一个文件** 。这个路由不知道 ``index.html`` 和 ``JS/app.js`` 属于
    同一次构建，所以推一半会留下一台由两代产物拼起来的控制台—— 通常表现为页面能打开、
    随后在浏览器控制台里报错，因为 HTML 和 JS 已经对不上了。要么把你改过的文件全推一遍，
    要么重烧 storage 分区（ ``storage-flash``）回到镜像自带的那版控制台： ``app-flash`` 只写
@@ -186,4 +186,4 @@ HTTP 服务 **不会** 把 ``Accept-Language`` 映射到 ``web/en/`` 与 ``web/z
 
 商店模块可自带 ``web/``，位于 ``/store/modules/ID/web/``，对应
 ``/modules/ID/web/…``，与 Host 控制台无关。插件 UI 见
-:doc:`plugins/develop_l2`。
+:doc:`plugins/develop_js`。

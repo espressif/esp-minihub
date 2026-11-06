@@ -22,7 +22,7 @@
 里这几行各自就是一个答案：
 
 * ``JS module 'X' missing main.js`` （ :file:`module_loader.c:901` ）—— 包里没有
-  ``main.js`` ，检查 ``module.json`` 的 ``runtime`` 是不是字面量 ``js`` 。
+  ``main.js`` ，检查 ``module.json`` 的 ``runtime`` 是不是字面量 ``JS`` 。
 * ``module 'X' has no binary or builtin`` （ :file:`module_loader.c:906` ）—— Host 没有可入口的东西。
 * ``skip module 'X' — adapter 'Y' already registered`` （ :file:`module_loader.c:912` ）——
   那个 ``adapter`` 名已被内置适配器占用。
@@ -55,11 +55,11 @@
    原生模块在 ``dlopen`` 时崩溃，Host 会写入 ``/store/modules/ID/.load_guard``，
    下次启动跳过。用 ``POST /api/modules`` 清除：
 
-   .. code-block:: json
+   .. code-block:: JSON
 
       { "id": "my_native", "clear_load_guard": true, "reload": true }
 
-   串口查 ABI。L3 须让 ``module.json`` 的 ``abi_version`` 与 ``core_api_*`` 覆盖
+   串口查 ABI。ELF 须让 ``module.json`` 的 ``abi_version`` 与 ``core_api_*`` 覆盖
    当前 Host（头文件 ``MINIHUB_MODULE_ABI_VERSION`` ）。见 :doc:`api/module_abi`。
 
 Hub 重载循环或 MCP 报 HUB_NOT_READY

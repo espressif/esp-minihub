@@ -159,6 +159,24 @@ def parameters_rst(lang) -> list[str]:
     return _table(header, [14, 12, 8, 20, 17, 29], rows)
 
 
+def ui_elements_rst(lang) -> list[str]:
+    zh = _is_zh(lang)
+    header = (["UI 元素", "控件", "说明", "绑定"] if zh
+              else ["UI element", "Widget", "Description", "Binds to"])
+    rows = []
+    for row in _rows("ui_elements.csv"):
+        uid = _cell(row, "id")
+        if not uid:
+            continue
+        rows.append([
+            f"``{uid}``",
+            _cell(row, "label_zh" if zh else "label_en"),
+            _cell(row, "description_zh" if zh else "description_en"),
+            _cell(row, "binds_zh" if zh else "binds_en"),
+        ])
+    return _table(header, [16, 12, 52, 20], rows)
+
+
 # --- figures ---------------------------------------------------------------
 
 _PALETTE = """
@@ -734,8 +752,11 @@ class CatalogTable(Directive):
             lines = devices_rst(lang)
         elif what in ("parameters", "params"):
             lines = parameters_rst(lang)
+        elif what in ("ui_elements", "ui"):
+            lines = ui_elements_rst(lang)
         else:
-            raise self.error("unknown catalog table %r (use devices or parameters)" % what)
+            raise self.error(
+                "unknown catalog table %r (use devices, parameters or ui_elements)" % what)
         node = nodes.Element()
         self.state.nested_parse(StringList(lines), 0, node)
         return node.children

@@ -36,7 +36,7 @@ Core 并不知道「灯」是什么。它 **按点位工作**：类型只是一�
 
 活动点示例 （``GET /api/points``）：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "point_id": "sim.js_kitchen",
@@ -204,17 +204,20 @@ REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导�
 
 类型目录 CSV 的远程更新与列说明见 :doc:`type_catalog`。
 
-.. _adapters-json:
+.. _adapters-JSON:
 
 ``adapters.json``
 -----------------
 
 根对象只有 ``adapters``。每个键是适配器名，须与固件里编进去的静态适配器、
-或已安装商店模块的 ``adapter`` 字段一致。未识别的键会被忽略。
+或已安装商店模块的 ``adapter`` 字段一致。未识别的键会被忽略。有一个键被两处读取：
+``mqtt_broker`` 既是 Hub 内置 broker 的监听配置，MQTT 客户端适配器也登记在这个
+名字下，所以一个 ``enabled`` 同时决定 Hub 要不要监听、要不要连自己
+（:doc:`networking`）。
 
 顶层对象示例：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -225,7 +228,7 @@ REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导�
        "zigbee": { "enabled": false, "devices": [] },
        "ble_mesh": { "enabled": false, "provision": {}, "devices": [] },
        "thread": { "enabled": false, "dataset": null, "channel": null },
-       "mqtt": { "enabled": false, "broker": "127.0.0.1", "port": 1883, "devices": [] },
+       "mqtt_broker": { "enabled": false, "port": 1883, "allow_anonymous": true, "users": [] },
        "modbus": { "enabled": false, "poll_ms": 2000, "gateways": [] }
      }
    }
@@ -265,7 +268,7 @@ REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导�
     bit3 IAS Zone、bit4 电量测量、bit5 电能计量。非 ``sensor`` 一律按开关
     （bit0）处理，忽略 ``kind`` / ``caps``
 * **ble_mesh** — 配网策略在 ``provision`` （也可把 ``uuid_filters`` / ``bind_models``
-  写在适配器块顶层，方便 L1 inject）。 ``devices[]`` 最多 16 条。
+  写在适配器块顶层，方便 JSON inject）。 ``devices[]`` 最多 16 条。
 
   * ``provision.uuid_match_disabled`` — true 时接受任意未配网 UUID
   * ``provision.uuid_filters[]`` — 最多 8 条。 ``prefix_hex`` （或 ``hex`` ）为
@@ -287,16 +290,15 @@ REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导�
     二进制长度受 OpenThread 缓冲区限制（约 254 字节）
   * ``channel`` — 出厂种子带了这个键，但没有任何代码读写它：Host 忽略它，当前
     信道只由 ``GET /api/thread/status`` 报出。见 :doc:`thread`
-* **mqtt** — 连接 Broker 并登记点位。 ``devices[]`` 最多 16 条。
-
-  * ``broker`` — 主机名或 IP，最长 63 字节。未配置则点位仍注册，但保持离线
-  * ``port`` — Broker 端口，缺省 1883
-  * ``devices[]``： ``point_id``、 ``type`` （必填）。 ``state_topic`` /
-    ``command_topic`` 最长 95 字节。命令 ``turn_on`` / ``turn_off`` /
-    ``toggle`` 向 ``command_topic`` 发布 ``ON`` / ``OFF``； ``state_topic``
-    的载荷只取 31 字节，大小写不敏感的 ``ON*`` / ``OFF*`` 映成点位
-    ``on`` / ``off``， ``pressed`` / ``released`` 原样作为值，其余载荷直接
-    作为点位值
+* **mqtt_broker** — Hub 内置 broker 与它自己的环回客户端：没有 ``devices`` ，
+  也不产生点位。字段： ``enabled`` （缺省 ``false`` ）、 ``port`` （1–65535，缺省 1883）、
+  ``allow_anonymous`` （缺省 ``true`` ）、 ``users[]`` （最多 4 组
+  ``name`` / ``pass`` ，各 31 字节）、 ``connect_rate_limit`` （每 10 秒窗口接受的
+  CONNECT 数，缺省 16）。 ``enabled`` 为 ``true`` 时，Hub 还会连自己 ——
+  ``127.0.0.1`` 上的 ``port`` ，客户端 ID 为 ``minihub_host`` —— JS 插件用的
+  ``host.mqtt`` 就挂在这个客户端上。 ``allow_anonymous`` 设为 ``false`` 时，
+  它用 ``users[0]`` 登录； ``users[]`` 为空就意味着 ``host.mqtt`` 连不上，
+  并会记一条告警。监听地址、reload 行为与安全姿态见 :doc:`networking`
 * **modbus** — 主站轮询。最多 8 个网关、全局最多 64 条映射。
 
   * ``poll_ms`` — 轮询周期，整数 ≥ 500，缺省 2000
@@ -327,12 +329,12 @@ REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导�
     * ``batch_as_props`` — ``count`` > 1 时，另把原始寄存器批次写进点位
       ``props``，键为 ``r0`` … ``r31`` （最多 32 个）
 
-商店模块 (L2) 使用自己的键，例如 ``my_module``。安装时若槽位不存在会创建。
-L1 包把 ``inject`` **合并** 进指定适配器块（见 :doc:`plugins/develop_l1` ）。
+商店模块 (JS) 使用自己的键，例如 ``my_module``。安装时若槽位不存在会创建。
+JSON 包把 ``inject`` **合并** 进指定适配器块（见 :doc:`plugins/develop_json` ）。
 
 .. only:: not hide_l3
 
-   L3 模块同样使用自己的适配器键。
+   ELF 模块同样使用自己的适配器键。
 
 **不要** 把厂商云凭证写进通用 Host 的出厂配置。用户登录后由模块写入 NVS 或模块私有文件。
 
@@ -356,7 +358,7 @@ L1 包把 ``inject`` **合并** 进指定适配器块（见 :doc:`plugins/develo
 场景是一组 **步骤**，步骤内可含多条指令、可重复，用于一键跨设备编排。顶层是
 ``scenes`` 数组，每项：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "scenes": [
@@ -445,8 +447,8 @@ L1 包把 ``inject`` **合并** 进指定适配器块（见 :doc:`plugins/develo
 * REST 示例：:doc:`api/host_rest`
 * 端到端流程：:doc:`data_flow`
 * Matter 配网 REST：:doc:`matter`
-* L1 inject 合并：:doc:`plugins/develop_l1`
+* JSON inject 合并：:doc:`plugins/develop_json`
 
 .. only:: not hide_l3
 
-   * L3 插件：:doc:`plugins/develop_l3`
+   * ELF 插件：:doc:`plugins/develop_elf`

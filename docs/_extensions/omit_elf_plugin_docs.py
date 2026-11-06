@@ -15,7 +15,7 @@ from docutils import nodes
 
 # Docnames relative to docs/en or docs/zh_CN (no .rst).
 _DOCNAMES = {
-    "plugins/develop_l3",
+    "plugins/develop_elf",
     "api/module_abi",
     "api/plugin_host",
     "api/plugin_sdk_minihub",
@@ -28,7 +28,7 @@ _DOCNAMES = {
 }
 
 _TITLES = {
-    "plugins/develop_l3": {
+    "plugins/develop_elf": {
         "en": "Develop L3 (Native) Modules",
         "zh_CN": "开发 L3（原生）模块",
     },
@@ -101,7 +101,7 @@ def _on_missing(app, env, node, contnode):
 _L3_MARKERS = (
     "L3",
     "minihub-plugin-l3",
-    "develop_l3",
+    "develop_elf",
     "module_abi",
     "plugin_host",
     "plugin_sdk",

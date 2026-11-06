@@ -25,7 +25,7 @@ and symbol you edit to change it.
 
 .. minihub-limits:: update
 
-.. minihub-limits:: js
+.. minihub-limits:: JS
 
 .. minihub-limits:: hub
 

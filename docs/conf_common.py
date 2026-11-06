@@ -13,7 +13,7 @@ from pathlib import Path
 _DOCS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_DOCS_DIR, "_extensions"))
 
-# Pack Host type-catalog CSV / SVGs / STANDARD_TYPES into html_static_path.
+# Pack Host type-catalog CSV / SVGs into html_static_path.
 from stage_catalog import stage_catalog_assets, stage_module_sdk_zip  # noqa: E402
 from stage_architecture import stage_architecture_diagram  # noqa: E402
 from stage_data_flow import stage_data_flow_diagram  # noqa: E402

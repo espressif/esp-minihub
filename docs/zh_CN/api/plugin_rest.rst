@@ -6,14 +6,14 @@
 概述
 ----
 
-HTTP JSON API，用于 L1/L2 商店模块的开发、调试、安装与运维；插件 RPC 的 HTTP 入口。
+HTTP JSON API，用于 JSON/JS 商店模块的开发、调试、安装与运维；插件 RPC 的 HTTP 入口。
 
 实现：components/minihub_web + minihub_store + minihub_module。
 需 Kconfig：CONFIG_MINIHUB_STORE、CONFIG_MINIHUB_DYNAMIC_MODULES。
 
 .. only:: not hide_l3
 
-   同一套 API 也覆盖 L3 原生模块。加载它们需要
+   同一套 API 也覆盖 ELF 原生模块。加载它们需要
    ``CONFIG_MINIHUB_DYNAMIC_MODULES``。
 
 Host 通用 REST 见 :doc:`host_rest`；状态码与错误正文见 :doc:`errors`。
@@ -24,11 +24,11 @@ Host 通用 REST 见 :doc:`host_rest`；状态码与错误正文见 :doc:`errors
 * 没有 ``.mhub`` 上传接口 （不支持 multipart ``file=@*.mhub``）—— 先
   ``POST /api/store/refresh`` 刷新目录，再按 ``id`` 安装，由 Hub 下载 catalog 里的
   ``url``。
-* type 仅允许 module（L2）或 pack（L1）。
+* type 仅允许 module（JS）或 pack（JSON）。
 
 .. only:: not hide_l3
 
-   ``type: module`` 也覆盖 L3。
+   ``type: module`` 也覆盖 ELF。
 
 * 默认 reload: true，成功后触发 :doc:`../architecture` 中的 Hub 软重载。
 
@@ -51,15 +51,15 @@ GET /api/modules
 
    ``runtime`` 取值：
 
-   * ``js`` — L2 QuickJS （``main.js``）
+   * ``JS`` — JS QuickJS （``main.js``）
 
-   无法分类时省略该字段。L1 pack 在 ``GET /api/packs``，不是
+   无法分类时省略该字段。JSON pack 在 ``GET /api/packs``，不是
    ``runtime: pack``。
 
 .. only:: not hide_l3
 
-   ``runtime`` 也可以是 ``native`` （L3 ``.so``）或 ``hybrid`` （同时有原生与
-   ``main.js``；可选 ``entry`` 为 ``js`` 或 ``native``）。
+   ``runtime`` 也可以是 ``native`` （ELF ``.so``）或 ``hybrid`` （同时有原生与
+   ``main.js``；可选 ``entry`` 为 ``JS`` 或 ``native``）。
 
 POST /api/modules
 -----------------
@@ -113,7 +113,7 @@ POST /api/modules/ID/rpc
 
 .. only:: not hide_l3
 
-   L3 模块走 ``minihub_module_rpc``。
+   ELF 模块走 ``minihub_module_rpc``。
 
 .. container:: mh-api-block mh-api-parameters
 
@@ -139,7 +139,7 @@ POST /api/modules/ID/rpc
 
    ``params`` 必须是 JSON 对象，请求体上限 16 KiB。调用在 JS worker 上执行，不占
    HTTP 任务，慢 RPC 不会卡住其他 API 请求。MCP hub.api 仅允许白名单 method
-   代理本接口（:doc:`mcp`）。L2 JS 模块需要 RPC 时，在 ``setup`` 里用
+   代理本接口（:doc:`mcp`）。JS 模块需要 RPC 时，在 ``setup`` 里用
    ``host.module.registerRpc`` 注册。
 
 GET /api/modules/ID/preview
@@ -158,8 +158,8 @@ GET /api/packs · POST /api/packs
 
    ``GET /api/packs · POST /api/packs``
 
-GET 返回已安装 L1 配置包列表。POST 启用/禁用或删除 L1 包（body 类似 POST /api/modules，
-字段为 L1 id，无 clear_load_guard）。
+GET 返回已安装 JSON 配置包列表。POST 启用/禁用或删除 JSON 包（body 类似 POST /api/modules，
+字段为 JSON id，无 clear_load_guard）。
 
 GET /api/store/catalog
 ----------------------
@@ -222,9 +222,9 @@ POST /api/store/install
 
    ``POST /api/store/install``
 
-按 catalog 下载 ``.mhub`` 并解包。L2 模块先落到
+按 catalog 下载 ``.mhub`` 并解包。JS 模块先落到
 ``/store/modules/ID.staging/``，再 ``rename`` 成 ``/store/modules/ID/``，
-所以不会出现解到一半就被看到的目录。L1 包没有包目录：只保留它的清单 JSON，
+所以不会出现解到一半就被看到的目录。JSON 包没有包目录：只保留它的清单 JSON，
 位于 ``/data/config/packs/ID.json``。
 
 .. container:: mh-api-block mh-api-parameters
@@ -329,5 +329,5 @@ GET 返回 ``custom_url``、``disable_default`` 与 ``default_url`` （Kconfig �
 
 .. only:: not hide_l3
 
-   * L3 ABI 不匹配时 install 失败 — 见 :doc:`module_abi`
+   * ELF ABI 不匹配时 install 失败 — 见 :doc:`module_abi`
 

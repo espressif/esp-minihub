@@ -23,7 +23,7 @@ without reading Core C sources.
 | Understand design and advantages | [introduction.rst](en/introduction.rst) → [architecture.rst](en/architecture.rst) |
 | Build and flash | [getting_started.rst](en/getting_started.rst) |
 | OEM Host product | [application/](en/application/index.rst) → [host_customization.rst](en/host_customization.rst) → [production.rst](en/production.rst) |
-| Store plugin (L1/L2) | [plugins/overview.rst](en/plugins/overview.rst) |
+| Store plugin (JSON/JS) | [plugins/overview.rst](en/plugins/overview.rst) |
 | REST / automation only | [type_catalog.rst](en/type_catalog.rst) → [data_model.rst](en/data_model.rst) → [api/](en/api/index.rst) |
 | Contribute | [contributing.rst](en/contributing.rst) |
 
@@ -59,11 +59,10 @@ build-docs -bs html -t esp32s31 -l zh_CN
 HTML output: `docs/_build/en/esp32s31/html/` and `docs/_build/zh_CN/esp32s31/html/`.
 
 HTML builds include a downloadable type-catalog snapshot under
-`_static/catalog/` (CSV, device icons, `STANDARD_TYPES*.md`) and
-`_static/catalog.zip`, copied from
+`_static/catalog/` (CSV, device icons) and `_static/catalog.zip`, copied from
 `components/minihub_device_widget/` at Sphinx configure time. While
 `HIDE_L3` is true in `docs/_extensions/omit_elf_plugin_docs.py`, the HTML
-build omits L3 chapters and any passage wrapped in `.. only:: not hide_l3`,
+build omits ELF chapters and any passage wrapped in `.. only:: not hide_l3`,
 drops the raw `_sources/` copies (they would repeat the hidden passages), and
 stages figures that leave out the native band. Set `HIDE_L3 = False` to publish
 them again; the `.rst` sources stay in the tree either way.

@@ -437,7 +437,7 @@ POST /api/hub/reload
 
    ``POST /api/hub/reload``
 
-软重载 Hub：重读 JSON、重载 L1 包与商店模块、重启适配器与 JS，不整机关机。
+软重载 Hub：重读 JSON、重载 JSON 包与商店模块、重启适配器与 JS，不整机关机。
 详见 :doc:`../architecture`。
 
 .. container:: mh-api-block mh-api-parameters
@@ -788,7 +788,7 @@ WebSocket 长连接，订阅 Hub 事件总线。每帧至少含 ``event_type`` �
 
 .. only:: not hide_l3
 
-   L3 模块用 ``event_publish`` 发布。
+   ELF 模块用 ``event_publish`` 发布。
 
 Host 发布的 ``event_type``：
 
@@ -851,7 +851,7 @@ ESP-IDF 的配网管理器会发 ``wifi.provisioning``、``wifi.provision_failed
 这三条只在调了 ``minihub_provision_start()`` 的产品上出现 （见
 :doc:`../networking`）。
 
-L2 JS ``host.event.subscribe`` 可传事件名或 ``*`` （全部事件）。Host 侧没有
+JS ``host.event.subscribe`` 可传事件名或 ``*`` （全部事件）。Host 侧没有
 过滤名单：订阅你需要的类型即可。
 
 .. container:: mh-api-block mh-api-attention

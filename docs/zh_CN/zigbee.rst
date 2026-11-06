@@ -4,7 +4,7 @@ Zigbee
 :link_to_translation:`en:[English]`
 
 MiniHub 以 **Host 适配器** （协调器）运行 Zigbee，而不是独立终端示例。设备条目在
-``adapters.zigbee`` 下。JSON 字段见 :doc:`data_model` （ :ref:`adapters-json` ）。
+``adapters.zigbee`` 下。JSON 字段见 :doc:`data_model` （ :ref:`adapters-JSON` ）。
 
 Zigbee 独占 2.4 GHz 射频：既不与 Wi-Fi 共存，也不与 BLE Mesh 共存；Thread 又要抢
 同一块 802.15.4 射频，所以这两个栈 **编译期互斥**：
@@ -30,7 +30,7 @@ JSON 仍然双开时按跳过 Thread 处理；JSON 让 Zigbee 与 Wi-Fi 或 BLE 
 在 ``/data/config/adapters.json`` 中启用（出厂配置：
 ``application/minihub/configs/adapters.json`` ）：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -42,7 +42,7 @@ JSON 仍然双开时按跳过 Thread 处理；JSON 让 Zigbee 与 Wi-Fi 或 BLE 
    }
 
 设置 ``adapters.zigbee.enabled``，并在 ``devices[]`` 中列出已绑定设备。
-字段清单见 :ref:`adapters-json`。
+字段清单见 :ref:`adapters-JSON`。
 
 REST 接口
 ---------
@@ -76,7 +76,7 @@ Install code
 
 若入网设备使用 install code，须在 permit-join 之前调用。请求体：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "ieee": "...",
@@ -92,7 +92,7 @@ Install code
 处理函数会注入 ``zigbee``。语义与 Hub 点位移除相同（ ``point_id``，或
 ``delete_all`` 加适配器）。
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "point_id": "zigbee.zb_0a1b" }
 
@@ -129,7 +129,7 @@ Install code
 遥测更新只通过 ``minihub_point_merge_params`` 合并 ``props.params``，因此同一
 点上的插件字段会保留。
 
-插件（L2）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
+插件（JS）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
 ``catalog.json``），写在同一 ``point_id`` 上：
 
 * **关联** — 写入 ``props.owner`` = 插件 ``adapter`` 名。该槽在

@@ -2,15 +2,15 @@
 
 | Path | Purpose |
 |------|---------|
-| `include/` | Standalone L3 headers (`minihub_plugin_sdk.h`) — compile without IDF or Host tree |
-| `host_export_allowlist.json` | Host ELF symbols L3 `.so` may leave undefined |
+| `include/` | Standalone ELF headers (`minihub_plugin_sdk.h`) — compile without IDF or Host tree |
+| `host_export_allowlist.json` | Host ELF symbols an ELF `.so` may leave undefined |
 | `minihub_plugin_standalone.cmake` | Optional no-IDF CMake fragment |
-| `build_plugin_standalone.py` | Discover + cmake + pack (L3 cmake, then L1/L2 zip) |
+| `build_plugin_standalone.py` | Discover + cmake + pack (ELF cmake, then JSON/JS zip) |
 | `pack_store_module.py` | MHMD wrap + `.mhub` zip (`store_paths.py` alongside) |
 | `sync_store_catalog.py` | Rewrite `catalog.json` from deploy `.mhub` files |
-| `templates/l1/` | L1 pack (`inject` into mqtt) |
-| `templates/l2/` | L2 JS (`main.js`) |
-| `templates/l3/` | L3 native (`minihub_module_entry`) |
+| `templates/l1/` | JSON pack (`inject` into a Host adapter block) |
+| `templates/l2/` | JS (`main.js`) |
+| `templates/l3/` | ELF native (`minihub_module_entry`) |
 
 ```bash
 python3 tools/new_store_module.py --tier l2 --id my_js --name "My JS"
@@ -32,16 +32,16 @@ This checkout already lists it in `.cursor/mcp.json` and `.vscode/mcp.json`.
 
 | Tool | Purpose |
 |------|---------|
-| `plugin_guide` | L1 / L2 / L3 / `host.*` / pack rules |
+| `plugin_guide` | JSON / JS / ELF / `host.*` / pack rules |
 | `scaffold_plugin` | Template files (optional write to `out_dir`) |
-| `validate_plugin` | `module.json` id/type/inject + L2 JS bans |
-| `pack_plugin` | Zip L1/L2 into `.mhub` (L3 needs an existing `.so`) |
+| `validate_plugin` | `module.json` id/type/inject + JS bans |
+| `pack_plugin` | Zip JSON/JS into `.mhub` (ELF needs an existing `.so`) |
 
 Plugin-only workspace (no Host clone): still run this script from an `esp-minihub` tree (or copy `tools/plugin_mcp/` + `docs/module_sdk/templates/` + `tools/minihub_plugin_mcp.py`), then `scaffold_plugin` with `out_dir` pointing at the customer's folder.
 
 Tests: `python3 tools/plugin_mcp/test_plugin_mcp.py`.
 
-## L3 out-of-tree compile
+## ELF out-of-tree compile
 
 Standalone headers for compiling a native plugin **without** checking out
 ESP-IDF or the MiniHub firmware tree.

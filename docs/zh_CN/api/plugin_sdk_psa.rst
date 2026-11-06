@@ -6,7 +6,7 @@ Plugin SDK — PSA Crypto
 概述
 ----
 
-Host 向 L3 插件导出的 PSA Crypto 子集（AEAD、cipher、密钥派生、ECDH）。
+Host 向 ELF 插件导出的 PSA Crypto 子集（AEAD、cipher、密钥派生、ECDH）。
 ``psa_key_attributes_t`` 须与 Host 布局一致；multipart 上下文为超大不透明缓冲。
 
 .. include-build-file:: inc/psa.inc

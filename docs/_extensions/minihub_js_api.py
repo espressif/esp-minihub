@@ -3,7 +3,7 @@
 """The ``host`` object an L2 plugin receives, read out of the JS glue at build time.
 
 ``make_host_object()`` in ``components/minihub_js/minihub_js.c`` builds the object
-namespace by namespace, and the net/crypto extension adds two more. Each
+namespace by namespace, and the per-namespace extension TUs add the rest. Each
 ``JS_SetPropertyStr`` line names the method, the C function behind it and its
 argument count, so the guide can print the real surface instead of a list someone
 keeps in sync by hand.
@@ -32,12 +32,32 @@ ROOT = Path(__file__).resolve().parents[2]
 BUILDERS = [
     (ROOT / "components" / "minihub_js" / "minihub_js.c", "make_host_object"),
     (ROOT / "components" / "minihub_js" / "minihub_js.c", "js_timer_install_global"),
-    (ROOT / "components" / "minihub_js" / "minihub_js_ext.c", "minihub_js_attach_net_crypto"),
+    (ROOT / "components" / "minihub_js" / "minihub_js_crypto.c", "minihub_js_attach_crypto"),
+    (ROOT / "components" / "minihub_js" / "minihub_js_net.c", "minihub_js_attach_net"),
+    (ROOT / "components" / "minihub_js" / "minihub_js_ble.c", "minihub_js_attach_ble"),
+    (ROOT / "components" / "minihub_js" / "minihub_js_mdns.c", "minihub_js_attach_mdns"),
+    (ROOT / "components" / "minihub_js" / "minihub_js_mqtt.c", "minihub_js_attach_mqtt"),
 ]
 
+# The API is documented on one page per C source file, so each page asks for only
+# the namespaces its builder owns. ``global`` (the timer globals) lives in
+# minihub_js.c, so it belongs to ``core``.
+SECTIONS = {
+    "core": {"log", "point", "command", "event", "http", "config", "module",
+             "timer", "adapter", "time", "global"},
+    "net": {"net", "net.udp", "net.tcp", "crypto"},
+    "ble": {"ble"},
+    "mdns": {"mdns"},
+    "mqtt": {"mqtt"},
+}
+
+# Methods are either plain JS_NewCFunction() or JS_NewCFunctionMagic(), which
+# carries a per-plugin id (host.mqtt needs one to keep each plugin's filters and
+# queue position apart). Only the arity is a table column, so the extra magic
+# arguments are skipped over.
 _CALL = re.compile(
     r"JS_SetPropertyStr\(\s*ctx\s*,\s*(\w+)\s*,\s*\"([^\"]+)\"\s*,\s*"
-    r"(?:JS_NewCFunction\(\s*ctx\s*,\s*\w+\s*,\s*\"[^\"]*\"\s*,\s*(\d+)\s*\)|(\w+))",
+    r"(?:JS_NewCFunction(?:Magic)?\(\s*ctx\s*,\s*\w+\s*,\s*\"[^\"]*\"\s*,\s*(\d+)\s*(?:,[^)]*\)|\))|(\w+))",
     re.S,
 )
 
@@ -119,13 +139,20 @@ def surface() -> list[dict]:
     return out
 
 
-def js_api_rst(lang: str) -> list[str]:
+def js_api_rst(lang: str, section: str | None = None) -> list[str]:
     zh = lang.startswith("zh")
+    recs = surface()
+    if section is not None:
+        allowed = SECTIONS.get(section)
+        if allowed is None:
+            raise ExtensionError(f"minihub-js-api: unknown section {section!r}")
+        recs = [r for r in recs
+                if r["ns"] in allowed or (r["global"] and section == "core")]
     header = (["命名空间", "方法（斜杠后的数字是参数个数）", "定义处"] if zh
               else ["Namespace", "Methods (digits after / are the arg count)", "Defined at"])
     rows = [[("``global``" if rec["global"] else f"``host.{rec['ns']}``"),
              ", ".join(rec["methods"]),
-             f"``{rec['where']}``"] for rec in surface()]
+             f"``{rec['where']}``"] for rec in recs]
     out = _table(header, [16, 58, 26], rows)
     out[0] = (".. list-table:: host 对象" if zh else ".. list-table:: The host object")
     return out
@@ -133,13 +160,14 @@ def js_api_rst(lang: str) -> list[str]:
 
 class JsApiTable(Directive):
     required_arguments = 0
-    optional_arguments = 0
+    optional_arguments = 1
     has_content = False
 
     def run(self):
         env = self.state.document.settings.env
+        section = self.arguments[0] if self.arguments else None
         node = nodes.Element()
-        self.state.nested_parse(StringList(js_api_rst(env.config.language)), 0, node)
+        self.state.nested_parse(StringList(js_api_rst(env.config.language, section)), 0, node)
         return node.children
 
 

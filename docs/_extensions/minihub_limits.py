@@ -156,9 +156,6 @@ ROWS: list[tuple] = [
      ("define", "components/minihub_protocol_adapters/adapter_matter/matter_adapter.c",
       "SUB_ARM_MIN_MS")),
 
-    ("radios", "MQTT devices per adapter", "单适配器 MQTT 设备数", "16", 16,
-     ("define", "components/minihub_protocol_adapters/adapter_mqtt/mqtt_adapter.c",
-      "MAX_MQTT_DEVICES")),
     ("radios", "Modbus gateways", "Modbus 网关数", "8", 8,
      ("define", "components/minihub_protocol_adapters/adapter_modbus/modbus_map.h",
       "MODBUS_MAX_GATEWAYS")),

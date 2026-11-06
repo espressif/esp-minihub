@@ -1,6 +1,6 @@
 ---
 name: minihub-plugin-l1
-description: Create or edit MiniHub Store L1 packs (module.json inject into an existing Host adapter, no main.js / no .so). Use when the user wants a config pack, inject devices into mqtt/zigbee/modbus, or kind pack.
+description: Create or edit MiniHub Store L1 packs (module.json inject into an existing Host adapter, no main.js / no .so). Use when the user wants a config pack, inject devices into zigbee/modbus, or kind pack.
 ---
 
 # MiniHub Store L1 (pack)
@@ -38,7 +38,7 @@ Or IDE MCP: `scaffold_plugin` with `tier=l1` (`python3 tools/minihub_plugin_mcp.
 
 - `id` = directory name (must match folder)
 - `kind`: `"pack"` (or omit if `runtime` is `"pack"` / `config_only: true`)
-- `inject.adapter` must already exist on Host (`mqtt`, `zigbee`, `ble_mesh`, `modbus`, …)
+- `inject.adapter` must already exist on Host (`zigbee`, `ble_mesh`, `modbus`, `mqtt_broker`, …)
 
 ## Env
 

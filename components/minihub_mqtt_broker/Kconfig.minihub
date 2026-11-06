@@ -1,0 +1,25 @@
+menu "MQTT broker"
+
+    config MINIHUB_MQTT_BROKER
+        bool "Enable on-device MQTT broker"
+        default y
+        help
+            Run an mosquitto broker on the Hub (TCP 1883) so MQTT devices at
+            the site connect to the Hub itself instead of a separate always-on
+            machine. The broker is a pure transport service: it carries no Hub
+            points. At run time adapters.mqtt_broker.enabled decides whether it
+            listens (factory seed: off), and that same flag starts the Hub's own
+            loopback MQTT client, which is what host.mqtt rides on. Turning this
+            option off therefore also drops CONFIG_MINIHUB_MQTT_ADAPTER and
+            CONFIG_MINIHUB_JS_MQTT: a product without an on-device broker has no
+            MQTT client either.
+
+            After flipping this option in an existing build directory, build
+            twice (or run reconfigure first). The component manager evaluates
+            the espressif/mosquitto rule against build/config/sdkconfig.json,
+            which kconfgen only writes later in the same configure pass, so the
+            first build still sees the previous value and drops the package:
+            "mosq_broker.h: No such file or directory". Turning the option off
+            needs no second pass, and a fresh build directory resolves in one.
+
+endmenu

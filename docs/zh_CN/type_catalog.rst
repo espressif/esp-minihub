@@ -29,14 +29,13 @@
 内置设备类型与参数
 ------------------
 
-权威源码：``components/minihub_device_widget/model/*.csv``。完整对照表见
-``components/minihub_device_widget/STANDARD_TYPES_CN.md``。
+权威源码：``components/minihub_device_widget/model/*.csv``。本页直接从这些 CSV
+渲染设备类型、参数与 UI 元素。
 
 * :download:`devices.csv <../_static/catalog/model/devices.csv>`
 * :download:`parameters.csv <../_static/catalog/model/parameters.csv>`
 * :download:`ui_elements.csv <../_static/catalog/model/ui_elements.csv>`
 * :download:`services.csv <../_static/catalog/model/services.csv>` —— 仅供参考（RainMaker 系统服务），不属于控件注册表
-* :download:`STANDARD_TYPES_CN.md <../_static/catalog/STANDARD_TYPES_CN.md>`
 * :download:`catalog.zip <../_static/catalog.zip>`
 
 内置设备类型
@@ -81,6 +80,20 @@ text / button / hidden；下表列出的是当前各行实际用到的。另有�
 ``ui.hidden`` = 类型级永不画行。实例 ``visible: false`` = **这台** 设备藏参数，
 但仍留在 ``props.params``。只读传感器用实例 ``access: "R"`` （仍显示，无拖动）。
 控件形状与点位数值如何合成一行，见 :doc:`data_model` 。
+
+UI 元素
+++++++++
+
+上面的闭合集合，逐个说明：
+
+.. minihub-catalog:: ui_elements
+
+``wifi_signal`` （WiFi RSSI，dBm）这类只读遥测在目录里是一条 ``ui.text`` 参数。
+ESPHome、Tasmota 这类 MQTT 适配器把它当作**实例**参数挂到设备点位上，而不是内置
+类型的某一列，并写 ``access: "R"``；详情面板于是只显示数值、不提供任何控件。要加
+任意这类只读传感器：在 ``parameters.csv`` 写一行 ``ui_element: ui.text``，并在实例
+条目上设 ``access: "R"``。ESPHome 从它的 ``sensor.wifi_signal`` 实体取这个值；一台
+设备一条点位的注册契约见 :doc:`data_model` 。
 
 图标与图案
 ----------
@@ -189,7 +202,7 @@ reload；只传一份时 PUT 仍然成功，但回 ``rebuilt: false`` 并带一�
 
 不改 Host CSV。在插件里写 ``devices.json``，参数名必须已在目录中：
 
-.. code-block:: json
+.. code-block:: JSON
 
    [
      {
@@ -230,7 +243,7 @@ reload；只传一份时 PUT 仍然成功，但回 ``rebuilt: false`` 并带一�
 
 .. only:: not hide_l3
 
-   L3：改 JSON 后重新生成 ``device_desc.gen.h``，不要手改头文件。L3 源码用
+   ELF：改 JSON 后重新生成 ``device_desc.gen.h``，不要手改头文件。ELF 源码用
    ``tools/new_store_module.py --tier l3`` 生成。
 
 2. 增加全新设备类型
@@ -301,4 +314,4 @@ reload；只传一份时 PUT 仍然成功，但回 ``rebuilt: false`` 并带一�
 
 .. only:: not hide_l3
 
-   * L3 插件：:doc:`plugins/develop_l3`
+   * ELF 插件：:doc:`plugins/develop_elf`

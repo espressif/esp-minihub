@@ -21,7 +21,7 @@ commissioner. Dataset: ``GET`` / ``POST /api/thread/dataset``, and the live role
 channel and ``dataset_set`` flag come from ``GET /api/thread/status`` — the
 ``adapters.thread.channel`` key in the factory JSON is not read by anything.
 Fields: :doc:`data_model`
-(:ref:`adapters-json`).
+(:ref:`adapters-JSON`).
 
 Start or stop the border router (no body; same login as other writes). These
 routes exist only with that option:
@@ -31,7 +31,7 @@ routes exist only with that option:
 * ``POST /api/thread/stop`` — same ``status`` field; ``ok`` when the stack was
   already down
 
-An L1 pack that injects a Thread ``devices[]`` creates paper devices nothing can
+A JSON pack that injects a Thread ``devices[]`` creates paper devices nothing can
 talk to, and a ``thread_ota`` plugin would have nothing to update, so do not
 ship one. That is a convention, not an enforced limit: the validator lists
 ``thread`` as an injectable Host adapter and the Host pack loader merges the

@@ -1,6 +1,6 @@
 # minihub_device_widget（设备控件描述符）
 
-[English](README.md) | [中文](README_CN.md) · [标准类型](STANDARD_TYPES_CN.md)
+[English](README.md) | [中文](README_CN.md) · [标准类型](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/type_catalog.html)
 
 设备 UI 类型目录：某类型暴露哪些参数，以及每个参数如何渲染（控件、标签、范围、
 CSS）。数据源：`model/*.csv`。构建时嵌入扁平注册表；图标打进 littlefs
@@ -53,6 +53,8 @@ CSS）。数据源：`model/*.csv`。构建时嵌入扁平注册表；图标打�
 `hidden`）。`hue` / `saturation` / `cct` 均为 `ui.slider`；彩虹/色带由参数名 + CSS
 决定，不是额外控件类型。
 
+列为双语：`id`、`label_zh`/`label_en`、`description_zh`/`description_en`、`binds_zh`/`binds_en`。
+
 | | `ui.hidden` | 实例 `visible:false` |
 |--|-------------|----------------------|
 | 写在哪 | `parameters.csv` 的 `ui_element` | 插件 `devices.json` |
@@ -72,7 +74,7 @@ CSS）。数据源：`model/*.csv`。构建时嵌入扁平注册表；图标打�
 - **`speaker`** — `power`、`volume`（`volume` 依赖 `power`）
 - **`name`** — 在目录中；无设备列出 → 不成控件
 
-完整表见 [`STANDARD_TYPES_CN.md`](STANDARD_TYPES_CN.md)。
+完整表见 [标准类型目录](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/type_catalog.html)。
 
 <a id="icons"></a>
 ## 图标

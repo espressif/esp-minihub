@@ -5,7 +5,7 @@ BLE Mesh
 
 MiniHub 以 **Host 适配器** 运行 BLE Mesh。设备条目在 ``adapters.ble_mesh`` 下。
 JSON 字段（含 ``provision.uuid_filters`` 与 ``provision.bind_models`` ）见
-:doc:`data_model` （ :ref:`adapters-json` ）。
+:doc:`data_model` （ :ref:`adapters-JSON` ）。
 
 在 ``sdkconfig`` / menuconfig 中打开 ``CONFIG_MINIHUB_BLE_MESH_SDK`` 后直接编译
 （默认协议栈已含 BLE Mesh；若该选项已关掉，脚本会丢掉对应栈）：
@@ -29,7 +29,7 @@ Zigbee 正在入网，或 BLE Mesh 已在配网）。可用 ``GET /api/radio/pro
 
 在 ``/data/config/adapters.json`` 中启用：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -43,9 +43,9 @@ Zigbee 正在入网，或 BLE Mesh 已在配网）。可用 ``GET /api/radio/pro
 
 设置 ``adapters.ble_mesh.enabled``。配网策略在 ``provision`` （
 ``uuid_filters`` / ``bind_models`` ）。已绑定节点在 ``devices[]``。
-``type`` 为 ``sensor`` 的条目会被跳过。字段见 :ref:`adapters-json`。
-L1 包可 **合并** 额外 bind/过滤默认值（演示
-``examples/plugins/ble_mesh_pack`` ）； **不要** 用 L1 发明 ``devices[]``。
+``type`` 为 ``sensor`` 的条目会被跳过。字段见 :ref:`adapters-JSON`。
+JSON 包可 **合并** 额外 bind/过滤默认值（演示
+``examples/plugins/ble_mesh_pack`` ）； **不要** 用 JSON 发明 ``devices[]``。
 
 REST 接口
 ---------
@@ -81,7 +81,7 @@ REST 接口
 ``POST /api/ble_mesh/devices`` 用于移除设备。若请求体未写 ``adapter``，
 处理函数会注入 ``ble_mesh``。语义与 Hub 点位移除相同。
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "point_id": "mesh.light.1" }
 
@@ -116,7 +116,7 @@ Zigbee 入网或 BLE Mesh 配网是否进行中，以及表示射频关键窗口
 ``value``，**不得** ``minihub_point_set`` 整份替换 ``props``，否则会冲掉
 uuid / 厂商 / ``owner`` / ``ota``。
 
-插件（L2）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
+插件（JS）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
 ``catalog.json``），写在同一 ``point_id`` 上：
 
 * **关联** — 写入 ``props.owner`` = 插件 ``adapter`` 名。该槽在

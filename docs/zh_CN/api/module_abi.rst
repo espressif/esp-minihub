@@ -1,4 +1,4 @@
-模块 ABI（L3 原生插件）
+模块 ABI（ELF 原生插件）
 ========================
 
 :link_to_translation:`en:[English]`
@@ -7,9 +7,9 @@
 ----
 
 原生模块是被加载进一台正在运行的 Hub，所以在互相调用之前，两边必须先对一份二进制
-契约达成一致。商店 **L3** 模块（``module.json`` + MHMD ``.so``）就通过这份 ABI 与
+契约达成一致。商店 **ELF** 模块（``module.json`` + MHMD ``.so``）就通过这份 ABI 与
 Host 对接：模块导出 ``minihub_module_entry``，保存传入的 ``minihub_module_host_api_t``
-虚表，并返回 ``minihub_adapter_t``。L2 JS 见 :doc:`js_host`；REST 安装/RPC 见
+虚表，并返回 ``minihub_adapter_t``。JS 见 :doc:`js_host`；REST 安装/RPC 见
 :doc:`plugin_rest`。
 
 契约成立的前提是下面每一条都满足：
@@ -35,7 +35,7 @@ API 参考
 符号白名单
 ----------
 
-L3 ``.so`` 不得链接 Host 应用。每一个未定义 ELF 符号都必须出现在下方列表中
+ELF ``.so`` 不得链接 Host 应用。每一个未定义 ELF 符号都必须出现在下方列表中
 （与 ``docs/module_sdk/host_export_allowlist.json`` 相同）。Host 用
 ``esp_elf_register_symbol`` 解析。地址是固件本地的，不要写死。
 
@@ -96,7 +96,7 @@ Host 重建后重新生成：
 完整快照（以该 JSON 为运行时白名单真源）：
 
 .. literalinclude:: ../../module_sdk/host_export_allowlist.json
-   :language: json
+   :language: JSON
 
 C 函数原型：:doc:`plugin_host` （不要自行再声明这些符号）。
-实现指南：:doc:`../plugins/develop_l3`。
+实现指南：:doc:`../plugins/develop_elf`。
