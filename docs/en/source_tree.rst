@@ -79,8 +79,9 @@ Core and services
     session and the optional API token are ``minihub_auth`` ; network credentials
     over SoftAP and the factory reset are ``minihub_provision`` ; Ethernet and
     Wi-Fi STA come up in ``minihub_net`` ; firmware update state and progress are
-    ``minihub_ota`` , and fetching and applying firmware, asset and console
-    packages from the deploy root is ``minihub_update`` .
+    ``minihub_ota`` ; fetching and applying firmware, asset and console
+    packages from the deploy root is ``minihub_update`` , and the on-device MQTT
+    broker that the site's devices connect to is ``minihub_mqtt_broker`` .
 
 Device model and UI
     This group decides what a device looks like and when automation fires.
@@ -98,7 +99,7 @@ Store and modules
     The Store exists so plugins can be installed at run time, which is what makes
     the extension flexible. Catalog refresh, install, upgrade and uninstall are
     ``minihub_store`` ; reading manifests, checking the ABI and loading are
-    ``minihub_module`` ; merging L1 packs into the adapters view is
+    ``minihub_module`` ; merging JSON packs into the adapters view is
     ``minihub_pack`` ; the QuickJS worker and the ``host`` object are
     ``minihub_js`` .
 
@@ -111,11 +112,12 @@ Radios
     The seven bundled adapters live under ``components/minihub_protocol_adapters/`` :
     ``adapter_wifi`` , ``adapter_zigbee`` , ``adapter_ble_mesh`` ,
     ``adapter_matter`` , ``adapter_thread`` , ``adapter_mqtt`` ,
-    ``adapter_modbus`` . Five register device points — Zigbee, BLE Mesh, Matter,
-    MQTT and Modbus; Wi-Fi STA is an uplink only and Thread is an OpenThread
-    Border Router, so neither owns a device and neither registers a point
-    (:doc:`radios`). Each adapter is its own component, so a product can leave one
-    out without touching the others.
+    ``adapter_modbus`` . Four register device points — Zigbee, BLE Mesh, Matter
+    and Modbus; Wi-Fi STA is an uplink only, Thread is an OpenThread Border
+    Router, and MQTT is the client for the Hub's own broker, so none of those
+    three owns a device and none registers a point (:doc:`radios`). Each adapter
+    is its own component, so a product can leave one out without touching the
+    others.
 
 Optional hardware
     These are compiled only when a board asks for them: the on-device UI for

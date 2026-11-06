@@ -22,7 +22,7 @@
 文档形状
 --------
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "rules": [

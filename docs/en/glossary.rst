@@ -110,18 +110,18 @@ Store
     :doc:`plugins/pack_and_catalog`.
 
 QuickJS
-    The embedded JavaScript engine that runs L2 modules. This firmware uses the
+    The embedded JavaScript engine that runs JS modules. This firmware uses the
     ``espressif/quickjs-ng`` component (QuickJS-NG 0.14.0), not upstream QuickJS
     and not a browser: no module system, no ``console``, no ``fetch``. It is
-    single-threaded and every L2 module shares one worker task. The consequences
-    are listed in :doc:`plugins/develop_l2`.
+    single-threaded and every JS module shares one worker task. The consequences
+    are listed in :doc:`plugins/develop_js`.
 
 .. only:: not hide_l3
 
-   A third tier, L3, carries a native ``.so`` instead of data or JavaScript.
+   A third tier, ELF, carries a native ``.so`` instead of data or JavaScript.
 
    MHMD
-       The magic number ``0x4D484D44`` of the inner native image in an L3
+       The magic number ``0x4D484D44`` of the inner native image in an ELF
        package. It names the binary, not the zip around it.
 
    ABI
@@ -164,7 +164,7 @@ NVS
 Soft reload (hub reload)
     Restarting adapters and modules in place, without a reboot:
     ``POST /api/hub/reload`` or MCP ``hub.reload``. It re-reads JSON, stops
-    adapters, reloads modules, and re-runs each L2 ``setup(host)``. Matter and
+    adapters, reloads modules, and re-runs each JS ``setup(host)``. Matter and
     Thread builds may re-attach CHIP to OpenThread.
 
 Names that mean two things here

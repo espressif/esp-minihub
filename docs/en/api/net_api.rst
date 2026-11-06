@@ -14,7 +14,7 @@ Modules should use ``minihub_net_*``, not ``esp_wifi_*`` directly. Persistent in
 
 .. only:: not hide_l3
 
-   ``esp_wifi_*`` is not on the L3 allowlist.
+   ``esp_wifi_*`` is not on the ELF allowlist.
 
 API Reference
 -------------

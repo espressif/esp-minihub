@@ -64,7 +64,7 @@ works with no LAN client and returns JSON directly.
 
    Example — list points:
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "method": "GET", "path": "/api/points" }
 

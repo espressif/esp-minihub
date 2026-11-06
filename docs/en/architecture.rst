@@ -38,7 +38,7 @@ A Hub can end up talking to two kinds of cloud, and they differ in how the
 speaking code got there.
 
 * **A vendor cloud is installed.** MIoT and the like arrive as a Store module —
-  an L1 pack merged into ``adapters.json``, or an L2 module that signs in,
+  a JSON pack merged into ``adapters.json``, or a JS module that signs in,
   subscribes and reports. It is installed, upgraded and removed against a running
   Hub, which is why vendor-specific code is never linked into the Host: uninstall
   the module and the path is gone.
@@ -65,7 +65,7 @@ block to isolate it and read what it forbids.
 
 .. only:: not hide_l3
 
-   ``minihub_module`` also loads L3 ``.so`` packages (and Hybrid).
+   ``minihub_module`` also loads ELF ``.so`` packages (and Hybrid).
 
 Design principles
 -----------------
@@ -91,7 +91,7 @@ reload runs).
 
 .. only:: not hide_l3
 
-   Reload also ``dlclose`` s L3 modules before they load again.
+   Reload also ``dlclose`` s ELF modules before they load again.
 
 The generic Host writes to two partitions. ``storage`` mounts at ``/data`` (Hub
 config **and** the Web console, at ``/data/web/``, plus the device icons under
@@ -127,7 +127,7 @@ Key components
    * - ``minihub_module``
      - Reading manifests and loading modules
    * - ``minihub_pack``
-     - L1 config packs, merged through ``inject``
+     - JSON config packs, merged through ``inject``
    * - ``minihub_store``
      - Catalog, install, upgrade, uninstall
    * - ``minihub_net``
@@ -148,7 +148,7 @@ Key components
 
 .. only:: not hide_l3
 
-   ``minihub_module`` also loads L3 ``.so`` modules through the ABI vtable.
+   ``minihub_module`` also loads ELF ``.so`` modules through the ABI vtable.
 
 Which folder holds what, and who is supposed to edit it, is in
 :doc:`source_tree`.
@@ -166,7 +166,7 @@ Default writable root: ``/data`` (LittleFS on generic ``minihub`` product).
      scenes.json        Scene definitions
      devices.csv        Flattened type catalog
      model/             Optional uploaded devices.csv + parameters.csv
-   /data/config/packs/  Optional L1 pack staging (product-dependent)
+   /data/config/packs/  Optional JSON pack staging (product-dependent)
    /store/modules/ID/   Installed Store modules (module.json, main.js, …)
    /data/web/           Host Web console (index.html, login.html, …)
    /data/tmp/           scratch (module loader)
@@ -208,11 +208,11 @@ Hub soft reload
 ``minihub_hub_reload_async()`` on the ``hub_reload`` task, guarded so a second
 reload waits up to 60 s. The steps, in ``minihub_hub_reload()`` order:
 
-1. ``minihub_js_unload_all()`` first — L2 handlers must stop touching points
+1. ``minihub_js_unload_all()`` first — JS handlers must stop touching points
    before anything below them is torn down
 2. Adapter lifecycle lock (60 s; ``ESP_ERR_TIMEOUT`` aborts the reload)
 3. ``minihub_config_reload()`` — re-read JSON from flash (aborts on error)
-4. ``minihub_pack_reload()`` — merge L1 packs into the adapters view
+4. ``minihub_pack_reload()`` — merge JSON packs into the adapters view
 5. Stop all adapters; ``minihub_module_reload()`` — rescan manifests
 6. ``minihub_adapter_load_all()`` + ``minihub_adapter_start_all()``
 7. Unlock; Matter + Thread builds re-attach CHIP to OpenThread
@@ -227,7 +227,7 @@ reload.
 
 .. only:: not hide_l3
 
-   The same lock covers ``dlclose`` of an L3 ``.so``.
+   The same lock covers ``dlclose`` of an ELF ``.so``.
 
 Data flow: command
 ------------------
@@ -283,7 +283,7 @@ plugins.
      - :doc:`api/host_rest`; WebSocket events at ``/ws/events``
    * - MCP tools
      - :doc:`api/mcp`
-   * - L2 JS host object
+   * - JS host object
      - :doc:`api/js_host`
    * - Store pack / catalog
      - :doc:`plugins/pack_and_catalog`
@@ -298,14 +298,14 @@ plugins.
 
       * - Surface
         - Chapter / artifact
-      * - L3 module + adapter C API
+      * - ELF module + adapter C API
         - :doc:`api/module_abi`, :doc:`api/minihub_core`, :doc:`api/minihub_adapter`
-      * - L3 link symbols
+      * - ELF link symbols
         - ``docs/module_sdk/host_export_allowlist.json``
 
-   **ABI stability:** L3 ``.so`` modules declare ``abi_version`` and
+   **ABI stability:** ELF ``.so`` modules declare ``abi_version`` and
    ``core_api_min`` / ``core_api_max`` in ``module.json``, and Host refuses to
    install or load a mismatched one. Native modules are not published to the
-   Store, so a release ships the Host firmware plus L1/L2 packs, assets, and the
+   Store, so a release ships the Host firmware plus JSON/JS packs, assets, and the
    web console. Host export changes require
-   allowlist and symbol regeneration (:doc:`plugins/develop_l3`).
+   allowlist and symbol regeneration (:doc:`plugins/develop_elf`).

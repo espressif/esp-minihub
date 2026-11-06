@@ -6,16 +6,9 @@
   "enabled": true,
   "type": "pack",
   "runtime": "pack",
-  "description": "L1 pack: inject demo MQTT device. The merge creates the adapters.mqtt key if it is missing and enables it.",
+  "description": "L1 pack: product defaults for the on-device MQTT broker. Host skips the pack while adapters.mqtt_broker.enabled is false, and creates the key with enabled:true when it is missing entirely. Listed keys replace the adapter's value wholesale (devices[] is the exception: it merges by point_id), so a users[] here is the whole list, not an addition to it.",
   "inject": {
-    "adapter": "mqtt",
-    "devices": [
-      {
-        "point_id": "mqtt.PLACEHOLDER_ID_demo",
-        "type": "switch",
-        "state_topic": "minihub/PLACEHOLDER_ID/state",
-        "command_topic": "minihub/PLACEHOLDER_ID/set"
-      }
-    ]
+    "adapter": "mqtt_broker",
+    "connect_rate_limit": 8
   }
 }

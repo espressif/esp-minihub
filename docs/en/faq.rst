@@ -22,7 +22,7 @@ Install success is not load success. Read the boot log for the module id; each o
 these lines in ``components/minihub_module/module_loader.c`` is its own answer:
 
 * ``JS module 'X' missing main.js`` (:file:`module_loader.c:901`) — the package has
-  no ``main.js``; check ``module.json`` ``runtime`` is the literal ``js``.
+  no ``main.js``; check ``module.json`` ``runtime`` is the literal ``JS``.
 * ``module 'X' has no binary or builtin`` (:file:`module_loader.c:906`) — nothing for
   the Host to enter.
 * ``skip module 'X' — adapter 'Y' already registered`` (:file:`module_loader.c:912`) —
@@ -58,11 +58,11 @@ Every status and body this endpoint can produce: :doc:`api/errors`.
    ``/store/modules/ID/.load_guard`` and skips it on the next boot. Clear with
    ``POST /api/modules``:
 
-   .. code-block:: json
+   .. code-block:: JSON
 
       { "id": "my_native", "clear_load_guard": true, "reload": true }
 
-   Check the serial log for ABI errors. L3 ``module.json`` ``abi_version`` and
+   Check the serial log for ABI errors. ELF ``module.json`` ``abi_version`` and
    ``core_api_*`` must bracket the Host (header ``MINIHUB_MODULE_ABI_VERSION``).
    See :doc:`api/module_abi`.
 

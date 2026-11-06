@@ -25,7 +25,7 @@ REST: ``GET /api/rules``, ``POST /api/rules/import`` (:doc:`api/host_rest`).
 Document shape
 --------------
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "rules": [

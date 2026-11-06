@@ -15,7 +15,7 @@
 
 .. only:: not hide_l3
 
-   ``esp_wifi_*`` 不在 L3 白名单内。
+   ``esp_wifi_*`` 不在 ELF 白名单内。
 
 API 参考
 --------

@@ -38,7 +38,7 @@ plugin — start there, not in the Core ``.c`` files:
 * Radios and access: :doc:`radios`
 * Build and flash: :doc:`getting_started`
 * OEM Host: :doc:`host_customization`, :doc:`production`
-* Store plugins: :doc:`plugins/overview` (pick L1 or L2, then that chapter)
+* Store plugins: :doc:`plugins/overview` (pick JSON or JS, then that chapter)
 * REST / MCP tool list: :doc:`api/host_rest`, :doc:`api/mcp`
 * Git and contributions: :doc:`contributing`
 
@@ -93,5 +93,5 @@ verify on the device — serial logs, ``GET /api/modules``, and
 
 .. only:: not hide_l3
 
-   L3 undefined symbols must be on ``host_export_allowlist.json``; declarations
-   come from ``minihub_plugin_sdk.h`` — :doc:`plugins/develop_l3`.
+   ELF undefined symbols must be on ``host_export_allowlist.json``; declarations
+   come from ``minihub_plugin_sdk.h`` — :doc:`plugins/develop_elf`.

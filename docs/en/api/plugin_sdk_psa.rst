@@ -6,7 +6,7 @@ Plugin SDK — PSA Crypto
 Overview
 --------
 
-PSA Crypto subset Host exports to L3 plugins (AEAD, cipher, key derivation,
+PSA Crypto subset Host exports to ELF plugins (AEAD, cipher, key derivation,
 ECDH). ``psa_key_attributes_t`` must match Host layout; multipart contexts are
 opaque oversized buffers.
 

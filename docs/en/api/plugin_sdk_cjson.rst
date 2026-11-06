@@ -6,7 +6,7 @@ Plugin SDK — cJSON
 Overview
 --------
 
-JSON helpers Host exports to L3 plugins (``cJSON_*``). Layout matches Dave
+JSON helpers Host exports to ELF plugins (``cJSON_*``). Layout matches Dave
 Gamble cJSON as linked by Host (``espressif__cjson``).
 
 .. include-build-file:: inc/cjson.inc

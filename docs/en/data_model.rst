@@ -41,7 +41,7 @@ Do **not** split one device into many points (wrong: ``sim.js_kitchen.brightness
 
 Live point example (``GET /api/points``):
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "point_id": "sim.js_kitchen",
@@ -231,18 +231,21 @@ or via ``POST /api/rules/import`` / ``POST /api/scenes/import``. Then
 
 Remote catalog CSV updates and column details: :doc:`type_catalog`.
 
-.. _adapters-json:
+.. _adapters-JSON:
 
 ``adapters.json``
 -----------------
 
 The root object is only ``adapters``. Each key is an adapter name and must match
 a statically linked adapter in the firmware, or a Store module ``adapter`` field.
-Unknown keys are ignored.
+Unknown keys are ignored. One key has two readers: ``mqtt_broker`` carries the
+on-device broker's listener settings, and the MQTT client adapter registers under
+that same name, so one ``enabled`` flag decides whether the Hub listens and
+whether it connects to itself (:doc:`networking`).
 
 Top-level example:
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -253,7 +256,7 @@ Top-level example:
        "zigbee": { "enabled": false, "devices": [] },
        "ble_mesh": { "enabled": false, "provision": {}, "devices": [] },
        "thread": { "enabled": false, "dataset": null, "channel": null },
-       "mqtt": { "enabled": false, "broker": "127.0.0.1", "port": 1883, "devices": [] },
+       "mqtt_broker": { "enabled": false, "port": 1883, "allow_anonymous": true, "users": [] },
        "modbus": { "enabled": false, "poll_ms": 2000, "gateways": [] }
      }
    }
@@ -300,7 +303,7 @@ Fields the Host reads per adapter:
     bit5 energy metering. Non-``sensor`` types always get on/off (bit0);
     ``kind`` / ``caps`` are ignored
 * **ble_mesh** — Provisioning policy lives under ``provision`` (``uuid_filters`` /
-  ``bind_models`` may also sit at the adapter-block top level for L1 inject).
+  ``bind_models`` may also sit at the adapter-block top level for JSON inject).
   ``devices[]`` max 16.
 
   * ``provision.uuid_match_disabled`` — true accepts any unprovisioned UUID
@@ -324,17 +327,16 @@ Fields the Host reads per adapter:
   * ``channel`` — the factory seed carries this key, but no code reads or writes
     it: Host ignores it, and the live channel is reported by
     ``GET /api/thread/status``. See :doc:`thread`
-* **mqtt** — connect a broker and register points. ``devices[]`` max 16.
-
-  * ``broker`` — hostname or IP, max 63 bytes. If unset, points still register
-    offline
-  * ``port`` — broker port, default 1883
-  * ``devices[]``: ``point_id``, ``type`` (required). ``state_topic`` /
-    ``command_topic`` max 95 bytes. Commands ``turn_on`` / ``turn_off`` /
-    ``toggle`` publish ``ON`` / ``OFF`` on ``command_topic``. A ``state_topic``
-    payload is read as 31 bytes: ``ON*`` / ``OFF*`` in any case become ``on`` /
-    ``off``, ``pressed`` / ``released`` pass through as those values, and
-    anything else becomes the point value verbatim
+* **mqtt_broker** — the on-device broker and its own loopback client: no
+  ``devices`` and no Hub points. Fields: ``enabled`` (default ``false``), ``port``
+  (1–65535, default 1883), ``allow_anonymous`` (default ``true``), ``users[]``
+  (max 4 ``name`` / ``pass`` pairs, 31 bytes each), ``connect_rate_limit``
+  (CONNECTs accepted per 10 s, default 16). While ``enabled`` is ``true`` the Hub
+  also connects to itself — ``127.0.0.1`` on ``port``, client id ``minihub_host``
+  — and that client is what carries ``host.mqtt`` for JS plugins. With
+  ``allow_anonymous`` set to ``false`` it presents ``users[0]``, so an empty
+  ``users[]`` leaves ``host.mqtt`` disconnected and logs a warning. Listen
+  address, reload behavior and the security posture: :doc:`networking`
 * **modbus** — master polling. Max 8 gateways and 64 maps total.
 
   * ``poll_ms`` — poll period, integer ≥ 500, default 2000
@@ -365,13 +367,13 @@ Fields the Host reads per adapter:
     * ``batch_as_props`` — with ``count`` > 1, also store the raw register batch
       in the point's ``props`` as ``r0`` … ``r31`` (first 32 registers only)
 
-Store modules (L2) add their own key, for example ``my_module``. Install creates
-the slot if missing. L1 packs **merge** ``inject`` into the named adapter block
-(see :doc:`plugins/develop_l1`).
+Store modules (JS) add their own key, for example ``my_module``. Install creates
+the slot if missing. JSON packs **merge** ``inject`` into the named adapter block
+(see :doc:`plugins/develop_json`).
 
 .. only:: not hide_l3
 
-   L3 modules add their own adapter key the same way.
+   ELF modules add their own adapter key the same way.
 
 Do **not** put vendor cloud tokens in the generic Host factory JSON. Persist them via
 the module (NVS / module-private files) after the user logs in.
@@ -397,7 +399,7 @@ Scenes (``scenes.json``)
 A scene is a list of **steps**; a step may carry several commands and may repeat, which
 makes it a one-tap sequence across devices. The root object holds a ``scenes`` array:
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "scenes": [
@@ -499,8 +501,8 @@ Related
 * REST examples: :doc:`api/host_rest`
 * End-to-end flow: :doc:`data_flow`
 * Matter commissioning REST: :doc:`matter`
-* L1 inject merge: :doc:`plugins/develop_l1`
+* JSON inject merge: :doc:`plugins/develop_json`
 
 .. only:: not hide_l3
 
-   * L3 plugins: :doc:`plugins/develop_l3`
+   * ELF plugins: :doc:`plugins/develop_elf`

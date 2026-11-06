@@ -1,12 +1,12 @@
-L3 Host export SDK
-==================
+ELF Host export SDK
+====================
 
 :link_to_translation:`zh_CN:[中文]`
 
 Overview
 --------
 
-Standalone headers for Store **L3** plugins that compile **without** ESP-IDF or
+Standalone headers for Store **ELF** plugins that compile **without** ESP-IDF or
 the MiniHub source tree. Ship ``docs/module_sdk/include/`` plus a matching cross
 compiler (ESP32-S31: ``riscv32-esp-elf-gcc``).
 
@@ -86,4 +86,4 @@ When ``CONFIG_MINIHUB_DYNAMIC_MODULES`` is enabled, Host firmware build runs
      --sizes-out /tmp/plugin_sdk_sizes.h \
      --check-out /tmp/plugin_sdk_abi_check.c
 
-Implementation: :doc:`../plugins/develop_l3`.
+Implementation: :doc:`../plugins/develop_elf`.

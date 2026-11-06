@@ -81,7 +81,7 @@ Matter 构建需要大 app 槽。链接报装不下时放大 ``ota_0`` / ``ota_1
 
 .. only:: not hide_l3
 
-   仓库内 L3 须打开 ``CONFIG_MINIHUB_DYNAMIC_MODULES`` 并 ``build`` （会生成 ``.so``
+   仓库内 ELF 须打开 ``CONFIG_MINIHUB_DYNAMIC_MODULES`` 并 ``build`` （会生成 ``.so``
    并 pack）。已有制品时：
 
    .. code-block:: bash
@@ -102,7 +102,7 @@ Matter 构建需要大 app 槽。链接报装不下时放大 ``ota_0`` / ``ota_1
 4. 可选：写入量产商店 URL（ ``POST /api/store/config``，见
    :doc:`api/plugin_rest` ）
 
-   .. code-block:: json
+   .. code-block:: JSON
 
       { "custom_url": "https://store.example", "disable_default": true }
 
@@ -216,7 +216,7 @@ SBOM 与依赖 CVE
 
 .. only:: not hide_l3
 
-   L3 ``.so`` 用 Plugin SDK 与导出白名单解析符号，不跟某一版 Host 固件绑定。
+   ELF ``.so`` 用 Plugin SDK 与导出白名单解析符号，不跟某一版 Host 固件绑定。
    ``module.json`` 中 ``abi_version``、 ``core_api_min`` / ``core_api_max`` 须覆盖
    当前 Host，且芯片架构一致。不必为每次固件发布重编模块。没有单独的固件版本对照表：
    上述三个字段覆盖当前 Host 即可。契约见 :doc:`api/module_abi`。

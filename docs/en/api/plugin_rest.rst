@@ -6,7 +6,7 @@ Store plugin REST API
 Overview
 --------
 
-HTTP JSON API for developing, debugging, installing, and operating L1/L2 Store
+HTTP JSON API for developing, debugging, installing, and operating JSON/JS Store
 modules; HTTP entry for module RPC.
 
 Implementation: ``components/minihub_web`` + ``minihub_store`` + ``minihub_module``.
@@ -14,7 +14,7 @@ Requires ``CONFIG_MINIHUB_STORE`` and ``CONFIG_MINIHUB_DYNAMIC_MODULES``.
 
 .. only:: not hide_l3
 
-   The same API covers L3 native modules. ``CONFIG_MINIHUB_DYNAMIC_MODULES`` is
+   The same API covers ELF native modules. ``CONFIG_MINIHUB_DYNAMIC_MODULES`` is
    required to load them.
 
 Host REST: :doc:`host_rest`. Status codes and error bodies: :doc:`errors`.
@@ -25,11 +25,11 @@ Conventions
 * There is **no** upload endpoint for a ``.mhub``: run ``POST /api/store/refresh``
   so the catalog is current, then install by ``id`` and the Hub downloads the
   ``url`` from the catalog.
-* ``type`` must be ``module`` (L2) or ``pack`` (L1).
+* ``type`` must be ``module`` (JS) or ``pack`` (JSON).
 
 .. only:: not hide_l3
 
-   ``type: module`` also covers L3.
+   ``type: module`` also covers ELF.
 
 * Default ``reload: true`` triggers Hub soft reload — :doc:`../architecture`.
 
@@ -52,15 +52,15 @@ List installed Store modules and load state.
 
    ``runtime`` is one of:
 
-   * ``js`` — L2 QuickJS (``main.js``)
+   * ``JS`` — JS QuickJS (``main.js``)
 
-   The field is omitted if Host cannot classify the slot. L1 packs are listed
+   The field is omitted if Host cannot classify the slot. JSON packs are listed
    by ``GET /api/packs``, not as ``runtime: pack``.
 
 .. only:: not hide_l3
 
-   ``runtime`` may also be ``native`` (L3 ``.so``) or ``hybrid`` (both native
-   and ``main.js``; optional ``entry`` ``js`` or ``native``).
+   ``runtime`` may also be ``native`` (ELF ``.so``) or ``hybrid`` (both native
+   and ``main.js``; optional ``entry`` ``JS`` or ``native``).
 
 POST /api/modules
 -----------------
@@ -144,7 +144,7 @@ Call the RPC handler the module registered through
    ``params`` must be a JSON object, and the body is capped at 16 KiB. The call
    runs on the JS worker off the HTTP task, so a slow RPC does not stall other
    API requests. MCP ``hub.api`` proxies only allowlisted ``method`` values
-   (:doc:`mcp`). An L2 JS module registers RPC with
+   (:doc:`mcp`). A JS module registers RPC with
    ``host.module.registerRpc`` in ``setup`` when it needs one.
 
 GET /api/modules/ID/preview
@@ -163,7 +163,7 @@ GET /api/packs · POST /api/packs
 
    ``GET /api/packs · POST /api/packs``
 
-GET lists installed L1 packs. POST enable/disable/delete (like ``POST /api/modules``
+GET lists installed JSON packs. POST enable/disable/delete (like ``POST /api/modules``
 without ``clear_load_guard``).
 
 GET /api/store/catalog
@@ -227,9 +227,9 @@ POST /api/store/install
 
    ``POST /api/store/install``
 
-Download the catalog ``.mhub`` and unpack it. An L2 module is staged at
+Download the catalog ``.mhub`` and unpack it. A JS module is staged at
 ``/store/modules/ID.staging/`` and renamed to ``/store/modules/ID/``, so a
-half-extracted package is never visible. An L1 pack has no package directory:
+half-extracted package is never visible. A JSON pack has no package directory:
 only its manifest JSON is kept, at ``/data/config/packs/ID.json``.
 
 .. container:: mh-api-block mh-api-parameters

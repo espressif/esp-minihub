@@ -10,12 +10,12 @@ API 参考
 **静态链接** 的适配器 —— 用 REST/MCP 操作 Hub，或在 Host 固件中实现
 ``minihub_adapter_t``。
 
-``examples/plugins/`` 或 ``MINIHUB_PLUGIN_DIRS`` 下的 L2（JS）模块没有链进固件。
+``examples/plugins/`` 或 ``MINIHUB_PLUGIN_DIRS`` 下的 JS（JavaScript）模块没有链进固件。
 它通过 JS ``host`` 对象工作；安装、启用与 RPC 走 REST。
 
 .. only:: not hide_l3
 
-   L3（原生）模块使用 Host 虚表。仓库外 C 源文件应
+   ELF（原生）模块使用 Host 虚表。仓库外 C 源文件应
    ``#include "minihub_plugin_sdk.h"`` （ :doc:`plugin_host` ）。
 
 .. toctree::
@@ -36,6 +36,11 @@ API 参考
 
    plugin_rest
    js_host
+   js_host_core
+   js_host_net
+   js_host_ble
+   js_host_mdns
+   js_host_mqtt
 
 .. only:: not hide_l3
 

@@ -1,9 +1,9 @@
-开发 L3（原生）模块
-===================
+开发 ELF（原生）插件
+====================
 
 :link_to_translation:`en:[English]`
 
-L3 模块在外层 ``.mhub`` zip 内携带 **原生 ELF** ``.so``。Host 对该镜像 ``dlopen``
+ELF 模块在外层 ``.mhub`` zip 内携带 **原生 ELF** ``.so``。Host 对该镜像 ``dlopen``
 后调用 ``minihub_module_entry``，所以这个二进制必须是为将要加载它的那台 Host 编的
 —— 安装时没有任何东西会替你做 ABI 转换。打包前用 **MHMD** 头封装 ``.so``
 （``tools/pack_store_module.py mhmd`` ）；加载器靠这个头识别镜像。
@@ -114,7 +114,7 @@ L3 模块在外层 ``.mhub`` zip 内携带 **原生 ELF** ``.so``。Host 对该�
 会做 configure、编译，并可加 ``--pack``。Host 树内编译仍写到
 ``application/minihub/build/<id>.so``。
 
-脚手架出的 L3 插件（双路径）
+脚手架出的 ELF 插件（双路径）
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 用 ``if(ESP_PLATFORM)`` / 独立 ``include()`` 切分上述片段，同一份源码两边都能编。
@@ -145,11 +145,11 @@ Host 固件 ``build`` 不会做这件事。
    ./tools/build_firmware.py -app minihub modules
 
 已有 MHMD ``.so`` 时不必重编： ``python3 tools/pack_store_module.py mhmd in.so out.so``
-只套头。 ``pack`` 只发布 L1 与 L2 ，原生包按上面第 3-5 步自己放进商店目录，或者走工厂
+只套头。 ``pack`` 只发布 JSON 与 JS ，原生包按上面第 3-5 步自己放进商店目录，或者走工厂
 镜像。
 
-L3 常用脚本
-^^^^^^^^^^^
+ELF 常用脚本
+^^^^^^^^^^^^^^
 
 * ``tools/new_store_module.py --tier l3 --id ID`` — 脚手架
 * ``tools/generate_devices_property_from_json.py`` — ``devices.json`` →
@@ -180,10 +180,10 @@ L3 常用脚本
      CMakeLists.txt
      meta.json            # 可选 ui + capabilities
 
-``module.json`` （L3）
-----------------------
+``module.json`` （ELF）
+-------------------------
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "id": "my_native",

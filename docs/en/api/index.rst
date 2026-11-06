@@ -12,13 +12,13 @@ automation script, or a **statically linked** adapter under ``components/`` —
 talks REST or MCP to the hub, or implements ``minihub_adapter_t`` in Host
 firmware.
 
-An L2 (JS) module under ``examples/plugins/`` or ``MINIHUB_PLUGIN_DIRS`` is not
+A JS (JavaScript) module under ``examples/plugins/`` or ``MINIHUB_PLUGIN_DIRS`` is not
 linked into the firmware. It works through the JS ``host`` object and uses REST for
 install, enable and RPC.
 
 .. only:: not hide_l3
 
-   L3 (native) modules use the host vtable. Out-of-tree C sources should
+   ELF (native) modules use the host vtable. Out-of-tree C sources should
    ``#include "minihub_plugin_sdk.h"`` (:doc:`plugin_host`).
 
 .. toctree::
@@ -39,6 +39,11 @@ install, enable and RPC.
 
    plugin_rest
    js_host
+   js_host_core
+   js_host_net
+   js_host_ble
+   js_host_mdns
+   js_host_mqtt
 
 .. only:: not hide_l3
 

@@ -35,7 +35,7 @@ Core 的 ``.c``：
 * 射频与接入： :doc:`radios`
 * 编译烧录： :doc:`getting_started`
 * OEM Host： :doc:`host_customization`、 :doc:`production`
-* 商店插件： :doc:`plugins/overview` （先选 L1 或 L2，再进对应章）
+* 商店插件： :doc:`plugins/overview` （先选 JSON 或 JS，再进对应章）
 * REST / MCP 工具列表： :doc:`api/host_rest`、 :doc:`api/mcp`
 * 贡献与 Git： :doc:`contributing`
 
@@ -83,5 +83,5 @@ Hub 对外提供十二个工具，多数场景用到其中几个： ``points.lis
 
 .. only:: not hide_l3
 
-   L3 未定义符号须在 ``host_export_allowlist.json`` 内，声明来自
-   ``minihub_plugin_sdk.h`` — :doc:`plugins/develop_l3`。
+   ELF 未定义符号须在 ``host_export_allowlist.json`` 内，声明来自
+   ``minihub_plugin_sdk.h`` — :doc:`plugins/develop_elf`。

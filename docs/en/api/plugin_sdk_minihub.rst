@@ -6,7 +6,7 @@ Plugin SDK — MiniHub
 Overview
 --------
 
-MiniHub Host exports used by Store L3 plugins: **points**, **module ABI**,
+MiniHub Host exports used by Store ELF plugins: **points**, **module ABI**,
 **config / hub reload**, **HTTP worker**, **net probe**, and **BLE GATT client**.
 
 Out-of-tree plugins get the same declarations from

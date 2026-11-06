@@ -13,9 +13,9 @@ PC 部署根（``MINIHUB_PLUGINS_DEPLOY_DIR``，默认 ``~/workspace/minihub_sto
 插件
 ----
 
-发布出的每个模块都是一个 ``.mhub``。L1 与 L2 放在 ``Stores/Common/<id>/``。原生
+发布出的每个模块都是一个 ``.mhub``。JSON 与 JS 放在 ``Stores/Common/<id>/``。原生
 与 hybrid 模块不是商店包： ``store_buckets_for_module()`` 不给它们分配目录，残留
-目录会被删除，所以部署树里只有 L1/L2。``catalog.json``
+目录会被删除，所以部署树里只有 JSON/JS。``catalog.json``
 是打包 ``.mhub`` 时由 ``tools/sync_store_catalog.py`` 写在同目录的单个对象。
 
 .. code-block:: text
@@ -32,7 +32,7 @@ PC 部署根（``MINIHUB_PLUGINS_DEPLOY_DIR``，默认 ``~/workspace/minihub_sto
 一个插件 catalog 条目形如（由 ``tools/sync_store_catalog.py`` 依据构建出的
 ``.mhub`` 生成）：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "type": "module", "id": "foo", "name": "Foo", "version": "1.0.0",
@@ -63,12 +63,12 @@ catalog 条目字段
   商店也可以把它按版本编址。
 * ``targets`` —— 芯片目录名列表（如 ``["esp32s31"]`` 或 ``["ALL"]`` ），即
   ``?chip=`` 的过滤依据。
-* ``runtime`` —— ``"pack"`` （纯配置 L1）或 ``"js"`` （L2）。``"hybrid"`` 与
+* ``runtime`` —— ``"pack"`` （纯配置 JSON）或 ``"js"`` （JS）。``"hybrid"`` 与
   ``"native"`` 描述的是原生模块，二者都不发布。
-* ``config_only`` —— 仅纯配置 L1 包为 ``true``。
+* ``config_only`` —— 仅纯配置 JSON 包为 ``true``。
 * ``size`` —— ``.mhub`` 的字节数。
 * ``sha256`` —— ``.mhub`` 的 64 位十六进制摘要。
-* ``host_api`` —— 仅 L2 与 hybrid：取自 ``module.json``，缺省为 ``0``。
+* ``host_api`` —— 仅 JS 与 hybrid：取自 ``module.json``，缺省为 ``0``。
 * ``abi`` —— 仅原生与 hybrid：``abi_version`` 加 ``symbols`` （包所引用的 Host
   符号哈希）。Hub 的部署树里不会出现该条目，因为它不发布原生或 hybrid 包。
 
@@ -112,7 +112,7 @@ catalog 条目字段
 
 HTTP 200。匹配的插件与已发布的最高固件版本：
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "status": "ok",
@@ -166,7 +166,7 @@ HTTP 200。匹配的插件与已发布的最高固件版本：
    curl -s "http://127.0.0.1:8080/api/firmware?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
    curl -s -o minihub.bin "http://127.0.0.1:8080/files/Firmwares/esp32s31/0.1.0/minihub-esp32s31-0.1.0.bin?mac=aa:bb:cc:dd:ee:ff&cur_version=0.1.0"
 
-.. code-block:: json
+.. code-block:: JSON
 
    [
      {

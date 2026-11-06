@@ -62,7 +62,7 @@
    所有命令来源都汇到同一个路由器（``minihub_command_invoke``）：上面的控件
    POST、带明确 ``point_id`` 的 ``POST /api/command`` （可选
    ``params.parameter``）、规则的 ``command`` / ``command_by_type`` 动作，以及
-   L2 JS 的 ``host.command.invoke`` / ``host.command.on``。路由器解析到点后，
+   JS 的 ``host.command.invoke`` / ``host.command.on``。路由器解析到点后，
    由该点的适配器把命令经射频发给设备。
 
 2. 设备执行与上报
@@ -129,13 +129,13 @@
 
    第三方行为以 **商店模块** 形式交付，位于 ``/store/modules/ID/``：
 
-   * **L1** ``minihub_pack`` —— 注入已有适配器（不引入新射频协议栈）。
-   * **L2** ``minihub_module`` —— JavaScript 插件（``main.js``，经 ``minihub_js``
+   * **JSON** ``minihub_pack`` —— 注入已有适配器（不引入新射频协议栈）。
+   * **JS** ``minihub_module`` —— JavaScript 插件（``main.js``，经 ``minihub_js``
      的 QuickJS）；可附带 ``web/``，由 ``/modules/ID/web/…`` 提供。
 
 .. only:: not hide_l3
 
-   * **L3** ``minihub_module`` —— 运行时加载的原生 ``.so``。
+   * **ELF** ``minihub_module`` —— 运行时加载的原生 ``.so``。
 
 模块用 ``host.event.subscribe(type, fn)`` 订阅（内部是一次通配订阅，在 JS 侧
 过滤）、调用 Host API、注册点——模块注册的点与其他点一样发出
@@ -265,7 +265,7 @@ API 速查
    * - ``GET /api/modules/*/preview``
      - 模块 UI 预览
    * - ``GET /api/packs``、``POST /api/packs``
-     - L1 pack 列表 / 管理
+     - JSON pack 列表 / 管理
    * - ``GET /api/scenes``、``POST /api/scenes/import``、``POST /api/scenes/invoke``
      - 场景管理
    * - ``GET /api/events``、WebSocket ``/ws/events``
@@ -282,5 +282,5 @@ API 速查
 * :doc:`data_model` —— 点位模型与 adapters / 场景。
 * :doc:`rules` —— ``when`` / ``if`` / ``then`` 与比较 ``op``。
 * :doc:`web_console` —— 替换或换肤 Web 控制台。
-* :doc:`plugins/index` —— 编写 L1/L2 商店模块。
+* :doc:`plugins/index` —— 编写 JSON/JS 商店模块。
 * :doc:`api/index` —— 完整 REST / JS / MCP / C ABI 参考。

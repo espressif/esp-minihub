@@ -1,9 +1,9 @@
-Develop L2 (JS) Modules
-=======================
+Develop JS (JavaScript) Plugins
+===============================
 
 :link_to_translation:`zh_CN:[中文]`
 
-L2 modules run **QuickJS** scripts on the Hub. Host loads ``main.js`` after
+JS modules run **QuickJS** scripts on the Hub. Host loads ``main.js`` after
 adapters start and on soft reload (``POST /api/hub/reload``). Implementation:
 ``components/minihub_js/minihub_js.c``.
 
@@ -15,7 +15,7 @@ firmware pins the ``espressif/quickjs-ng`` component at 0.14.0. Syntax follows
 that build: ``class``, ``async``/``await``, ``Proxy`` and optional chaining all
 work. Read the ``quickjs-ng`` documentation for the exact boundary rather than
 trusting a version typed here. MiniHub adds the four timer globals and one
-``host`` object, and nothing else, so an L2 module is neither a browser page
+``host`` object, and nothing else, so a JS module is neither a browser page
 nor a Node process.
 
 The differences that bite a JavaScript developer:
@@ -37,10 +37,10 @@ The differences that bite a JavaScript developer:
   by default, allocated in PSRAM) and QuickJS is told to stop at
   ``CONFIG_MINIHUB_JS_WORKER_STACK_BUDGET`` (24576) so recursion hits the engine
   limit instead of the real stack.
-* L2 needs ``CONFIG_MINIHUB_JS_PLUGINS``, which defaults to on once
+* JS needs ``CONFIG_MINIHUB_JS_PLUGINS``, which defaults to on once
   ``CONFIG_MINIHUB_DYNAMIC_MODULES`` is on.
 
-When to use L2
+When to use JS
 ---------------
 
 * Lightweight automation, HTTP polling, or glue between REST and points
@@ -48,7 +48,7 @@ When to use L2
 
 .. only:: not hide_l3
 
-   * Prototypes before committing to L3
+   * Prototypes before committing to ELF
 
 Requirements: ``CONFIG_MINIHUB_DYNAMIC_MODULES`` and JS runtime enabled in the
 product sdkconfig (``dynamic_modules`` feature in ``app.yml``).
@@ -69,7 +69,7 @@ Directory layout
 ``module.json`` example
 -----------------------
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "id": "demo_js",
@@ -82,18 +82,18 @@ Directory layout
      "targets": ["ALL"]
    }
 
-An L2 manifest carries no ``abi_version`` — that belongs to a native package.
+A JS manifest carries no ``abi_version`` — that belongs to a native package.
 ``ui`` and ``capabilities`` are read from ``meta.json`` when one is packaged, and
 fall back to ``module.json`` when it is not.
 
 **``runtime: "js"`` is required.** Omitting it does not make the module JS: at
 load time the runtime only starts a QuickJS module when ``runtime`` is the literal
-string ``js`` (or ``hybrid``), and a manifest with no ``runtime`` and no
+string ``JS`` (or ``hybrid``), and a manifest with no ``runtime`` and no
 ``binary`` falls through to the native path and fails with "no binary or builtin".
 The ``main.js`` / no-``CMakeLists.txt`` heuristic you may have seen described
 elsewhere is used by the **packer and catalog generator** to classify a source
 tree, not by the Hub. ``adapter`` is required too — the loader rejects a manifest
-whose adapter name is empty, L2 included.
+whose adapter name is empty, JS included.
 
 ``main.js`` contract
 --------------------
@@ -115,7 +115,7 @@ Host calls ``setup(host)`` once per load. The ``host`` object exposes:
 * ``host.adapter.poll(fn)`` — run ``fn`` on the ~5 s adapter poll tick, up to 8
   handlers in the runtime; ``host.adapter.clearPoll()`` drops them all
 * ``host.http.request({ url, method, headers, body, timeout_ms, response_b64 })``
-  — blocking HTTP **on the JS worker**, so it stalls every other L2 module for the
+  — blocking HTTP **on the JS worker**, so it stalls every other JS module for the
   duration. There is no URL allowlist in the device: reachability, and the TLS
   trust bundle for ``https``, are the only limits. ``response_b64`` returns the
   body base64-encoded instead of as a UTF-8 string
@@ -165,7 +165,7 @@ Wire into ``adapters.json``
 
 Add a block so the adapter name exists (can be empty devices list):
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -192,8 +192,8 @@ Verify:
 * ``GET /api/points`` — ``demo_js.hello`` present
 * Serial log: ``JS module 'demo_js' setup ok``
 
-Module RPC from L2 is optional; prefer ``host.command`` or REST. JS API: :doc:`../api/js_host`.
+Module RPC from JS is optional; prefer ``host.command`` or REST. JS API: :doc:`../api/js_host`.
 
 .. only:: not hide_l3
 
-   For L3 RPC see :doc:`develop_l3`.
+   For ELF RPC see :doc:`develop_elf`.

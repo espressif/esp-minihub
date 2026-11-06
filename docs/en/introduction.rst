@@ -95,7 +95,7 @@ Limitations
   type as a name. A wrong ``type`` or parameter shows up at run time instead: the
   card renders with no control and the console logs a warning
   (:doc:`type_catalog`).
-* All L2 modules share one QuickJS task. A callback that blocks therefore holds
+* All JS modules share one QuickJS task. A callback that blocks therefore holds
   up every other JS module as well (:doc:`api/js_host`).
 * Wi-Fi and BLE Mesh coexist on the 2.4 GHz radio; IEEE 802.15.4 (Zigbee **or**
   Thread) coexists with neither, and Zigbee and Thread are never started together

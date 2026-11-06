@@ -51,9 +51,9 @@ printed.
 
 .. minihub-errors:: messages
 
-* ``invalid json`` and ``empty body`` are the two most common, and both
+* ``invalid JSON`` and ``empty body`` are the two most common, and both
   mean the request never got as far as the operation. ``empty body`` is literal: the
-  handler read zero bytes. ``invalid json`` has two causes — the body is not JSON, or it
+  handler read zero bytes. ``invalid JSON`` has two causes — the body is not JSON, or it
   is longer than the buffer that handler happened to reserve. Endpoints that read into a
   fixed array (``/api/store/install`` takes 255 bytes) cut the body and then fail to parse
   it; endpoints that go through ``read_http_body()`` reject an oversized body up front with

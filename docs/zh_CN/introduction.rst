@@ -90,7 +90,7 @@ WebSocket 与 JavaScript 接口（ :doc:`api/index` ），可选的 MCP 服务�
 * 编译期没人检查厂商设备类型，因为 Core 只把类型存成一个名字。所以 ``type``
   写错、参数写错都是运行时才暴露：卡片渲染出来却没有控件，控制台记一条告警
   （ :doc:`type_catalog` ）。
-* 所有 L2 模块共用一个 QuickJS 任务。一个回调卡住，就会连带拖住其它 JS 模块
+* 所有 JS 模块共用一个 QuickJS 任务。一个回调卡住，就会连带拖住其它 JS 模块
   （ :doc:`api/js_host` ）。
 * Wi-Fi 与 BLE Mesh 能在 2.4 GHz 射频上共存；IEEE 802.15.4（Zigbee **或**
   Thread）与两者都不共存，Zigbee 与 Thread 也不会一起启动（ :doc:`radios` ）。

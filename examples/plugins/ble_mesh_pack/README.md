@@ -14,14 +14,13 @@ block on load / `POST /api/hub/reload`. Public Host `store_preinstall` stays
 
 | Need | Use |
 |------|-----|
-| Defaults for a **Host** adapter (bind list, UUID filters, MQTT/Modbus maps) | **L1** this demo |
+| Defaults for a **Host** adapter (bind list, UUID filters, Modbus maps) | **L1** this demo |
 | Logic, HTTP, or a new adapter | **L2** / **L3** |
 | Vendor claim / OTA on a live radio point | **L3** native module (same `point_id`) |
 
-Do **not** inject `devices[]` on `zigbee` / `matter` / `ble_mesh`. Those points
-are registered when a node joins. MQTT `devices[]` is allowed (Host MQTT list)
-but is a different inject target — enable `adapters.mqtt` first or the pack is
-skipped.
+Do **not** inject `devices[]` on `zigbee` / `matter` / `ble_mesh`: those points
+are registered when a node joins. Whatever the target adapter, Host skips a pack
+whose block is already present with `enabled: false`.
 
 ## What it merges
 

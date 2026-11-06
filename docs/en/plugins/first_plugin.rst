@@ -4,7 +4,7 @@ Your First Store Plugin
 :link_to_translation:`zh_CN:[中文]`
 
 One pass from an empty directory to a plugin running on a Hub, then changing it
-without reflashing. L2 (JavaScript on QuickJS) is used because it needs no
+without reflashing. JS (JavaScript on QuickJS) is used because it needs no
 cross-compiler. Switching tier changes only the ``--tier`` flag in step 1 and
 what step 2 writes.
 
@@ -100,7 +100,7 @@ Three rules that decide whether the plugin is usable, not cosmetic:
   widget (:doc:`../type_catalog`).
 * commands are routed by the ``adapter`` field you pass to ``point.register()``
   and bind with ``host.command.on(adapter, fn)`` — omit it and the point lands on
-  the loader's default ``js`` adapter, so ``host.command.on('my_js', …)`` would
+  the loader's default ``JS`` adapter, so ``host.command.on('my_js', …)`` would
   never be called for it.
 * one physical device is one point, with parameters under ``props.params`` --
   never one point per parameter (:doc:`../data_model`).
@@ -119,7 +119,7 @@ Three rules that decide whether the plugin is usable, not cosmetic:
 
 The first command writes
 ``~/workspace/minihub_store/Stores/Common/my_js/my_js.mhub`` **and** the
-``catalog.json`` beside it (``pack_store_module.py:323-326``); L1 and L2 always
+``catalog.json`` beside it (``pack_store_module.py:323-326``); JSON and JS always
 land under ``Common``, and a native module is not a store package, so ``pack``
 skips it. The second line is what you need for a package you placed by hand or an
 entry you edited — after ``pack`` it is redundant, harmless to leave in. That
@@ -204,17 +204,17 @@ If nothing appears
 Switching to another tier
 -------------------------
 
-L1 is the same loop with step 2 replaced by an ``inject`` block in
+JSON is the same loop with step 2 replaced by an ``inject`` block in
 ``module.json`` -- no code, no ``setup``, and it can only add defaults to an
-adapter the Host already ships (:doc:`develop_l1`).
+adapter the Host already ships (:doc:`develop_json`).
 
 .. only:: not hide_l3
 
-   L3 replaces step 2 with C sources and adds a compile before packing:
+   ELF replaces step 2 with C sources and adds a compile before packing:
    ``python3 tools/build_plugin_standalone.py``, or ``./tools/build_firmware.py
    modules`` when it is built together with the Host. The MHMD header goes on with
    its own command, ``pack_store_module.py mhmd in.so out.so`` — ``pack`` only
-   embeds an ``.so`` that is already wrapped (:doc:`develop_l3`).
+   embeds an ``.so`` that is already wrapped (:doc:`develop_elf`).
 
-Full details for each step: :doc:`develop_l2`, :doc:`pack_and_catalog`,
+Full details for each step: :doc:`develop_js`, :doc:`pack_and_catalog`,
 :doc:`../api/host_rest`.

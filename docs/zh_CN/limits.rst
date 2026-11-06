@@ -24,7 +24,7 @@
 
 .. minihub-limits:: update
 
-.. minihub-limits:: js
+.. minihub-limits:: JS
 
 .. minihub-limits:: hub
 

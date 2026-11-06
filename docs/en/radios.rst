@@ -106,5 +106,5 @@ fetch). Plugins pack via
 End-device OTA REST: ``POST /api/devices/ota`` (:doc:`api/host_rest`). Hub
 **firmware** update is a different path: :doc:`ota`.
 
-Do not L1-inject ``devices[]`` on ``zigbee`` / ``matter`` / ``ble_mesh``, and
-do not invent a Thread device list. See :doc:`plugins/develop_l1`.
+Do not JSON-inject ``devices[]`` on ``zigbee`` / ``matter`` / ``ble_mesh``, and
+do not invent a Thread device list. See :doc:`plugins/develop_json`.

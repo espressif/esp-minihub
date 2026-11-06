@@ -5,7 +5,7 @@ Zigbee
 
 MiniHub runs Zigbee as a **Host adapter** (coordinator), not as a standalone
 end-device sample. Devices live under ``adapters.zigbee``. JSON field details
-are in :doc:`data_model` (:ref:`adapters-json`); this chapter covers build,
+are in :doc:`data_model` (:ref:`adapters-JSON`); this chapter covers build,
 join, and REST.
 
 Zigbee takes the 2.4 GHz radio to itself: it shares it with neither Wi-Fi nor BLE
@@ -34,7 +34,7 @@ Runtime configuration
 Enable in ``/data/config/adapters.json`` (factory JSON:
 ``application/minihub/configs/adapters.json``):
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "adapters": {
@@ -46,7 +46,7 @@ Enable in ``/data/config/adapters.json`` (factory JSON:
    }
 
 Set ``adapters.zigbee.enabled`` and list bound devices in ``devices[]``.
-Field list: :ref:`adapters-json`.
+Field list: :ref:`adapters-JSON`.
 
 REST endpoints
 --------------
@@ -83,7 +83,7 @@ Install code
 
 Call before permit-join when the joiner uses an install code. Body:
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "ieee": "...",
@@ -99,7 +99,7 @@ Remove devices (legacy)
 ``adapter``, the handler injects ``zigbee``. Same remove semantics as Hub
 points remove (``point_id``, or ``delete_all`` with adapter).
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "point_id": "zigbee.zb_0a1b" }
 
@@ -138,7 +138,7 @@ adapter sets top-level identity (not catalog params / Devices sliders):
 Telemetry updates merge **only** ``props.params`` via
 ``minihub_point_merge_params``, so plugin keys on the same point survive.
 
-Plugins (L2) match ``props.manufacturer`` (local filter, e.g.
+Plugins (JS) match ``props.manufacturer`` (local filter, e.g.
 packed ``catalog.json``) on that same ``point_id``. Both keys below are
 **plugin-side conventions**: no Host code writes ``props.owner`` or ``props.ota``,
 and the Hub does not fetch a vendor catalog for you.

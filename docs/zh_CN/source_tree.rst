@@ -76,7 +76,8 @@ Core 与服务
     ``minihub_hub`` ；控制台会话与可选的 API token 在 ``minihub_auth`` ；收网络凭据
     （ SoftAP ）与恢复出厂在 ``minihub_provision`` ；Ethernet 与 Wi-Fi STA 的拉起在
     ``minihub_net`` ；固件升级的状态与进度在 ``minihub_ota`` ，从部署根拉取并应用
-    固件、资源与控制台包在 ``minihub_update`` 。
+    固件、资源与控制台包在 ``minihub_update`` ；站点里的 MQTT 设备连的那个内置
+    broker 在 ``minihub_mqtt_broker`` 。
 
 设备模型与 UI
     这一组决定设备长什么样、自动化什么时候触发。
@@ -90,7 +91,7 @@ Core 与服务
 
 商店与模块
     商店是为了动态安装插件，便于更灵活的扩展。目录刷新与安装、升级、卸载在
-    ``minihub_store`` ；读清单、校验 ABI、加载在 ``minihub_module`` ；L1 包合并进适配
+    ``minihub_store`` ；读清单、校验 ABI、加载在 ``minihub_module`` ；JSON 包合并进适配
     器视图在 ``minihub_pack`` ；QuickJS 工作线程与 ``host`` 对象在 ``minihub_js`` 。
 
 射频
@@ -100,9 +101,10 @@ Core 与服务
 
     自带的七个适配器在 ``components/minihub_protocol_adapters/`` 下： ``adapter_wifi`` 、
     ``adapter_zigbee`` 、 ``adapter_ble_mesh`` 、 ``adapter_matter`` 、
-    ``adapter_thread`` 、 ``adapter_mqtt`` 、 ``adapter_modbus`` 。登记设备点的有五个 ——
-    Zigbee 、 BLE Mesh 、 Matter 、 MQTT 、 Modbus ； Wi-Fi STA 只做上行， Thread 只做
-    OpenThread Border Router ，两者都不拥有设备，也就不登记点位（见 :doc:`radios` ）。
+    ``adapter_thread`` 、 ``adapter_mqtt`` 、 ``adapter_modbus`` 。登记设备点的有四个 ——
+    Zigbee 、 BLE Mesh 、 Matter 、 Modbus ； Wi-Fi STA 只做上行， Thread 只做
+    OpenThread Border Router ， MQTT 是 Hub 内置 broker 的客户端，这三者都不拥有
+    设备，也就不登记点位（见 :doc:`radios` ）。
     每个适配器都是独立组件，产品要去掉哪个就去掉哪个。
 
 可选硬件

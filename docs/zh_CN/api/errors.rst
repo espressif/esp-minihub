@@ -45,8 +45,8 @@ URI 长过服务器缓冲是 **414**，连接建好却一个请求都没发是 *
 
 .. minihub-errors:: messages
 
-* ``invalid json`` 与 ``empty body`` 最常见，两者都说明请求还没走到真正的操作。
-  ``empty body`` 是字面意思：处理函数读到 0 字节。 ``invalid json`` 有两个原因—— body
+* ``invalid JSON`` 与 ``empty body`` 最常见，两者都说明请求还没走到真正的操作。
+  ``empty body`` 是字面意思：处理函数读到 0 字节。 ``invalid JSON`` 有两个原因—— body
   本身不是 JSON，或者它比那个处理函数恰好预留的缓冲区更长。读进定长数组的端点
   （ ``/api/store/install`` 只收 255 字节）会把 body 截断，然后解析失败；走
   ``read_http_body()`` 的端点则提前拒收超长 body，回 ``invalid body`` 或

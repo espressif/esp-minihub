@@ -59,7 +59,7 @@ hub.api
 
    示例 — 列出点位：
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "method": "GET", "path": "/api/points" }
 

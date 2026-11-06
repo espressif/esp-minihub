@@ -32,7 +32,7 @@
 Hub 最终会说上话的云有两种，两者的差别就在「说」的代码是怎么来的：
 
 * **厂商云是装进来的。** MIoT 之类以一个商店模块的形态到来：要么是被合并进
-  ``adapters.json`` 的 L1 包，要么是自己登录、订阅、上报的 L2 模块。它在一台已经
+  ``adapters.json`` 的 JSON 包，要么是自己登录、订阅、上报的 JS 模块。它在一台已经
   跑着的 Hub 上安装、升级、卸载 —— 厂商专有的代码因此不链进 Host：把模块卸载，
   这条路就没了。
 * **RainMaker 是编译进来的。** ``components/minihub_rainmaker`` 由
@@ -53,7 +53,7 @@ IP 上行：``minihub_net`` —— 见 :doc:`networking`。
 
 .. only:: not hide_l3
 
-   ``minihub_module`` 同时加载 L3 ``.so`` 包（以及 Hybrid）。
+   ``minihub_module`` 同时加载 ELF ``.so`` 包（以及 Hybrid）。
 
 设计原则
 --------
@@ -73,7 +73,7 @@ OpenThread，所以得等 Hub ready（重载期间 MCP 返回 ``HUB_NOT_READY`` 
 
 .. only:: not hide_l3
 
-   重载时也会 ``dlclose`` L3 模块，然后再加载。
+   重载时也会 ``dlclose`` ELF 模块，然后再加载。
 
 通用 Host 有两块可写分区。 ``storage`` 挂在 ``/data`` （Hub 配置 **与**  Web
 控制台，控制台在 ``/data/web/``，设备图标在 ``/data/images/``）。第二块
@@ -107,7 +107,7 @@ JSON 编写：:doc:`data_model` （点位 / adapters / 规则）；类型目录�
    * - ``minihub_module``
      - 读清单、加载模块
    * - ``minihub_pack``
-     - L1 配置包，经 ``inject`` 合并
+     - JSON 配置包，经 ``inject`` 合并
    * - ``minihub_store``
      - 目录、安装、升级、卸载
    * - ``minihub_net``
@@ -127,7 +127,7 @@ JSON 编写：:doc:`data_model` （点位 / adapters / 规则）；类型目录�
 
 .. only:: not hide_l3
 
-   ``minihub_module`` 也通过 ABI 虚表加载 L3 ``.so`` 模块。
+   ``minihub_module`` 也通过 ABI 虚表加载 ELF ``.so`` 模块。
 
 哪个目录放着什么、该由谁去改，见 :doc:`source_tree`。
 
@@ -144,7 +144,7 @@ JSON 编写：:doc:`data_model` （点位 / adapters / 规则）；类型目录�
      scenes.json        场景定义
      devices.csv        扁平化类型目录
      model/             可选上传的 devices.csv + parameters.csv
-   /data/config/packs/  可选 L1 包暂存（因产品而异）
+   /data/config/packs/  可选 JSON 包暂存（因产品而异）
    /store/modules/ID/   已安装 商店 模块（module.json、main.js 等）
    /data/web/           Host Web 控制台（index.html、login.html 等）
    /data/tmp/           临时目录（模块加载器）
@@ -185,10 +185,10 @@ Hub 软重载
 ``hub_reload`` 任务上跑，并有一把 60 秒的锁让第二次重载排队等待。
 ``minihub_hub_reload()`` 的实际步骤：
 
-1. 先 ``minihub_js_unload_all()`` — L2 回调必须在地基被拆掉之前停止碰点位
+1. 先 ``minihub_js_unload_all()`` — JS 回调必须在地基被拆掉之前停止碰点位
 2. 适配器生命周期锁（60 秒；拿不到就 ``ESP_ERR_TIMEOUT`` 中止本次重载）
 3. ``minihub_config_reload()`` — 从 Flash 重读 JSON（出错即中止）
-4. ``minihub_pack_reload()`` — 合并 L1 包到 adapters 视图
+4. ``minihub_pack_reload()`` — 合并 JSON 包到 adapters 视图
 5. 停止全部适配器； ``minihub_module_reload()`` — 重扫 manifest
 6. ``minihub_adapter_load_all()`` + ``minihub_adapter_start_all()``
 7. 解锁；Matter + Thread 构建把 CHIP 重新挂到 OpenThread
@@ -201,7 +201,7 @@ Hub 软重载
 
 .. only:: not hide_l3
 
-   同一把锁也覆盖 L3 ``.so`` 的 ``dlclose``。
+   同一把锁也覆盖 ELF ``.so`` 的 ``dlclose``。
 
 数据流：命令
 ------------
@@ -256,7 +256,7 @@ Hub 软重载
      - :doc:`api/host_rest`；WebSocket 事件 ``/ws/events``
    * - MCP 工具
      - :doc:`api/mcp`
-   * - L2 JS host 对象
+   * - JS host 对象
      - :doc:`api/js_host`
    * - 商店打包 / 目录
      - :doc:`plugins/pack_and_catalog`
@@ -271,13 +271,13 @@ Hub 软重载
 
       * - 接口
         - 章节 / 产物
-      * - L3 模块与适配器 C API
+      * - ELF 模块与适配器 C API
         - :doc:`api/module_abi`、:doc:`api/minihub_core`、:doc:`api/minihub_adapter`
-      * - L3 链接符号
+      * - ELF 链接符号
         - ``docs/module_sdk/host_export_allowlist.json``
 
-   ABI 稳定性：L3 原生模块在 ``module.json`` 中声明 ``abi_version``、
+   ABI 稳定性：ELF 原生模块在 ``module.json`` 中声明 ``abi_version``、
    ``core_api_min`` 与 ``core_api_max``，Host 会拒绝安装或加载不匹配的那一个。
-   原生模块不发布到商店，因此一次发布交付的是 Host 固件加 L1/L2 包、资源与 Web
+   原生模块不发布到商店，因此一次发布交付的是 Host 固件加 JSON/JS 包、资源与 Web
    控制台。
-   Host 导出符号变更须更新 allowlist 并重新生成符号（:doc:`plugins/develop_l3`）。
+   Host 导出符号变更须更新 allowlist 并重新生成符号（:doc:`plugins/develop_elf`）。

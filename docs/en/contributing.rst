@@ -91,13 +91,13 @@ Code and firmware
 
 .. only:: not hide_l3
 
-   * L3 modules: ``./tools/build_firmware.py -app minihub modules`` (compile every native ``.so``; pack with ``pack``)
-   * Standalone L3 demos (no IDF project): ``python3 tools/test_build_plugin_standalone.py -v``
+   * ELF modules: ``./tools/build_firmware.py -app minihub modules`` (compile every native ``.so``; pack with ``pack``)
+   * Standalone ELF demos (no IDF project): ``python3 tools/test_build_plugin_standalone.py -v``
      (GitLab job ``build:plugin_standalone``; needs ``riscv32-esp-elf-gcc`` and ``cmake``)
-   * When changing Host symbols visible to L3 modules, update
+   * When changing Host symbols visible to ELF modules, update
      ``docs/module_sdk/host_export_allowlist.json`` and run
      ``python3 tools/gen_host_export_symbols.py`` as documented in
-     :doc:`plugins/develop_l3`.
+     :doc:`plugins/develop_elf`.
 
 Review expectations
 -------------------

@@ -20,8 +20,10 @@ Kconfig
 * ``CONFIG_MINIHUB_NET_ETH`` — 原生 EMAC + PHY（S31 Function CoreBoard：YT8531）
 * ``CONFIG_MINIHUB_NET_WIFI_SOFTAP`` — SoftAP/STA 由 ``minihub_net`` 外管理
 * ``CONFIG_MINIHUB_WIFI_PROVISIONING`` — 无 NVS 凭据时走 SoftAP 配网
+* ``CONFIG_MINIHUB_MQTT_BROKER`` — Hub 内置 MQTT broker；是否监听由运行时配置决定
 
-片段：``configs/sdkconfig/feature/wifi_sta.defaults``、``eth.defaults``。
+片段：``configs/sdkconfig/feature/wifi_sta.defaults``、``eth.defaults``、
+``mqtt_broker.defaults``。
 
 启动顺序
 --------
@@ -67,6 +69,53 @@ Wi-Fi SSID/PSK 保存在 NVS （命名空间 ``minihub_wifi``），由
 连那个开放热点也不开，此时无凭据的设备只留一行
 ``no Wi-Fi credentials and provisioning disabled`` 日志。
 
+MQTT broker
+-----------
+
+``components/minihub_mqtt_broker`` 在 Hub 上跑一个
+`mosquitto <https://components.espressif.com/components/espressif/mosquitto>`_
+broker，站点里的 MQTT 设备因此连 Hub 本身，不再需要一台常开的机器。它只做传输：
+不注册任何点位。打开它的同时，Hub 也会在 ``127.0.0.1`` 上起一个自己的 MQTT 客户端
+—— ``components/minihub_protocol_adapters/adapter_mqtt`` ，登记在同一个
+``mqtt_broker`` 名字下 —— 因为 JS 插件用的 ``host.mqtt`` 就挂在这个客户端上。
+没有连外部 broker 的模式：broker 不启动，客户端也就不会被创建。
+
+只要 ``CONFIG_MINIHUB_MQTT_BROKER`` 打开（默认打开），固件里就带着 broker；是否监听
+由运行时的 ``adapters.mqtt_broker`` 决定（:ref:`adapters-JSON`），出厂种子是关的：
+
+.. code-block:: JSON
+
+   "mqtt_broker": {
+     "enabled": false,
+     "port": 1883,
+     "allow_anonymous": true,
+     "users": [],
+     "connect_rate_limit": 16
+   }
+
+* ``enabled`` — 出厂种子里是 ``false``：不建任务，不开端口，也不创建环回客户端
+* ``port`` — TCP 监听端口，1–65535，默认 1883
+* ``allow_anonymous`` — 默认 ``true``，不带用户名的客户端直接放行。带了用户名的
+  客户端一律查 ``users``，查不到就拒绝。设成 ``false`` 之后，Hub 自己的客户端用
+  ``users[0]`` 登录，所以 ``users`` 为空就等于 ``host.mqtt`` 连不上，并会记一条告警
+* ``users`` — 最多 4 条 ``{"name": …, "pass": …}``，每个字段最长 31 字节，超出的
+  丢弃并告警
+* ``connect_rate_limit`` — 每 10 秒窗口内接受的 CONNECT 报文数，默认 16。同时在线的
+  客户端数没有上限
+
+监听绑 ``0.0.0.0``，所以以太网、Wi-Fi STA 地址、配网热点（``192.168.4.1``）上都会
+应答。默认姿态是匿名放行且没有按 topic 的 **访问控制列表（ACL）**，也就是说任何能连到 Hub 的设备都能
+发布和订阅全部 topic。出货前把 ``allow_anonymous`` 设成 ``false`` 并列出用户；网络
+前提见 :doc:`security`。
+
+只有 ``mqtt_broker`` 这棵子树真的变了，reload 才会重启 broker，所以改别的适配器不会
+让 MQTT 客户端掉线；重启则会。retained 消息和离线会话只存在 RAM 里，重启或 broker
+重启之后就没了。
+
+这一版没有：TLS、WebSocket、桥接、持久化、按 topic 的 ACL，也只有一个 listener。
+``CONFIG_MOSQ_ENABLE_SYS`` 是调试开关（默认关），打开后任何 MQTT 客户端都能读到
+broker 自己的 ``$SYS`` 计数。
+
 REST：网络配置
 --------------
 
@@ -74,7 +123,7 @@ REST：网络配置
 
 **请求体**
 
-.. code-block:: json
+.. code-block:: JSON
 
    {
      "iface": "eth",
@@ -93,7 +142,7 @@ REST：网络配置
 
 **响应**
 
-.. code-block:: json
+.. code-block:: JSON
 
    { "result": "ok" }
 
@@ -114,6 +163,7 @@ REST：网络配置
 * ``Ethernet link up, MAC …`` — 物理链路已接通
 * ``eth got IP`` / ``wifi got IP`` — 该接口已获得 IPv4
 * ``MiniHub ready (net=… prov=… web_ui=… lcd_ui=… eth=… wifi=…)`` — 功能已准备，不代表已有 IP
+* ``listening on 0.0.0.0:1883, anonymous allowed, 0 user(s)`` — MQTT broker 任务已起（tag ``mqtt_broker``）
 
 排障
 ----
@@ -137,6 +187,16 @@ REST：网络配置
 **REST net config 返回 fail**
 
 ``dhcp: false`` 时静态字段须合法。请求体上限约 2 KB。
+
+**MQTT 设备连不上 broker**
+
+* ``adapters.mqtt_broker.enabled`` 须为 ``true``，然后在控制台重载，或调
+  ``POST /api/hub/reload``
+* 出现 ``listening on …`` 说明端口已绑上；出现 ``mosq_broker_run returned …`` 说明
+  broker 退出了，每 5 秒重试一次 —— 此时查一下端口是否被别的服务占着
+* 客户端带了用户名就一定查 ``users``，查不到即拒，``allow_anonymous`` 为 ``true``
+  也一样
+* 反复重连的设备可能耗尽 ``connect_rate_limit``，在那 10 秒窗口剩下的时间里都会被拒
 
 C API
 -----

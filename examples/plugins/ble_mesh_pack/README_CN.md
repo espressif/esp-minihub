@@ -12,13 +12,12 @@ Host `minihub_pack` 在加载或 `POST /api/hub/reload` 时把 `inject` **合并
 
 | 需求 | 选择 |
 |------|------|
-| 给 **Host** 适配器下默认参数（bind、UUID 过滤、MQTT/Modbus 映射） | **L1** 本演示 |
+| 给 **Host** 适配器下默认参数（bind、UUID 过滤、Modbus 映射） | **L1** 本演示 |
 | 逻辑、HTTP、新适配器 | **L2** / **L3** |
 | 对已入网点做厂商认领 / OTA | **L3** 原生模块（同一 `point_id`） |
 
-**不要** 向 `zigbee` / `matter` / `ble_mesh` inject `devices[]`。那些点由入网登记。
-MQTT 的 `devices[]` 可以 inject（Host MQTT 列表），但适配器必须先
-`enabled`，否则 pack 会被跳过。
+**不要** 向 `zigbee` / `matter` / `ble_mesh` inject `devices[]` ：那些点由入网登记。
+无论目标是哪个适配器，只要它的块已存在且 `enabled` 为 false ，Host 就会跳过该 pack 。
 
 ## 合并内容
 

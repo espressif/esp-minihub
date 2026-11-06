@@ -133,25 +133,25 @@ IDF 构建。
 ------------------
 
 1. 新增 ``examples/plugins/ID/`` （或通过 ``MINIHUB_PLUGIN_DIRS``
-   指向你自己的仓库；见 :doc:`plugins/develop_l1` 或
-   :doc:`plugins/develop_l2` ）
+   指向你自己的仓库；见 :doc:`plugins/develop_json` 或
+   :doc:`plugins/develop_js` ）
 2. ``python3 tools/pack_store_module.py pack ID``
 3. 本机运行 ``python3 tools/store_server.py`` （Hub 通过局域网拉包，不是在设备上跑）
 4. 打开 Web UI（ ``http://HUB/`` ）并进入 ``商店``
 5. 在商店中将 自定义商店 URL 设为该服务，刷新目录后在商店 UI 中
-   安装 ``ID`` （L1 用 ``pack`` 作为类型）
+   安装 ``ID`` （JSON 用 ``pack`` 作为类型）
 
 .. only:: not hide_l3
 
-   L3 原生模块见 :doc:`plugins/develop_l3`。打包前先编译 ``.so``。
+   ELF 原生模块见 :doc:`plugins/develop_elf`。打包前先编译 ``.so``。
 
 新类型 / 控件：改 Host ``model/*.csv`` 后重编，或在已运行 Hub 上用 REST 上传两份
-CSV （``PUT /api/dev/catalog/…``；无 Web 页面—— :doc:`type_catalog`）。演示：L1
-``examples/plugins/ble_mesh_pack``，L2 ``color_bulb_js`` / ``meter_plug_js``。
+CSV （``PUT /api/dev/catalog/…``；无 Web 页面—— :doc:`type_catalog`）。演示：JSON
+``examples/plugins/ble_mesh_pack``，JS ``color_bulb_js`` / ``meter_plug_js``。
 
 .. only:: not hide_l3
 
-   仓库内不再有 L3 演示，用
+   仓库内不再有 ELF 演示，用
    ``tools/new_store_module.py --tier l3 --id my_native`` 生成。
 
 OEM Host 产品见 :doc:`host_customization`。

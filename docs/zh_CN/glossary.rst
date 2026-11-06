@@ -94,17 +94,17 @@ SKU（Stock Keeping Unit ，库存单位）
     以及喂给它插件的那台服务器。见 :doc:`plugins/pack_and_catalog`。
 
 QuickJS
-    运行 L2 模块的内嵌 JavaScript 引擎。本固件用的是 ``espressif/quickjs-ng``
+    运行 JS 模块的内嵌 JavaScript 引擎。本固件用的是 ``espressif/quickjs-ng``
     组件（QuickJS-NG 0.14.0），不是上游 QuickJS，也不是浏览器：没有模块系统、
-    没有 ``console``、没有 ``fetch``。它是单线程的，固件里所有 L2 模块共用一个
-    工作任务。具体影响列在 :doc:`plugins/develop_l2`。
+    没有 ``console``、没有 ``fetch``。它是单线程的，固件里所有 JS 模块共用一个
+    工作任务。具体影响列在 :doc:`plugins/develop_js`。
 
 .. only:: not hide_l3
 
-   还有第三层 L3，它带的是一段原生 ``.so``，而不是数据或 JavaScript。
+   还有第三层 ELF，它带的是一段原生 ``.so``，而不是数据或 JavaScript。
 
    MHMD
-       L3 包内层原生镜像的魔数 ``0x4D484D44``。它说的是那个二进制，不是外面的
+       ELF 包内层原生镜像的魔数 ``0x4D484D44``。它说的是那个二进制，不是外面的
        zip。
 
    ABI
@@ -133,7 +133,7 @@ NVS
 
 热重载（hub reload）
     不重启就重启适配器与模块： ``POST /api/hub/reload`` 或 MCP ``hub.reload``。
-    它重新读取 JSON、停掉适配器、重载模块，并重新执行每个 L2 的
+    它重新读取 JSON、停掉适配器、重载模块，并重新执行每个 JS 的
     ``setup(host)``。Matter 与 Thread 构建可能在重载后把 CHIP 重新挂到
     OpenThread。
 
