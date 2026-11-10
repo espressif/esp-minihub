@@ -15,15 +15,15 @@ Modbus / Thread 边界路由器）。
 
 | 目标 | 从这里开始 | 不必去做 |
 |------|------------|----------|
-| 理解架构 | [简介](docs/zh_CN/introduction.rst) · [架构](docs/zh_CN/architecture.rst) | 读 Core `.c` |
-| 编译烧录参考 Host | [快速开始](docs/zh_CN/getting_started.rst) | 改 `components/minihub_*` |
-| 做 OEM Host 产品 | [Host 定制](docs/zh_CN/host_customization.rst) → [量产](docs/zh_CN/production.rst) | 把 Core 拷进 `application/` |
-| 开发 Store 插件（L1/L2/L3） | [插件概览](docs/zh_CN/plugins/overview.rst) · [examples/](examples/README_CN.md) | 改 Host 启动流程 |
-| REST / MCP / 规则 | [数据模型](docs/zh_CN/data_model.rst) · [规则](docs/zh_CN/rules.rst) · [API](docs/zh_CN/api/index.rst) | 用 C 写适配器 |
-| 射频、认领、OTA | [射频与接入](docs/zh_CN/radios.rst) | 把 Thread 当成设备点 |
+| 理解架构 | [简介](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/introduction.html) · [架构](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/architecture.html) | 读 Core `.c` |
+| 编译烧录参考 Host | [快速开始](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/getting_started.html) | 改 `components/minihub_*` |
+| 做 OEM Host 产品 | [Host 定制](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/host_customization.html) → [量产](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/production.html) | 把 Core 拷进 `application/` |
+| 开发 Store 插件（L1/L2/L3） | [插件概览](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/plugins/overview.html) · [examples/](examples/README_CN.md) | 改 Host 启动流程 |
+| REST / MCP / 规则 | [数据模型](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/data_model.html) · [规则](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/rules.html) · [API](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/api/index.html) | 用 C 写适配器 |
+| 射频、认领、OTA | [射频与接入](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/radios.html) | 把 Thread 当成设备点 |
 
-编程指南（HTML）：[docs/README.md](docs/README.md)。RST：
-[docs/en/index.rst](docs/en/index.rst) · [docs/zh_CN/index.rst](docs/zh_CN/index.rst)。
+开发文档请参考 <https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/>；最新资讯消息请参考 <https://minihub.espressif.com/>。
+本地编译指南见 [docs/README.md](docs/README.md)。
 
 ## 为什么用 MiniHub
 
@@ -60,7 +60,7 @@ Modbus / Thread 边界路由器）。
 ```
 
 协议栈：`zigbee` · `ble_mesh` · `matter` · `thread`（Thread **只做 BR**，不是
-设备适配器）。细节见 [快速开始](docs/zh_CN/getting_started.rst)。
+设备适配器）。细节见 [快速开始](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/getting_started.html)。
 
 ## 仓库布局
 
@@ -89,7 +89,7 @@ Core **按点位工作**，不为灯/开关定义 C 结构体。一台物理设�
   `point.adapter`（射频）。
 * 现场更新用 `merge_params` / `merge_props`，不要整份替换 `props`。
 * 规则动作只有 `command` / `command_by_type` / `delay` / `notify`：
-  [规则](docs/zh_CN/rules.rst)。场景是独立 REST，不是规则 `then`。
+  [规则](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/rules.html)。场景是独立 REST，不是规则 `then`。
 
 ## Store 插件
 
@@ -109,11 +109,11 @@ python3 tools/pack_store_module.py pack <id>
 
 ## 文档
 
-* [English index](docs/en/index.rst) · [中文索引](docs/zh_CN/index.rst)
+* [English index](https://docs.espressif.com/projects/esp-minihub/en/latest/index.html) · [中文索引](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/index.html)
 * [编译 HTML](docs/README.md)
-* [贡献](docs/zh_CN/contributing.rst) · [AGENTS.md](AGENTS.md)
+* [贡献](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/contributing.html) · [AGENTS.md](AGENTS.md)
 
 ## 贡献
 
-见 [docs/zh_CN/contributing.rst](docs/zh_CN/contributing.rst)：约定式提交、
+见 [贡献指南](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/contributing.html)：约定式提交、
 分支名用下划线（不用连字符）、Host Core 保持生态无关、厂商逻辑放 Store 插件。
