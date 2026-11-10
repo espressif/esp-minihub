@@ -47,8 +47,8 @@ See [`application/README.md`](application/README.md).
 
 ## Requirements
 
-* ESP-IDF 6.2, pinned to `master` at `434d5fd100b90a03c19018c572809cc29c7db28b`
-  (`git describe` = `qa-test-full-v6.2-20261016-70-g434d5fd100b`); ESP32-S31 support is
+* ESP-IDF 6.2, pinned to `master` at `8f8481b790354212b7016282eb08f5074aa91820`
+  (`git describe` = `qa-test-full-v6.2-20261030-164-g8f8481b7903`); ESP32-S31 support is
   newer than any 6.2 release tag. The build reads `$IDF_PATH`, default `./esp-idf`
 * Python 3.10+ and PyYAML
 * Optional: `ESP_MATTER_PATH` when Matter is compiled in
