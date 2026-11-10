@@ -29,9 +29,9 @@
      - 当前使用的修订
      - 为什么重要
    * - ESP-IDF
-     - ``master`` 分支 ``434d5fd100b90a03c19018c572809cc29c7db28b``，
-       ``git describe`` 为 ``qa-test-full-v6.2-20261016-70-g434d5fd100b``
-       （即 ESP-IDF 6.2.0 之后再 70 个提交）
+     - ``master`` 分支 ``8f8481b790354212b7016282eb08f5074aa91820``，
+       ``git describe`` 为 ``qa-test-full-v6.2-20261030-164-g8f8481b7903``
+       （即 ESP-IDF 6.2.0 之后再 164 个提交）
      - ESP32-S31 的支持比任何 6.2 release tag 都新；IDF 5.x 完全没有 S31 工具链
    * - Target
      - ``esp32s31``，且每次都要 ``--preview``
@@ -42,7 +42,7 @@
 .. code-block:: bash
 
    git clone -b master https://github.com/espressif/esp-idf.git
-   cd esp-idf && git checkout 434d5fd100b90a03c19018c572809cc29c7db28b
+   cd esp-idf && git checkout 8f8481b790354212b7016282eb08f5074aa91820
    ./install.sh esp32s31 && . ./export.sh
 
 ``tools/build_firmware.py`` 读取 ``$IDF_PATH``，未设置时使用仓库同级的

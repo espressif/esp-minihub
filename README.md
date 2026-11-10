@@ -15,15 +15,16 @@ dependencies. Public Host `store_preinstall` stays empty.
 
 | Goal | Start here | You should not need to… |
 |------|------------|-------------------------|
-| Understand architecture | [Introduction](docs/en/introduction.rst) · [Architecture](docs/en/architecture.rst) | Read Core `.c` |
-| Build and flash the reference Host | [Getting started](docs/en/getting_started.rst) | Fork `components/minihub_*` |
-| Ship an OEM Host product | [Host customization](docs/en/host_customization.rst) → [Production](docs/en/production.rst) | Copy Core into `application/` |
-| Develop a Store plugin (L1/L2/L3) | [Plugin overview](docs/en/plugins/overview.rst) · [examples/](examples/README.md) | Change Host bring-up |
-| REST / MCP / rules | [Data model](docs/en/data_model.rst) · [Rules](docs/en/rules.rst) · [API](docs/en/api/index.rst) | Implement adapters in C |
-| Radios, claim, OTA | [Radios](docs/en/radios.rst) | Treat Thread as a device point |
+| Understand architecture | [Introduction](https://docs.espressif.com/projects/esp-minihub/en/latest/introduction.html) · [Architecture](https://docs.espressif.com/projects/esp-minihub/en/latest/architecture.html) | Read Core `.c` |
+| Build and flash the reference Host | [Getting started](https://docs.espressif.com/projects/esp-minihub/en/latest/getting_started.html) | Fork `components/minihub_*` |
+| Ship an OEM Host product | [Host customization](https://docs.espressif.com/projects/esp-minihub/en/latest/host_customization.html) → [Production](https://docs.espressif.com/projects/esp-minihub/en/latest/production.html) | Copy Core into `application/` |
+| Develop a Store plugin (L1/L2/L3) | [Plugin overview](https://docs.espressif.com/projects/esp-minihub/en/latest/plugins/overview.html) · [examples/](examples/README.md) | Change Host bring-up |
+| REST / MCP / rules | [Data model](https://docs.espressif.com/projects/esp-minihub/en/latest/data_model.html) · [Rules](https://docs.espressif.com/projects/esp-minihub/en/latest/rules.html) · [API](https://docs.espressif.com/projects/esp-minihub/en/latest/api/index.html) | Implement adapters in C |
+| Radios, claim, OTA | [Radios](https://docs.espressif.com/projects/esp-minihub/en/latest/radios.html) | Treat Thread as a device point |
 
-Programming Guide (HTML): [docs/README.md](docs/README.md). RST:
-[docs/en/index.rst](docs/en/index.rst) · [docs/zh_CN/index.rst](docs/zh_CN/index.rst).
+Development guide: <https://docs.espressif.com/projects/esp-minihub/en/latest/>.
+Latest news: <https://minihub.espressif.com/>.
+To build the guide locally: [docs/README.md](docs/README.md).
 
 ## Why MiniHub
 
@@ -47,8 +48,8 @@ See [`application/README.md`](application/README.md).
 
 ## Requirements
 
-* ESP-IDF 6.2, pinned to `master` at `434d5fd100b90a03c19018c572809cc29c7db28b`
-  (`git describe` = `qa-test-full-v6.2-20261016-70-g434d5fd100b`); ESP32-S31 support is
+* ESP-IDF 6.2, pinned to `master` at `8f8481b790354212b7016282eb08f5074aa91820`
+  (`git describe` = `qa-test-full-v6.2-20261030-164-g8f8481b7903`); ESP32-S31 support is
   newer than any 6.2 release tag. The build reads `$IDF_PATH`, default `./esp-idf`
 * Python 3.10+ and PyYAML
 * Optional: `ESP_MATTER_PATH` when Matter is compiled in
@@ -61,7 +62,7 @@ See [`application/README.md`](application/README.md).
 ```
 
 Stacks: `zigbee` · `ble_mesh` · `matter` · `thread` (Thread is **BR only**, not
-a device adapter). Details: [getting started](docs/en/getting_started.rst).
+a device adapter). Details: [getting started](https://docs.espressif.com/projects/esp-minihub/en/latest/getting_started.html).
 
 ## Repository layout
 
@@ -89,7 +90,7 @@ does not register device points.
   radio point uses the **same** `point_id` and `merge_props` — never a second
   point. Commands still use `point.adapter` (the radio).
 * Telemetry updates: `merge_params` / `merge_props`, not a full `props` replace.
-* Rules (`command` / `command_by_type` / `delay` / `notify`): [rules](docs/en/rules.rst).
+* Rules (`command` / `command_by_type` / `delay` / `notify`): [rules](https://docs.espressif.com/projects/esp-minihub/en/latest/rules.html).
   Scenes are a separate REST path.
 
 ## Store plugins
@@ -110,12 +111,12 @@ python3 tools/pack_store_module.py pack <id>
 
 ## Documentation
 
-* [English index](docs/en/index.rst) · [中文索引](docs/zh_CN/index.rst)
+* [English index](https://docs.espressif.com/projects/esp-minihub/en/latest/index.html) · [中文索引](https://docs.espressif.com/projects/esp-minihub/zh_CN/latest/index.html)
 * [Build HTML](docs/README.md)
-* [Contributing](docs/en/contributing.rst) · [AGENTS.md](AGENTS.md)
+* [Contributing](https://docs.espressif.com/projects/esp-minihub/en/latest/contributing.html) · [AGENTS.md](AGENTS.md)
 
 ## Contributing
 
-[docs/en/contributing.rst](docs/en/contributing.rst): conventional commits,
+[Contributing](https://docs.espressif.com/projects/esp-minihub/en/latest/contributing.html): conventional commits,
 underscores in branch names (no hyphens), Host Core stays ecosystem-agnostic,
 vendor logic belongs in Store plugins.
