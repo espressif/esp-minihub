@@ -115,18 +115,22 @@ State sync
 The Hub asks; nodes do not report. ``ble_mesh_adapter_poll()`` returns without
 doing anything, so the adapter poll task fetches nothing, and no client model
 subscribes to a group address, so a Status message a node publishes to a group is
-never received. State reaches a point at four moments: once when the model binds
-finish, with one Get per bound model whose ``models[]`` row declares a ``get``
-opcode, plus a Sensor Descriptor Get for a node carrying a Sensor Server; once
-after that descriptor answers -- it names the property ids, and a single Sensor
-Get with no property operand returns all of them; on every Set reply; and again
-when the Hub reboots, using the ``(model, elem)`` bind list saved with the
-device in NVS (a Sensor Server already listed in that store gets a Sensor Get,
-not another Descriptor). Every parameter the map marks readable has a Get behind
-it. Until a Get answers, a parameter shows the ``init`` value from the map, not
-a value the node reported. Devices provisioned before this bind list existed
-keep working for control but stay on ``init`` until they are commanded or
-re-provisioned.
+never received. State reaches a point at four moments:
+
+* When model binds finish: one Get per bound model whose ``models[]`` row
+  declares a ``get`` opcode, plus a Sensor Descriptor Get for a node carrying a
+  Sensor Server.
+* After that descriptor answers: it names the property ids, and a single Sensor
+  Get with no property operand returns all of them.
+* On every Set reply.
+* When the Hub reboots, using the ``(model, elem)`` bind list saved with the
+  device in NVS (a Sensor Server already listed in that store gets a Sensor Get,
+  not another Descriptor).
+
+Every parameter the map marks readable has a Get behind it. Until a Get answers,
+a parameter shows the ``init`` value from the map, not a value the node reported.
+Devices provisioned before this bind list existed keep working for control but
+stay on ``init`` until they are commanded or re-provisioned.
 
 A node whose state changes by itself, a wall switch pressed or a sensor value
 drifting, therefore stays stale in the console until the Hub next Gets, which in

@@ -105,14 +105,19 @@ BLE Mesh 上做不到的：
 
 Hub 主动去取，设备不会自己报。 ``ble_mesh_adapter_poll()`` 直接返回、什么都不做，
 适配器轮询任务因此不取任何东西；client model 也没有订阅任何 group 地址，设备发到
-group 的 Status 收不到。状态只在四个时刻落到点上：model 绑定完成时，每个已绑定且
-``models[]`` 行声明了 ``get`` opcode 的模型各取一次，带 Sensor Server 的节点还要取
-Sensor Descriptor；descriptor 回答之后再取一次 —— 它给出 property id，一条不带
-property 操作数的 Sensor Get 就把全部属性取回；每次 Set 的回复；以及 Hub 重启时，
-按 NVS 里随设备保存的 ``(model, elem)`` 绑定列表再 Get 一遍（已存过的 Sensor Server
-只发 Sensor Get，不再 Descriptor）。映射表标为可读的参数，背后都有一条 Get。Get
-回答之前，参数显示的是映射表里的 ``init`` 值，不是节点回报的值。在这份绑定列表出现
-之前配过网的设备仍能控制，但会停在 ``init``，直到有命令或重新配网。
+group 的 Status 收不到。状态只在四个时刻落到点上：
+
+* model 绑定完成时：每个已绑定且 ``models[]`` 行声明了 ``get`` opcode 的模型各取
+  一次，带 Sensor Server 的节点还要取 Sensor Descriptor。
+* descriptor 回答之后再取一次：它给出 property id，一条不带 property 操作数的
+  Sensor Get 就把全部属性取回。
+* 每次 Set 的回复。
+* Hub 重启时：按 NVS 里随设备保存的 ``(model, elem)`` 绑定列表再 Get 一遍（已存过的
+  Sensor Server 只发 Sensor Get，不再 Descriptor）。
+
+映射表标为可读的参数，背后都有一条 Get。Get 回答之前，参数显示的是映射表里的
+``init`` 值，不是节点回报的值。在这份绑定列表出现之前配过网的设备仍能控制，但会停在
+``init``，直到有命令或重新配网。
 
 所以设备自己变了状态（有人手按墙面开关、传感器数值漂移），控制台里的值就一直是旧的，
 直到 Hub 下一次 Get —— 实际就是下一条命令、Hub 重启（且已存绑定列表），或重新配网。

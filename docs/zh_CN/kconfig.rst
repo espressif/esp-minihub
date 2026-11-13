@@ -24,7 +24,7 @@ MiniHub 的每一个构建选项都在这里，文档构建时直接从 Kconfig 
 
 .. minihub-features:: minihub
 
-这条链上有三条规则，改动会不会生效由它们决定：
+这条链上有这些规则，改动会不会生效由它们决定：
 
 * 已经存在的 ``sdkconfig`` 盖过所有片段。如果某个符号仍然写在 ``application/<app>/sdkconfig``
   里，那么改 ``feature/*.defaults`` 再重新构建是什么效果都没有的—— 这正是

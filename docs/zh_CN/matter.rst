@@ -109,10 +109,13 @@ Web 添加对话框始终走 BLE 配网并注入凭据，入网后再在 fabric 
 * ``ble_wifi`` / ``first_time`` — BLE + 注入 **设备** Wi-Fi 凭据
 
 ``POST /api/matter/commission`` 仍可接受 ``network`` （仅 DNS-SD / multi-admin）和
-``ble_ethernet``；概览对话框不再提供这两项。只有 ``ble_ethernet`` 那条会让 CHIP
-同时浏览所有发现类型；对话框用的两条走 esp-matter 自己的 Wi-Fi / Thread 配网入口。
+``ble_ethernet``。概览对话框不再提供这两项。
+
+只有 ``ble_ethernet`` 那条会让 CHIP 同时浏览所有发现类型。
+对话框用的两条走 esp-matter 自己的 Wi-Fi / Thread 配网入口。
+
 正在进行的配网可以用 ``POST /api/matter/commission`` 配 ``{"cancel": true}`` 中止
-（对话框上是 **取消配网**），应答 ``status: "cancelled"``。
+（对话框上是 **取消配网**）。应答 ``status`` 为 ``cancelled``。
 
 配网并持久化设备
 ^^^^^^^^^^^^^^^^
@@ -122,7 +125,7 @@ Web 添加对话框始终走 BLE 配网并注入凭据，入网后再在 fabric 
 ``commission: "started"``，**不会** 阻塞 HTTP 处理线程。成功后清除 phase，卡片变为
 正常设备；失败或配网看门狗超时则保留卡片为 ``commission_phase: "failed"``
 （可删除）。看门狗时长由 ``CONFIG_MINIHUB_MATTER_COMMISSION_WAIT_MS`` 决定，缺省
-**300 秒** （可配 60–900 秒）—— 首次 DNS-SD 浏览可能要几分钟，旧笔记里的 180 秒
+**300 秒** （可配 60–900 秒）。首次 DNS-SD 浏览可能要几分钟，旧笔记里的 180 秒
 已经过期。用 ``GET /api/matter/status`` 轮询 ``commission``：``idle`` |
 ``running`` | ``ok`` | ``failed``。省略 ``pairing_code`` 时仍只 upsert、不配网
 （``commission: "skipped"``）。
@@ -335,12 +338,15 @@ Wi-Fi 由谁管理？
 ``MINIHUB_MATTER_ADAPTER`` 打开且 ``MINIHUB_THREAD_ADAPTER`` 关闭时，
 ``MINIHUB_NET_WIFI_STA`` 会 select CHIP 的 ``ENABLE_WIFI_STATION``。
 
-Thread BR 产品保持 CHIP station 关闭（``thread.defaults``）—— Host 上行是
-以太网，CHIP 不得调用 ``esp_wifi_connect()``。station 关闭时由
-``matter_over_eth.defaults`` 打开 ``ENABLE_ETHERNET_TELEMETRY``（CHIP 唯一能
-打开 ``CHIP_DEVICE_CONFIG_ENABLE_ETHERNET`` / EspDnssd 的 Kconfig），并关掉
-``ETHERNET_NETWORK_COMMISSIONING_DRIVER``，避免 ``ESPEthernetDriver::Init``
-再装一套 PHY（EMAC 由 MiniHub 接管；Hub 是 commissioner-only）。
+Thread BR 产品保持 CHIP station 关闭（``thread.defaults``）：
+
+* Host 上行是以太网，CHIP 不得调用 ``esp_wifi_connect()``。
+* station 关闭时由 ``matter_over_eth.defaults`` 打开
+  ``ENABLE_ETHERNET_TELEMETRY``（CHIP 唯一能打开
+  ``CHIP_DEVICE_CONFIG_ENABLE_ETHERNET`` / EspDnssd 的 Kconfig）。
+* 并关掉 ``ETHERNET_NETWORK_COMMISSIONING_DRIVER``，避免
+  ``ESPEthernetDriver::Init`` 再装一套 PHY。
+* EMAC 由 MiniHub 接管；Hub 是 commissioner-only。
 
 存在凭据时 MiniHub 通过 ``minihub_net_start_wifi()`` 连接 Host STA。默认路由
 按 IPv4 上行选择 netif — 见 :doc:`networking`。

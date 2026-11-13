@@ -21,9 +21,14 @@ Ethernet.
 ``minihub_adapter_start_all()`` starts Wi-Fi first, then 802.15.4, then BLE Mesh;
 adapters that hold no radio (Modbus, for example) start last. The Wi-Fi group
 wins: when ``adapters.json`` asks for Wi-Fi or BLE Mesh together with
-Zigbee/Thread, the 802.15.4 adapter is the loser — it is not initialized, not
-started, publishes no points, is never polled, a ``radio mutex`` warning is
-logged, and the file is not rewritten.
+Zigbee/Thread, the 802.15.4 adapter is the loser:
+
+* it is not initialized
+* it is not started
+* it publishes no points
+* it is never polled
+* a ``radio mutex`` warning is logged
+* the file is not rewritten
 
 Zigbee and Thread may both be linked. Which one runs is its ``enabled`` flag in
 ``adapters.json``. When both are true, the one that starts later is skipped

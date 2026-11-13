@@ -17,9 +17,14 @@ Thread 的 Hub，IP 上行就得走以太网。
 
 ``minihub_adapter_start_all()`` 按 Wi-Fi、802.15.4、BLE Mesh 的顺序 start；不占
 射频的适配器（如 Modbus）排在最后。Wi-Fi 一组优先： ``adapters.json`` 同时要求
-Wi-Fi 或 BLE Mesh 与 Zigbee/Thread 时，输的是 802.15.4 那个适配器 —— 不会被
-init、不会 start、不产生任何点、也不会被 poll，日志中出现 ``radio mutex`` 相关
-WARN，且不回写那个文件。
+Wi-Fi 或 BLE Mesh 与 Zigbee/Thread 时，输的是 802.15.4 那个适配器：
+
+* 不会被 init
+* 不会 start
+* 不产生任何点
+* 也不会被 poll
+* 日志中出现 ``radio mutex`` 相关 WARN
+* 且不回写那个文件
 
 Zigbee 与 Thread 可以一起编进固件。哪个启动由 ``adapters.json`` 里该项的
 ``enabled`` 决定；两项都为 true 时，按启动顺序跳过后一个（注册顺序里 Zigbee 在
@@ -45,7 +50,7 @@ Wi-Fi STA 是 Host 适配器（ ``adapters.wifi`` ）。以太网由 ``minihub_n
    * - BLE Mesh + Thread
      - **丢弃 Thread**
    * - Zigbee + Thread
-     - **丢弃后启动的那个**（Zigbee 先注册，所以是 Thread）
+     - **丢弃后启动的那个** （Zigbee 先注册，所以是 Thread）
    * - Wi-Fi + BLE Mesh + Zigbee
      - **丢弃 Zigbee**，Wi-Fi + BLE Mesh 保留
 

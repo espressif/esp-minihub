@@ -28,7 +28,7 @@ stack fragment is appended last.
 
 .. minihub-features:: minihub
 
-Three rules in that chain decide what a change does:
+These rules in that chain decide what a change does:
 
 * A ``sdkconfig`` that already exists wins over every fragment. Changing a
   ``feature/*.defaults`` file and rebuilding does nothing if the symbol is still set in
