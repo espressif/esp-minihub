@@ -1,0 +1,21 @@
+minihub_param,matter,zigbee,ble_mesh,spec_cluster
+battery_low,,,,
+brightness,,,,
+cct,,,,
+co2,cl0x040D,,prop:0x0077,
+contact,,,,
+current_a,,,,
+energy_wh,,,,
+hue,,,,
+humidity,cl0x0405,,prop:0x0076,Humidity Measurement
+illuminance,cl0x0400,,prop:0x0055,Illuminance Measurement
+motion,cl0x002F,,prop:0x0042,
+occupancy,cl0x0406,,prop:0x004d,Occupancy Sensing
+power,,,,
+power_w,,,,
+pressure_hpa,cl0x0403,,prop:0x00a9,Pressure Measurement
+saturation,,,,
+tamper,,,,
+temperature,cl0x0402,,prop:0x0075,Temperature Measurement
+voltage_v,,,,
+zone_status,,,,
