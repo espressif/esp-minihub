@@ -5,6 +5,7 @@
 # MINIHUB_LCD_UI depends on !MINIHUB_NET_ETH because EMAC and the RGB LCD share
 # pin groups on this board. Keep `eth` out of this list; feature/lcd.defaults
 # pins CONFIG_MINIHUB_NET_ETH=n explicitly (the symbol defaults to y on S31).
+# Same fragment also forbids Thread (Wi-Fi + Matter vs OT BR lwip_hook clash).
 board: esp32_s31_korvo1
 features:
   - common

@@ -23,3 +23,6 @@ Shared fragments: repo-root `configs/sdkconfig/`.
 not shared with other products. Boot order: BLE Mesh / Zigbee adapters start before
 `esp_wifi_init()` (see `minihub_net_start_wifi`). Radio memory trim:
 `configs/sdkconfig/feature/radio_coexist_memory.defaults`.
+
+Thread is forbidden here (`feature/lcd.defaults`): no `MINIHUB_THREAD_ADAPTER`,
+no `OPENTHREAD_ENABLED`. Use the ETH product when you need OpenThread BR.
