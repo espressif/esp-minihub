@@ -49,7 +49,6 @@ extern "C" {
 #include "minihub_ota.h"
 #include "minihub_task.h"
 #include "minihub_update.h"
-#include "nvs_flash.h"
 #include "minihub_net_cfg.h"
 extern "C" {
 esp_err_t minihub_net_get_wifi_sta(char *ssid, size_t ssid_len, bool *has_password);
@@ -2500,21 +2499,49 @@ void refresh_map()
     schedule_map_snapshot_fetch(geo.lat, geo.lon);
 }
 
+/* Same Hub store as Web GET/POST /api/system/display_name. */
+static constexpr size_t kUserNameMax = MINIHUB_DISPLAY_NAME_MAX;
+static char s_local_user_name[kUserNameMax + 1] = {};
+
+void load_local_user_name()
+{
+    s_local_user_name[0] = '\0';
+    (void)minihub_display_name_get(s_local_user_name, sizeof(s_local_user_name));
+}
+
+esp_err_t save_local_user_name(const char *name)
+{
+    const esp_err_t err = minihub_display_name_set(name);
+    if (err == ESP_OK) {
+        strncpy(s_local_user_name, name, sizeof(s_local_user_name) - 1);
+        s_local_user_name[sizeof(s_local_user_name) - 1] = '\0';
+    }
+    return err;
+}
+
+const char *local_user_display_name()
+{
+    return s_local_user_name[0] ? s_local_user_name : lcd_tr(LCD_STR_USER_DEFAULT_NAME);
+}
+
+void user_rename_open();
+
 void refresh_user_sidebar()
 {
     if (!s_lcd.runtime || !s_lcd.document_id.is_valid()) {
         return;
     }
+    load_local_user_name();
     const auto state = s_lcd.runtime->get_screen_flow_state(s_lcd.document_id, FLOW_ID);
     if (!state) {
         return;
     }
     char path[64];
     snprintf(path, sizeof(path), LCD_VIEW_PATTERN_USER_NAME, state->c_str());
-    /* Same slot as the web sidebar footer: the local display name, not the
-     * cloud account. Web default is ov.user ("User"); a Xiaomi id stays on the
+    /* Same slot as the web sidebar footer: Hub display_name, not a cloud
+     * account. Web default is ov.user ("User"); a Xiaomi id stays on the
      * overview auth bar. */
-    set_label_text(path, lcd_tr(LCD_STR_USER_DEFAULT_NAME));
+    set_label_text(path, local_user_display_name());
 }
 
 bool is_controllable_point_type(const char *type)
@@ -2557,40 +2584,9 @@ void handle_device_tap(int slot)
 
 void handle_user_tap()
 {
-    if (!s_lcd.runtime || !s_lcd.document_id.is_valid()) {
-        return;
-    }
-    const auto state = s_lcd.runtime->get_screen_flow_state(s_lcd.document_id, FLOW_ID);
-    if (!state) {
-        return;
-    }
-    char path[64];
-    snprintf(path, sizeof(path), LCD_VIEW_PATTERN_USER_NAME, state->c_str());
-
-    cJSON *result = nullptr;
-    char auth_adapter[32] = {};
-    set_label_text(path, lcd_tr(LCD_STR_USER_DEFAULT_NAME));
-    if (!minihub_module_pick_auth_adapter(auth_adapter, sizeof(auth_adapter)) ||
-        minihub_module_invoke_rpc(auth_adapter, "status", nullptr, &result) != ESP_OK || !result) {
-        ESP_LOGD(TAG, "user tap: local name stays User, no cloud account");
-        request_display_refresh();
-        return;
-    }
-    const cJSON *logged = cJSON_GetObjectItem(result, "logged_in");
-    const cJSON *uid = cJSON_GetObjectItem(result, "user_id");
-    const cJSON *region = cJSON_GetObjectItem(result, "region");
-    if (cJSON_IsTrue(logged) && cJSON_IsString(uid)) {
-        ESP_LOGI(TAG,
-                 "Cloud signed in (%s): user_id=%s region=%s",
-                 auth_adapter,
-                 uid->valuestring,
-                 cJSON_IsString(region) ? region->valuestring : "-");
-    } else {
-        ESP_LOGI(TAG, "Account: open cloud login on overview (%s)", auth_adapter);
-        module_auth_lcd::login_overlay_show_browser_hint();
-    }
-    cJSON_Delete(result);
-    request_display_refresh();
+    /* Mirror the web sidebar user-row: edit the local display name. Cloud
+     * login stays on the overview auth bar (auth_login), not this button. */
+    user_rename_open();
 }
 
 /* ---- system / rules / scenes ------------------------------------------- */
@@ -3215,34 +3211,53 @@ static std::string form_chosen_name()
     return s_form.name.substr(first, last - first + 1);
 }
 
-/* Device rename reuses the rules/scenes name_modal (name_screens also lists
- * "overview"). Its textInput binds to rename.text, not name.text, so typing a
- * device name cannot leak into the rule/scene editors. */
+/* Device rename and sidebar display-name edit share overview's name_modal.
+ * textInput binds to rename.text (not name.text) so rule/scene editors stay
+ * isolated. Mode selects which title / save path runs on OK. */
+enum class RenameMode { None, Device, User };
+static RenameMode s_rename_mode = RenameMode::None;
 static int s_rename_slot = -1;
 static std::string s_rename_text;
 
-void rename_open(int slot)
+void rename_modal_open(RenameMode mode, const char *seed, const char *title, const char *hint)
 {
-    if (!s_lcd.runtime || !s_lcd.document_id.is_valid() ||
-        slot < 0 || static_cast<size_t>(slot) >= s_overview_filtered.size()) {
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid() || !seed) {
         return;
     }
-    const minihub_point_t &pt = s_overview_filtered[static_cast<size_t>(slot)];
-    s_rename_slot = slot;
-    s_rename_text = point_display_name(pt);
+    s_rename_mode = mode;
+    s_rename_text = seed;
     char input_path[128], modal_path[128];
     snprintf(input_path, sizeof(input_path), LCD_VIEW_PATTERN_NAME_INPUT, "overview");
     snprintf(modal_path, sizeof(modal_path), LCD_VIEW_PATTERN_NAME_MODAL, "overview");
     s_lcd.runtime->set_binding_value(s_lcd.document_id, input_path,
                                      "rename.text", s_rename_text);
-    set_label_text(LCD_VIEW_RENAME_HINT, lcd_tr(LCD_STR_RENAME_HINT));
+    set_label_text(LCD_VIEW_RENAME_TITLE, title);
+    set_label_text(LCD_VIEW_RENAME_HINT, hint);
     set_view_hidden(modal_path, false);
     request_display_refresh();
 }
 
+void rename_open(int slot)
+{
+    if (slot < 0 || static_cast<size_t>(slot) >= s_overview_filtered.size()) {
+        return;
+    }
+    const minihub_point_t &pt = s_overview_filtered[static_cast<size_t>(slot)];
+    s_rename_slot = slot;
+    rename_modal_open(RenameMode::Device, point_display_name(pt),
+                      lcd_tr(LCD_STR_RENAME_TITLE), lcd_tr(LCD_STR_RENAME_HINT));
+}
+
+void user_rename_open()
+{
+    s_rename_slot = -1;
+    rename_modal_open(RenameMode::User, local_user_display_name(),
+                      lcd_tr(LCD_STR_USER_RENAME_TITLE), lcd_tr(LCD_STR_USER_RENAME_HINT));
+}
+
 void handle_rename_changed(const std::string &value)
 {
-    if (s_rename_slot >= 0) {
+    if (s_rename_mode != RenameMode::None) {
         s_rename_text = value;
     }
 }
@@ -3251,6 +3266,7 @@ void handle_rename_cancel()
 {
     char modal_path[128];
     snprintf(modal_path, sizeof(modal_path), LCD_VIEW_PATTERN_NAME_MODAL, "overview");
+    s_rename_mode = RenameMode::None;
     s_rename_slot = -1;
     s_rename_text.clear();
     set_view_hidden(modal_path, true);
@@ -3259,7 +3275,7 @@ void handle_rename_cancel()
 
 void handle_rename_ok()
 {
-    if (s_rename_slot < 0 || static_cast<size_t>(s_rename_slot) >= s_overview_filtered.size()) {
+    if (s_rename_mode == RenameMode::None) {
         return;
     }
     const size_t first = s_rename_text.find_first_not_of(" \t");
@@ -3269,8 +3285,30 @@ void handle_rename_ok()
         return;
     }
     std::string name = s_rename_text.substr(first, last - first + 1);
-    if (name.size() > 48) {
+    if (name.size() > kUserNameMax) {
         set_label_text(LCD_VIEW_RENAME_HINT, lcd_tr(LCD_STR_RENAME_TOO_LONG));
+        return;
+    }
+
+    if (s_rename_mode == RenameMode::User) {
+        const esp_err_t err = save_local_user_name(name.c_str());
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "user display name save failed: %s", esp_err_to_name(err));
+            set_label_text(LCD_VIEW_RENAME_HINT, lcd_tr(LCD_STR_USER_RENAME_FAILED));
+            return;
+        }
+        ESP_LOGI(TAG, "user display name -> %s", name.c_str());
+        char modal_path[128];
+        snprintf(modal_path, sizeof(modal_path), LCD_VIEW_PATTERN_NAME_MODAL, "overview");
+        s_rename_mode = RenameMode::None;
+        s_rename_text.clear();
+        set_view_hidden(modal_path, true);
+        refresh_user_sidebar();
+        request_display_refresh();
+        return;
+    }
+
+    if (s_rename_slot < 0 || static_cast<size_t>(s_rename_slot) >= s_overview_filtered.size()) {
         return;
     }
     const minihub_point_t &pt = s_overview_filtered[static_cast<size_t>(s_rename_slot)];
@@ -3291,6 +3329,7 @@ void handle_rename_ok()
     }
     char modal_path[128];
     snprintf(modal_path, sizeof(modal_path), LCD_VIEW_PATTERN_NAME_MODAL, "overview");
+    s_rename_mode = RenameMode::None;
     s_rename_slot = -1;
     s_rename_text.clear();
     set_view_hidden(modal_path, true);

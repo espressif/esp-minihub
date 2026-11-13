@@ -100,6 +100,7 @@
     "MATTER_STATUS": "/overview/overview_main/overview_toolbar/matter_bar/matter_status",
     "MATTER_ADD_BTN": "/overview/overview_main/overview_toolbar/matter_bar/matter_add_btn",
     "RENAME_HINT": "/overview/name_modal/name_card/name_hint",
+    "RENAME_TITLE": "/overview/name_modal/name_card/name_title",
     "SYSTEM_WIFI_CFG": "/system/system_main/sys_grid/sys_card_wifi",
     "SYSTEM_WIFI_SSID": "/system/system_main/sys_grid/sys_card_wifi/wifi_ssid_input",
     "SYSTEM_WIFI_PASS": "/system/system_main/sys_grid/sys_card_wifi/wifi_pass_input",

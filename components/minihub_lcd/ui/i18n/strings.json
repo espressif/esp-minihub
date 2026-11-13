@@ -638,10 +638,27 @@
       "zh": "重命名设备",
       "en": "Rename device"
     },
+    "user_rename_title": {
+      "zh": "编辑显示名",
+      "en": "Edit display name"
+    },
     "rename_hint": {
       "zh": "最多 48 字节",
       "en": "Up to 48 bytes"
     },
+    "user_rename_hint": {
+      "zh": "侧栏显示名，最多 48 字节",
+      "en": "Sidebar display name, up to 48 bytes"
+    },
+    "user_rename_done": {
+      "zh": "已更新显示名",
+      "en": "Display name updated"
+    },
+    "user_rename_failed": {
+      "zh": "保存显示名失败",
+      "en": "Failed to save display name"
+    },
+
     "rename_placeholder": {
       "zh": "输入新名称",
       "en": "Enter a new name"

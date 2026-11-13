@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-10-28-16:35:00';
+window.mhWebBuild = '2026-11-13-18:30:00';
 // Replaced by minify_web_assets.py from CONFIG_MINIHUB_WEB_VERSION (never edit by hand):
 window.mhWebVersion = 'dev';
 
@@ -126,11 +126,14 @@ function toggleSecret(btn) {
 document.querySelectorAll('.nav-item').forEach(n => n.onclick = () => switchView(n.dataset.view));
 document.getElementById('menu-btn').onclick = () => document.getElementById('sidebar').classList.toggle('open');
 
-document.getElementById('user-row').onclick = () => {
+document.getElementById('user-row').onclick = async () => {
     const n = prompt(t('ov.name_prompt'), localName());
-    if (n && n.trim()) {
-        localStorage.setItem('minihub_display_name', n.trim());
+    if (!n || !n.trim()) return;
+    try {
+        await saveDisplayName(n.trim());
         renderLocalUser();
+    } catch (e) {
+        console.warn('display name save failed', e);
     }
 };
 
@@ -156,6 +159,7 @@ function bootConsole() {
             try { await ensureDwCatalog(); } catch (e) {}
         }
         await loadPoints();
+        loadDisplayName();
         loadModulesForAuth().then(() => {
             loadMeta();
             applyLoginHash();
