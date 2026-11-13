@@ -35,7 +35,7 @@ extern "C" {
 /**
  * @brief Maximum length of point type string.
  */
-#define MINIHUB_TYPE_MAX      16
+#define MINIHUB_TYPE_MAX      32
 /**
  * @brief Maximum length of point value string snapshot.
  */

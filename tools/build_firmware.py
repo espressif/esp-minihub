@@ -20,7 +20,8 @@ Apps (-app / --app; folder under application/):
 
 Stacks (lowercase, optional):
   ble_mesh | zigbee | matter | thread
-  thread and zigbee are mutually exclusive (IEEE 802.15.4).
+  thread and zigbee may both be linked. If adapters.json enables both,
+  the one that starts later is skipped (Zigbee is registered first).
   Omit stacks to use defaults (zigbee ble_mesh), then reconcile with the
   product sdkconfig: drop stacks that are disabled there; pull in matter /
   thread when those Kconfig options are already =y. Pass a stack name to
@@ -156,7 +157,7 @@ Product: -app / MINIHUB_APP (application/<name>/)
 Stacks (optional): ble_mesh | zigbee | matter | thread
   default if omitted: zigbee ble_mesh; then reconcile with product sdkconfig
   (drop disabled; add matter/thread when already =y).
-thread and zigbee are mutually exclusive (IEEE 802.15.4).
+thread and zigbee may both be linked; adapters.json decides which runs.
 
 Examples:
   ./tools/build_firmware.py -app minihub build
@@ -383,12 +384,11 @@ def validate_stacks(stacks: list[str]) -> None:
         usage(2)
     if "thread" in stacks and "zigbee" in stacks:
         print(
-            "ERROR: stacks 'thread' and 'zigbee' both use IEEE 802.15.4 — pick one "
-            "(omit zigbee on the CLI, or clear CONFIG_MINIHUB_THREAD_ADAPTER / "
-            "CONFIG_MINIHUB_ZIGBEE_SDK in sdkconfig).",
-            file=sys.stderr,
+            "thread and zigbee both linked (IEEE 802.15.4). "
+            "adapters.json enabled flags decide which runs; "
+            "if both are enabled, the one that starts later is skipped.",
+            flush=True,
         )
-        sys.exit(2)
 
 
 def manifest_app_name() -> str:
@@ -430,9 +430,16 @@ def write_stacks_gen(stacks: list[str]) -> None:
 def sync_stack_symbols_in_sdkconfig(stacks: list[str]) -> None:
     """Ensure selected stacks are =y in application sdkconfig.
 
-    Does not force unselected stacks to 'is not set' — that undoes manual
-    menuconfig / hand-edits. Disabled stacks are listed in stacks.gen only;
-    Matter/Thread also use ensure_*_stack when sdkconfig already has =y.
+    Unselected ble_mesh / zigbee / matter stay untouched (menuconfig may keep
+    them). Thread is special:
+    - Leaving CONFIG_OPENTHREAD_ENABLED=y after THREAD_ADAPTER is cleared still
+      links libopenthread_br and clashes with Matter CHIP route hooks — when
+      thread is not in the stack list, force both off.
+    - When thread IS linked:
+      * CHIP CONFIG_ENABLE_ROUTE_HOOK must stay off: OT BR already defines
+        lwip_hook_ip6_route / lwip_hook_nd6_get_gw (RainMaker OTBR pattern).
+      * CHIP CONFIG_ENABLE_WIFI_STATION must stay off: Host uplink is Ethernet;
+        CHIP must not call esp_wifi_connect() beside MiniHub.
     """
     path = APP_DIR / "sdkconfig"
     if not path.is_file():
@@ -457,6 +464,36 @@ def sync_stack_symbols_in_sdkconfig(stacks: list[str]) -> None:
         elif n:
             text = new_text
             changed = True
+    if "thread" not in stacks:
+        for sym in ("CONFIG_MINIHUB_THREAD_ADAPTER", "CONFIG_OPENTHREAD_ENABLED"):
+            off = f"# {sym} is not set"
+            new_text, n = re.subn(
+                rf"(?m)^(?:#\s*)?{re.escape(sym)}(?:=y|=n|\s+is not set)\s*$",
+                off,
+                text,
+            )
+            if n:
+                text = new_text
+                changed = True
+            elif f"{sym}=y" in text:
+                text = text.rstrip() + "\n" + off + "\n"
+                changed = True
+    else:
+        # Thread BR owns lwip hooks and Host uplink is ETH — keep CHIP's
+        # Wi-Fi station / route-hook copies out of the link and runtime.
+        for sym in ("CONFIG_ENABLE_ROUTE_HOOK", "CONFIG_ENABLE_WIFI_STATION"):
+            off = f"# {sym} is not set"
+            new_text, n = re.subn(
+                rf"(?m)^(?:#\s*)?{re.escape(sym)}(?:=y|=n|\s+is not set)\s*$",
+                off,
+                text,
+            )
+            if n:
+                text = new_text
+                changed = True
+            elif f"{sym}=y" in text:
+                text = text.rstrip() + "\n" + off + "\n"
+                changed = True
     if changed:
         path.write_text(text, encoding="utf-8")
 
@@ -629,10 +666,9 @@ def ensure_thread_stack(stacks: list[str]) -> list[str]:
 def ensure_zigbee_stack(stacks: list[str]) -> list[str]:
     """If ZIGBEE_SDK=y in sdkconfig, pull in the zigbee stack automatically.
 
-    Parity with ensure_thread_stack: a stack enabled in sdkconfig must be present
-    in the resolved list so validate_stacks() can reject a zigbee+thread conflict
-    even when the user only passed the other stack on the CLI (e.g.
-    `tools/build_firmware.py thread build`).
+    Parity with ensure_thread_stack: a stack enabled in sdkconfig is linked
+    even when the CLI only named the other 802.15.4 stack. Runtime
+    adapters.json decides which one starts.
     """
     if "zigbee" in stacks:
         return stacks

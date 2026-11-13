@@ -1,0 +1,37 @@
+adapt_status,minihub,ble_mesh,zigbee,matter
+❌ no,battery,—,—,—
+❌ no,battery_low,—,—,—
+❌ no,brightness,—,—,—
+❌ no,cct,—,—,—
+✅ yes,co2,属性 0x0077,—,Carbon Dioxide Concentration Measurement (0x040D)
+❌ no,contact,—,—,—
+❌ no,current_a,—,—,—
+❌ no,energy_wh,—,—,—
+❌ no,fault,—,—,—
+❌ no,hue,—,—,—
+✅ yes,humidity,属性 0x0076,—,Relative Humidity Measurement (0x0405)
+✅ yes,illuminance,属性 0x0055,—,Illuminance Measurement (0x0400)
+❌ no,indicator,—,—,—
+❌ no,intensity,—,—,—
+❌ no,leak,—,—,—
+✅ yes,motion,属性 0x0042,—,Power Source (0x002F)
+❌ no,mute,—,—,—
+❌ no,name,—,—,—
+✅ yes,occupancy,属性 0x004d,—,Occupancy Sensing (0x0406)
+❌ no,play_next,—,—,—
+❌ no,play_pause,—,—,—
+❌ no,play_prev,—,—,—
+❌ no,play_resume,—,—,—
+❌ no,pm25,—,—,—
+❌ no,power,—,—,—
+❌ no,power_w,—,—,—
+✅ yes,pressure_hpa,属性 0x00a9,—,Pressure Measurement (0x0403)
+❌ no,saturation,—,—,—
+❌ no,smoke,—,—,—
+❌ no,tamper,—,—,—
+✅ yes,temperature,属性 0x0075,—,Temperature Measurement (0x0402)
+❌ no,unmute,—,—,—
+❌ no,voltage_v,—,—,—
+❌ no,volume,—,—,—
+❌ no,wifi_signal,—,—,—
+❌ no,zone_status,—,—,—

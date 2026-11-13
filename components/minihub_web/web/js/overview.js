@@ -834,9 +834,7 @@ function cardHtml(p) {
     const readOnly = !!(p.props && p.props.access === 'R');   /* read-only param: show value, no control */
     /* Overview card toggle = power only. Extra params open generic catalog detail / Devices. */
     const hasParams = !!(p.props && p.props.params && typeof p.props.params === 'object');
-    const ctrlTypes = ['switch', 'light', 'light_strip', 'fan_light', 'fan', 'router', 'car', 'camera', 'television', 'air-conditioner', 'fridge', 'water_purifier', 'water_heater', 'appliance', 'washer', 'dishwasher', 'oven'];
-    const allowToggle = !commissioning && ctrlTypes.includes(p.type) && !noCtrl && !readOnly &&
-        (!hasParams || powerVal != null || p.value === 'on' || p.value === 'off' || p.value === 'true' || p.value === 'false' || !p.value);
+    const allowToggle = !commissioning && !noCtrl && !readOnly && dwHasPowerControl(p);
     const ctrl = allowToggle ? '<label class="toggle"><input type="checkbox" data-id="' + p.point_id + '"' + (on ? ' checked' : '') + dis + '>    <span class="slider"></span></label>' : '';
     const pidJs = String(p.point_id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const delBtn = (p.adapter === 'matter') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteMatterDevice(\'' + pidJs + '\')">' + t('ov.delete') + '</button>' : (p.adapter === 'zigbee') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteZigbeeDevice(\'' + pidJs + '\')">' + t('ov.delete') + '</button>' : (p.adapter === 'ble_mesh') ? '<button class="btn-sm bad" type="button" style="pointer-events:auto;position:relative;z-index:2" onclick="event.preventDefault();event.stopPropagation();deleteBleMeshDevice(\'' + pidJs + '\')">' + t('ov.delete') + '</button>' : '';

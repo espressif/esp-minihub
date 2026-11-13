@@ -18,7 +18,7 @@ function paintMapDevices(hub) {
         });
         m.bindPopup('<b>' + esc(p.point_id.split('/').pop()) + '</b><br>' + esc(p.value) + (p.online ? '' : t('map.offline')));
         deviceLayer.addLayer(m);
-        if (p.online && (p.type === 'switch' || p.type === 'light')) {
+        if (p.online && dwHasPowerControl(p)) {
             m.on('click', () => cmd(p.point_id, on ? 'turn_off' : 'turn_on'));
         }
     });

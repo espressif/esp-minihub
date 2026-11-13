@@ -5,6 +5,7 @@ set(SRCS
     "minihub_ble_mesh.c"
     "ble_mesh_map.c"
     "ble_mesh_nvs.c"
+    "ble_mesh_sensor.c"
     "ble_mesh_stack.c"
     "ble_mesh_bt.c"
 )
@@ -15,4 +16,5 @@ idf_component_register(
     SRCS ${SRCS}
     INCLUDE_DIRS "include" "."
     REQUIRES minihub_core nvs_flash espressif__cjson esp_timer bt freertos esp_coex
+    EMBED_TXTFILES "config/ble_mesh_map.json"
 )

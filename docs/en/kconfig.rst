@@ -28,7 +28,7 @@ stack fragment is appended last.
 
 .. minihub-features:: minihub
 
-Three rules in that chain decide what a change does:
+These rules in that chain decide what a change does:
 
 * A ``sdkconfig`` that already exists wins over every fragment. Changing a
   ``feature/*.defaults`` file and rebuilding does nothing if the symbol is still set in
@@ -41,8 +41,9 @@ Three rules in that chain decide what a change does:
   gets committed.
 * ``board_manager.defaults`` is not in the list on purpose — ``esp_board_manager`` injects
   it. It is what pulls the board's own flash, PSRAM and PHY settings in.
-* Radio stacks that share IEEE 802.15.4 are refused, not silently combined: building
-  ``thread`` and ``zigbee`` together stops with exit code 2 and tells you to pick one.
+* Thread and Zigbee may both be linked. Which one runs is the ``enabled`` flag
+  of that entry in the product ``adapters.json``. When both are true, the one
+  that starts later is skipped.
 
 To see what a configured build actually uses, read the generated files rather than the
 fragments: ``application/<app>/build/config/sdkconfig.h`` (what the C code sees),

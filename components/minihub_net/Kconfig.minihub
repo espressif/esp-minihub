@@ -3,12 +3,17 @@ menu "Networking"
     config MINIHUB_NET_WIFI_STA
         bool "Enable Wi-Fi STA"
         default y
+        select ENABLE_WIFI_STATION if MINIHUB_MATTER_ADAPTER && !MINIHUB_THREAD_ADAPTER
         help
             Start Wi-Fi station (credentials from Kconfig / NVS / SoftAP or BLE provision).
+            With the Matter adapter on (and Thread BR off), this selects CHIP
+            ENABLE_WIFI_STATION. Thread BR products keep CHIP station off — Host
+            uplink is Ethernet; CHIP must not call esp_wifi_connect().
 
     config MINIHUB_NET_WIFI_SOFTAP
         bool "Wi-Fi SoftAP in use (external stack)"
         default n
+        select ENABLE_WIFI_AP if MINIHUB_MATTER_ADAPTER
         help
             Product uses 2.4 GHz Wi-Fi SoftAP and/or STA outside minihub_net
             while MINIHUB_NET_WIFI_STA is disabled. Set n for ETH-only Host.

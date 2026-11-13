@@ -24,7 +24,7 @@ CSS）。数据源：`model/*.csv`。构建时嵌入扁平注册表；图标打�
 |----|------|
 | `device_id` | 类型 id，如 `light`、`switch` |
 | `parameters` | 逗号分隔的参数名 |
-| `primary_param` | 如 `power` |
+| `primary_param` | 概括该类型的参数，如 `power` |
 | `mandatory_params` | 逗号分隔的必选参数 |
 | `image` | 可选设备图标文件名（在 `images/devices/` 下） |
 
@@ -141,6 +141,7 @@ python3 tools/dev_sync.py --open
 #include "minihub_device_widget.h"
 
 const minihub_device_widget_device_t *d = minihub_device_widget_get("light");
+// d->primary_param 是 "power" —— 概括该类型的参数
 const minihub_device_widget_entry_t *e =
     minihub_device_widget_find("light", "brightness");
 

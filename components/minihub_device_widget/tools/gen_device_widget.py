@@ -49,13 +49,14 @@ CMake binary dir — not committed under the component source tree):
   - ui_controls.json              structured output (devices/services/
                                   parameters/parameter_catalog/ui_elements/registry)
   - devices.csv                   FLAT runtime registry (device,parameter,
-                                  style,image,device_image) -
+                                  style,image,device_image,primary_param) -
                                   protocol-agnostic: device DISPLAY is
                                   protocol-independent, so the transport
                                   prefix lives in the device registration,
                                   not in this catalog. `device_image` is the
                                   device-class icon override repeated on
-                                  every row of that device. Firmware seeds
+                                  every row of that device; `primary_param`
+                                  is repeated the same way. Firmware seeds
                                   /data/config/devices.csv from the embedded
                                   C string at boot (not by flashing this file).
   - minihub_device_widget_gen.c   the same flat registry as an embedded
@@ -118,8 +119,10 @@ MODEL_FILES = {
 # which is protocol-independent. The transport prefix (thread/zigbee/...) is a
 # property of the device REGISTRATION (see minihub_point_resolve_by_type_param).
 # `device_image` is the device-class icon override; it is repeated on every row
-# of a device because the registry is flat.
-CSV_COLS = ["device", "parameter", "style", "image", "device_image"]
+# of a device because the registry is flat. `primary_param` is repeated the same
+# way: rows are sorted by parameter name at load time, so position cannot say
+# which param summarises the type.
+CSV_COLS = ["device", "parameter", "style", "image", "device_image", "primary_param"]
 
 # Closed web-widget set. Spectrum look (hue rainbow, sat, cct) is CSS tone from
 # the parameter name — not extra ui.* types.
@@ -417,7 +420,7 @@ def device_parameters(dev_row):
 
 def build_runtime_entries(dev_rows, param_defs):
     """Flatten Device->Parameter into the flat runtime registry
-    (device, parameter, style, image, device_image).
+    (device, parameter, style, image, device_image, primary_param).
 
     Upstream lists a device type's parameters ON THE DEVICE, so `devices.csv`
     carries them and services are the orthogonal SYSTEM services (ota /
@@ -433,6 +436,11 @@ def build_runtime_entries(dev_rows, param_defs):
         params = device_parameters(d)
         if not params:
             raise SystemExit(f"devices.csv: device '{dev}' lists no parameters")
+        primary = _s(d.get("primary_param"))
+        if primary and primary not in params:
+            raise SystemExit(
+                f"devices.csv: device '{dev}' primary_param '{primary}' "
+                f"is not one of its parameters")
         for p in params:
             pd = resolve(param_defs, dev, p)
             entries.append({
@@ -442,6 +450,7 @@ def build_runtime_entries(dev_rows, param_defs):
                 "style": build_style(pd),
                 "image": _s(pd.get("image")),
                 "device_image": dev_img,
+                "primary_param": primary,
             })
     return entries
 
@@ -510,7 +519,7 @@ def _flat_rows(entries):
     for e in entries:
         yield [e["device"], e["parameter"],
                json.dumps(e["style"], ensure_ascii=False),
-               e["image"], e["device_image"]]
+               e["image"], e["device_image"], e["primary_param"]]
 
 
 def emit_csv(entries, path):

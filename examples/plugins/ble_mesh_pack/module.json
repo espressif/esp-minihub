@@ -12,8 +12,8 @@
     "provision": {
       "bind_models": [
         {
-          "model_id": "0x1307",
-          "name": "l1_demo_light_hsl_srv"
+          "model_id": "0xFF01",
+          "name": "l1_demo_vendor_model"
         }
       ]
     }

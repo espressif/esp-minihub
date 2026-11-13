@@ -13,6 +13,7 @@
 #include "minihub_matter.h"
 #include "minihub_module.h"
 #include "matter_rpc.h"
+#include "matter_map.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,6 +74,44 @@ static bool s_started;
  * be held across a blocking call). Callers of publish_points/interview/subscribe_*
  * are serialized by the adapter lifecycle lock, so s_snap is single-owner scratch. */
 static portMUX_TYPE s_devices_mux = portMUX_INITIALIZER_UNLOCKED;
+
+/* Sensor value cache: per published point_id, the latest full `params` object
+ * (e.g. {temperature, humidity}). Matter reports arrive per-cluster, so each
+ * report must merge into the existing values rather than replace them — Core's
+ * minihub_point_merge_params() replaces the whole params object. Updated only on
+ * the CHIP event task (on_matter_attr_typed), so a single mux is enough. */
+typedef struct sensor_cache {
+    char point_id[64];
+    cJSON *params;                 /* owned; merged into the point on every report */
+    struct sensor_cache *next;
+} sensor_cache_t;
+
+static sensor_cache_t *s_sensor_cache;
+static portMUX_TYPE s_sensor_mux = portMUX_INITIALIZER_UNLOCKED;
+
+/* Return (creating if needed) the cached params object for point_id. The returned
+ * pointer is owned by the cache; the caller mutates it and then pushes it to Core. */
+static cJSON *sensor_cache_acquire(const char *point_id)
+{
+    portENTER_CRITICAL(&s_sensor_mux);
+    for (sensor_cache_t *c = s_sensor_cache; c; c = c->next) {
+        if (strcmp(c->point_id, point_id) == 0) {
+            portEXIT_CRITICAL(&s_sensor_mux);
+            return c->params;
+        }
+    }
+    sensor_cache_t *c = (sensor_cache_t *)calloc(1, sizeof(*c));
+    if (!c) {
+        portEXIT_CRITICAL(&s_sensor_mux);
+        return NULL;
+    }
+    strncpy(c->point_id, point_id, sizeof(c->point_id) - 1);
+    c->params = cJSON_CreateObject();
+    c->next = s_sensor_cache;
+    s_sensor_cache = c;
+    portEXIT_CRITICAL(&s_sensor_mux);
+    return c->params;
+}
 
 /* s_snap / s_snap_count: a transient snapshot of the live table, allocated to the
  * actual device count (not the cap) and reused between calls. Refreshed per call and
@@ -360,7 +399,23 @@ static void on_matter_attr(uint64_t node_id, uint16_t endpoint_id, uint32_t clus
                            uint32_t attribute_id, bool value, void *ctx)
 {
     (void)ctx;
-    if (cluster_id != MATTER_ONOFF_CLUSTER || attribute_id != MATTER_ONOFF_ATTR) {
+    /* Route through the capability map: resolve (cluster, attr) → normalized param.
+     * The Matter attr callback is currently bool-only, so only OnOff (param "power")
+     * is reportable; any other cluster is skipped until the typed attr callback lands.
+     * Fall back to the literal OnOff id when the map does not cover the attribute, so a
+     * missing/empty map never drops OnOff reports. */
+    const char *param = minihub_matter_map_param_for_cluster_attr(cluster_id, attribute_id);
+    if (param == NULL) {
+        if (cluster_id == MATTER_ONOFF_CLUSTER && attribute_id == MATTER_ONOFF_ATTR) {
+            param = "power";
+        } else {
+            return;
+        }
+    }
+    if (strcmp(param, "power") != 0) {
+        ESP_LOGD(TAG, "report node%llu ep%u cluster%u -> %s (non-bool, skipped)",
+                 (unsigned long long)node_id, (unsigned)endpoint_id,
+                 (unsigned)cluster_id, param);
         return;
     }
     /* Copy the matching row under the mux; the list may be rebuilt from httpd/poll. */
@@ -657,7 +712,14 @@ static void subscribe_commissioned(bool rearm_now)
             continue; /* a resync must not clobber a subscription that already came up */
         }
 
-        esp_err_t err = minihub_matter_subscribe_node(node_id, eps, n);
+        minihub_matter_map_path_t map_paths[MINIHUB_MATTER_MAP_MAX_CTRLS + MINIHUB_MATTER_MAP_MAX_CAPARAMS];
+        size_t path_n = minihub_matter_map_collect_paths(map_paths, sizeof(map_paths) / sizeof(map_paths[0]));
+        minihub_matter_attr_path_t paths[MINIHUB_MATTER_MAP_MAX_CTRLS + MINIHUB_MATTER_MAP_MAX_CAPARAMS];
+        for (size_t p = 0; p < path_n; p++) {
+            paths[p].cluster_id = map_paths[p].cluster_id;
+            paths[p].attribute_id = map_paths[p].attribute_id;
+        }
+        esp_err_t err = minihub_matter_subscribe_node_attrs(node_id, eps, n, paths, path_n);
         memcpy(w->armed_eps, eps, n * sizeof(uint16_t));
         w->armed_count = n;
         w->armed_valid = true;
@@ -665,11 +727,10 @@ static void subscribe_commissioned(bool rearm_now)
         if (w->tries < 8) {
             w->tries++;
         }
-        /* after (re)arming, re-read the OnOff value so a subscription drop
-         * that clobbered the live value self-heals instead of sticking at "off". */
-        if (err == ESP_OK || err == ESP_ERR_NOT_FINISHED) {
-            bool onoff_dummy = false;
-            (void)minihub_matter_read_onoff(node_id, eps[0], &onoff_dummy);
+        /* After (re)arming, re-read mapped attrs so a Hub reboot / subscription
+         * drop does not leave points stuck on map init values. */
+        if ((err == ESP_OK || err == ESP_ERR_NOT_FINISHED) && path_n > 0) {
+            (void)minihub_matter_read_attrs(node_id, eps, n, paths, path_n);
         }
         if (err == ESP_ERR_NOT_FINISHED) {
             ESP_LOGI(TAG, "subscribing node%llu (%u endpoint(s)), retry in %lldms",
@@ -759,6 +820,102 @@ static esp_err_t parse_devices(const cJSON *cfg, matter_device_t **out_head, siz
     return ESP_OK;
 }
 
+/* Resolve a published matter device's point_id from (node_id, endpoint_id).
+ * Mirrors the lookup in on_matter_attr but returns the id string. */
+static bool matter_point_id_for(uint64_t node_id, uint16_t endpoint_id,
+                                char *out, size_t n)
+{
+    bool found = false;
+    portENTER_CRITICAL(&s_devices_mux);
+    for (matter_device_t *d = s_dev_head; d; d = d->next) {
+        if (d->node_id == node_id && d->endpoint_id == endpoint_id && d->point_id[0]) {
+            strncpy(out, d->point_id, n - 1);
+            out[n - 1] = '\0';
+            found = true;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&s_devices_mux);
+    return found;
+}
+
+/* Typed attribute sink (Item 3). OnOff (MINIHUB_MATTER_VAL_BOOL) is still
+ * handled by the legacy bool callback on_matter_attr; this handler takes over
+ * numeric clusters (Level/Color/sensor) now that matter_ctrl.cpp decodes TLV
+ * beyond bool. It resolves the param via the map, applies the sensor decode
+ * (scale/clamp or boolean threshold from matter_map.json), merges into the
+ * device's cached params, and pushes the whole object to Core so sibling params
+ * (e.g. humidity when temperature reports) survive. */
+static void on_matter_attr_typed(uint64_t node_id, uint16_t endpoint_id,
+                                 uint32_t cluster_id, uint32_t attribute_id,
+                                 const minihub_matter_attr_value_t *value, void *ctx)
+{
+    (void)ctx;
+    if (!value || value->type == MINIHUB_MATTER_VAL_BOOL) {
+        return; /* BOOL handled by on_matter_attr */
+    }
+    const char *param = minihub_matter_map_param_for_cluster_attr(cluster_id, attribute_id);
+    if (!param) {
+        return;
+    }
+    minihub_matter_map_sensor_t sinfo;
+    if (!minihub_matter_map_sensor_for_cluster((uint16_t)cluster_id, &sinfo)) {
+        ESP_LOGD(TAG, "report node%llu ep%u cluster%u -> %s (no sensor decode in map)",
+                 (unsigned long long)node_id, (unsigned)endpoint_id,
+                 (unsigned)cluster_id, param);
+        return;
+    }
+
+    char point_id[64];
+    if (!matter_point_id_for(node_id, endpoint_id, point_id, sizeof(point_id))) {
+        ESP_LOGW(TAG, "report node%llu ep%u matches no published matter device",
+                 (unsigned long long)node_id, (unsigned)endpoint_id);
+        return;
+    }
+
+    double raw = 0;
+    if (value->type == MINIHUB_MATTER_VAL_UINT) {
+        raw = (double)value->v.u;
+    } else if (value->type == MINIHUB_MATTER_VAL_INT) {
+        raw = (double)value->v.i;
+    } else if (value->type == MINIHUB_MATTER_VAL_DOUBLE) {
+        raw = value->v.d;
+    } else {
+        return;
+    }
+
+    cJSON *params = sensor_cache_acquire(point_id);
+    if (!params) {
+        return;
+    }
+    cJSON *ent = cJSON_GetObjectItem(params, param);
+    if (sinfo.bool_threshold >= 0) {
+        bool on = (raw > (double)sinfo.bool_threshold);
+        if (ent) {
+            cJSON_SetBoolValue(ent, on);
+        } else {
+            cJSON_AddBoolToObject(params, param, on);
+        }
+    } else {
+        double disp = raw * sinfo.scale;
+        if (disp < sinfo.min) {
+            disp = sinfo.min;
+        } else if (disp > sinfo.max) {
+            disp = sinfo.max;
+        }
+        if (ent) {
+            cJSON_SetNumberValue(ent, disp);
+        } else {
+            cJSON_AddNumberToObject(params, param, disp);
+        }
+    }
+
+    esp_err_t err = minihub_point_merge_params(point_id, NULL, params);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "merge_params %s failed: %s", point_id, esp_err_to_name(err));
+    }
+}
+
 static esp_err_t matter_adapter_init(const cJSON *config)
 {
     s_started = false;
@@ -768,12 +925,23 @@ static esp_err_t matter_adapter_init(const cJSON *config)
         parse_devices(config, &build, &n);
     }
     publish_device_table(build, n);
+    /* Load the capability map (matter_map.json) that drives OnOff/level/color/sensor
+     * routing. Failure is non-fatal: on_matter_attr falls back to the literal OnOff
+     * id so reports still work while the map is missing. */
+    esp_err_t map_err = minihub_matter_map_init();
+    if (map_err != ESP_OK) {
+        ESP_LOGW(TAG, "matter_map load failed (%s); using built-in OnOff id",
+                 esp_err_to_name(map_err));
+    }
     /* Host-static RPC → Store 「已安装」shows as 内置 (managed=false). */
     (void)minihub_module_register_rpc("matter", matter_module_rpc);
     (void)minihub_matter_set_identity_cb(on_matter_identity, NULL);
     /* Registered once for the life of the process and never cleared: the Matter side
      * keeps the pair non-atomically, so clearing it from stop() would race a report. */
     (void)minihub_matter_set_attr_cb(on_matter_attr, NULL);
+    /* Typed sink (Item 3): routes numeric Level/Color/sensor reports via the map
+     * once matter_ctrl.cpp decodes TLV beyond bool. */
+    (void)minihub_matter_set_attr_typed_cb(on_matter_attr_typed, NULL);
     return ESP_OK;
 }
 
@@ -917,7 +1085,23 @@ esp_err_t matter_adapter_start(void)
 
 esp_err_t matter_adapter_poll(void)
 {
-    if (!s_started || !minihub_matter_ready()) {
+    if (!s_started) {
+        return ESP_OK;
+    }
+    /* First start may have run before Ethernet/Dnssd was up, or Thread BR was
+     * still down under ENABLE_MATTER_OVER_THREAD. Retry commissioner init a few
+     * times so the UI can leave "未就绪" without a full Hub reload. */
+    if (!minihub_matter_ready()) {
+        static int s_init_retries;
+        if (s_init_retries < 12) {
+            s_init_retries++;
+            esp_err_t ierr = minihub_matter_init();
+            if (ierr == ESP_OK && minihub_matter_ready()) {
+                ESP_LOGI(TAG, "Matter commissioner ready on retry %d", s_init_retries);
+                interview_unique_nodes();
+                subscribe_commissioned(true);
+            }
+        }
         return ESP_OK;
     }
     /* Matter read/invoke needs the CHIP stack lock; adapter_poll must not take
@@ -959,6 +1143,40 @@ esp_err_t matter_adapter_stop(void)
     return ESP_OK;
 }
 
+/* Dispatch a normalized param write for a matter device via the capability map.
+ * Maps the param name to a Matter cluster/command and converts the display value
+ * (0–100 brightness, Kelvin cct, ...) into the protocol-native unit. Returns the
+ * RPC result. Hue/saturation are intentionally NOT handled here: MoveToHueAnd
+ * Saturation needs both at once, so a single-param command cannot drive them. */
+static esp_err_t matter_adapter_write_param(const matter_device_t *dev, const char *param, double value)
+{
+    uint16_t cluster = 0;
+    const char *field = NULL;
+    if (!minihub_matter_map_control_for_param(param, &cluster, &field)) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    if (strcmp(field, "onoff") == 0) {
+        return minihub_matter_onoff(dev->node_id, dev->endpoint_id, value > 0.5);
+    }
+    if (strcmp(field, "current_level") == 0) {
+        /* brightness 0–100 → LevelControl 0–254 */
+        uint8_t lvl = (uint8_t)(value * 254.0 / 100.0);
+        if (lvl == 0 && value > 0) {
+            lvl = 1;
+        }
+        return minihub_matter_level_set(dev->node_id, dev->endpoint_id, lvl);
+    }
+    if (strcmp(field, "color_temperature_mireds") == 0) {
+        /* cct in Kelvin → mireds (1e6 / K); guard against K==0 */
+        if (value < 1) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        uint16_t mireds = (uint16_t)(1000000.0 / value);
+        return minihub_matter_color_temp_set(dev->node_id, dev->endpoint_id, mireds);
+    }
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 static esp_err_t matter_adapter_handle_command(const minihub_command_t *cmd)
 {
     if (!s_started || !cmd) {
@@ -982,6 +1200,33 @@ static esp_err_t matter_adapter_handle_command(const minihub_command_t *cmd)
             path = pj->valuestring;
         }
         return minihub_matter_ota_offer(cmd->point_id, path);
+    }
+
+    if (strcmp(cmd->cmd, "set_param") == 0) {
+        const cJSON *pj = cmd->params ? cJSON_GetObjectItem(cmd->params, "param") : NULL;
+        const cJSON *vj = cmd->params ? cJSON_GetObjectItem(cmd->params, "value") : NULL;
+        if (!cJSON_IsString(pj) || !pj->valuestring[0] || !cJSON_IsNumber(vj)) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        const char *param = pj->valuestring;
+        double value = vj->valuedouble;
+        esp_err_t werr = matter_adapter_write_param(&dev, param, value);
+        if (werr == ESP_OK) {
+            /* Optimistically reflect the write before the device reports back. */
+            cJSON *params = cJSON_CreateObject();
+            if (params) {
+                if (strcmp(param, "cct") == 0) {
+                    cJSON_AddNumberToObject(params, param, value); /* Kelvin display */
+                } else if (strcmp(param, "brightness") == 0) {
+                    cJSON_AddNumberToObject(params, param, value);
+                } else {
+                    cJSON_AddBoolToObject(params, param, value > 0.5);
+                }
+                (void)minihub_point_merge_params(dev.point_id, NULL, params);
+                cJSON_Delete(params);
+            }
+        }
+        return werr;
     }
 
     if (!minihub_matter_ready()) {

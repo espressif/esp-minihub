@@ -109,10 +109,13 @@ Web 添加对话框始终走 BLE 配网并注入凭据，入网后再在 fabric 
 * ``ble_wifi`` / ``first_time`` — BLE + 注入 **设备** Wi-Fi 凭据
 
 ``POST /api/matter/commission`` 仍可接受 ``network`` （仅 DNS-SD / multi-admin）和
-``ble_ethernet``；概览对话框不再提供这两项。只有 ``ble_ethernet`` 那条会让 CHIP
-同时浏览所有发现类型；对话框用的两条走 esp-matter 自己的 Wi-Fi / Thread 配网入口。
+``ble_ethernet``。概览对话框不再提供这两项。
+
+只有 ``ble_ethernet`` 那条会让 CHIP 同时浏览所有发现类型。
+对话框用的两条走 esp-matter 自己的 Wi-Fi / Thread 配网入口。
+
 正在进行的配网可以用 ``POST /api/matter/commission`` 配 ``{"cancel": true}`` 中止
-（对话框上是 **取消配网**），应答 ``status: "cancelled"``。
+（对话框上是 **取消配网**）。应答 ``status`` 为 ``cancelled``。
 
 配网并持久化设备
 ^^^^^^^^^^^^^^^^
@@ -122,7 +125,7 @@ Web 添加对话框始终走 BLE 配网并注入凭据，入网后再在 fabric 
 ``commission: "started"``，**不会** 阻塞 HTTP 处理线程。成功后清除 phase，卡片变为
 正常设备；失败或配网看门狗超时则保留卡片为 ``commission_phase: "failed"``
 （可删除）。看门狗时长由 ``CONFIG_MINIHUB_MATTER_COMMISSION_WAIT_MS`` 决定，缺省
-**300 秒** （可配 60–900 秒）—— 首次 DNS-SD 浏览可能要几分钟，旧笔记里的 180 秒
+**300 秒** （可配 60–900 秒）。首次 DNS-SD 浏览可能要几分钟，旧笔记里的 180 秒
 已经过期。用 ``GET /api/matter/status`` 轮询 ``commission``：``idle`` |
 ``running`` | ``ok`` | ``failed``。省略 ``pairing_code`` 时仍只 upsert、不配网
 （``commission: "skipped"``）。
@@ -240,7 +243,7 @@ Matter 适配器为每个已配网 node 建立 **一条** 订阅，覆盖该 nod
 台架演示
 ^^^^^^^^
 
-必须出现的判据（这是验收条件，见下面的状态说明）：
+必须出现的判据（这是验收条件）：
 
 1. ``GET /api/matter/status`` 里该 node 的 ``live`` 为 ``true``。
 2. 先把卡片复位，免得把 Hub 自己的写入当成上报：``POST /api/hub/reload`` 重新发布配置的
@@ -252,9 +255,6 @@ Matter 适配器为每个已配网 node 建立 **一条** 订阅，覆盖该 nod
    变大、且点位值变成设备的真实状态。若值变了而 ``reports`` 不动，那是 Hub 命令写的，
    这一轮不作数。
 
-**还在等一台可达的设备。** 这套流程尚未在任何台架上完整跑通。开发用的这块板子上，已配网
-的 node 不响应 CASE，``live`` 一直是 ``false``，``reports`` 一直是 ``0``，从未有上报
-到达，所以第 3、4 步（包括一条上报多久能落到卡片上）都还没验证。
 ``components/minihub_matter/matter_ctrl.cpp`` 里的订阅区间配置是
 ``MATTER_SUB_MIN_INTERVAL`` = 5 秒、``MATTER_SUB_MAX_INTERVAL`` = 30 秒，它们只是限制
 设备最多多久报一次，**不是** 从按下按键到卡片更新的实测时延。
@@ -335,9 +335,21 @@ Matter-over-Thread 终端也走 **Matter** 点，见 :doc:`thread`。
 Wi-Fi 由谁管理？
 ----------------
 
-MiniHub 控制器构建上 **关闭** CHIP Wi-Fi STA （``matter_over_eth.defaults``）。
-存在凭据时 MiniHub 仍通过 ``minihub_net_start_wifi()`` 连接 Host STA。
-默认路由按 IPv4 上行选择 netif — 见 :doc:`networking`。
+``MINIHUB_MATTER_ADAPTER`` 打开且 ``MINIHUB_THREAD_ADAPTER`` 关闭时，
+``MINIHUB_NET_WIFI_STA`` 会 select CHIP 的 ``ENABLE_WIFI_STATION``。
+
+Thread BR 产品保持 CHIP station 关闭（``thread.defaults``）：
+
+* Host 上行是以太网，CHIP 不得调用 ``esp_wifi_connect()``。
+* station 关闭时由 ``matter_over_eth.defaults`` 打开
+  ``ENABLE_ETHERNET_TELEMETRY``（CHIP 唯一能打开
+  ``CHIP_DEVICE_CONFIG_ENABLE_ETHERNET`` / EspDnssd 的 Kconfig）。
+* 并关掉 ``ETHERNET_NETWORK_COMMISSIONING_DRIVER``，避免
+  ``ESPEthernetDriver::Init`` 再装一套 PHY。
+* EMAC 由 MiniHub 接管；Hub 是 commissioner-only。
+
+存在凭据时 MiniHub 通过 ``minihub_net_start_wifi()`` 连接 Host STA。默认路由
+按 IPv4 上行选择 netif — 见 :doc:`networking`。
 
 术语
 ----

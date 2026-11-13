@@ -876,6 +876,7 @@ static esp_err_t dw_validate_devices(const dw_csv_table_t *dev, char *errbuf, si
     }
     int c_id = dw_col_index(dev, "device_id");
     int c_par = dw_col_index(dev, "parameters");
+    int c_primary = dw_col_index(dev, "primary_param");
     for (int i = 0; i < dev->nrows; i++) {
         const char *id = dw_cell(dev, i, c_id);
         if (!id || !id[0]) {
@@ -894,18 +895,37 @@ static esp_err_t dw_validate_devices(const dw_csv_table_t *dev, char *errbuf, si
         if (!tmp) {
             return ESP_ERR_NO_MEM;
         }
+        char *prim = strdup(dw_cell(dev, i, c_primary));
+        if (!prim) {
+            free(tmp);
+            return ESP_ERR_NO_MEM;
+        }
+        dw_trim_inplace(prim);
+        bool primary_listed = false;
         for (char *tok = strtok(tmp, ","); tok; tok = strtok(NULL, ",")) {
             dw_trim_inplace(tok);
-            if (tok[0]) {
-                any = true;
-                break;
+            if (!tok[0]) {
+                continue;
+            }
+            any = true;
+            if (prim[0] && strcmp(tok, prim) == 0) {
+                primary_listed = true;
             }
         }
         free(tmp);
         if (!any) {
+            free(prim);
             dw_errf(errbuf, errbuf_len, "devices.csv: device '%s' lists no parameters", id);
             return ESP_ERR_INVALID_ARG;
         }
+        if (prim[0] && !primary_listed) {
+            dw_errf(errbuf, errbuf_len,
+                    "devices.csv: device '%s' primary_param '%s' is not one of its parameters",
+                    id, prim);
+            free(prim);
+            return ESP_ERR_INVALID_ARG;
+        }
+        free(prim);
     }
     return ESP_OK;
 }
@@ -961,6 +981,7 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
     int d_id = dw_col_index(dev, "device_id");
     int d_par = dw_col_index(dev, "parameters");
     int d_img = dw_col_index(dev, "image");
+    int d_primary = dw_col_index(dev, "primary_param");
     dw_param_cols_t pc;
     dw_param_cols_resolve(par, &pc);
     int c_p = pc.parameter;
@@ -981,7 +1002,7 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
             return ESP_FAIL;
         }
     }
-    fputs("device,parameter,style,image,device_image\n", f);
+    fputs("device,parameter,style,image,device_image,primary_param\n", f);
 
     for (int di = 0; di < dev->nrows; di++) {
         const char *dev_id = dw_cell(dev, di, d_id);
@@ -991,6 +1012,14 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
             fclose(f);
             return ESP_ERR_NO_MEM;
         }
+        /* The flat loader does not trim cells, so publish the name trimmed. */
+        char *primary = strdup(dw_cell(dev, di, d_primary));
+        if (!primary) {
+            free(plist);
+            fclose(f);
+            return ESP_ERR_NO_MEM;
+        }
+        dw_trim_inplace(primary);
         for (char *tok = strtok(plist, ","); tok; tok = strtok(NULL, ",")) {
             dw_trim_inplace(tok);
             if (!tok[0]) {
@@ -998,6 +1027,7 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
             }
             int pr = dw_find_param_row(par, c_p, tok);
             if (pr < 0) {
+                free(primary);
                 free(plist);
                 fclose(f);
                 unlink(out_path);
@@ -1008,6 +1038,7 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
             }
             cJSON *style = dw_build_style(par, pr, &pc);
             if (!style) {
+                free(primary);
                 free(plist);
                 fclose(f);
                 unlink(out_path);
@@ -1016,6 +1047,7 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
             char *style_s = cJSON_PrintUnformatted(style);
             cJSON_Delete(style);
             if (!style_s) {
+                free(primary);
                 free(plist);
                 fclose(f);
                 unlink(out_path);
@@ -1031,9 +1063,12 @@ static esp_err_t dw_flatten_to_file(const dw_csv_table_t *dev, const dw_csv_tabl
             dw_csv_write_field(f, pimg, false);
             fputc(',', f);
             dw_csv_write_field(f, dev_img, false);
+            fputc(',', f);
+            dw_csv_write_field(f, primary, false);
             fputc('\n', f);
             free(style_s);
         }
+        free(primary);
         free(plist);
     }
     fclose(f);

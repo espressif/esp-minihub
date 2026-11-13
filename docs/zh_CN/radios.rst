@@ -13,16 +13,25 @@ Thread 不是设备适配器。它只做 OpenThread Border Router，所以 Matte
 稀缺的是 2.4 GHz 射频。Wi-Fi 与 BLE Mesh 在同一颗射频上共存；IEEE 802.15.4
 （Zigbee **或** Thread）与这两者都不共存，Zigbee 与 Thread 也彼此排斥。所以一个
 产品要么跑 Wi-Fi / BLE Mesh 这一组，要么只跑一个 802.15.4 栈 —— 做 Zigbee 或
-Thread 的 Hub，IP 上行就得走以太网。 ``minihub_adapter_start_all()`` 按
-Wi-Fi、802.15.4、BLE Mesh 的顺序 start；不占射频的适配器（如 Modbus）排在最后。
-Wi-Fi 一组优先： ``adapters.json`` 同时要求 Wi-Fi 或 BLE Mesh 与 Zigbee/Thread
-时，输的是 802.15.4 那个适配器 —— 不会被 init、不会 start、不产生任何点、也不会
-被 poll，日志中出现 ``radio mutex`` 相关 WARN，且不回写那个文件。Zigbee 与
-Thread 在构建期也被拦下： ``tools/build_firmware.py`` 会拒绝两者都打开的配置
-（sdkconfig 里已开启的另一栈也会先补进来再统一校验），两个 Kconfig 选项之间没有
-``depends on`` / ``select`` 依赖。Wi-Fi STA 是 Host 适配器
-（ ``adapters.wifi`` ）。以太网由 ``minihub_net_init()`` 启动，本身不是适配器，
-也不参与射频竞争。
+Thread 的 Hub，IP 上行就得走以太网。
+
+``minihub_adapter_start_all()`` 按 Wi-Fi、802.15.4、BLE Mesh 的顺序 start；不占
+射频的适配器（如 Modbus）排在最后。Wi-Fi 一组优先： ``adapters.json`` 同时要求
+Wi-Fi 或 BLE Mesh 与 Zigbee/Thread 时，输的是 802.15.4 那个适配器：
+
+* 不会被 init
+* 不会 start
+* 不产生任何点
+* 也不会被 poll
+* 日志中出现 ``radio mutex`` 相关 WARN
+* 且不回写那个文件
+
+Zigbee 与 Thread 可以一起编进固件。哪个启动由 ``adapters.json`` 里该项的
+``enabled`` 决定；两项都为 true 时，按启动顺序跳过后一个（注册顺序里 Zigbee 在
+Thread 之前）。两个 Kconfig 选项之间没有 ``depends on`` / ``select`` 依赖。
+
+Wi-Fi STA 是 Host 适配器（ ``adapters.wifi`` ）。以太网由 ``minihub_net_init()``
+启动，本身不是适配器，也不参与射频竞争。
 
 .. list-table::
    :header-rows: 1
@@ -41,7 +50,7 @@ Thread 在构建期也被拦下： ``tools/build_firmware.py`` 会拒绝两者�
    * - BLE Mesh + Thread
      - **丢弃 Thread**
    * - Zigbee + Thread
-     - **丢弃 Thread（构建期亦拦截）**
+     - **丢弃后启动的那个** （Zigbee 先注册，所以是 Thread）
    * - Wi-Fi + BLE Mesh + Zigbee
      - **丢弃 Zigbee**，Wi-Fi + BLE Mesh 保留
 

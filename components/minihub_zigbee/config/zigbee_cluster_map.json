@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "clusters": [
+  "models": [
     { "id": "0x0006", "cap": "onoff" },
     { "id": "0x0402", "cap": "temp" },
     { "id": "0x0405", "cap": "humidity" },
@@ -25,7 +25,7 @@
       "any_caps": ["onoff"]
     }
   ],
-  "attrs": [
+  "sensors": [
     {
       "cluster": "0x0006",
       "attr": "0x0000",

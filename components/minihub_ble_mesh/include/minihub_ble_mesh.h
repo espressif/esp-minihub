@@ -78,6 +78,12 @@ esp_err_t minihub_ble_mesh_lightness(uint16_t unicast, uint16_t lightness);
 esp_err_t minihub_ble_mesh_ctl(uint16_t unicast, uint16_t lightness, uint16_t temperature,
                                int16_t delta_uv);
 
+/**
+ * @brief Light HSL set: hue / saturation / lightness, each 0…65535 (Mesh raw values).
+ */
+esp_err_t minihub_ble_mesh_hsl(uint16_t unicast, uint16_t hue, uint16_t saturation,
+                               uint16_t lightness);
+
 typedef void (*minihub_ble_mesh_device_cb_t)(const minihub_ble_mesh_device_t *dev, void *ctx);
 typedef void (*minihub_ble_mesh_attr_cb_t)(const minihub_ble_mesh_attr_evt_t *evt, void *ctx);
 

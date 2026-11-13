@@ -149,8 +149,8 @@ CID/PID/VID 与 ``uuid``；Matter Basic Information 与 ``node_id``）。品类�
   来自按参数名推断的 CSS tone，不是另一种控件。
 * **数值** 来自在线点位的 ``props.params``；不在里面的参数不画行。
 * **可否操作** 看实例的 ``access``：``R`` 只显示，``RW`` 可改；``requires`` 不满足时变灰。
-* **卡片上的电源开关** 另有一份硬编码名单（``overview.js`` 的 ``ctrlTypes``），
-  类型不在名单里就没有开关；地图弹窗只对 ``switch`` 与 ``light`` 单击开关。
+* **卡片上的电源开关** 同样来自目录：类型要提供可写的 ``power`` 参数。地图标点用
+  同一个判断；实例 ``power`` 上 ``visible: false`` 或 ``access: "R"`` 就没有开关。
 
 参数怎么被读写
 --------------
@@ -248,7 +248,7 @@ REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导�
   :doc:`matter` 的限制一节。配网流程见 :doc:`matter`。字段：
 
   * ``point_id`` （必填）— 最长 64 字节
-  * ``type`` — 最长 16 字节，缺省 ``light``
+  * ``type`` — 最长 32 字节，缺省 ``light``
   * ``node_id`` — Fabric 节点号，十进制或 ``0x`` 十六进制字符串。控制器占用 1，设备应 ≥ 2
   * ``endpoint_id`` — Matter 端点，整数 0–65535，缺省 1（REST 配网写入的是这个字段，不是数组）
   * ``transport`` — ``wifi`` / ``ethernet`` / ``thread``，最长 15 字节；仅记录用
@@ -256,7 +256,7 @@ REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导�
 
   * ``point_id`` （必填）— Hub 点位名，最长 64 字节，两段点分形式，如
     ``zigbee.zb_0a1b`` （发现）或 ``zigbee.door_contact`` （手动绑定）
-  * ``type`` （必填）— 点位类型，最长 16 字节。 ``light`` / ``switch`` 走开关命令
+  * ``type`` （必填）— 点位类型，最长 32 字节。 ``light`` / ``switch`` 走开关命令
     （ ``turn_on`` / ``turn_off`` / ``toggle`` ）。 ``sensor`` 走温湿度或门磁
   * ``ieee`` — 64 位 IEEE 地址，十六进制字符串（可带 ``0x`` 前缀）。配网后用来认设备
   * ``short_addr`` — 网络短地址，整数 0–65535
@@ -276,12 +276,20 @@ REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导�
     offset+长度 ≤ 16。无有效过滤器时等同接受全部 UUID
   * ``provision.bind_models[]`` — 最多 12 条。 ``model_id`` 为整数或
     ``0x1000`` 形式字符串；可选 ``name``、 ``company_id`` （SIG 默认
-    ``0xFFFF`` ）。Host 客户端目前覆盖 OnOff ``0x1000``、Level ``0x1002``、
-    Lightness ``0x1300``、CTL ``0x1303``
-  * ``devices[]``： ``point_id``、 ``type`` （必填，最长 64 / 16 字节）。
-    ``type`` 为 ``sensor`` 的条目会被跳过。 ``uuid`` 为 32 个十六进制字符
+    ``0xFFFF`` ）。Host 会绑定能力表里已知的全部模型
+    （OnOff ``0x1000``、Level ``0x1002``、Lightness ``0x1300``、
+    CTL ``0x1303``、HSL ``0x1307``、Sensor Server ``0x1100``），
+    **再加上** 此处列出的模型 —— 所以这个数组是追加厂商模型，
+    不是替换内置集合
+  * ``devices[]``： ``point_id``、 ``type`` （必填，最长 64 / 32 字节）。
+    ``uuid`` 为 32 个十六进制字符
     （缓冲 32+NUL）。 ``unicast`` 0–65535。 ``elem_num`` 元素个数 0–255，
     缺省 1
+  * ``devices[].models[]`` — 可选。该条目的 Composition 模型：整数、
+    ``0x1000`` 形式字符串，或能力表公开的模型名字（``onoff``、
+    ``gen_onoff_srv`` 等）。写了就由映射表按模型推能力、进而定类型；
+    没写就由 ``type`` 推 —— 看映射表为该类型认识哪些参数。最终没有任何
+    已知能力的条目会被跳过并记日志
 * **thread** — 无 ``devices``， **不** 登记设备点（Border Router / dataset
   而已；Matter-over-Thread 终端走 ``adapters.matter``）。字段：
 
@@ -317,7 +325,7 @@ REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导�
   * ``maps[]`` （写在各网关下）把寄存器映到点位：
 
     * ``point_id`` （必填）— 最长 64 字节
-    * ``type`` — 最长 16 字节，缺省 ``sensor``
+    * ``type`` — 最长 32 字节，缺省 ``sensor``
     * ``unit_id`` — 覆盖网关默认从站号
     * ``fc`` — ``coil`` / ``discrete`` （或 ``di`` ）/ ``input`` （或 ``ir`` ）/
       其它视为 holding

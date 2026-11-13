@@ -53,6 +53,13 @@ esp_err_t minihub_matter_set_attr_cb(minihub_matter_attr_bool_cb_t cb, void *ctx
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t minihub_matter_set_attr_typed_cb(minihub_matter_attr_typed_cb_t cb, void *ctx)
+{
+    (void)cb;
+    (void)ctx;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 esp_err_t minihub_matter_interview_identity(uint64_t node_id)
 {
     (void)node_id;
@@ -135,6 +142,32 @@ esp_err_t minihub_matter_onoff(uint64_t node_id, uint16_t endpoint_id, bool on)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t minihub_matter_level_set(uint64_t node_id, uint16_t endpoint_id, uint8_t level)
+{
+    (void)node_id;
+    (void)endpoint_id;
+    (void)level;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_matter_color_temp_set(uint64_t node_id, uint16_t endpoint_id, uint16_t mireds)
+{
+    (void)node_id;
+    (void)endpoint_id;
+    (void)mireds;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_matter_color_xy_set(uint64_t node_id, uint16_t endpoint_id,
+                                      uint8_t hue, uint8_t saturation)
+{
+    (void)node_id;
+    (void)endpoint_id;
+    (void)hue;
+    (void)saturation;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool *out_on)
 {
     (void)node_id;
@@ -142,6 +175,29 @@ esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool
     if (out_on) {
         *out_on = false;
     }
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_matter_read_attrs(uint64_t node_id, const uint16_t *endpoint_ids, size_t ep_count,
+                                    const minihub_matter_attr_path_t *attrs, size_t attr_count)
+{
+    (void)node_id;
+    (void)endpoint_ids;
+    (void)ep_count;
+    (void)attrs;
+    (void)attr_count;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_matter_subscribe_node_attrs(uint64_t node_id, const uint16_t *endpoint_ids,
+                                              size_t ep_count, const minihub_matter_attr_path_t *attrs,
+                                              size_t attr_count)
+{
+    (void)node_id;
+    (void)endpoint_ids;
+    (void)ep_count;
+    (void)attrs;
+    (void)attr_count;
     return ESP_ERR_NOT_SUPPORTED;
 }
 

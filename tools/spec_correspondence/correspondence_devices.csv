@@ -1,0 +1,9 @@
+minihub_device_type,matter_device(s),zigbee_zha_device(s),ble_mesh_model(s),note
+light,On/Off Light / Dimmable Light / Color Temperature Light / Extended Color Light,On/off light / Dimmable light / Color dimmable light / Color temperature light / Extended color light,Light Lightness / CTL / HSL,Matter covers OnOff+Dimmer+CT+ECL in one 'light' bucket
+switch,On/Off Light Switch / Dimmer Switch / Color Dimmer Switch,On/off light switch / Dimmer switch / Color dimmer switch,Generic OnOff / Generic Level,
+sensor_temp_humidity,Temperature Sensor / Humidity Sensor,(no ZHA device type; clusters 0x0402/0x0405),Sensor Server,MiniHub merges temp+humidity into one type
+sensor_air_quality,Air Quality Sensor,(no standard ZCL; vendor/custom),Sensor Server,
+sensor_illuminance,Light Sensor,Light sensor (0x0106),Sensor Server,
+sensor_occupancy,Occupancy Sensor,Occupancy sensor (0x0107),Sensor Server,
+sensor_motion,Occupancy Sensor (motion sub-type),Occupancy sensor (0x0107),Sensor Server,Matter has no dedicated 'motion' type; MiniHub splits it out
+sensor,(all Sensor types),(all ZHA sensor types),Sensor Server,Zigbee coarse bucket; expands to the typed sensors above

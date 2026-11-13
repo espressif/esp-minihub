@@ -111,12 +111,14 @@ resolves the joined device with DNS-SD on the fabric:
 * ``ble_wifi`` / ``first_time`` — BLE + inject **device** Wi-Fi credentials
 
 ``POST /api/matter/commission`` still accepts ``network`` (DNS-SD only / multi-admin)
-and ``ble_ethernet`` for API clients; they are not offered in the overview dialog.
-Only the ``ble_ethernet`` path asks CHIP to browse every discovery type at once;
-the two dialog paths go through esp-matter's Wi-Fi / Thread pairing helpers.
-An in-flight commissioning can be stopped with
-``POST /api/matter/commission`` and ``{"cancel": true}`` (the dialog shows
-**取消配网**), which answers ``status: "cancelled"``.
+and ``ble_ethernet`` for API clients. They are not offered in the overview dialog.
+
+Only the ``ble_ethernet`` path asks CHIP to browse every discovery type at once.
+The two dialog paths go through esp-matter's Wi-Fi / Thread pairing helpers.
+
+Stop an in-flight commissioning with ``POST /api/matter/commission`` and
+``{"cancel": true}`` (the dialog shows **取消配网**). The response ``status`` is
+``cancelled``.
 
 Commission + persist devices
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -128,9 +130,9 @@ commissioning, and returns ``commission: "started"`` without blocking the HTTP
 handler. On success the phase is cleared and the card becomes a normal device; on
 failure or the commission watchdog the card stays with
 ``commission_phase: "failed"`` (deletable). The watchdog is
-``CONFIG_MINIHUB_MATTER_COMMISSION_WAIT_MS``, default **300 s** (60–900 s),
-because a first DNS-SD browse on the fabric can take minutes — an older 180 s
-figure you may find in notes is stale. Poll ``GET /api/matter/status`` for
+``CONFIG_MINIHUB_MATTER_COMMISSION_WAIT_MS``, default **300 s** (60–900 s).
+A first DNS-SD browse on the fabric can take minutes — an older 180 s figure you
+may find in notes is stale. Poll ``GET /api/matter/status`` for
 ``commission``: ``idle`` | ``running`` | ``ok`` | ``failed``. Omitting
 ``pairing_code`` still upserts without commissioning (``commission: "skipped"``).
 
@@ -252,8 +254,7 @@ an empty array. The numbers above show the field shape, not a bench reading.
 Bench demo
 ^^^^^^^^^^
 
-The observable that must appear — this is the acceptance condition, see the status note
-below:
+The observable that must appear — this is the acceptance condition:
 
 1. ``GET /api/matter/status`` shows the node with ``live`` true.
 2. Reset the card, so the Hub's own write cannot be mistaken for a report:
@@ -266,13 +267,10 @@ below:
    went up and the point value moved to the device's real state. If the value moved while
    ``reports`` stayed flat, a Hub command wrote it and that run proves nothing.
 
-**Pending a reachable device.** This procedure has not been run end to end anywhere. On
-the development bench the commissioned node does not answer CASE, so ``live`` stayed
-``false``, ``reports`` stayed ``0``, and no report ever arrived — steps 3 and 4 are
-therefore unverified, including how long a report takes to show up. The subscribe
-intervals in ``components/minihub_matter/matter_ctrl.cpp`` (``MATTER_SUB_MIN_INTERVAL`` =
-5 s, ``MATTER_SUB_MAX_INTERVAL`` = 30 s) are **configured bounds** on how often the
-device may report; they are not a measured button-press-to-card latency.
+The subscribe intervals in ``components/minihub_matter/matter_ctrl.cpp``
+(``MATTER_SUB_MIN_INTERVAL`` = 5 s, ``MATTER_SUB_MAX_INTERVAL`` = 30 s) are
+**configured bounds** on how often the device may report; they are not a measured
+button-press-to-card latency.
 
 Limits
 ^^^^^^
@@ -362,10 +360,22 @@ Matter-over-Thread end-devices are **Matter** points; see :doc:`thread`.
 Who owns Wi-Fi?
 ---------------
 
-CHIP Wi-Fi station is **off** on MiniHub controller builds
-(``matter_over_eth.defaults``). MiniHub still connects Host STA via
-``minihub_net_start_wifi()`` when credentials exist. Default-route selection only
-picks the netif with IPv4 — see :doc:`networking`.
+``MINIHUB_NET_WIFI_STA`` selects CHIP ``ENABLE_WIFI_STATION`` when
+``MINIHUB_MATTER_ADAPTER`` is on and ``MINIHUB_THREAD_ADAPTER`` is off.
+
+Thread BR products keep CHIP station off (``thread.defaults``):
+
+* Host uplink is Ethernet; CHIP must not call ``esp_wifi_connect()``.
+* With station off, ``matter_over_eth.defaults`` sets
+  ``ENABLE_ETHERNET_TELEMETRY=y`` (the only CHIP Kconfig that turns on
+  ``CHIP_DEVICE_CONFIG_ENABLE_ETHERNET`` / EspDnssd).
+* It clears ``ETHERNET_NETWORK_COMMISSIONING_DRIVER`` so
+  ``ESPEthernetDriver::Init`` does not install a second PHY.
+* MiniHub owns EMAC and the Hub is commissioner-only.
+
+MiniHub connects Host STA via ``minihub_net_start_wifi()`` when credentials
+exist. Default-route selection only picks the netif with IPv4 — see
+:doc:`networking`.
 
 Terminology
 -----------

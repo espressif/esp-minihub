@@ -9,6 +9,12 @@ upstreamed and the product depends on it:
 
 - `esp-rainmaker-1.16.0-defer-chal-resp-self-claim.patch` — defer the commissioning
   challenge-response / self-claim so MiniHub can own the fabric.
+- `esp-matter-ota-provider-class-memaccess.patch` — replace `memset` on
+  `EspOtaRequestorEntry` with value-init (`Apply-Root: ../esp-matter`). Needed
+  because GCC `-Werror=class-memaccess` rejects clearing a type that embeds
+  `chip::ScopedNodeId`.
+- `esp-matter-ota-provider-cluster-include.patch` — CHIP renamed
+  `ota-provider-cluster.h` → `OTAProviderCluster.h`; update esp-matter includes.
 
 **Dropped (superseded by `esp_sha_compat.c`, 2026-10-02):** the two soft-SHA fallback
 patches (`esp-rainmaker-1.16.0-soft-sha-fallback.patch` and its `-managed` variant) made

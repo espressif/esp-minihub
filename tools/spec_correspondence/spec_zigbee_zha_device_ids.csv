@@ -1,0 +1,33 @@
+device_id,name,minihub_support,minihub_type
+0x0000,Generic On/Off Switch,yes,switch
+0x0001,Level Control Switch,yes,switch
+0x0002,On/Off Output,no,
+0x0003,Level Controllable Output,no,
+0x0004,Scene Selector,no,
+0x0005,Configuration Tool,no,
+0x0006,Remote Control,no,
+0x0007,Combined Interface,no,
+0x0008,Range Extender,no,
+0x0009,Mains Power Outlet,yes,light
+0x000A,Door Lock,no,
+0x000B,Door Lock Controller,no,
+0x000C,Simple Sensor,yes,sensor
+0x000D,Consumption Awareness,no,
+0x0050,Home Gateway,no,
+0x0051,Smart plug,param,power
+0x0052,White Goods,no,
+0x0053,Meter Interface,no,
+0x0100,On/off light,yes,light
+0x0101,Dimmable light,yes,light
+0x0102,Color dimmable light,yes,light
+0x0103,On/off light switch,yes,switch
+0x0104,Dimmer switch,yes,switch
+0x0105,Color dimmer switch,yes,switch
+0x0106,Light sensor,yes,sensor_illuminance
+0x0107,Occupancy sensor,yes,sensor_occupancy
+0x0108,On/off ballast,yes,light
+0x0109,Dimmable ballast,yes,light
+0x010A,On/off plug-in unit,yes,light
+0x010B,Dimmable plug-in unit,yes,light
+0x010C,Color temperature light,yes,light
+0x010D,Extended color light,yes,light

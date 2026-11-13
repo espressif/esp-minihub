@@ -560,6 +560,7 @@ static void emit_classified(uint16_t short_addr, uint64_t ieee, uint8_t endpoint
         (void)zigbee_stack_subscribe(dev.short_addr, dev.endpoint, dev.ieee, dev.caps);
     }
     zigbee_stack_subscribe_product_params(dev.short_addr, dev.endpoint, dev.ieee);
+    zigbee_stack_read_map_attrs(dev.short_addr, dev.endpoint, dev.caps);
     /* Best-effort Basic identity — join already succeeded; ignore read failures. */
     if (s_stack_ready) {
         esp_zigbee_lock_acquire(portMAX_DELAY);
@@ -1577,6 +1578,30 @@ void zigbee_stack_subscribe_product_params(uint16_t short_addr, uint8_t endpoint
     /* Static/info attrs (e.g. Basic): read only — many devices reject ZDO bind on 0x0000. */
     for (size_t i = 0; i < n; i++) {
         (void)read_attr(short_addr, endpoint, params[i].cluster, params[i].attr_id);
+    }
+    esp_zigbee_lock_release();
+}
+
+void zigbee_stack_read_map_attrs(uint16_t short_addr, uint8_t endpoint, uint8_t caps)
+{
+    if (!s_stack_ready || caps == 0) {
+        return;
+    }
+    if (endpoint == 0) {
+        endpoint = 1;
+    }
+    /* Compact paths only — full minihub_zb_map_attr_t[MAX] is ~4 KiB and blows
+     * the esp_timer stack (this runs from disc_finalize via emit_classified). */
+    minihub_zb_map_path_t paths[MINIHUB_ZB_MAP_MAX_ATTRS];
+    size_t n = minihub_zb_map_read_paths_for_caps(caps, paths, MINIHUB_ZB_MAP_MAX_ATTRS);
+    if (n == 0) {
+        return;
+    }
+    ESP_LOGI(TAG, "map read-back 0x%04x ep=%u caps=0x%02x n=%u", short_addr, endpoint, caps,
+             (unsigned)n);
+    esp_zigbee_lock_acquire(portMAX_DELAY);
+    for (size_t i = 0; i < n; i++) {
+        (void)read_attr(short_addr, endpoint, paths[i].cluster, paths[i].attr);
     }
     esp_zigbee_lock_release();
 }

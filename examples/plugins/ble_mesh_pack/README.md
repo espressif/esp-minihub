@@ -24,17 +24,20 @@ whose block is already present with `enabled: false`.
 
 ## What it merges
 
-Appends one SIG bind entry that factory `adapters.json` does **not** list:
+Appends one **vendor** bind entry — a model id the Host's own capability map
+does not know:
 
 | Field | Value |
 |-------|--------|
-| `model_id` | `0x1307` (Light HSL Server) |
-| `name` | `l1_demo_light_hsl_srv` (marker so you can spot the merge) |
+| `model_id` | `0xFF01` (vendor model) |
+| `name` | `l1_demo_vendor_model` (marker so you can spot the merge) |
 
-Host BLE Mesh **clients today** bind OnOff / Level / Lightness / CTL. This extra
-row is for teaching inject merge, not a new lighting pipeline. It does **not**
-restrict UUID matching (`uuid_filters` stay empty → still accept any
-unprovisioned node).
+The Host binds every model its capability map knows (OnOff / Level / Lightness
+/ CTL / HSL / Sensor Server) **plus** the models a policy names, so this row
+adds a vendor model without dropping the built-in ones. This extra row is for
+teaching inject merge, not a new lighting pipeline. It does **not** restrict
+UUID matching (`uuid_filters` stay empty → still accept any unprovisioned
+node).
 
 If `adapters.ble_mesh.enabled` is **false**, Host **skips** the pack (serial:
 `skip pack 'ble_mesh_pack'`).
@@ -73,7 +76,7 @@ curl -X POST http://$HUB/api/hub/reload
   `merged pack 'ble_mesh_pack' into adapter 'ble_mesh'`
 * `GET /api/packs` — `id=ble_mesh_pack`, `inject_adapter=ble_mesh`
 * `GET /api/config/adapters` — `adapters.ble_mesh.provision.bind_models`
-  includes `{ "model_id": "0x1307", "name": "l1_demo_light_hsl_srv" }`
+  includes `{ "model_id": "0xFF01", "name": "l1_demo_vendor_model" }`
 * Devices page is **unchanged** until a real Mesh node joins (L1 does not
   register points)
 

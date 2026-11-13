@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "_comment": "Matter capability map — mirrors ble_mesh_map.json schema. 'attr' is the Matter attribute id used for subscribe/read-back on Hub restart. Sensor 'scale' values encode each cluster's MeasuredValue unit.",
+  "models": [
+    { "id": "0x0006", "cap": "onoff", "client": "0x0006", "alias": "OnOff" },
+    { "id": "0x0008", "cap": "level", "also": "lightness", "client": "0x0008", "alias": "LevelControl" },
+    { "id": "0x0300", "cap": "ctl", "also": "hsl", "client": "0x0300", "alias": "ColorControl" },
+    { "id": "0x0402", "cap": "sensor", "alias": "TemperatureMeasurement" },
+    { "id": "0x0405", "cap": "sensor", "alias": "RelativeHumidityMeasurement" },
+    { "id": "0x0403", "cap": "sensor", "alias": "PressureMeasurement" },
+    { "id": "0x0400", "cap": "sensor", "alias": "IlluminanceMeasurement" },
+    { "id": "0x0406", "cap": "sensor", "alias": "OccupancySensing" },
+    { "id": "0x040D", "cap": "sensor", "alias": "CarbonDioxideConcentrationMeasurement" },
+    { "id": "0x002F", "cap": "sensor", "alias": "BooleanState" }
+  ],
+  "classify": [
+    { "type": "sensor_temp_humidity", "priority": 120, "any_props": ["0x0402", "0x0405"] },
+    { "type": "sensor_air_quality",   "priority": 110, "any_props": ["0x040D"] },
+    { "type": "sensor_illuminance",   "priority": 100, "any_props": ["0x0400"] },
+    { "type": "sensor_occupancy",     "priority": 95,  "any_props": ["0x0406"] },
+    { "type": "sensor_motion",        "priority": 90,  "any_props": ["0x002F"] },
+    { "type": "light",                "priority": 50,  "any_caps": ["level", "ctl", "hsl", "lightness"] },
+    { "type": "switch",               "priority": 10,  "any_caps": ["onoff"] }
+  ],
+  "params": [
+    { "cap": "onoff",     "param": "power",      "access": "RW", "init": "off" },
+    { "cap": "level",     "param": "brightness", "access": "RW", "init": 100 },
+    { "cap": "lightness", "param": "brightness", "access": "RW", "init": 100 },
+    { "cap": "ctl",       "param": "cct",        "access": "RW", "init": 4000 },
+    { "cap": "hsl",       "param": "hue",        "access": "RW", "init": 0 },
+    { "cap": "hsl",       "param": "saturation", "access": "RW", "init": 0 },
+    { "prop": "0x0402", "param": "temperature",  "access": "R" },
+    { "prop": "0x0405", "param": "humidity",     "access": "R" },
+    { "prop": "0x0403", "param": "pressure_hpa", "access": "R" },
+    { "prop": "0x0400", "param": "illuminance",  "access": "R" },
+    { "prop": "0x0406", "param": "occupancy",    "access": "R" },
+    { "prop": "0x002F", "param": "motion",       "access": "R" },
+    { "prop": "0x040D", "param": "co2",          "access": "R" }
+  ],
+  "controls": [
+    { "param": "power",      "kind": "onoff", "model": "0x0006", "field": "onoff", "attr": "0x0000" },
+    { "param": "brightness", "kind": "level", "model": "0x0008", "field": "current_level", "fallback": "lightness", "attr": "0x0000" },
+    { "param": "cct",        "kind": "ctl",   "model": "0x0300", "field": "color_temperature_mireds", "attr": "0x0007" },
+    { "param": "hue",        "kind": "hsl",   "model": "0x0300", "field": "current_hue", "attr": "0x0000" },
+    { "param": "saturation", "kind": "hsl",   "model": "0x0300", "field": "current_saturation", "attr": "0x0001" }
+  ],
+  "sensors": [
+    { "property": "0x0402", "param": "temperature",  "attr": "0x0000", "size": 2, "signed": true,  "scale": 0.01,   "min": -40,    "max": 125 },
+    { "property": "0x0405", "param": "humidity",     "attr": "0x0000", "size": 2, "signed": false, "scale": 0.01,   "min": 0,      "max": 100 },
+    { "property": "0x0403", "param": "pressure_hpa", "attr": "0x0000", "size": 4, "signed": false, "scale": 0.01,   "min": 300,    "max": 1100 },
+    { "property": "0x0400", "param": "illuminance",  "attr": "0x0000", "size": 4, "signed": false, "scale": 0.01,   "min": 0,      "max": 100000 },
+    { "property": "0x0406", "param": "occupancy",    "attr": "0x0000", "size": 1, "signed": false, "scale": 1,      "bool_threshold": 0 },
+    { "property": "0x002F", "param": "motion",       "attr": "0x0000", "size": 1, "signed": false, "scale": 1,      "bool_threshold": 0 },
+    { "property": "0x040D", "param": "co2",          "attr": "0x0000", "size": 2, "signed": false, "scale": 1,      "min": 0,      "max": 5000 }
+  ]
+}

@@ -7,11 +7,13 @@ MiniHub 以 **Host 适配器** （协调器）运行 Zigbee，而不是独立终
 ``adapters.zigbee`` 下。JSON 字段见 :doc:`data_model` （ :ref:`adapters-JSON` ）。
 
 Zigbee 独占 2.4 GHz 射频：既不与 Wi-Fi 共存，也不与 BLE Mesh 共存；Thread 又要抢
-同一块 802.15.4 射频，所以这两个栈 **编译期互斥**：
-``tools/build_firmware.py`` 会拦下两者都启用的构建，两个 Kconfig 选项彼此没有依赖。
-JSON 仍然双开时按跳过 Thread 处理；JSON 让 Zigbee 与 Wi-Fi 或 BLE Mesh 并列时，按
-跳过 Zigbee 处理。所以 Zigbee 的 Hub 走以太网接入局域网。Hub 启动见
-:doc:`getting_started` 与 :doc:`networking`，完整矩阵见 :doc:`radios`。
+同一块 802.15.4 射频。两个栈可以一起编译，两个 Kconfig 选项彼此没有依赖。
+``adapters.json`` 里哪一项 ``enabled`` 为 true，哪一项就启动；两项都为 true 时
+跳过后启动的那个（Zigbee 先注册，所以是 Thread）。
+
+JSON 让 Zigbee 与 Wi-Fi 或 BLE Mesh 并列时，按跳过 Zigbee 处理。所以 Zigbee 的
+Hub 走以太网接入局域网。Hub 启动见 :doc:`getting_started` 与 :doc:`networking`，
+完整矩阵见 :doc:`radios`。
 
 构建
 ----

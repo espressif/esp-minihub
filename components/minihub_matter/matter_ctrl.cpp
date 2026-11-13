@@ -25,18 +25,19 @@ extern "C" esp_err_t minihub_hub_resync_adapter_async(const char *adapter_name) 
 #include "minihub_thread.h"
 #endif
 #include <esp_matter.h>
+#include <esp_matter_client.h>
 #include <esp_matter_controller_client.h>
-#include <esp_matter_controller_cluster_command.h>
 #include <esp_matter_controller_pairing_command.h>
-#include <esp_matter_controller_read_command.h>
-#include <esp_matter_controller_subscribe_command.h>
-#include <esp_matter_controller_utils.h>
 #include <app-common/zap-generated/ids/Attributes.h>
 #include <app-common/zap-generated/ids/Clusters.h>
 #include <app/AttributePathParams.h>
 #include <app/EventPathParams.h>
+#include <app/InteractionModelEngine.h>
 #include <app/data-model/Decode.h>
+#include <lib/support/CHIPMem.h>
+#include <lib/support/CHIPMem.h>
 #include <lib/support/Span.h>
+#include <lib/core/ScopedNodeId.h>
 #include <lib/core/TLV.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/CommissioningDelegate.h>
@@ -45,6 +46,8 @@ extern "C" esp_err_t minihub_hub_resync_adapter_async(const char *adapter_name) 
 #include <lib/dnssd/Advertiser.h>
 #include <lib/dnssd/Resolver.h>
 #include <platform/CHIPDeviceLayer.h>
+#include <setup_payload/ManualSetupPayloadGenerator.h>
+#include <setup_payload/SetupPayload.h>
 #if CONFIG_ENABLE_MATTER_OVER_THREAD
 #include <platform/ThreadStackManager.h>
 #include <platform/ESP32/OpenthreadLauncher.h>
@@ -63,7 +66,38 @@ static constexpr uint32_t k_onoff_cluster = chip::app::Clusters::OnOff::Id;
 static constexpr uint32_t k_onoff_on_cmd = chip::app::Clusters::OnOff::Commands::On::Id;
 static constexpr uint32_t k_onoff_off_cmd = chip::app::Clusters::OnOff::Commands::Off::Id;
 static constexpr uint32_t k_onoff_attr = chip::app::Clusters::OnOff::Attributes::OnOff::Id;
+static constexpr uint32_t k_level_cluster = chip::app::Clusters::LevelControl::Id;
+static constexpr uint32_t k_level_move_to_level_wo = chip::app::Clusters::LevelControl::Commands::MoveToLevelWithOnOff::Id;
+static constexpr uint32_t k_color_cluster = chip::app::Clusters::ColorControl::Id;
+static constexpr uint32_t k_color_move_to_ct = chip::app::Clusters::ColorControl::Commands::MoveToColorTemperature::Id;
+static constexpr uint32_t k_color_move_to_hue_sat = chip::app::Clusters::ColorControl::Commands::MoveToHueAndSaturation::Id;
 static constexpr uint32_t k_basic_cluster = chip::app::Clusters::BasicInformation::Id;
+
+static chip::ScopedNodeId scoped_peer(uint64_t node_id)
+{
+    return chip::ScopedNodeId(
+        node_id, esp_matter::controller::matter_controller_client::get_instance().get_fabric_index());
+}
+
+static esp_err_t chip_to_esp(CHIP_ERROR err)
+{
+    if (err == CHIP_NO_ERROR) {
+        return ESP_OK;
+    }
+    if (err == CHIP_ERROR_NO_MEMORY) {
+        return ESP_ERR_NO_MEM;
+    }
+    if (err == CHIP_ERROR_INVALID_ARGUMENT) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (err == CHIP_ERROR_BUSY || err == CHIP_ERROR_INCORRECT_STATE) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (err == CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    return ESP_FAIL;
+}
 
 static char s_last_error[128];
 static bool s_started;
@@ -163,11 +197,20 @@ static void *s_identity_ctx;
 
 static minihub_matter_attr_bool_cb_t s_attr_cb;
 static void *s_attr_ctx;
+static minihub_matter_attr_typed_cb_t s_attr_typed_cb;
+static void *s_attr_typed_ctx;
 
 esp_err_t minihub_matter_set_attr_cb(minihub_matter_attr_bool_cb_t cb, void *ctx)
 {
     s_attr_cb = cb;
     s_attr_ctx = ctx;
+    return ESP_OK;
+}
+
+esp_err_t minihub_matter_set_attr_typed_cb(minihub_matter_attr_typed_cb_t cb, void *ctx)
+{
+    s_attr_typed_cb = cb;
+    s_attr_typed_ctx = ctx;
     return ESP_OK;
 }
 
@@ -179,20 +222,65 @@ esp_err_t minihub_matter_set_attr_cb(minihub_matter_attr_bool_cb_t cb, void *ctx
  * Runs on the CHIP event task inside the stack lock. */
 static void note_sub_report(uint64_t node_id, uint16_t endpoint_id);
 
-/* esp_matter::controller::attribute_report_cb_t target. Runs on the CHIP event
- * task inside the stack lock. */
+/* Attribute report sink used by client read/subscribe delegates. Runs on the
+ * CHIP event task inside the stack lock. */
 static void on_attr_report(uint64_t node_id, const chip::app::ConcreteDataAttributePath &path,
                            chip::TLV::TLVReader *data, const chip::app::StatusIB &status)
 {
-    if (!s_attr_cb || data == nullptr || !status.IsSuccess()) {
+    if (data == nullptr || !status.IsSuccess()) {
         return;
     }
-    bool val = false;
-    if (chip::app::DataModel::Decode(*data, val) != CHIP_NO_ERROR) {
-        return; /* non-boolean attribute, or decode failure */
+    /* Decode TLV by element type so typed callback carries real values, not
+     * just bool. CHIP auto-widens integers on Decode. */
+    minihub_matter_attr_value_t tv = { MINIHUB_MATTER_VAL_UNKNOWN, {0} };
+    bool is_bool = false;
+    bool b = false;
+
+    chip::TLV::TLVType t = data->GetType();
+    switch (t) {
+    case chip::TLV::kTLVType_Boolean:
+        if (chip::app::DataModel::Decode(*data, b) == CHIP_NO_ERROR) {
+            tv.type = MINIHUB_MATTER_VAL_BOOL;
+            tv.v.b = b;
+            is_bool = true;
+        }
+        break;
+    case chip::TLV::kTLVType_UnsignedInteger: {
+        uint64_t u = 0;
+        if (chip::app::DataModel::Decode(*data, u) == CHIP_NO_ERROR) {
+            tv.type = MINIHUB_MATTER_VAL_UINT;
+            tv.v.u = u;
+        }
+        break;
     }
+    case chip::TLV::kTLVType_SignedInteger: {
+        int64_t i = 0;
+        if (chip::app::DataModel::Decode(*data, i) == CHIP_NO_ERROR) {
+            tv.type = MINIHUB_MATTER_VAL_INT;
+            tv.v.i = i;
+        }
+        break;
+    }
+    case chip::TLV::kTLVType_FloatingPointNumber: {
+        double d = 0;
+        if (chip::app::DataModel::Decode(*data, d) == CHIP_NO_ERROR) {
+            tv.type = MINIHUB_MATTER_VAL_DOUBLE;
+            tv.v.d = d;
+        }
+        break;
+    }
+    default:
+        break;
+    }
+
     note_sub_report(node_id, path.mEndpointId);
-    s_attr_cb(node_id, path.mEndpointId, path.mClusterId, path.mAttributeId, val, s_attr_ctx);
+    if (is_bool && s_attr_cb != nullptr) {
+        s_attr_cb(node_id, path.mEndpointId, path.mClusterId, path.mAttributeId, b, s_attr_ctx);
+    }
+    if (s_attr_typed_cb != nullptr) {
+        s_attr_typed_cb(node_id, path.mEndpointId, path.mClusterId, path.mAttributeId,
+                        &tv, s_attr_typed_ctx);
+    }
 }
 
 static void set_error(const char *msg)
@@ -299,12 +387,8 @@ static void on_identity_attr(uint64_t node_id, const chip::app::ConcreteDataAttr
     }
 }
 
-static void on_identity_done(uint64_t node_id,
-                             const chip::Platform::ScopedMemoryBufferWithSize<chip::app::AttributePathParams> &attr_paths,
-                             const chip::Platform::ScopedMemoryBufferWithSize<chip::app::EventPathParams> &event_paths)
+static void on_identity_done(uint64_t node_id)
 {
-    (void)attr_paths;
-    (void)event_paths;
     identity_slot_t *slot = identity_slot(node_id, false);
     if (!slot) {
         return;
@@ -484,20 +568,6 @@ static void schedule_finalize(esp_err_t result)
     }
 }
 
-static void on_pairing_complete(CHIP_ERROR err)
-{
-    if (err != CHIP_NO_ERROR) {
-        char buf[96];
-        snprintf(buf, sizeof(buf), "PASE session failed: %s", chip::ErrorStr(err));
-        set_error(buf);
-        s_pairing_in_progress = false;
-        schedule_finalize(ESP_FAIL);
-        return;
-    }
-    s_commission_stage = COMMISSION_STAGE_BINDING;
-    ESP_LOGI(TAG, "commission stage -> binding (PASE up)");
-}
-
 static void on_commissioning_success(chip::ScopedNodeId peer_id)
 {
     ESP_LOGI(TAG, "Commissioned node 0x%016" PRIx64, peer_id.GetNodeId());
@@ -514,13 +584,8 @@ static void on_commissioning_success(chip::ScopedNodeId peer_id)
 }
 
 static void on_commissioning_failure(chip::ScopedNodeId peer_id, CHIP_ERROR error,
-                                     chip::Controller::CommissioningStage stage,
-                                     std::optional<chip::Credentials::AttestationVerificationResult> additional)
+                                     chip::Controller::CommissioningStage stage)
 {
-    (void)peer_id;
-    (void)additional;
-    /* commission_error is 96 bytes in adapters.json, so the card gets the compact
-     * form and the actionable hint goes to the log only. */
     if (error == CHIP_ERROR_WRONG_NODE_ID) {
         ESP_LOGW(TAG, "device rejected the operational credential (kInvalidNodeOpId): node id "
                       "%" PRIu64 " is already on this fabric, or the device still holds an old "
@@ -536,18 +601,62 @@ static void on_commissioning_failure(chip::ScopedNodeId peer_id, CHIP_ERROR erro
     schedule_finalize(ESP_FAIL);
 }
 
+/* Caller-owned pairing::interaction — one commission at a time. */
+static esp_matter::controller::pairing::interaction s_pairing_op;
+
+class HubPairingDelegate final : public esp_matter::controller::pairing::delegate {
+public:
+    void OnProgress(esp_matter::controller::pairing::phase_t phase) override
+    {
+        using phase_t = esp_matter::controller::pairing::phase_t;
+        if (phase == phase_t::discovery) {
+            s_commission_stage = COMMISSION_STAGE_DISCOVERING;
+            ESP_LOGI(TAG, "commission stage -> discovering");
+        } else if (phase == phase_t::pase) {
+            s_commission_stage = COMMISSION_STAGE_BINDING;
+            ESP_LOGI(TAG, "commission stage -> binding (PASE up)");
+        } else if (phase == phase_t::commissioning) {
+            s_commission_stage = COMMISSION_STAGE_BINDING;
+            ESP_LOGI(TAG, "commission stage -> commissioning");
+        }
+    }
+
+    void OnCommissioningStage(chip::Controller::CommissioningStage stage) override
+    {
+        ESP_LOGI(TAG, "commissioning stage: %s", chip::Controller::StageToString(stage));
+    }
+
+    void OnDone(const esp_matter::controller::pairing::completion_t &result) override
+    {
+        chip::FabricIndex fabric =
+            esp_matter::controller::matter_controller_client::get_instance().get_fabric_index();
+        chip::ScopedNodeId peer(result.node_id, fabric);
+        if (result.error == CHIP_NO_ERROR) {
+            on_commissioning_success(peer);
+            return;
+        }
+        chip::Controller::CommissioningStage stage = chip::Controller::CommissioningStage::kSecurePairing;
+        if (result.details && result.details->failedStage.HasValue()) {
+            stage = result.details->failedStage.Value();
+        }
+        on_commissioning_failure(peer, result.error, stage);
+    }
+};
+
+static HubPairingDelegate s_pairing_delegate;
+
 static void register_pairing_callbacks(void)
 {
-    esp_matter::controller::pairing_command_callbacks_t cb = {
-        .pase_callback = on_pairing_complete,
-        .commissioning_success_callback = on_commissioning_success,
-        .commissioning_failure_callback = on_commissioning_failure,
-        .unpair_complete_callback = nullptr,
-    };
-    auto &pairing = esp_matter::controller::pairing_command::get_instance();
-    pairing.set_callbacks(cb);
-    /* Hub does not run ICD client storage; default esp-matter enables ICD registration and fails commissioning. */
-    pairing.set_icd_registration(false);
+    /* New pairing::interaction takes the delegate per start(); ICD stays off via options. */
+}
+
+static esp_err_t start_pairing(esp_matter::controller::pairing::request_t &request)
+{
+    esp_matter::controller::pairing::options_t options;
+    options.timeout_ms = k_commission_wait_ms;
+    options.register_icd = false; /* Hub has no ICD client storage. */
+    CHIP_ERROR cerr = s_pairing_op.start(request, options, &s_pairing_delegate);
+    return chip_to_esp(cerr);
 }
 
 static esp_err_t validate_commission_node_id(uint64_t node_id)
@@ -572,23 +681,16 @@ static bool ensure_pairing_slot_free(void)
         return false;
     }
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-    if (!s_pairing_in_progress && commissioner->GetPairingDelegate() == nullptr &&
+    if (!s_pairing_in_progress && !s_pairing_op.active() &&
         commissioner->GetCommissioningStage() == chip::Controller::CommissioningStage::kSecurePairing) {
         return true;
     }
-    ESP_LOGW(TAG, "clearing sticky pairing state (delegate=%d flag=%d stage=%s)",
-             commissioner->GetPairingDelegate() != nullptr, s_pairing_in_progress,
+    ESP_LOGW(TAG, "clearing sticky pairing state (active=%d flag=%d stage=%s)",
+             s_pairing_op.active(), s_pairing_in_progress,
              chip::Controller::StageToString(commissioner->GetCommissioningStage()));
-    /* Drop the delegate first so StopPairing's completion does not finalize the
-     * device card we are about to commission. */
-    commissioner->RegisterPairingDelegate(nullptr);
+    /* stop() detaches the delegate and cancels unfinished pairing. */
+    s_pairing_op.stop();
     s_pairing_in_progress = false;
-    /* A commissioning left at FindOperationalForStayActive makes the next
-     * PairDevice() complete PASE synchronously and then fail Commission().
-     * SetUpCodePairer treats that failure as "PASE never started" and calls
-     * PASEEstablishmentComplete() again, which asserts. StopPairing resets the
-     * stage to kSecurePairing. The first call may only stop discovery; the
-     * second cancels the commissioning itself. */
     if (s_commission_node_id >= 2 &&
         commissioner->GetCommissioningStage() != chip::Controller::CommissioningStage::kSecurePairing) {
         (void)commissioner->StopPairing(static_cast<chip::NodeId>(s_commission_node_id));
@@ -774,10 +876,14 @@ esp_err_t minihub_matter_init(void)
     }
 
 #if CONFIG_ENABLE_MATTER_OVER_THREAD
+    /* Attach CHIP's OT instance when the Hub Border Router is up. If Thread is
+     * disabled in adapters.json (or still forming), do not abort commissioner
+     * setup: ENABLE_ETHERNET_TELEMETRY gives EspDnssd a live Ethernet path, and
+     * ble_thread commissioning is still gated by minihub_matter_commission_preflight
+     * on minihub_thread_ready(). Retry attach later via minihub_matter_attach_thread. */
     err = matter_thread_stack_attach();
     if (err != ESP_OK) {
-        set_error("thread stack attach failed");
-        ESP_LOGW(TAG, "commissioner init will fail without CHIP ThreadStack: %s",
+        ESP_LOGW(TAG, "CHIP ThreadStack not attached yet (%s); continuing commissioner on Ethernet",
                  esp_err_to_name(err));
     }
 #endif
@@ -789,9 +895,12 @@ esp_err_t minihub_matter_init(void)
     if (!commissioner_ready) {
         err = client.init(k_controller_node_id, k_controller_fabric_id, k_controller_port);
         if (err != ESP_OK) {
-            /* Factory may already be inited from a prior partial attempt. */
-            ESP_LOGW(TAG, "controller init: %s (continuing to setup_commissioner)",
-                     esp_err_to_name(err));
+            /* DeviceControllerFactory::Init failed (often Dnssd / missing
+             * Wi-Fi|Ethernet CHIP transport). SetupCommissioner needs a live
+             * system state — do not continue. */
+            set_error("DeviceControllerFactory init failed");
+            ESP_LOGE(TAG, "controller init: %s", esp_err_to_name(err));
+            return err;
         }
         err = client.setup_commissioner();
         if (err != ESP_OK) {
@@ -853,18 +962,11 @@ bool minihub_matter_ready(void)
 static esp_err_t pairing_code_ble_ethernet(chip::NodeId node_id, const char *payload)
 {
     /* BLE discovery, no Wi-Fi/Thread credentials — Ethernet (or already-linked) devices. */
-    chip::Controller::CommissioningParameters params;
-    auto &client = esp_matter::controller::matter_controller_client::get_instance();
-    auto *commissioner = client.get_commissioner();
-    if (!commissioner) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    if (commissioner->GetPairingDelegate() != nullptr) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    commissioner->RegisterPairingDelegate(&esp_matter::controller::pairing_command::get_instance());
-    CHIP_ERROR cerr = commissioner->PairDevice(node_id, payload, params, chip::Controller::DiscoveryType::kAll);
-    return (cerr == CHIP_NO_ERROR) ? ESP_OK : ESP_FAIL;
+    esp_matter::controller::pairing::request_t request;
+    request.node_id = node_id;
+    request.params.setup_code.payload = payload;
+    request.params.setup_code.transport = esp_matter::controller::pairing::transport_t::ble;
+    return start_pairing(request);
 }
 
 static void ensure_dnssd_ready(void)
@@ -1062,23 +1164,32 @@ esp_err_t minihub_matter_commission_code_ex(uint64_t node_id, const char *pairin
     ensure_dnssd_ready();
 
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+    esp_matter::controller::pairing::request_t request;
+    request.node_id = static_cast<chip::NodeId>(node_id);
+    request.params.setup_code.payload = code.c_str();
     if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_WIFI) {
         ESP_LOGI(TAG, "commission BLE+WiFi node=%" PRIu64, node_id);
-        err = esp_matter::controller::pairing_code_wifi(static_cast<chip::NodeId>(node_id), ssid, pass,
-                                                        code.c_str());
+        request.params.setup_code.transport = esp_matter::controller::pairing::transport_t::ble;
+        request.credentials.wifi.SetValue(esp_matter::controller::pairing::wifi_credentials_t{
+            chip::ByteSpan(reinterpret_cast<const uint8_t *>(ssid), strlen(ssid)),
+            chip::ByteSpan(reinterpret_cast<const uint8_t *>(pass), strlen(pass)),
+        });
+        err = start_pairing(request);
 #if CONFIG_MINIHUB_MATTER_THREAD_VIA_BLE_COMMISSION
     } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_THREAD) {
         ESP_LOGI(TAG, "commission BLE+Thread node=%" PRIu64 " dataset_len=%u", node_id,
                  (unsigned)dataset_len);
-        err = esp_matter::controller::pairing_code_thread(static_cast<chip::NodeId>(node_id), code.c_str(),
-                                                          dataset_buf, static_cast<uint8_t>(dataset_len));
+        request.params.setup_code.transport = esp_matter::controller::pairing::transport_t::ble;
+        request.credentials.thread_dataset.SetValue(chip::ByteSpan(dataset_buf, dataset_len));
+        err = start_pairing(request);
 #endif
     } else if (discovery == MINIHUB_MATTER_DISCOVERY_BLE_ETHERNET) {
         ESP_LOGI(TAG, "commission BLE+Ethernet node=%" PRIu64, node_id);
         err = pairing_code_ble_ethernet(static_cast<chip::NodeId>(node_id), code.c_str());
     } else {
         ESP_LOGI(TAG, "commission network-only node=%" PRIu64, node_id);
-        err = esp_matter::controller::pairing_code(static_cast<chip::NodeId>(node_id), code.c_str());
+        request.params.setup_code.transport = esp_matter::controller::pairing::transport_t::on_network;
+        err = start_pairing(request);
     }
     if (err != ESP_OK) {
         s_pairing_in_progress = false;
@@ -1195,13 +1306,48 @@ esp_err_t minihub_matter_commission_pin(uint64_t node_id, uint32_t setup_pin)
     s_pairing_in_progress = true;
     set_error(NULL);
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-    err = esp_matter::controller::pairing_on_network(node_id, setup_pin);
+    chip::SetupPayload payload;
+    payload.setUpPINCode = setup_pin;
+    payload.discriminator.SetLongValue(0);
+    std::string decimal;
+    CHIP_ERROR gen_err = chip::ManualSetupPayloadGenerator(payload).payloadDecimalStringRepresentation(decimal);
+    if (gen_err != CHIP_NO_ERROR || decimal.empty()) {
+        s_pairing_in_progress = false;
+        set_error("manual setup code generate failed");
+        return ESP_FAIL;
+    }
+    static char s_pin_payload[32];
+    strncpy(s_pin_payload, decimal.c_str(), sizeof(s_pin_payload) - 1);
+    s_pin_payload[sizeof(s_pin_payload) - 1] = '\0';
+    esp_matter::controller::pairing::request_t request;
+    request.node_id = static_cast<chip::NodeId>(node_id);
+    request.params.setup_code.payload = s_pin_payload;
+    request.params.setup_code.transport = esp_matter::controller::pairing::transport_t::on_network;
+    err = start_pairing(request);
     if (err != ESP_OK) {
         s_pairing_in_progress = false;
         set_error("pairing_on_network failed");
     }
     return err;
 }
+
+/* Caller-owned invoke: deleted in OnDone (or immediately on sync start failure).
+ * Keep json_encodable on the owner so fields outlive async start(). */
+class InvokeOwner final : public esp_matter::client::invoke_command::delegate {
+public:
+    esp_matter::client::invoke_command::interaction operation;
+    esp_matter::client::json_encodable fields;
+
+    explicit InvokeOwner(const char *json_fields = nullptr) : fields(json_fields ? json_fields : "") {}
+
+    void OnDone(const esp_matter::client::target_t &, CHIP_ERROR err) override
+    {
+        if (err != CHIP_NO_ERROR) {
+            ESP_LOGW(TAG, "invoke failed: %s", chip::ErrorStr(err));
+        }
+        chip::Platform::Delete(this);
+    }
+};
 
 esp_err_t minihub_matter_onoff(uint64_t node_id, uint16_t endpoint_id, bool on)
 {
@@ -1210,11 +1356,21 @@ esp_err_t minihub_matter_onoff(uint64_t node_id, uint16_t endpoint_id, bool on)
     }
     uint32_t cmd = on ? k_onoff_on_cmd : k_onoff_off_cmd;
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-    esp_err_t err = esp_matter::controller::send_invoke_cluster_command(node_id, endpoint_id, k_onoff_cluster, cmd,
-                                                                        nullptr);
-    if (err != ESP_OK) {
+    esp_matter::client::invoke_command::request_t request = {
+        .endpoint_id = endpoint_id,
+        .cluster_id = k_onoff_cluster,
+        .command_id = cmd,
+        .fields = nullptr,
+    };
+    auto *owner = chip::Platform::New<InvokeOwner>();
+    if (!owner) {
+        return ESP_ERR_NO_MEM;
+    }
+    CHIP_ERROR cerr = owner->operation.start(scoped_peer(node_id), request, owner);
+    if (cerr != CHIP_NO_ERROR) {
+        chip::Platform::Delete(owner);
         set_error("onoff command failed");
-        return err;
+        return chip_to_esp(cerr);
     }
     s_last_read.node_id = node_id;
     s_last_read.endpoint_id = endpoint_id;
@@ -1224,30 +1380,84 @@ esp_err_t minihub_matter_onoff(uint64_t node_id, uint16_t endpoint_id, bool on)
     return ESP_OK;
 }
 
-/* Async failure sinks for a read issued by minihub_matter_read_onoff(): without
- * these the object just deletes itself and nothing is visible anywhere.
- *
- * on_connect_failure_cb_t gets the read_command as its context and
- * esp_matter deletes that object right after the call
- * (esp_matter_controller_read_command.cpp:58), so ctx is never dereferenced.
- * These run on the CHIP event task, like the commissioning callbacks that also
- * call set_error(). */
-static void on_read_connect_failure(void *ctx, const chip::ScopedNodeId &peer_id, CHIP_ERROR error)
+/* Level/Color writes mirror onoff(): JSON command fields for esp_matter::client
+ * invoke ("<fieldId>:<type>": value). Confirm field ids at build time. */
+static esp_err_t invoke_with_fields(uint64_t node_id, uint16_t endpoint_id, uint32_t cluster_id,
+                                    uint32_t command_id, const char *json_fields, const char *err_msg)
 {
-    (void)ctx;
-    ESP_LOGW(TAG, "read: node %" PRIu64 " connect failed: %s", peer_id.GetNodeId(), chip::ErrorStr(error));
-    char buf[96];
-    snprintf(buf, sizeof(buf), "read connect failed: %s", chip::ErrorStr(error));
-    set_error(buf);
+    if (!s_started) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+    auto *owner = chip::Platform::New<InvokeOwner>(json_fields);
+    if (!owner) {
+        return ESP_ERR_NO_MEM;
+    }
+    esp_matter::client::invoke_command::request_t request = {
+        .endpoint_id = endpoint_id,
+        .cluster_id = cluster_id,
+        .command_id = command_id,
+        .fields = &owner->fields,
+    };
+    CHIP_ERROR cerr = owner->operation.start(scoped_peer(node_id), request, owner);
+    if (cerr != CHIP_NO_ERROR) {
+        chip::Platform::Delete(owner);
+        set_error(err_msg);
+        return chip_to_esp(cerr);
+    }
+    set_error(NULL);
+    return ESP_OK;
 }
 
-static void on_read_error(uint64_t node_id, CHIP_ERROR error)
+esp_err_t minihub_matter_level_set(uint64_t node_id, uint16_t endpoint_id, uint8_t level)
 {
-    ESP_LOGW(TAG, "read: node %" PRIu64 " failed: %s", node_id, chip::ErrorStr(error));
-    char buf[96];
-    snprintf(buf, sizeof(buf), "attribute read failed: %s", chip::ErrorStr(error));
-    set_error(buf);
+    char payload[40];
+    snprintf(payload, sizeof(payload), "{\"0:U8\": %u, \"1:U16\": 0}", (unsigned)level);
+    return invoke_with_fields(node_id, endpoint_id, k_level_cluster, k_level_move_to_level_wo,
+                              payload, "level set failed");
 }
+
+esp_err_t minihub_matter_color_temp_set(uint64_t node_id, uint16_t endpoint_id, uint16_t mireds)
+{
+    char payload[48];
+    snprintf(payload, sizeof(payload), "{\"0:U16\": %u, \"1:U16\": 0}", (unsigned)mireds);
+    return invoke_with_fields(node_id, endpoint_id, k_color_cluster, k_color_move_to_ct,
+                              payload, "color temp set failed");
+}
+
+esp_err_t minihub_matter_color_xy_set(uint64_t node_id, uint16_t endpoint_id,
+                                      uint8_t hue, uint8_t saturation)
+{
+    char payload[56];
+    snprintf(payload, sizeof(payload),
+             "{\"0:U8\": %u, \"1:U8\": %u, \"2:U16\": 0}",
+             (unsigned)hue, (unsigned)saturation);
+    return invoke_with_fields(node_id, endpoint_id, k_color_cluster, k_color_move_to_hue_sat,
+                              payload, "hue/sat set failed");
+}
+
+/* Caller-owned read: deleted in OnDone (or immediately on sync start failure). */
+class AttrReadOwner final : public esp_matter::client::read_command::delegate {
+public:
+    esp_matter::client::read_command::interaction operation;
+
+    void OnAttribute(const esp_matter::client::target_t &target, const chip::app::ConcreteDataAttributePath &path,
+                     chip::TLV::TLVReader *value, const chip::app::StatusIB &status) override
+    {
+        on_attr_report(target.node_id, path, value, status);
+    }
+
+    void OnDone(const esp_matter::client::target_t &target, CHIP_ERROR err) override
+    {
+        if (err != CHIP_NO_ERROR) {
+            ESP_LOGW(TAG, "read: node %" PRIu64 " failed: %s", target.node_id, chip::ErrorStr(err));
+            char buf[96];
+            snprintf(buf, sizeof(buf), "attribute read failed: %s", chip::ErrorStr(err));
+            set_error(buf);
+        }
+        chip::Platform::Delete(this);
+    }
+};
 
 esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool *out_on)
 {
@@ -1258,25 +1468,63 @@ esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool
         return ESP_ERR_INVALID_STATE;
     }
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-    /* The 11-arg single-path ctor is esp_matter_controller_read_command.h:75
-     * (only fabric_filtered defaults); read_cb_done stays nullptr because the
-     * value path is on_attr_report. */
-    auto *cmd = chip::Platform::New<esp_matter::controller::read_command>(
-        node_id, endpoint_id, k_onoff_cluster, k_onoff_attr,
-        esp_matter::controller::READ_ATTRIBUTE, on_attr_report, nullptr, nullptr,
-        on_read_connect_failure, on_read_error);
-    if (!cmd) {
+    chip::app::AttributePathParams path(endpoint_id, k_onoff_cluster, k_onoff_attr);
+    esp_matter::client::read_command::request_t request(
+        chip::Span<const chip::app::AttributePathParams>(&path, 1));
+    auto *owner = chip::Platform::New<AttrReadOwner>();
+    if (!owner) {
         return ESP_ERR_NO_MEM;
     }
-    /* read_command owns itself (deleted in OnDone, on a connect failure at
-     * esp_matter_controller_read_command.cpp:58, or inside send_command() itself
-     * at :86) — never free cmd here and never touch it after send_command(): an
-     * accepted send may already be a dangling pointer. send_command() returning
-     * ESP_OK only means the request was handed to CHIP, so report it as
-     * ESP_ERR_NOT_FINISHED: *out_on was NOT written, the value arrives through
-     * on_attr_report. */
-    esp_err_t serr = cmd->send_command();
-    return serr == ESP_OK ? ESP_ERR_NOT_FINISHED : serr;
+    /* start() returning CHIP_NO_ERROR only means the request was accepted; the
+     * value arrives asynchronously through OnAttribute → on_attr_report. */
+    CHIP_ERROR cerr = owner->operation.start(scoped_peer(node_id), request, *owner);
+    if (cerr != CHIP_NO_ERROR) {
+        chip::Platform::Delete(owner);
+        return chip_to_esp(cerr);
+    }
+    return ESP_ERR_NOT_FINISHED;
+}
+
+esp_err_t minihub_matter_read_attrs(uint64_t node_id, const uint16_t *endpoint_ids, size_t ep_count,
+                                    const minihub_matter_attr_path_t *attrs, size_t attr_count)
+{
+    if (!endpoint_ids || ep_count == 0 || !attrs || attr_count == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_started) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    const size_t total = ep_count * attr_count;
+    if (total == 0 || total > 256) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+    chip::app::AttributePathParams *paths =
+        static_cast<chip::app::AttributePathParams *>(chip::Platform::MemoryCalloc(total, sizeof(*paths)));
+    if (!paths) {
+        return ESP_ERR_NO_MEM;
+    }
+    size_t n = 0;
+    for (size_t e = 0; e < ep_count; e++) {
+        for (size_t a = 0; a < attr_count; a++) {
+            paths[n++] = chip::app::AttributePathParams(endpoint_ids[e], attrs[a].cluster_id,
+                                                        attrs[a].attribute_id);
+        }
+    }
+    esp_matter::client::read_command::request_t request(
+        chip::Span<const chip::app::AttributePathParams>(paths, total));
+    auto *owner = chip::Platform::New<AttrReadOwner>();
+    if (!owner) {
+        chip::Platform::MemoryFree(paths);
+        return ESP_ERR_NO_MEM;
+    }
+    CHIP_ERROR cerr = owner->operation.start(scoped_peer(node_id), request, *owner);
+    chip::Platform::MemoryFree(paths);
+    if (cerr != CHIP_NO_ERROR) {
+        chip::Platform::Delete(owner);
+        return chip_to_esp(cerr);
+    }
+    return ESP_ERR_NOT_FINISHED;
 }
 
 #define MATTER_SUB_MAX ((int)CONFIG_MINIHUB_MATTER_MAX_NODES)
@@ -1293,6 +1541,8 @@ typedef struct {
     size_t endpoint_count;
     bool live;        /* per node: the esp-matter callbacks are node-granular */
     uint32_t subscription_id;
+    /* Caller-owned esp_matter::client::subscribe_command owner (SubOwner*). */
+    void *owner;
     /* Boolean reports counted for this node row by note_sub_report(): cumulative
      * per row, cleared only when the row is freed (the drop_node() memset, or the
      * failed-fresh-arm one) before reallocation to another node — re-arming an
@@ -1473,6 +1723,88 @@ static void on_sub_established(uint64_t node_id, uint32_t subscription_id)
     }
 }
 
+static void on_sub_terminated(uint64_t node_id, uint32_t subscription_id);
+
+/* Caller-owned subscription. Do not stop()/Delete from OnStateChanged — defer
+ * teardown via ScheduleWork when the row was dropped mid-arm (orphan). */
+class SubOwner final : public esp_matter::client::subscribe_command::delegate {
+public:
+    esp_matter::client::subscribe_command::subscription sub;
+    uint64_t node_id = 0;
+
+    void OnAttribute(const esp_matter::client::target_t &target, const chip::app::ConcreteDataAttributePath &path,
+                     chip::TLV::TLVReader *value, const chip::app::StatusIB &status) override
+    {
+        on_attr_report(target.node_id, path, value, status);
+    }
+
+    void OnStateChanged(const esp_matter::client::target_t &, esp_matter::client::subscribe_command::state_t state,
+                        CHIP_ERROR error) override
+    {
+        using state_t = esp_matter::client::subscribe_command::state_t;
+        if (state == state_t::active) {
+            uint32_t id = sub.id().ValueOr(0);
+            on_sub_established(node_id, id);
+            return;
+        }
+        if (state == state_t::terminated) {
+            uint32_t id = sub.id().ValueOr(0);
+            on_sub_terminated(node_id, id);
+            if (error != CHIP_NO_ERROR) {
+                ESP_LOGW(TAG, "subscribe: node %" PRIu64 " terminated: %s", node_id, chip::ErrorStr(error));
+                char buf[96];
+                snprintf(buf, sizeof(buf), "subscribe terminated: %s", chip::ErrorStr(error));
+                set_error(buf);
+            }
+            /* If the table row was cleared (orphan), free this owner after callbacks unwind. */
+            bool tracked = false;
+            portENTER_CRITICAL(&s_sub_mux);
+            for (int i = 0; i < MATTER_SUB_MAX; i++) {
+                if (s_subs && s_subs[i].node_id == node_id && s_subs[i].owner == this) {
+                    tracked = true;
+                    break;
+                }
+            }
+            portEXIT_CRITICAL(&s_sub_mux);
+            if (!tracked) {
+                CHIP_ERROR serr =
+                    chip::DeviceLayer::PlatformMgr().ScheduleWork(ReapOrphan, reinterpret_cast<intptr_t>(this));
+                if (serr != CHIP_NO_ERROR) {
+                    ESP_LOGW(TAG, "ScheduleWork ReapOrphan: %s", chip::ErrorStr(serr));
+                }
+            }
+            return;
+        }
+        if (state == state_t::connecting || state == state_t::backoff) {
+            if (error != CHIP_NO_ERROR) {
+                ESP_LOGW(TAG, "subscribe: node %" PRIu64 " state=%u: %s", node_id, (unsigned)state,
+                         chip::ErrorStr(error));
+            }
+        }
+    }
+
+private:
+    static void ReapOrphan(intptr_t arg)
+    {
+        auto *owner = reinterpret_cast<SubOwner *>(arg);
+        if (!owner) {
+            return;
+        }
+        esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+        owner->sub.stop();
+        chip::Platform::Delete(owner);
+    }
+};
+
+static void destroy_sub_owner(SubOwner *owner)
+{
+    if (!owner) {
+        return;
+    }
+    owner->sub.stop();
+    chip::Platform::Delete(owner);
+}
+
 /* Runs on the caller's task (adapter poll/resync via subscribe_node), never on the
  * CHIP event task, so taking the stack lock here is acceptable. */
 static void reap_sub_orphans(void)
@@ -1501,14 +1833,13 @@ static void reap_sub_orphans(void)
         return;
     }
 
-    /* Runs on the caller's task (adapter poll/resync via subscribe_node), never on
-     * the CHIP event task, so taking the stack lock here is acceptable. */
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+    auto *engine = chip::app::InteractionModelEngine::GetInstance();
     for (size_t i = 0; i < n; i++) {
-        esp_err_t err = esp_matter::controller::send_shutdown_subscription(pending[i].node_id,
-                                                                          pending[i].sub_id);
-        ESP_LOGW(TAG, "reaped orphan subscription node=%" PRIu64 " id=0x%" PRIx32 ": %s",
-                 pending[i].node_id, pending[i].sub_id, esp_err_to_name(err));
+        chip::ScopedNodeId peer = scoped_peer(pending[i].node_id);
+        CHIP_ERROR cerr = engine->ShutdownSubscription(peer, pending[i].sub_id);
+        ESP_LOGW(TAG, "reaped orphan subscription node=%" PRIu64 " id=0x%" PRIx32 ": %" CHIP_ERROR_FORMAT,
+                 pending[i].node_id, pending[i].sub_id, cerr.Format());
     }
     heap_caps_free(pending);
 }
@@ -1520,7 +1851,8 @@ static void on_sub_terminated(uint64_t node_id, uint32_t subscription_id)
     }
     portENTER_CRITICAL(&s_sub_mux);
     for (int i = 0; i < MATTER_SUB_MAX; i++) {
-        if (s_subs[i].node_id == node_id && s_subs[i].subscription_id == subscription_id) {
+        if (s_subs[i].node_id == node_id &&
+            (subscription_id == 0 || s_subs[i].subscription_id == subscription_id)) {
             s_subs[i].live = false;
             s_subs[i].subscription_id = 0;
         }
@@ -1529,35 +1861,29 @@ static void on_sub_terminated(uint64_t node_id, uint32_t subscription_id)
     ESP_LOGW(TAG, "subscription down node=%" PRIu64 " id=0x%" PRIx32, node_id, subscription_id);
 }
 
-/* esp-matter deletes the subscribe_command right after this callback
- * (esp_matter_controller_subscribe_command.cpp:53-63), so ctx is never
- * dereferenced — same discipline as on_read_connect_failure. */
-static void on_subscribe_connect_failure(void *ctx, const chip::ScopedNodeId &peer_id, CHIP_ERROR error)
+esp_err_t minihub_matter_subscribe_node_attrs(uint64_t node_id, const uint16_t *endpoint_ids,
+                                              size_t ep_count, const minihub_matter_attr_path_t *attrs,
+                                              size_t attr_count)
 {
-    (void)ctx;
-    ESP_LOGW(TAG, "subscribe: node %" PRIu64 " connect failed: %s", peer_id.GetNodeId(), chip::ErrorStr(error));
-    char buf[96];
-    snprintf(buf, sizeof(buf), "subscribe connect failed: %s", chip::ErrorStr(error));
-    set_error(buf);
-}
-
-esp_err_t minihub_matter_subscribe_node(uint64_t node_id, const uint16_t *endpoint_ids, size_t count)
-{
-    if (!endpoint_ids || count == 0 || count > k_sub_ep_max) {
-        set_error("subscribe: bad endpoint list");
+    if (!endpoint_ids || ep_count == 0 || ep_count > k_sub_ep_max || !attrs || attr_count == 0) {
+        set_error("subscribe: bad endpoint/attr list");
+        return ESP_ERR_INVALID_ARG;
+    }
+    const size_t total = ep_count * attr_count;
+    if (total == 0 || total > 256) {
+        set_error("subscribe: path list too large");
         return ESP_ERR_INVALID_ARG;
     }
     if (!s_started || node_id < 2) {
         set_error("subscribe: commissioner not ready");
         return ESP_ERR_INVALID_STATE;
     }
-    /* Opportunistic: shut down any subscription that established after its row was
-     * dropped. Returns without touching the stack lock when there is nothing queued. */
     reap_sub_orphans();
 
-    /* Claim (or refresh) the node's row under the mux, but send outside it:
+    /* Claim (or refresh) the node's row under the mux, but start outside it:
      * portENTER_CRITICAL is a spinlock and the CHIP stack lock may block. */
     matter_sub_slot_t prior = {};
+    SubOwner *stale_owner = nullptr;
     int idx;
     bool fresh;
     portENTER_CRITICAL(&s_sub_mux);
@@ -1567,68 +1893,121 @@ esp_err_t minihub_matter_subscribe_node(uint64_t node_id, const uint16_t *endpoi
         idx = sub_slot(node_id, true);
     } else {
         prior = s_subs[idx];
+        /* Short-circuit while an owner is still connecting / active / backing off. */
+        if (s_subs[idx].owner != nullptr && s_subs[idx].live) {
+            const uint32_t live_id = s_subs[idx].subscription_id;
+            portEXIT_CRITICAL(&s_sub_mux);
+            ESP_LOGI(TAG, "subscribe: node %" PRIu64 " already live (id=0x%" PRIx32 "), not re-arming",
+                     node_id, live_id);
+            return ESP_OK;
+        }
+        if (s_subs[idx].owner != nullptr && !s_subs[idx].live) {
+            /* May be connecting/backoff/terminated — inspect under CHIP lock below. */
+        }
     }
     if (idx < 0) {
         portEXIT_CRITICAL(&s_sub_mux);
-        set_error("subscribe: table full"); /* the poll path will not re-arm this node */
+        set_error("subscribe: table full");
         return ESP_ERR_NO_MEM;
     }
-    if (s_subs[idx].live) {
-        const uint32_t live_id = s_subs[idx].subscription_id;
-        portEXIT_CRITICAL(&s_sub_mux);
-        /* Silent today: the adapter only logs a NOT_FINISHED arm, so a short-circuit
-         * here is indistinguishable from "never attempted" in the console log. */
-        ESP_LOGI(TAG, "subscribe: node %" PRIu64 " already live (id=0x%" PRIx32 "), not re-arming",
-                 node_id, live_id);
-        return ESP_OK;
-    }
-    memcpy(s_subs[idx].endpoints, endpoint_ids, count * sizeof(uint16_t));
-    s_subs[idx].endpoint_count = count;
+    memcpy(s_subs[idx].endpoints, endpoint_ids, ep_count * sizeof(uint16_t));
+    s_subs[idx].endpoint_count = ep_count;
     s_subs[idx].live = false;
     s_subs[idx].subscription_id = 0;
+    /* Detach prior owner pointer from the row; free it under CHIP lock. */
+    stale_owner = static_cast<SubOwner *>(s_subs[idx].owner);
+    s_subs[idx].owner = nullptr;
     portEXIT_CRITICAL(&s_sub_mux);
 
     esp_err_t err;
     {
         esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-        chip::Platform::ScopedMemoryBufferWithSize<chip::app::AttributePathParams> attr_paths;
-        chip::Platform::ScopedMemoryBufferWithSize<chip::app::EventPathParams> event_paths;
-        if (!attr_paths.Alloc(count)) {
+        if (stale_owner) {
+            using state_t = esp_matter::client::subscribe_command::state_t;
+            const state_t st = stale_owner->sub.state();
+            if (st == state_t::active || st == state_t::backoff || st == state_t::connecting) {
+                /* Still in flight or established — restore owner and skip re-arm. */
+                portENTER_CRITICAL(&s_sub_mux);
+                if (idx >= 0 && s_subs[idx].node_id == node_id && s_subs[idx].owner == nullptr) {
+                    s_subs[idx].owner = stale_owner;
+                    if (st == state_t::active) {
+                        s_subs[idx].live = true;
+                        s_subs[idx].subscription_id = stale_owner->sub.id().ValueOr(0);
+                    }
+                } else {
+                    destroy_sub_owner(stale_owner);
+                }
+                portEXIT_CRITICAL(&s_sub_mux);
+                ESP_LOGI(TAG, "subscribe: node %" PRIu64 " owner still state=%u, not re-arming", node_id,
+                         (unsigned)st);
+                return (st == state_t::active) ? ESP_OK : ESP_ERR_NOT_FINISHED;
+            }
+            destroy_sub_owner(stale_owner);
+            stale_owner = nullptr;
+        }
+
+        chip::app::AttributePathParams *paths =
+            static_cast<chip::app::AttributePathParams *>(chip::Platform::MemoryCalloc(total, sizeof(*paths)));
+        if (!paths) {
             err = ESP_ERR_NO_MEM;
             set_error("subscribe: attribute path alloc failed");
         } else {
-            for (size_t i = 0; i < count; i++) {
-                attr_paths[i] = chip::app::AttributePathParams(endpoint_ids[i], k_onoff_cluster, k_onoff_attr);
+            size_t n = 0;
+            for (size_t e = 0; e < ep_count; e++) {
+                for (size_t a = 0; a < attr_count; a++) {
+                    paths[n++] = chip::app::AttributePathParams(
+                        endpoint_ids[e], attrs[a].cluster_id, attrs[a].attribute_id);
+                }
             }
-            /* subscribe_command deletes itself in OnDone (auto_resubscribe re-arms
-             * first) and on every synchronous failure path
-             * (esp_matter_controller_subscribe_command.cpp:47-49, :53-63, :88). */
-            auto *cmd = chip::Platform::New<esp_matter::controller::subscribe_command>(
-                node_id, std::move(attr_paths), std::move(event_paths),
-                MATTER_SUB_MIN_INTERVAL, MATTER_SUB_MAX_INTERVAL, true /* auto_resubscribe */,
-                on_attr_report, nullptr, on_sub_established, on_sub_terminated,
-                on_subscribe_connect_failure, true /* keep_subscription */);
-            if (!cmd) {
+            esp_matter::client::subscribe_command::options_t options;
+            options.min_interval = MATTER_SUB_MIN_INTERVAL;
+            options.max_interval = MATTER_SUB_MAX_INTERVAL;
+            options.auto_resubscribe = true;
+            options.keep_subscriptions = true;
+            esp_matter::client::subscribe_command::request_t request(
+                chip::Span<const chip::app::AttributePathParams>(paths, total), options);
+
+            auto *owner = chip::Platform::New<SubOwner>();
+            if (!owner) {
+                chip::Platform::MemoryFree(paths);
                 err = ESP_ERR_NO_MEM;
                 set_error("subscribe: command alloc failed");
             } else {
-                /* send_command() returning ESP_OK only means the request was handed
-                 * to CHIP, and the object may already have deleted itself on a
-                 * synchronous failure path — do not touch cmd afterwards. */
-                esp_err_t serr = cmd->send_command();
-                if (serr == ESP_OK) {
+                owner->node_id = node_id;
+                CHIP_ERROR cerr = owner->sub.start(scoped_peer(node_id), request, *owner);
+                chip::Platform::MemoryFree(paths);
+                if (cerr != CHIP_NO_ERROR) {
+                    chip::Platform::Delete(owner);
+                    err = chip_to_esp(cerr);
+                    set_error("subscribe request failed");
+                } else {
+                    portENTER_CRITICAL(&s_sub_mux);
+                    if (s_subs[idx].node_id == node_id) {
+                        s_subs[idx].owner = owner;
+                    } else {
+                        /* Row was dropped mid-start — free owner after callbacks unwind. */
+                        portEXIT_CRITICAL(&s_sub_mux);
+                        CHIP_ERROR serr = chip::DeviceLayer::PlatformMgr().ScheduleWork(
+                            [](intptr_t arg) {
+                                esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+                                destroy_sub_owner(reinterpret_cast<SubOwner *>(arg));
+                            },
+                            reinterpret_cast<intptr_t>(owner));
+                        if (serr != CHIP_NO_ERROR) {
+                            ESP_LOGW(TAG, "ScheduleWork destroy owner: %s", chip::ErrorStr(serr));
+                            destroy_sub_owner(owner);
+                        }
+                        return ESP_ERR_NOT_FINISHED;
+                    }
+                    portEXIT_CRITICAL(&s_sub_mux);
                     return ESP_ERR_NOT_FINISHED;
                 }
-                err = serr;
-                set_error("subscribe request failed");
             }
         }
     }
 
     /* Synchronous failure: roll the row back (fresh → free the slot, existing
-     * → restore its prior list) so failed attempts cannot fill the table.
-     * Asynchronous silent failures (self-delete after connect) leave the row
-     * not-live, which is exactly what the poll path re-arms on. */
+     * → restore its prior list) so failed attempts cannot fill the table. */
     portENTER_CRITICAL(&s_sub_mux);
     if (fresh) {
         memset(&s_subs[idx], 0, sizeof(s_subs[idx]));
@@ -1639,16 +2018,18 @@ esp_err_t minihub_matter_subscribe_node(uint64_t node_id, const uint16_t *endpoi
     return err;
 }
 
+esp_err_t minihub_matter_subscribe_node(uint64_t node_id, const uint16_t *endpoint_ids, size_t count)
+{
+    const minihub_matter_attr_path_t onoff = {
+        .cluster_id = (uint16_t)k_onoff_cluster,
+        .attribute_id = (uint16_t)k_onoff_attr,
+    };
+    return minihub_matter_subscribe_node_attrs(node_id, endpoint_ids, count, &onoff, 1);
+}
+
 /* Tear down a node's subscription and free its row(s). A re-commissioned device gets
- * a NEW node id; rows keyed by the old id are otherwise never reclaimed, so the old
- * endpoint list stays armed forever while /api/matter/status still reads healthy. This
- * is the truthful drop the adapter's subscribe_commissioned() calls before re-arming.
- *
- * Order per the ruling: send the real esp-matter teardown first, then free the table
- * row. send_shutdown_subscription() needs the stack lock (a blocking mutex) so it runs
- * OUTSIDE s_sub_mux; the subscription_id is captured under the mux first. Only one
- * caller (subscribe_commissioned, under the adapter lifecycle lock) runs at a time, so
- * no concurrent re-arm slips in during the teardown window. */
+ * a NEW node id; rows keyed by the old id are otherwise never reclaimed. Stop the
+ * caller-owned SubOwner under the CHIP lock (outside s_sub_mux), then clear the row. */
 esp_err_t minihub_matter_drop_node(uint64_t node_id)
 {
     if (node_id < 2) {
@@ -1657,33 +2038,36 @@ esp_err_t minihub_matter_drop_node(uint64_t node_id)
     if (!s_subs) {
         return ESP_ERR_NO_MEM;
     }
+    SubOwner *owner = nullptr;
     uint32_t sub_id = 0;
     portENTER_CRITICAL(&s_sub_mux);
-    for (int i = 0; i < MATTER_SUB_MAX; i++) {
-        if (s_subs[i].node_id == node_id && s_subs[i].subscription_id != 0) {
-            sub_id = s_subs[i].subscription_id;
-        }
-    }
-    portEXIT_CRITICAL(&s_sub_mux);
-
-    if (sub_id != 0) {
-        esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-        esp_err_t terr = esp_matter::controller::send_shutdown_subscription(node_id, sub_id);
-        if (terr != ESP_OK) {
-            ESP_LOGW(TAG, "drop node=%" PRIu64 " shutdown sub=0x%" PRIx32 " failed: %s", node_id, sub_id,
-                     esp_err_to_name(terr));
-        }
-    }
-
     bool found = false;
-    portENTER_CRITICAL(&s_sub_mux);
     for (int i = 0; i < MATTER_SUB_MAX; i++) {
         if (s_subs[i].node_id == node_id) {
+            if (!owner) {
+                owner = static_cast<SubOwner *>(s_subs[i].owner);
+                sub_id = s_subs[i].subscription_id;
+            }
             memset(&s_subs[i], 0, sizeof(s_subs[i]));
             found = true;
         }
     }
     portEXIT_CRITICAL(&s_sub_mux);
+
+    if (owner || sub_id != 0) {
+        esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
+        if (owner) {
+            destroy_sub_owner(owner);
+        } else if (sub_id != 0) {
+            CHIP_ERROR cerr =
+                chip::app::InteractionModelEngine::GetInstance()->ShutdownSubscription(scoped_peer(node_id),
+                                                                                       sub_id);
+            if (cerr != CHIP_NO_ERROR) {
+                ESP_LOGW(TAG, "drop node=%" PRIu64 " shutdown sub=0x%" PRIx32 ": %" CHIP_ERROR_FORMAT, node_id,
+                         sub_id, cerr.Format());
+            }
+        }
+    }
 
     if (!found) {
         return ESP_ERR_NOT_FOUND;
@@ -1842,6 +2226,28 @@ esp_err_t minihub_matter_set_identity_cb(minihub_matter_identity_cb_t cb, void *
     return ESP_OK;
 }
 
+class IdentityReadOwner final : public esp_matter::client::read_command::delegate {
+public:
+    esp_matter::client::read_command::interaction operation;
+    uint64_t node_id = 0;
+
+    void OnAttribute(const esp_matter::client::target_t &target, const chip::app::ConcreteDataAttributePath &path,
+                     chip::TLV::TLVReader *value, const chip::app::StatusIB &status) override
+    {
+        on_identity_attr(target.node_id, path, value, status);
+    }
+
+    void OnDone(const esp_matter::client::target_t &target, CHIP_ERROR err) override
+    {
+        if (err != CHIP_NO_ERROR) {
+            ESP_LOGW(TAG, "identity read node=%" PRIu64 " failed: %s", target.node_id, chip::ErrorStr(err));
+        } else {
+            on_identity_done(target.node_id);
+        }
+        chip::Platform::Delete(this);
+    }
+};
+
 esp_err_t minihub_matter_interview_identity(uint64_t node_id)
 {
     if (!s_started) {
@@ -1850,16 +2256,9 @@ esp_err_t minihub_matter_interview_identity(uint64_t node_id)
     if (node_id < 2) {
         return ESP_ERR_INVALID_ARG;
     }
-    /* matter_hub (lf_core_chip_read_attribute) takes the stack lock before
-     * GetConnectedDevice. send_command() arms AddressResolve, which
-     * CancelTimer()s on this thread. SystemLayerImplFreeRTOS asserts the
-     * caller holds PlatformMgr's lock and chipDie()s otherwise.
-     * From a CHIP callback the scoped lock is ALREADY_TAKEN and does not
-     * unlock on the way out. */
+    /* ScopedChipStackLock: AddressResolve CancelTimer asserts PlatformMgr lock. */
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-    using chip::Platform::ScopedMemoryBufferWithSize;
     using chip::app::AttributePathParams;
-    using chip::app::EventPathParams;
     using namespace chip::app::Clusters::BasicInformation::Attributes;
 
     const uint32_t attrs[] = {
@@ -1871,20 +2270,28 @@ esp_err_t minihub_matter_interview_identity(uint64_t node_id)
         HardwareVersion::Id,
     };
     const size_t n = sizeof(attrs) / sizeof(attrs[0]);
-    ScopedMemoryBufferWithSize<AttributePathParams> attr_paths;
-    ScopedMemoryBufferWithSize<EventPathParams> event_paths;
-    attr_paths.Alloc(n);
-    if (!attr_paths.Get()) {
+    AttributePathParams *paths =
+        static_cast<AttributePathParams *>(chip::Platform::MemoryCalloc(n, sizeof(*paths)));
+    if (!paths) {
         return ESP_ERR_NO_MEM;
     }
     for (size_t i = 0; i < n; i++) {
-        attr_paths[i] = AttributePathParams(0, k_basic_cluster, attrs[i]);
+        paths[i] = AttributePathParams(0, k_basic_cluster, attrs[i]);
     }
-    auto *cmd = chip::Platform::New<esp_matter::controller::read_command>(
-        node_id, std::move(attr_paths), std::move(event_paths), on_identity_attr, on_identity_done, nullptr);
-    if (!cmd) {
+    esp_matter::client::read_command::request_t request(
+        chip::Span<const AttributePathParams>(paths, n));
+    auto *owner = chip::Platform::New<IdentityReadOwner>();
+    if (!owner) {
+        chip::Platform::MemoryFree(paths);
         return ESP_ERR_NO_MEM;
     }
+    owner->node_id = node_id;
+    CHIP_ERROR cerr = owner->operation.start(scoped_peer(node_id), request, *owner);
+    chip::Platform::MemoryFree(paths);
+    if (cerr != CHIP_NO_ERROR) {
+        chip::Platform::Delete(owner);
+        return chip_to_esp(cerr);
+    }
     ESP_LOGI(TAG, "interview Basic Information node=%" PRIu64, node_id);
-    return cmd->send_command();
+    return ESP_OK;
 }

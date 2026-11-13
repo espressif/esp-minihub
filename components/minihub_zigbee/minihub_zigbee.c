@@ -125,6 +125,7 @@ static void on_stack_ready(void *ctx)
         }
         zigbee_stack_subscribe_product_params(s_devices[i].short_addr, s_devices[i].endpoint,
                                               s_devices[i].ieee);
+        zigbee_stack_read_map_attrs(s_devices[i].short_addr, s_devices[i].endpoint, caps);
     }
 }
 

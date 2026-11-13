@@ -1,0 +1,25 @@
+From: MiniHub Contributors
+Subject: esp-matter: value-init EspOtaRequestorEntry (no memset)
+
+GCC -Werror=class-memaccess rejects memset on EspOtaRequestorEntry
+because it embeds chip::ScopedNodeId (non-trivial). Value-initialize
+instead so Matter OTA Provider builds under -Werror=cpp.
+
+Component: esp-matter (sibling checkout via ESP_MATTER_PATH)
+File: components/esp_matter_ota_provider/src/esp_matter_ota_provider.cpp
+Apply-Root: ../esp-matter
+
+Apply: ./tools/apply_component_patches.sh
+---
+--- a/components/esp_matter_ota_provider/src/esp_matter_ota_provider.cpp
++++ b/components/esp_matter_ota_provider/src/esp_matter_ota_provider.cpp
+@@ -339,7 +339,8 @@ esp_err_t EspOtaProvider::CreateOtaRequestorEntry(const chip::ScopedNodeId &node
+         if (!entry) {
+             return ESP_ERR_NO_MEM;
+         }
+-        memset(entry, 0, sizeof(EspOtaRequestorEntry));
++        /* MiniHub: value-init EspOtaRequestorEntry (no memset on non-trivial type) */
++        *entry = EspOtaRequestorEntry{};
+         entry->mNodeId = nodeId;
+         entry->mOtaAllowed = mOtaAllowedDefault;
+         entry->mNext = mOtaRequestorList;

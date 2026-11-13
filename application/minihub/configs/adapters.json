@@ -26,25 +26,7 @@
     "ble_mesh": {
       "enabled": false,
       "provision": {
-        "uuid_match_disabled": true,
-        "bind_models": [
-          {
-            "model_id": "0x1000",
-            "name": "gen_onoff_srv"
-          },
-          {
-            "model_id": "0x1002",
-            "name": "gen_level_srv"
-          },
-          {
-            "model_id": "0x1300",
-            "name": "light_lightness_srv"
-          },
-          {
-            "model_id": "0x1303",
-            "name": "light_ctl_srv"
-          }
-        ]
+        "uuid_match_disabled": true
       },
       "devices": []
     },

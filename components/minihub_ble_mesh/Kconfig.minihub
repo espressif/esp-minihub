@@ -16,5 +16,7 @@ menu "BLE Mesh"
         select BLE_MESH_GENERIC_LEVEL_CLI
         select BLE_MESH_LIGHT_LIGHTNESS_CLI
         select BLE_MESH_LIGHT_CTL_CLI
+        select BLE_MESH_LIGHT_HSL_CLI
+        select BLE_MESH_SENSOR_CLI
 
 endmenu

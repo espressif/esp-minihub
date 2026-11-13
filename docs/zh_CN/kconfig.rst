@@ -24,7 +24,7 @@ MiniHub 的每一个构建选项都在这里，文档构建时直接从 Kconfig 
 
 .. minihub-features:: minihub
 
-这条链上有三条规则，改动会不会生效由它们决定：
+这条链上有这些规则，改动会不会生效由它们决定：
 
 * 已经存在的 ``sdkconfig`` 盖过所有片段。如果某个符号仍然写在 ``application/<app>/sdkconfig``
   里，那么改 ``feature/*.defaults`` 再重新构建是什么效果都没有的—— 这正是
@@ -35,8 +35,8 @@ MiniHub 的每一个构建选项都在这里，文档构建时直接从 Kconfig 
   于是只用于实验室的值可以单独放一个文件，永远不会被提交。
 * ``board_manager.defaults`` 是刻意不在列表里的，由 ``esp_board_manager`` 自己注入；
   板子的 flash、PSRAM、PHY 设置就是从那里进来的。
-* 共用 IEEE 802.15.4 的两个射频栈不会悄悄并存：同时构建 ``thread`` 与 ``zigbee`` 会
-  以退出码 2 停下，并告诉你要二选一。
+* Thread 与 Zigbee 可以一起编进固件。哪个真正启动由产品的 ``adapters.json``
+  里对应项的 ``enabled`` 决定；两项都为 true 时，后启动的那个跳过。
 
 要知道一次已配置的构建到底用了什么值，读生成出来的文件而不是片段：
 ``application/<app>/build/config/sdkconfig.h``（C 代码看到的）、同目录的

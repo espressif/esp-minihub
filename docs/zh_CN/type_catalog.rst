@@ -8,10 +8,11 @@
 ``components/minihub_device_widget/model/`` 下的 CSV 编译进固件，改它们要重编；
 设备上的运行时表 ``/data/config/devices.csv`` 优先于内嵌副本被读取，改它不必重烧。
 
-能不能控制是另一回事：概览卡片只对写死名单里的类型画电源开关
-（ ``components/minihub_web/web/js/overview.js`` 里的 ``ctrlTypes`` ）；地图弹窗
-只对 ``switch`` 与 ``light`` 提供点击开关 （ ``components/minihub_web/web/js/map.js`` ）。
-新类型会按目录渲染出卡片，但在这两份名单改掉之前没有开关。
+能不能控制也读同一份目录：类型提供可写的 ``power`` 参数时，概览卡片才画电源开关、
+地图标点才可点击开关 （ ``components/minihub_web/web/js/device_widgets.js`` 里的
+``dwHasPowerControl`` ）。目录没列出的类型看点位自己：有 ``power`` 参数，或者
+``value`` 是布尔摘要。实例覆盖类型 —— ``props.params.power`` 上 ``visible: false``
+或 ``access: "R"`` 就没有开关。
 
 契约的运行时那一半 （一台设备一条 point、值在 ``props.params``）见 :doc:`data_model`。
 
@@ -127,6 +128,11 @@ CSV 列说明
 ``devices.csv`` 列：``device_id``、``parameters`` （逗号分隔参数名）、
 ``primary_param``、``mandatory_params``、``image`` （``images/devices/``
 下的类图标）。上传时这五个表头都必须在，``image`` 的格子可以留空。
+
+``primary_param`` 指出该类型用哪个参数概括一台设备，适配器可以拿它当点位的
+紧凑 ``value``。生成的扁平注册表把这一列重复写在该类型的每一行上，
+``minihub_device_widget_get()`` 则按类型只暴露一次；类型没声明时它是空的。
+非空时它必须是该类型 ``parameters`` 里的一项：生成器和固件都会拒绝类型没列出的名字。
 
 ``parameters.csv`` 列：``parameter``、``label_zh``、``label_en``、``data_type``、
 ``properties``、``min`` / ``max`` / ``step`` / ``unit``、``ui_element``、

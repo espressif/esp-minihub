@@ -674,6 +674,33 @@ function dwFallbackCatalogParam(pname) {
     return { parameter: pname, label: pname, widget: '', style: '{}' };
 }
 
+/* The Overview toggle and the map click are one control: the type's power.
+ * The catalog says whether the type offers it and whether it is writable, so a
+ * type added to model/devices.csv needs no JS edit. A type the catalog does not
+ * describe has only the point's own evidence — a power param, or the boolean
+ * summary a flat point publishes. Instance visible/access win over the catalog. */
+function dwHasPowerControl(p) {
+    if (!p) return false;
+    const blob = (p.props && typeof p.props.params === 'object') ? p.props.params : null;
+    let live = null;
+    if (Array.isArray(blob)) {
+        live = blob.find(function (e) { return e && e.name === DW_PRIMARY_PARAM; }) || null;
+    } else if (blob) {
+        live = blob[DW_PRIMARY_PARAM] || null;
+    }
+    if (live && typeof live !== 'object') live = null;
+    const cat = dwCatalogForType(dwCatalogIndex(), p.type);
+    const row = (cat && cat.params[DW_PRIMARY_PARAM]) || null;
+    const s = dwParseStyle((row || dwFallbackCatalogParam(DW_PRIMARY_PARAM)).style);
+    const access = (live && live.access != null) ? String(live.access)
+        : (s.access ? String(s.access) : 'RW');
+    if (String(access).toUpperCase() === 'R') return false;
+    if (live) return live.visible !== false;
+    if (cat) return !!row;
+    const v = String(p.value == null ? '' : p.value).toLowerCase();
+    return v === 'on' || v === 'off' || v === 'true' || v === 'false';
+}
+
 function dwLiveIsOn(live) {
     if (!live) return null;
     const v = live.value;

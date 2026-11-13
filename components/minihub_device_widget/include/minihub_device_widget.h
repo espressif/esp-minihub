@@ -132,6 +132,9 @@ typedef struct {
     const char *device_image; /*!< Optional device-class icon override. */
                               /*!< Repeated on every row of the type. */
                               /*!< Prefer `minihub_device_widget_device_t.image`. */
+    const char *primary_param; /*!< Parameter that summarises the type. */
+                               /*!< Repeated on every row of the type. */
+                               /*!< Prefer `minihub_device_widget_device_t.primary_param`. */
 } minihub_device_widget_entry_t;
 
 /**
@@ -147,6 +150,10 @@ typedef struct {
     size_t count;                              /*!< Number of `entries`. */
     const char *image;                         /*!< Device-class icon file name. */
                                                /*!< Overrides `devices/<device>.svg`. */
+    const char *primary_param;                 /*!< Parameter that summarises the type. */
+                                               /*!< `devices.csv` owns it; `entries` is */
+                                               /*!< sorted by name, so position is not it. */
+                                               /*!< Empty when the type declares none. */
 } minihub_device_widget_device_t;
 
 /**

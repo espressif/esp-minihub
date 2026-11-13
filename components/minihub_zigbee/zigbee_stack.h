@@ -57,6 +57,12 @@ void zigbee_stack_notify_attr(const minihub_zigbee_attr_evt_t *evt);
 /** After device mapped: read quirk-declared ZCL attrs (Basic app/hw version, etc.). */
 void zigbee_stack_subscribe_product_params(uint16_t short_addr, uint8_t endpoint, uint64_t ieee);
 
+/**
+ * Read every unique (cluster, attr) the capability map lists for @p caps.
+ * Used on Hub reboot / join so points leave map init values (incl. onoff power).
+ */
+void zigbee_stack_read_map_attrs(uint16_t short_addr, uint8_t endpoint, uint8_t caps);
+
 /** Write a ZCL attribute (for product_params access=rw / control map write_attr). */
 esp_err_t zigbee_stack_write_attr(uint16_t short_addr, uint8_t endpoint, uint16_t cluster_id,
                                   uint16_t attr_id, uint8_t attr_type, void *value, uint16_t value_size);

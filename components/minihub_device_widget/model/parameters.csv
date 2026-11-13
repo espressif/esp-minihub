@@ -23,6 +23,8 @@ pressure_hpa,气压,Pressure,Float,Read,300,1100,0.1,hPa,ui.text,,Atmospheric pr
 saturation,饱和度,Saturation,Int,Read/Write,0,100,1,%,ui.slider,,Saturation,TRUE,,,power
 smoke,烟雾,Smoke,Bool,Read,,,,,ui.text,,Smoke detected,TRUE,,,
 tamper,防拆,Tamper,Bool,Read,,,,,ui.text,,Tamper detected,TRUE,,,
+zone_status,区域状态,Zone status,Bool,Read,,,,,ui.text,,IAS zone status (raw; alarm/tamper/battery bits),TRUE,,,
+battery_low,低电量,Low battery,Bool,Read,,,,,ui.text,,Battery low indicator (read-only),TRUE,,,
 temperature,温度,Temperature,Float,Read,-40,125,0.1,°C,ui.text,,Device or ambient temperature (read-only),TRUE,,,
 voltage_v,电压,Voltage,Float,Read,0,250,0.1,V,ui.text,,Line voltage (metering readout),TRUE,,,
 volume,音量,Volume,Int,Read/Write,0,100,1,,ui.slider,,Speaker volume,TRUE,,,power

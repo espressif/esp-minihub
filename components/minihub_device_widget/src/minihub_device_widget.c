@@ -43,6 +43,7 @@ typedef struct {
     char *style_json;
     char *image;
     char *device_image;   /* device-class icon override (repeated per row) */
+    char *primary_param;  /* summarising param (repeated per row) */
     /* No `visible`: that is a property of the registered point, not of the
      * type (see the header). No protocol field either: this catalog describes
      * how a device TYPE is rendered, and device display is protocol-independent.
@@ -73,6 +74,9 @@ _Static_assert(offsetof(dw_entry_t, image) ==
 _Static_assert(offsetof(dw_entry_t, device_image) ==
                    offsetof(minihub_device_widget_entry_t, device_image),
                "dw_entry_t.device_image offset mismatch");
+_Static_assert(offsetof(dw_entry_t, primary_param) ==
+                   offsetof(minihub_device_widget_entry_t, primary_param),
+               "dw_entry_t.primary_param offset mismatch");
 
 /* One immutable snapshot of the registry. A reload never mutates the active
  * snapshot in place: the new table is built first and then swapped in, so a
@@ -231,6 +235,7 @@ static void dw_entry_free(dw_entry_t *e)
     free(e->style_json);
     free(e->image);
     free(e->device_image);
+    free(e->primary_param);
 }
 
 static void dw_table_free(dw_table_t *t)
@@ -314,7 +319,7 @@ static esp_err_t dw_build(const char *text, dw_table_t *out)
         ESP_LOGW(TAG, "CSV header has %d columns (>%d); extra columns ignored",
                  nh, DW_CSV_MAX_COLS);
     }
-    int c_dev = -1, c_par = -1, c_sty = -1, c_img = -1, c_dimg = -1;
+    int c_dev = -1, c_par = -1, c_sty = -1, c_img = -1, c_dimg = -1, c_primary = -1;
     for (int i = 0; i < DW_CSV_MAX_COLS; i++) {
         if (hdr[i]) {
             if      (!strcasecmp(hdr[i], "device"))        c_dev  = i;
@@ -322,6 +327,7 @@ static esp_err_t dw_build(const char *text, dw_table_t *out)
             else if (!strcasecmp(hdr[i], "style"))         c_sty  = i;
             else if (!strcasecmp(hdr[i], "image"))         c_img  = i;
             else if (!strcasecmp(hdr[i], "device_image"))  c_dimg = i;
+            else if (!strcasecmp(hdr[i], "primary_param")) c_primary = i;
         }
         free(hdr[i]);
     }
@@ -365,6 +371,8 @@ static esp_err_t dw_build(const char *text, dw_table_t *out)
         if (c_img >= 0) f[c_img] = NULL;
         e.device_image = (c_dimg >= 0 && f[c_dimg]) ? f[c_dimg] : strdup("");
         if (c_dimg >= 0) f[c_dimg] = NULL;
+        e.primary_param = (c_primary >= 0 && f[c_primary]) ? f[c_primary] : strdup("");
+        if (c_primary >= 0) f[c_primary] = NULL;
         e.style_json = (c_sty >= 0 && f[c_sty]) ? f[c_sty] : strdup("{}");
         if (c_sty >= 0) f[c_sty] = NULL;
 
@@ -394,7 +402,7 @@ static esp_err_t dw_build(const char *text, dw_table_t *out)
         }
 
         if (!e.device || !e.parameter || !e.style_json || !e.image ||
-            !e.device_image || !e.label) {
+            !e.device_image || !e.primary_param || !e.label) {
             dw_entry_free(&e);
             goto oom;
         }
@@ -497,12 +505,17 @@ static esp_err_t dw_build(const char *text, dw_table_t *out)
     while (i < tmp_len) {
         size_t start = i;
         const char *dev = tmp[i].device;
-        /* The device-class icon override is repeated on every row of the
-         * device (the registry is flat), so any row carrying it wins. */
+        /* The device-class icon override and the summarising param are repeated
+         * on every row of the device (the registry is flat), so any row carrying
+         * them wins. */
         const char *dimg = "";
+        const char *primary = "";
         while (i < tmp_len && strcmp(tmp[i].device, dev) == 0) {
             if (dimg[0] == '\0' && tmp[i].device_image[0]) {
                 dimg = tmp[i].device_image;
+            }
+            if (primary[0] == '\0' && tmp[i].primary_param[0]) {
+                primary = tmp[i].primary_param;
             }
             i++;
         }
@@ -510,6 +523,7 @@ static esp_err_t dw_build(const char *text, dw_table_t *out)
         views[v].entries = (const minihub_device_widget_entry_t *)&tmp[start];
         views[v].count = i - start;
         views[v].image = dimg;
+        views[v].primary_param = primary;
         v++;
     }
 
@@ -531,6 +545,7 @@ oom:
             free(tmp[k].style_json);
             free(tmp[k].image);
             free(tmp[k].device_image);
+            free(tmp[k].primary_param);
         }
         free(tmp);
     }

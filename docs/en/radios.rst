@@ -16,15 +16,25 @@ The scarce resource is the 2.4 GHz radio. Wi-Fi and BLE Mesh coexist on it. IEEE
 802.15.4 — Zigbee **or** Thread — shares it with neither of them, and Zigbee and
 Thread exclude each other, so one product runs either the Wi-Fi / BLE Mesh group
 or one 802.15.4 stack. A Zigbee or Thread Hub therefore takes its IP uplink from
-Ethernet. ``minihub_adapter_start_all()`` starts Wi-Fi first, then 802.15.4, then
-BLE Mesh; adapters that hold no radio (Modbus, for example) start last. The Wi-Fi
-group wins: when ``adapters.json`` asks for Wi-Fi or BLE Mesh together with
-Zigbee/Thread, the 802.15.4 adapter is the loser — it is not initialized, not
-started, publishes no points, is never polled, a ``radio mutex`` warning is
-logged, and the file is not rewritten. Zigbee and Thread are also held apart at
-build time: ``tools/build_firmware.py`` refuses a configuration that turns
-on both (a stack already enabled in sdkconfig is pulled in before that check),
-and neither Kconfig option has a ``depends on`` / ``select`` tie to the other.
+Ethernet.
+
+``minihub_adapter_start_all()`` starts Wi-Fi first, then 802.15.4, then BLE Mesh;
+adapters that hold no radio (Modbus, for example) start last. The Wi-Fi group
+wins: when ``adapters.json`` asks for Wi-Fi or BLE Mesh together with
+Zigbee/Thread, the 802.15.4 adapter is the loser:
+
+* it is not initialized
+* it is not started
+* it publishes no points
+* it is never polled
+* a ``radio mutex`` warning is logged
+* the file is not rewritten
+
+Zigbee and Thread may both be linked. Which one runs is its ``enabled`` flag in
+``adapters.json``. When both are true, the one that starts later is skipped
+(Zigbee is registered before Thread). Neither Kconfig option has a
+``depends on`` / ``select`` tie to the other.
+
 Wi-Fi STA is a Host adapter (``adapters.wifi``). Ethernet is started by
 ``minihub_net_init()``, is not an adapter, and never competes for the radio.
 
@@ -45,7 +55,7 @@ Wi-Fi STA is a Host adapter (``adapters.wifi``). Ethernet is started by
    * - BLE Mesh + Thread
      - **Thread dropped**
    * - Zigbee + Thread
-     - **Thread dropped** (also blocked at build time)
+     - **The later start is dropped** (Zigbee is registered first, so Thread)
    * - Wi-Fi + BLE Mesh + Zigbee
      - **Zigbee dropped**; Wi-Fi + BLE Mesh stay
 
