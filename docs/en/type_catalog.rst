@@ -11,12 +11,13 @@ firmware, so editing them means a rebuild; the runtime table on the device,
 ``/data/config/devices.csv``, is read in preference to that embedded copy and
 editing it needs no reflash.
 
-Whether a type is controllable is a separate question: the overview card draws
-a power toggle only for the types in a hardcoded whitelist (``ctrlTypes`` in
-``components/minihub_web/web/js/overview.js``), and the map popup only for
-``switch`` and ``light`` (``components/minihub_web/web/js/map.js``). A new type
-renders its card from the catalog, but shows no toggle until those lists
-change.
+Whether a type is controllable is read from the same catalog: the overview card
+draws a power toggle, and the map marker takes a click, when the type offers a
+writable ``power`` parameter (``dwHasPowerControl`` in
+``components/minihub_web/web/js/device_widgets.js``). A type the catalog does not
+list is judged by the point itself: a ``power`` parameter, or a boolean ``value``
+summary. The instance overrides the type — ``visible: false`` or ``access: "R"``
+on ``props.params.power`` removes the toggle.
 
 The runtime half of the contract — one device is one point, live values under
 ``props.params`` — is in :doc:`data_model`.
@@ -146,6 +147,13 @@ Two layers. Core never owns either CSV.
 ``primary_param``, ``mandatory_params``, ``image`` (class avatar under
 ``images/devices/``). All five headers must be present when you upload the file;
 the ``image`` cells may be empty.
+
+``primary_param`` names the parameter that summarises a device of that type, so
+an adapter can use it for the point's compact ``value``. The generated flat
+registry repeats it on every row of the type, and
+``minihub_device_widget_get()`` exposes it once per type; it is empty when the
+type declares none. A non-empty value must be one of the type's ``parameters``:
+the generator and the firmware both reject a name the type does not list.
 
 ``parameters.csv`` columns: ``parameter``, ``label_zh``, ``label_en``,
 ``data_type``, ``properties``, ``min`` / ``max`` / ``step`` / ``unit``,

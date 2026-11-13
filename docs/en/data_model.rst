@@ -171,9 +171,9 @@ Four things decide how a parameter row is drawn:
   gets no row.
 * **Operability** follows the instance ``access``: ``R`` displays, ``RW`` allows change,
   and an unmet ``requires`` dims the control.
-* **The power switch on a card** uses a separate hard-coded list (``ctrlTypes`` in
-  ``overview.js``); types outside it get no switch, and the map popup toggles only
-  ``switch`` and ``light``.
+* **The power switch on a card** comes from the same catalog: the type must offer a
+  writable ``power`` parameter. The map marker uses that same answer, and an instance
+  ``visible: false`` or ``access: "R"`` on ``power`` removes the switch.
 
 How parameters are read and written
 -----------------------------------
@@ -277,7 +277,7 @@ Fields the Host reads per adapter:
   Commissioning: :doc:`matter`. Fields:
 
   * ``point_id`` (required) — max 64 bytes
-  * ``type`` — max 16 bytes, default ``light``
+  * ``type`` — max 32 bytes, default ``light``
   * ``node_id`` — fabric node id as decimal or ``0x`` hex string. The
     commissioner uses 1; end devices should be ≥ 2
   * ``endpoint_id`` — Matter endpoint, integer 0–65535, default 1 (this is
@@ -288,7 +288,7 @@ Fields the Host reads per adapter:
 
   * ``point_id`` (required) — Hub id, max 64 bytes, two-segment dotted form
     e.g. ``zigbee.zb_0a1b`` (discovery) or ``zigbee.door_contact`` (manual bind)
-  * ``type`` (required) — max 16 bytes. ``light`` / ``switch`` take on/off
+  * ``type`` (required) — max 32 bytes. ``light`` / ``switch`` take on/off
     commands (``turn_on`` / ``turn_off`` / ``toggle``). ``sensor`` is
     temperature/humidity or contact
   * ``ieee`` — 64-bit IEEE as hex (optional ``0x`` prefix); used to recognize
@@ -312,11 +312,19 @@ Fields the Host reads per adapter:
     No valid filter means accept all UUIDs
   * ``provision.bind_models[]`` — max 12. ``model_id`` is an integer or
     ``0x1000``-style string; optional ``name``, ``company_id`` (SIG default
-    ``0xFFFF``). Host clients today cover OnOff ``0x1000``, Level ``0x1002``,
-    Lightness ``0x1300``, CTL ``0x1303``
-  * ``devices[]``: ``point_id``, ``type`` (required, max 64 / 16 bytes).
-    ``type`` ``sensor`` entries are skipped. ``uuid`` is 32 hex digits
+    ``0xFFFF``). The Host binds every model the capability map knows
+    (OnOff ``0x1000``, Level ``0x1002``, Lightness ``0x1300``, CTL ``0x1303``,
+    HSL ``0x1307``, Sensor Server ``0x1100``) **plus** the models listed here,
+    so this array adds vendor models instead of replacing the built-in set
+  * ``devices[]``: ``point_id``, ``type`` (required, max 64 / 32 bytes).
+    ``uuid`` is 32 hex digits
     (32+NUL buffer). ``unicast`` 0–65535. ``elem_num`` 0–255, default 1
+  * ``devices[].models[]`` — optional. The Composition models of that entry:
+    an integer, a ``0x1000``-style string, or a model name the capability map
+    publishes (``onoff``, ``gen_onoff_srv``, …). With it, the map derives the
+    capabilities and then the type; without it the ``type`` derives them from
+    the parameters the map knows for that type. An entry left with no known
+    capability is skipped and logged
 * **thread** — no ``devices`` and **no** Hub points (Border Router / dataset
   only; Matter-over-Thread end-devices live under ``adapters.matter``). Fields:
 
@@ -355,7 +363,7 @@ Fields the Host reads per adapter:
   * ``maps[]`` (under each gateway) map registers to points:
 
     * ``point_id`` (required) — max 64 bytes
-    * ``type`` — max 16 bytes, default ``sensor``
+    * ``type`` — max 32 bytes, default ``sensor``
     * ``unit_id`` — overrides the gateway default slave id
     * ``fc`` — ``coil`` / ``discrete`` (or ``di``) / ``input`` (or ``ir``);
       anything else is holding
