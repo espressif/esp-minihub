@@ -1,0 +1,18 @@
+# Fixed LCD recipe for product `minihub_lcd` (reference HW: esp32_s31_korvo1).
+# This is a standalone product, not a variant of `minihub`: do not run
+# apply_sdkconfig_variant.sh here.
+#
+# MINIHUB_LCD_UI depends on !MINIHUB_NET_ETH because EMAC and the RGB LCD share
+# pin groups on this board. Keep `eth` out of this list; feature/lcd.defaults
+# pins CONFIG_MINIHUB_NET_ETH=n explicitly (the symbol defaults to y on S31).
+board: esp32_s31_korvo1
+features:
+  - common
+  - memory
+  - partitions_16m
+  - wifi_sta
+  - lcd
+  - lcd_brookesia_storage
+  - dynamic_modules
+  - modbus
+  - mqtt_broker

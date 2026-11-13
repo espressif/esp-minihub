@@ -8,7 +8,7 @@ menu "Auth"
     config MINIHUB_WEB_LOGIN_AUTH_TOKEN
         string "REST Bearer token (empty = cookie only)"
         depends on MINIHUB_WEB_LOGIN_AUTH
-        default ""
+        default "espressif"
         help
             Scripts and LAN integrators authenticate with
             "Authorization: Bearer <this>". Empty by default, so a build from this

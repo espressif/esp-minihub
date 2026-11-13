@@ -1,12 +1,11 @@
 # Name,Type,SubType,Offset,Size,Flags
-# ESP32-S31 / 16MB flash — dual OTA app slots (ota_0 / ota_1 = 5 MiB each)
+# ESP32-S31 / 16MB flash — one 8 MiB OTA slot (ota_0)
 # Zigbee NVRAM shares RainMaker fctry NVS (no zb_storage / zb_fct);
 # storage + modstore at top of flash
 nvs,data,nvs,0x9000,0x6000,
 otadata,data,ota,0xf000,0x2000,
 phy_init,data,phy,0x11000,0x1000,
-ota_0,app,ota_0,0x20000,0x500000,
-ota_1,app,ota_1,,0x500000
-fctry,data,nvs,0xA95000,0xA000,
-storage,data,littlefs,0xA9F000,0x361000,
-modstore,data,littlefs,0xE00000,0x200000,
+ota_0,app,ota_0,0x20000,0x800000,
+fctry,data,nvs,0x820000,0xA000,
+storage,data,littlefs,0x82A000,0x4D6000,
+modstore,data,littlefs,0xD00000,0x200000,

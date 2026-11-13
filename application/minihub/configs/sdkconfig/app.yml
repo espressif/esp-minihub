@@ -1,4 +1,5 @@
-# Same as app.yml default — used by apply_sdkconfig_variant.sh --restore
+# Product recipe for application/minihub (esp32_s31_function_coreboard_1).
+# LCD is a separate product: ./tools/build_firmware.py -app minihub_lcd
 board: esp32_s31_function_coreboard_1
 features:
   - common

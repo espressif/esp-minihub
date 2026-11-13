@@ -1,0 +1,59 @@
+# Product profile for application/minihub_lcd (merged with configs/minihub_manifest.yml _host_base).
+# Sync: MINIHUB_APP=minihub_lcd python tools/sync_host_manifest.py
+#
+# Standalone LCD-only product, NOT a variant of application/minihub:
+# MINIHUB_LCD_UI depends on !MINIHUB_NET_ETH because EMAC and the RGB LCD share
+# pin groups on esp32_s31_korvo1. Keeping the recipe here (instead of switching
+# application/minihub/configs/sdkconfig/app.yml via apply_sdkconfig_variant.sh)
+# gives the LCD build its own sdkconfig and leaves the Ethernet product intact.
+#
+# Do NOT add a `variants: lcd` section here: sync_host_manifest.py selects the
+# `_<app>_lcd` overlay whenever app.yml has the `lcd` feature, which would stack
+# an overlay on top of this already-LCD main profile.
+extends: _host_base
+store_preinstall: []
+partition_table: partitions.csv
+board: esp32_s31_korvo1
+sdkconfig_features:
+- common
+- memory
+- partitions_16m
+- wifi_sta
+- lcd
+- lcd_brookesia_storage
+- dynamic_modules
+- modbus
+- mqtt_broker
+components:
+  # deep_merge() unions `require` onto _host_base, so list only what LCD adds.
+  require:
+  - minihub_lcd
+idf_dependencies:
+  espressif/esp_lcd_touch_gt1151: '*'
+  # Only gui_lvgl reaches 0.8.6. The rest of the 0.8 family resolves to
+  # 0.8.2 (lib_utils, service_manager, service_display), 0.8.3
+  # (gui_interface) and 0.8.5 (hal_adaptor) in the measured lock file;
+  # requiring >=0.8.6 for them makes dependency solving fail outright.
+  espressif/brookesia_lib_utils: '0.8.*'
+  # brookesia_gui_lvgl 0.8.6 pins lvgl==9.5.0 on purpose: newer LVGL/adapter emit
+  # #warning stubs that ESP-IDF turns into -Werror=cpp, and lv_ftsystem.c fails.
+  # Do not "upgrade" this to lvgl 9.6 / esp_lvgl_adapter 0.7 — that is the
+  # dependency deadlock an earlier attempt died in.
+  espressif/brookesia_gui_lvgl: '>=0.8.6,<0.9'
+  espressif/brookesia_hal_adaptor: '0.8.*'
+  espressif/brookesia_service_manager: '0.8.*'
+  espressif/brookesia_service_helper: '0.8.*'
+  espressif/brookesia_service_display: '0.8.*'
+  espressif/brookesia_gui_interface: '0.8.*'
+  espressif/esp_lvgl_adapter: '0.6.*'
+component_manifests:
+  minihub_lcd:
+    dependencies:
+      espressif/brookesia_lib_utils: '0.8.*'
+      espressif/brookesia_gui_lvgl: '>=0.8.6,<0.9'
+      espressif/brookesia_hal_adaptor: '0.8.*'
+      espressif/brookesia_service_manager: '0.8.*'
+      espressif/brookesia_service_helper: '0.8.*'
+      espressif/brookesia_service_display: '0.8.*'
+      espressif/brookesia_gui_interface: '0.8.*'
+      espressif/esp_lvgl_adapter: '0.6.*'

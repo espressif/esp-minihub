@@ -1,0 +1,96 @@
+{
+  "type": "viewTemplate",
+  "id": "device_card",
+  "node": {
+    "type": "container",
+    "layout": {"type": "flex", "flexFlow": "column", "gap": "4dp"},
+    "placement": {"width": "166dp", "height": "wrap"},
+    "style": {
+      "bgColor": "#151c2f",
+      "borderWidth": "1dp",
+      "borderColor": "#243049",
+      "padding": "8dp",
+      "radius": "10dp"
+    },
+    "children": [
+      {
+        "type": "container",
+        "id": "top",
+        "layout": {"type": "flex", "flexFlow": "row", "mainAlign": "start", "crossAlign": "center", "gap": "6dp"},
+        "placement": {"width": "150dp", "height": "wrap"},
+        "children": [
+          {
+            "type": "image",
+            "id": "icon",
+            "imageProps": {"src": "${image.icon_device}"},
+            "placement": {"width": "32dp", "height": "32dp"},
+            "commonProps": {"clickable": false}
+          },
+          {
+            "type": "label",
+            "id": "name",
+            "labelProps": {"text": ""},
+            "bindings": {"labelProps.text": "card.name"},
+            "placement": {"width": "wrap", "flexGrow": 1},
+            "style": {"textColor": "#eef2ff", "fontSize": "13sp"}
+          },
+          {
+            "type": "label",
+            "id": "type",
+            "labelProps": {"text": ""},
+            "bindings": {"labelProps.text": "card.type"},
+            "style": {"textColor": "#818cf8", "fontSize": "10sp", "bgColor": "#1a2238", "padding": "2dp", "radius": "4dp"}
+          }
+        ]
+      },
+      {
+        "type": "label",
+        "id": "meta",
+        "labelProps": {"text": ""},
+        "bindings": {"labelProps.text": "card.meta"},
+        "style": {"textColor": "#5c6b85", "fontSize": "10sp"}
+      },
+      {
+        "type": "label",
+        "id": "val",
+        "labelProps": {"text": ""},
+        "bindings": {"labelProps.text": "card.value"},
+        "style": {"textColor": "#22c55e", "fontSize": "16sp"}
+      },
+      {
+        "type": "button",
+        "id": "rename_btn",
+        "events": [
+          {
+            "type": "clicked",
+            "action": "device_rename"
+          }
+        ],
+        "placement": {
+          "width": "150dp",
+          "height": "24dp"
+        },
+        "style": {
+          "bgColor": "#1a2238",
+          "textColor": "#cbd5e1",
+          "fontSize": "10sp",
+          "radius": "4dp"
+        },
+        "children": [
+          {
+            "type": "label",
+            "id": "rename_btn_lbl",
+            "labelProps": {
+              "text": "${constant.strings.ov_rename}"
+            },
+            "placement": {
+              "mode": "relative",
+              "align": "center"
+            }
+          }
+        ]
+      }
+    ],
+    "events": [{"type": "clicked", "action": "device_tap"}]
+  }
+}

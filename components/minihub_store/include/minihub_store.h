@@ -106,3 +106,16 @@ bool minihub_store_copy_base_url(char *out, size_t out_len);
  * ESP_ERR_INVALID_STATE when no deploy URL is configured.
  */
 esp_err_t minihub_store_list_upgrades(cJSON **out);
+
+/**
+ * @brief littlefs usage of a mounted partition (the numbers the Web console
+ *        shows in its Storage / Modstore cards).
+ * @param label  Partition label, e.g. "storage" or "modstore".
+ * @param total  Receives the partition size in bytes.
+ * @param used   Receives the used bytes in bytes.
+ * @return
+ *     - ESP_OK: Succeed.
+ *     - ESP_ERR_INVALID_ARG: NULL argument.
+ *     - ESP_ERR_NOT_FOUND: Partition not mounted.
+ */
+esp_err_t minihub_store_partition_usage(const char *label, size_t *total, size_t *used);

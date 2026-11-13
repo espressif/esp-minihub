@@ -45,12 +45,6 @@
         {
           "type": "button",
           "id": "nav_overview",
-          "events": [
-            {
-              "type": "clicked",
-              "action": "nav_overview"
-            }
-          ],
           "style": {
             "bgColor": "#6366f1",
             "borderWidth": "1dp",
@@ -65,7 +59,7 @@
               "type": "label",
               "id": "nav_overview_lbl",
               "labelProps": {
-                "text": "概览"
+                "text": "${constant.strings.nav_overview}"
               },
               "placement": {
                 "mode": "relative",
@@ -83,7 +77,7 @@
           "events": [
             {
               "type": "clicked",
-              "action": "nav_map"
+              "action": "nav_map_from_overview"
             }
           ],
           "style": {
@@ -100,7 +94,77 @@
               "type": "label",
               "id": "nav_map_lbl",
               "labelProps": {
-                "text": "地图"
+                "text": "${constant.strings.nav_map}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_rules",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_rules_from_overview"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_rules_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_rules}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_scenes",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_scenes_from_overview"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_scenes_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_scenes}"
               },
               "placement": {
                 "mode": "relative",
@@ -118,7 +182,7 @@
           "events": [
             {
               "type": "clicked",
-              "action": "nav_store"
+              "action": "nav_store_from_overview"
             }
           ],
           "style": {
@@ -135,7 +199,42 @@
               "type": "label",
               "id": "nav_store_lbl",
               "labelProps": {
-                "text": "商店"
+                "text": "${constant.strings.nav_store}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_system",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_system_from_overview"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_system_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_system}"
               },
               "placement": {
                 "mode": "relative",
@@ -163,7 +262,7 @@
           "events": [
             {
               "type": "clicked",
-              "action": "user_tap"
+              "action": "user_tap_overview"
             }
           ],
           "style": {
@@ -176,20 +275,20 @@
             "height": "44dp"
           },
           "children": [
-        {
-          "type": "label",
-          "id": "user_name",
-          "labelProps": {
-                "text": "用户"
+            {
+              "type": "label",
+              "id": "user_name",
+              "labelProps": {
+                "text": "${constant.strings.user_default_name}"
               },
               "placement": {
                 "mode": "relative",
                 "align": "center"
-          },
-          "style": {
+              },
+              "style": {
                 "textColor": "#8b9bb4",
                 "fontSize": "12sp"
-          }
+              }
             }
           ]
         }
@@ -229,24 +328,24 @@
           "placement": {
             "width": "100%",
             "height": "wrap"
-      },
-      "children": [
-        {
-          "type": "label",
-          "id": "overview_title",
-          "labelProps": {
-                "text": "概览"
           },
-          "style": {
-            "textColor": "#eef2ff",
-            "fontSize": "18sp"
-          }
+          "children": [
+            {
+              "type": "label",
+              "id": "overview_title",
+              "labelProps": {
+                "text": "${constant.strings.nav_overview}"
+              },
+              "style": {
+                "textColor": "#eef2ff",
+                "fontSize": "18sp"
+              }
             },
             {
               "type": "label",
               "id": "overview_updated",
               "labelProps": {
-                "text": "更新 --:--:--"
+                "text": "${constant.strings.overview_updated_placeholder}"
               },
               "style": {
                 "textColor": "#5c6b85",
@@ -290,7 +389,7 @@
                   "type": "label",
                   "id": "stat_devices_lbl",
                   "labelProps": {
-                    "text": "能力点"
+                    "text": "${constant.strings.overview_points}"
                   },
                   "style": {
                     "textColor": "#8b9bb4",
@@ -334,7 +433,7 @@
                   "type": "label",
                   "id": "stat_online_lbl",
                   "labelProps": {
-                    "text": "在线"
+                    "text": "${constant.strings.overview_online}"
                   },
                   "style": {
                     "textColor": "#8b9bb4",
@@ -378,7 +477,7 @@
                   "type": "label",
                   "id": "stat_adapters_lbl",
                   "labelProps": {
-                    "text": "适配器"
+                    "text": "${constant.strings.overview_adapters}"
                   },
                   "style": {
                     "textColor": "#8b9bb4",
@@ -422,166 +521,419 @@
             "radius": "8dp"
           },
           "children": [
-        {
-          "type": "container",
-          "id": "filter_row",
-          "layout": {
-            "type": "flex",
-            "flexFlow": "row",
-            "mainAlign": "start",
-            "crossAlign": "center",
-            "gap": "6dp"
-          },
-          "placement": {
-            "width": "100%",
-            "height": "32dp"
-          },
-          "children": [
             {
-              "type": "button",
-              "id": "filter_all",
-              "events": [{"type": "clicked", "action": "filter_all"}],
-              "bindings": {
-                "style.bgColor": "chip.bg",
-                "style.borderColor": "chip.border"
+              "type": "container",
+              "id": "filter_row",
+              "layout": {
+                "type": "flex",
+                "flexFlow": "row",
+                "mainAlign": "start",
+                "crossAlign": "center",
+                "gap": "6dp"
               },
-              "style": {"bgColor": "#6366f1", "borderWidth": "1dp", "borderColor": "#6366f1"},
-              "placement": {"width": "56dp", "height": "32dp"},
-              "children": [{
-          "type": "label",
-                "id": "filter_all_lbl",
-                "bindings": {"style.textColor": "chip.text"},
-                "labelProps": {"text": "全部"},
-                "placement": {"mode": "relative", "align": "center"},
-                "style": {"textColor": "#eef2ff", "fontSize": "11sp"}
-              }]
+              "placement": {
+                "width": "100%",
+                "height": "32dp"
+              },
+              "children": [
+                {
+                  "type": "button",
+                  "id": "filter_all",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "filter_all"
+                    }
+                  ],
+                  "bindings": {
+                    "style.bgColor": "chip.bg",
+                    "style.borderColor": "chip.border"
+                  },
+                  "style": {
+                    "bgColor": "#6366f1",
+                    "borderWidth": "1dp",
+                    "borderColor": "#6366f1"
+                  },
+                  "placement": {
+                    "width": "56dp",
+                    "height": "32dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "filter_all_lbl",
+                      "bindings": {
+                        "style.textColor": "chip.text"
+                      },
+                      "labelProps": {
+                        "text": "${constant.strings.filter_all}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#eef2ff",
+                        "fontSize": "11sp"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "filter_auth",
+                  "commonProps": {
+                    "hidden": true
+                  },
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "filter_auth"
+                    }
+                  ],
+                  "bindings": {
+                    "style.bgColor": "chip.bg",
+                    "style.borderColor": "chip.border"
+                  },
+                  "style": {
+                    "bgColor": "#1a2238",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049"
+                  },
+                  "placement": {
+                    "width": "72dp",
+                    "height": "32dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "filter_auth_lbl",
+                      "bindings": {
+                        "style.textColor": "chip.text"
+                      },
+                      "labelProps": {
+                        "text": "${constant.strings.auth_cloud}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#8b9bb4",
+                        "fontSize": "11sp"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "filter_matter",
+                  "commonProps": {
+                    "hidden": true
+                  },
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "filter_matter"
+                    }
+                  ],
+                  "bindings": {
+                    "style.bgColor": "chip.bg",
+                    "style.borderColor": "chip.border"
+                  },
+                  "style": {
+                    "bgColor": "#1a2238",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049"
+                  },
+                  "placement": {
+                    "width": "72dp",
+                    "height": "32dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "filter_matter_lbl",
+                      "bindings": {
+                        "style.textColor": "chip.text"
+                      },
+                      "labelProps": {
+                        "text": "${constant.strings.matter_section}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#8b9bb4",
+                        "fontSize": "11sp"
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             {
-              "type": "button",
-              "id": "filter_auth",
-              "events": [{"type": "clicked", "action": "filter_auth"}],
-              "bindings": {
-                "style.bgColor": "chip.bg",
-                "style.borderColor": "chip.border"
+              "type": "container",
+              "id": "auth_bar",
+              "layout": {
+                "type": "flex",
+                "flexFlow": "row",
+                "mainAlign": "start",
+                "crossAlign": "center",
+                "gap": "6dp"
               },
-              "style": {"bgColor": "#1a2238", "borderWidth": "1dp", "borderColor": "#243049"},
-              "placement": {"width": "72dp", "height": "32dp"},
-              "children": [{
-                "type": "label",
-                "id": "filter_auth_lbl",
-                "bindings": {"style.textColor": "chip.text"},
-                "labelProps": {"text": "云账号"},
-                "placement": {"mode": "relative", "align": "center"},
-                "style": {"textColor": "#8b9bb4", "fontSize": "11sp"}
-              }]
+              "placement": {
+                "width": "100%",
+                "height": "36dp"
+              },
+              "commonProps": {
+                "hidden": true
+              },
+              "children": [
+                {
+                  "type": "label",
+                  "id": "auth_section_lbl",
+                  "labelProps": {
+                    "text": "${constant.strings.auth_cloud}"
+                  },
+                  "placement": {
+                    "width": "52dp"
+                  },
+                  "style": {
+                    "textColor": "#eef2ff",
+                    "fontSize": "13sp"
+                  }
+                },
+                {
+                  "type": "label",
+                  "id": "auth_acct",
+                  "labelProps": {
+                    "text": "${constant.strings.auth_not_logged_in}"
+                  },
+                  "placement": {
+                    "flexGrow": 1,
+                    "width": "wrap"
+                  },
+                  "style": {
+                    "textColor": "#818cf8",
+                    "fontSize": "12sp"
+                  }
+                },
+                {
+                  "type": "label",
+                  "id": "auth_count",
+                  "labelProps": {
+                    "text": "0"
+                  },
+                  "placement": {
+                    "width": "28dp"
+                  },
+                  "style": {
+                    "textColor": "#818cf8",
+                    "fontSize": "11sp",
+                    "bgColor": "#1a2238",
+                    "padding": "2dp",
+                    "radius": "4dp"
+                  }
+                },
+                {
+                  "type": "button",
+                  "id": "auth_btn_login",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "auth_login"
+                    }
+                  ],
+                  "commonProps": {
+                    "hidden": true
+                  },
+                  "style": {
+                    "bgColor": "#6366f1",
+                    "borderWidth": "1dp",
+                    "borderColor": "#6366f1"
+                  },
+                  "placement": {
+                    "width": "52dp",
+                    "height": "32dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "auth_btn_login_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.auth_login}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#eef2ff",
+                        "fontSize": "11sp"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "auth_btn_sync",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "auth_sync"
+                    }
+                  ],
+                  "commonProps": {
+                    "hidden": true
+                  },
+                  "style": {
+                    "bgColor": "#6366f1",
+                    "borderWidth": "1dp",
+                    "borderColor": "#6366f1"
+                  },
+                  "placement": {
+                    "width": "52dp",
+                    "height": "32dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "auth_btn_sync_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.auth_sync}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#eef2ff",
+                        "fontSize": "11sp"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "auth_btn_logout",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "auth_logout"
+                    }
+                  ],
+                  "commonProps": {
+                    "hidden": true
+                  },
+                  "style": {
+                    "bgColor": "#1a2238",
+                    "borderWidth": "1dp",
+                    "borderColor": "#dc2626"
+                  },
+                  "placement": {
+                    "width": "52dp",
+                    "height": "32dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "auth_btn_logout_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.auth_logout}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#fca5a5",
+                        "fontSize": "11sp"
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             {
-              "type": "button",
-              "id": "filter_matter",
-              "events": [{"type": "clicked", "action": "filter_matter"}],
-              "bindings": {
-                "style.bgColor": "chip.bg",
-                "style.borderColor": "chip.border"
+              "type": "container",
+              "id": "matter_bar",
+              "layout": {
+                "type": "flex",
+                "flexFlow": "row",
+                "mainAlign": "start",
+                "crossAlign": "center",
+                "gap": "8dp"
               },
-              "style": {"bgColor": "#1a2238", "borderWidth": "1dp", "borderColor": "#243049"},
-              "placement": {"width": "72dp", "height": "32dp"},
-              "children": [{
-                "type": "label",
-                "id": "filter_matter_lbl",
-                "bindings": {"style.textColor": "chip.text"},
-                "labelProps": {"text": "Matter"},
-                "placement": {"mode": "relative", "align": "center"},
-                "style": {"textColor": "#8b9bb4", "fontSize": "11sp"}
-              }]
+              "placement": {
+                "width": "100%",
+                "height": "32dp"
+              },
+              "commonProps": {
+                "hidden": true
+              },
+              "style": {
+                "bgColor": "#151c2f",
+                "padding": "6dp",
+                "radius": "8dp"
+              },
+              "children": [
+                {
+                  "type": "label",
+                  "id": "matter_section_lbl",
+                  "labelProps": {
+                    "text": "${constant.strings.matter_section}"
+                  },
+                  "style": {
+                    "textColor": "#eef2ff",
+                    "fontSize": "13sp"
+                  }
+                },
+                {
+                  "type": "label",
+                  "id": "matter_status",
+                  "labelProps": {
+                    "text": "${constant.strings.matter_not_ready}"
+                  },
+                  "style": {
+                    "textColor": "#5c6b85",
+                    "fontSize": "11sp"
+                  }
+                },
+                {
+                  "type": "button",
+                  "id": "matter_add_btn",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "matter_add"
+                    }
+                  ],
+                  "placement": {
+                    "width": "96dp",
+                    "height": "26dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "matter_add_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.matter_add}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#eef2ff",
+                        "fontSize": "11sp"
+                      }
+                    }
+                  ]
+                }
+              ]
             }
-          ]
-        },
-        {
-          "type": "container",
-          "id": "auth_bar",
-          "layout": {
-            "type": "flex",
-            "flexFlow": "row",
-            "mainAlign": "start",
-            "crossAlign": "center",
-            "gap": "6dp"
-          },
-          "placement": {
-            "width": "100%",
-            "height": "36dp"
-          },
-          "commonProps": {
-            "hidden": true
-          },
-          "children": [
-            {
-              "type": "label",
-              "id": "auth_section_lbl",
-              "labelProps": {"text": "云账号"},
-              "placement": {"width": "52dp"},
-              "style": {"textColor": "#eef2ff", "fontSize": "13sp"}
-            },
-            {
-              "type": "label",
-              "id": "auth_acct",
-              "labelProps": {"text": "未登录"},
-              "placement": {"flexGrow": 1, "width": "wrap"},
-              "style": {"textColor": "#818cf8", "fontSize": "12sp"}
-            },
-            {
-              "type": "label",
-              "id": "auth_count",
-              "labelProps": {"text": "0"},
-              "placement": {"width": "28dp"},
-              "style": {"textColor": "#818cf8", "fontSize": "11sp", "bgColor": "#1a2238", "padding": "2dp", "radius": "4dp"}
-            },
-            {
-              "type": "button",
-              "id": "auth_btn_login",
-              "events": [{"type": "clicked", "action": "auth_login"}],
-              "commonProps": {"hidden": true},
-              "style": {"bgColor": "#6366f1", "borderWidth": "1dp", "borderColor": "#6366f1"},
-              "placement": {"width": "52dp", "height": "32dp"},
-              "children": [{
-                "type": "label",
-                "id": "auth_btn_login_lbl",
-                "labelProps": {"text": "登录"},
-                "placement": {"mode": "relative", "align": "center"},
-                "style": {"textColor": "#eef2ff", "fontSize": "11sp"}
-              }]
-            },
-            {
-              "type": "button",
-              "id": "auth_btn_sync",
-              "events": [{"type": "clicked", "action": "auth_sync"}],
-              "commonProps": {"hidden": true},
-              "style": {"bgColor": "#6366f1", "borderWidth": "1dp", "borderColor": "#6366f1"},
-              "placement": {"width": "52dp", "height": "32dp"},
-              "children": [{
-                "type": "label",
-                "id": "auth_btn_sync_lbl",
-                "labelProps": {"text": "同步"},
-                "placement": {"mode": "relative", "align": "center"},
-                "style": {"textColor": "#eef2ff", "fontSize": "11sp"}
-              }]
-            },
-            {
-              "type": "button",
-              "id": "auth_btn_logout",
-              "events": [{"type": "clicked", "action": "auth_logout"}],
-              "commonProps": {"hidden": true},
-              "style": {"bgColor": "#1a2238", "borderWidth": "1dp", "borderColor": "#dc2626"},
-              "placement": {"width": "52dp", "height": "32dp"},
-              "children": [{
-                "type": "label",
-                "id": "auth_btn_logout_lbl",
-                "labelProps": {"text": "退出"},
-                "placement": {"mode": "relative", "align": "center"},
-                "style": {"textColor": "#fca5a5", "fontSize": "11sp"}
-              }]
-            }
-          ]
-        }
           ]
         },
         {
@@ -608,23 +960,52 @@
             {
               "type": "label",
               "id": "auth_cta_text",
-              "labelProps": {"text": "已登录，点击同步拉取云端设备"},
-              "placement": {"flexGrow": 1},
-              "style": {"textColor": "#8b9bb4", "fontSize": "11sp"}
+              "labelProps": {
+                "text": "${constant.strings.auth_cta}"
+              },
+              "placement": {
+                "flexGrow": 1
+              },
+              "style": {
+                "textColor": "#8b9bb4",
+                "fontSize": "11sp"
+              }
             },
             {
               "type": "button",
               "id": "auth_cta_sync",
-              "events": [{"type": "clicked", "action": "auth_sync_cta"}],
-              "style": {"bgColor": "#6366f1", "borderWidth": "1dp", "borderColor": "#6366f1"},
-              "placement": {"width": "88dp", "height": "32dp"},
-              "children": [{
-                "type": "label",
-                "id": "auth_cta_sync_lbl",
-                "labelProps": {"text": "同步设备"},
-                "placement": {"mode": "relative", "align": "center"},
-                "style": {"textColor": "#eef2ff", "fontSize": "11sp"}
-              }]
+              "events": [
+                {
+                  "type": "clicked",
+                  "action": "auth_sync_cta"
+                }
+              ],
+              "style": {
+                "bgColor": "#6366f1",
+                "borderWidth": "1dp",
+                "borderColor": "#6366f1"
+              },
+              "placement": {
+                "width": "88dp",
+                "height": "32dp"
+              },
+              "children": [
+                {
+                  "type": "label",
+                  "id": "auth_cta_sync_lbl",
+                  "labelProps": {
+                    "text": "${constant.strings.auth_sync_devices}"
+                  },
+                  "placement": {
+                    "mode": "relative",
+                    "align": "center"
+                  },
+                  "style": {
+                    "textColor": "#eef2ff",
+                    "fontSize": "11sp"
+                  }
+                }
+              ]
             }
           ]
         },
@@ -646,1331 +1027,199 @@
             "height": "wrap",
             "flexGrow": 1
           },
+          "children": []
+        }
+      ]
+    },
+    {
+      "type": "container",
+      "id": "name_modal",
+      "commonProps": {
+        "hidden": true
+      },
+      "layout": {
+        "type": "flex",
+        "flexFlow": "column",
+        "mainAlign": "center",
+        "crossAlign": "center"
+      },
+      "placement": {
+        "x": "0dp",
+        "y": "0dp",
+        "width": "800dp",
+        "height": "480dp"
+      },
+      "style": {
+        "bgColor": "#0b0f1a"
+      },
+      "children": [
+        {
+          "type": "container",
+          "id": "name_card",
+          "layout": {
+            "type": "flex",
+            "flexFlow": "column",
+            "mainAlign": "start",
+            "crossAlign": "stretch",
+            "gap": "8dp"
+          },
+          "placement": {
+            "width": "680dp",
+            "height": "420dp"
+          },
+          "style": {
+            "bgColor": "#131a2b",
+            "borderWidth": "1dp",
+            "borderColor": "#243049",
+            "radius": "10dp",
+            "padding": "16dp"
+          },
           "children": [
             {
-              "type": "container",
-              "id": "dev_0",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
+              "type": "label",
+              "id": "name_title",
+              "labelProps": {
+                "text": "${constant.strings.rename_title}"
               },
               "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
+                "textColor": "#eef2ff",
+                "fontSize": "17sp"
+              }
+            },
+            {
+              "type": "label",
+              "id": "name_hint",
+              "labelProps": {
+                "text": "${constant.strings.rename_hint}"
               },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_0_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
-                    {
-                      "type": "image",
-                      "id": "dev_0_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                {
-                  "type": "label",
-                  "id": "dev_0_name",
-                  "labelProps": {
-                    "text": ""
-                  },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                  },
-                  "style": {
-                    "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_0_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_0_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_0_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
+              "style": {
+                "textColor": "#8b9bb4",
+                "fontSize": "12sp"
+              }
+            },
+            {
+              "type": "textInput",
+              "id": "name_input",
+              "textInputProps": {
+                "text": "",
+                "placeholder": "${constant.strings.rename_placeholder}",
+                "maxLength": 48
+              },
+              "bindings": {
+                "textInputProps.text": "rename.text"
+              },
               "events": [
                 {
-                  "type": "clicked",
-                  "action": "device_tap_0"
+                  "type": "valueChanged",
+                  "action": "name_overview_changed"
                 }
-              ]
+              ],
+              "placement": {
+                "width": "648dp",
+                "height": "44dp"
+              },
+              "style": {
+                "bgColor": "#1a2238",
+                "borderWidth": "1dp",
+                "borderColor": "#243049",
+                "radius": "8dp",
+                "textColor": "#eef2ff",
+                "fontSize": "16sp",
+                "padding": "8dp"
+              }
             },
             {
               "type": "container",
-              "id": "dev_1",
+              "id": "name_btn_row",
               "layout": {
                 "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
+                "flexFlow": "row",
+                "mainAlign": "end",
+                "crossAlign": "center",
+                "gap": "10dp"
               },
               "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
+                "width": "648dp",
+                "height": "36dp"
               },
               "children": [
                 {
-                  "type": "container",
-                  "id": "dev_1_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
+                  "type": "button",
+                  "id": "name_cancel",
+                  "events": [
                     {
-                      "type": "image",
-                      "id": "dev_1_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                {
-                  "type": "label",
-                  "id": "dev_1_name",
-                  "labelProps": {
-                    "text": ""
-                  },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                  },
-                  "style": {
-                    "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_1_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
+                      "type": "clicked",
+                      "action": "name_overview_cancel"
                     }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_1_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
+                  ],
                   "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_1_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_1"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_2",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_2_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
+                    "bgColor": "#1a2238",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049",
+                    "radius": "8dp"
                   },
                   "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
+                    "width": "100dp",
+                    "height": "36dp"
                   },
                   "children": [
                     {
-                      "type": "image",
-                      "id": "dev_2_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                {
-                  "type": "label",
-                  "id": "dev_2_name",
-                  "labelProps": {
-                    "text": ""
-                  },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                  },
-                  "style": {
-                    "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
                       "type": "label",
-                      "id": "dev_2_type",
+                      "id": "name_cancel_lbl",
                       "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_2_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_2_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_2"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_3",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_3_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
-                    {
-                      "type": "image",
-                      "id": "dev_3_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
+                        "text": "${constant.strings.common_cancel}"
                       },
                       "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                {
-                  "type": "label",
-                  "id": "dev_3_name",
-                  "labelProps": {
-                    "text": ""
-                  },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                  },
-                  "style": {
-                    "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_3_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_3_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_3_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_3"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_4",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_4_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
-                    {
-                      "type": "image",
-                      "id": "dev_4_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_4_name",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
+                        "mode": "relative",
+                        "align": "center"
                       },
                       "style": {
                         "textColor": "#eef2ff",
                         "fontSize": "13sp"
                       }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_4_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
                     }
                   ]
                 },
                 {
-                  "type": "label",
-                  "id": "dev_4_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
+                  "type": "button",
+                  "id": "name_ok",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "name_overview_ok"
+                    }
+                  ],
                   "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_4_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_4"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_5",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_5_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
+                    "bgColor": "#1d4ed8",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049",
+                    "radius": "8dp"
                   },
                   "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
+                    "width": "100dp",
+                    "height": "36dp"
                   },
                   "children": [
                     {
-                      "type": "image",
-                      "id": "dev_5_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                    {
                       "type": "label",
-                      "id": "dev_5_name",
+                      "id": "name_ok_lbl",
                       "labelProps": {
-                        "text": ""
+                        "text": "${constant.strings.common_confirm}"
                       },
                       "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
+                        "mode": "relative",
+                        "align": "center"
                       },
                       "style": {
                         "textColor": "#eef2ff",
                         "fontSize": "13sp"
                       }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_5_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
                     }
                   ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_5_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_5_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_5"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_6",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_6_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
-                    {
-                      "type": "image",
-                      "id": "dev_6_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_6_name",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                      },
-                      "style": {
-                        "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_6_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_6_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_6_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_6"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_7",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_7_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
-                    {
-                      "type": "image",
-                      "id": "dev_7_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_7_name",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                      },
-                      "style": {
-                        "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_7_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_7_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_7_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_7"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_8",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_8_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
-                    {
-                      "type": "image",
-                      "id": "dev_8_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_8_name",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                      },
-                      "style": {
-                        "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_8_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_8_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_8_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_8"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_9",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_9_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
-                    {
-                      "type": "image",
-                      "id": "dev_9_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_9_name",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                      },
-                      "style": {
-                        "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_9_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_9_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_9_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_9"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_10",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_10_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
-                    {
-                      "type": "image",
-                      "id": "dev_10_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_10_name",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                      },
-                      "style": {
-                        "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_10_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_10_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_10_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_10"
-                }
-              ]
-            },
-            {
-              "type": "container",
-              "id": "dev_11",
-              "layout": {
-                "type": "flex",
-                "flexFlow": "column",
-                "gap": "4dp"
-              },
-              "placement": {
-                "width": "166dp",
-                "height": "wrap"
-              },
-              "style": {
-                "bgColor": "#151c2f",
-                "borderWidth": "1dp",
-                "borderColor": "#243049",
-                "padding": "8dp",
-                "radius": "10dp"
-              },
-              "children": [
-                {
-                  "type": "container",
-                  "id": "dev_11_top",
-                  "layout": {
-                    "type": "flex",
-                    "flexFlow": "row",
-                    "mainAlign": "start",
-                    "crossAlign": "center",
-                    "gap": "6dp"
-                  },
-                  "placement": {
-                    "width": "150dp",
-                    "height": "wrap"
-                  },
-                  "children": [
-                    {
-                      "type": "image",
-                      "id": "dev_11_icon",
-                      "imageProps": {
-                        "src": "${image.icon_device}"
-                      },
-                      "placement": {
-                        "width": "32dp",
-                        "height": "32dp"
-                      },
-                      "commonProps": {
-                        "clickable": false
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_11_name",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "placement": {
-                        "width": "wrap",
-                        "flexGrow": 1
-                      },
-                      "style": {
-                        "textColor": "#eef2ff",
-                        "fontSize": "13sp"
-                      }
-                    },
-                    {
-                      "type": "label",
-                      "id": "dev_11_type",
-                      "labelProps": {
-                        "text": ""
-                      },
-                      "style": {
-                        "textColor": "#818cf8",
-                        "fontSize": "10sp",
-                        "bgColor": "#1a2238",
-                        "padding": "2dp",
-                        "radius": "4dp"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "label",
-                  "id": "dev_11_meta",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#5c6b85",
-                    "fontSize": "10sp"
-                  }
-                },
-                {
-                  "type": "label",
-                  "id": "dev_11_val",
-                  "labelProps": {
-                    "text": ""
-                  },
-                  "style": {
-                    "textColor": "#22c55e",
-                    "fontSize": "16sp"
-                  }
-                }
-              ],
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "device_tap_11"
                 }
               ]
             }
-          ],
-          "commonProps": {
-            "scrollable": true
-          }
+          ]
         }
       ]
     }

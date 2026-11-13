@@ -1,0 +1,882 @@
+{
+  "schema": "minihub.lcd.i18n/1",
+  "version": "0.2.0",
+  "languages": [
+    "zh",
+    "en"
+  ],
+  "strings": {
+    "common_add": {
+      "zh": "+ 添加",
+      "en": "+ Add"
+    },
+    "common_cancel": {
+      "zh": "取消",
+      "en": "Cancel"
+    },
+    "common_confirm": {
+      "zh": "确定",
+      "en": "Confirm"
+    },
+    "common_ok": {
+      "zh": "确认",
+      "en": "OK"
+    },
+    "common_delete": {
+      "zh": "删除",
+      "en": "Delete"
+    },
+    "nav_overview": {
+      "zh": "概览",
+      "en": "Overview"
+    },
+    "nav_map": {
+      "zh": "地图",
+      "en": "Map"
+    },
+    "nav_rules": {
+      "zh": "规则",
+      "en": "Rules"
+    },
+    "nav_scenes": {
+      "zh": "场景",
+      "en": "Scenes"
+    },
+    "nav_store": {
+      "zh": "商店",
+      "en": "Store"
+    },
+    "nav_system": {
+      "zh": "系统",
+      "en": "System"
+    },
+    "overview_points": {
+      "zh": "能力点",
+      "en": "Points"
+    },
+    "overview_online": {
+      "zh": "在线",
+      "en": "Online"
+    },
+    "overview_adapters": {
+      "zh": "适配器",
+      "en": "Adapters"
+    },
+    "overview_updated_placeholder": {
+      "zh": "更新 --:--:--",
+      "en": "Updated --:--:--"
+    },
+    "overview_updated_fmt": {
+      "zh": "更新 %02d:%02d:%02d",
+      "en": "Updated %02d:%02d:%02d"
+    },
+    "overview_updated_no_time": {
+      "zh": "更新 待授时",
+      "en": "Updated - awaiting time"
+    },
+    "auth_cloud": {
+      "zh": "云账号",
+      "en": "Cloud account"
+    },
+    "auth_not_logged_in": {
+      "zh": "未登录",
+      "en": "Not signed in"
+    },
+    "auth_login": {
+      "zh": "登录",
+      "en": "Sign in"
+    },
+    "auth_logout": {
+      "zh": "退出",
+      "en": "Sign out"
+    },
+    "auth_sync": {
+      "zh": "同步",
+      "en": "Sync"
+    },
+    "auth_sync_devices": {
+      "zh": "同步设备",
+      "en": "Sync devices"
+    },
+    "auth_cta": {
+      "zh": "已登录，点击同步拉取云端设备",
+      "en": "Signed in. Tap Sync to pull cloud devices"
+    },
+    "auth_network_error": {
+      "zh": "网络未连接，请连接网络后重试",
+      "en": "No network. Connect and retry"
+    },
+    "auth_browser_hint_fmt": {
+      "zh": "请用手机浏览器访问 %s 进行登录",
+      "en": "Open %s in a phone browser to sign in"
+    },
+    "filter_all": {
+      "zh": "全部",
+      "en": "All"
+    },
+    "state_online": {
+      "zh": "在线",
+      "en": "Online"
+    },
+    "state_offline": {
+      "zh": "离线",
+      "en": "Offline"
+    },
+    "state_enabled": {
+      "zh": "已启用",
+      "en": "Enabled"
+    },
+    "state_disabled": {
+      "zh": "未启用",
+      "en": "Disabled"
+    },
+    "state_activated_off": {
+      "zh": "已停用",
+      "en": "Disabled"
+    },
+    "store_install": {
+      "zh": "安装",
+      "en": "Install"
+    },
+    "store_installed": {
+      "zh": "已安装",
+      "en": "Installed"
+    },
+    "store_available_title": {
+      "zh": "可用",
+      "en": "Available"
+    },
+    "store_available_empty": {
+      "zh": "暂无可安装项（均已安装或未预置）",
+      "en": "Nothing to install (already installed or not preloaded)"
+    },
+    "store_installed_empty": {
+      "zh": "暂无已安装项",
+      "en": "Nothing installed"
+    },
+    "store_uninstall": {
+      "zh": "卸载",
+      "en": "Uninstall"
+    },
+    "store_enable": {
+      "zh": "启用",
+      "en": "Enable"
+    },
+    "store_disable": {
+      "zh": "禁用",
+      "en": "Disable"
+    },
+    "store_upgrade": {
+      "zh": "升级",
+      "en": "Upgrade"
+    },
+    "store_reinstall": {
+      "zh": "重新安装",
+      "en": "Reinstall"
+    },
+    "store_plugin": {
+      "zh": "插件",
+      "en": "Plugin"
+    },
+    "store_builtin": {
+      "zh": "内置",
+      "en": "Built-in"
+    },
+    "store_module": {
+      "zh": "模块",
+      "en": "Module"
+    },
+    "store_pack": {
+      "zh": "配置包",
+      "en": "Config pack"
+    },
+    "store_actions_title": {
+      "zh": "商店操作",
+      "en": "Store action"
+    },
+    "store_available_count_fmt": {
+      "zh": "可用 · %d",
+      "en": "Available · %d"
+    },
+    "store_plugin_count_fmt": {
+      "zh": "插件 · %d",
+      "en": "Plugins · %d"
+    },
+    "store_op_failed_fmt": {
+      "zh": "%s 失败（%s）",
+      "en": "%s failed (%s)"
+    },
+    "store_offline_msg": {
+      "zh": "设备未联网或目录不可达",
+      "en": "Hub is offline or catalog unreachable"
+    },
+    "store_search_ph": {
+      "zh": "搜索模块...",
+      "en": "Search modules..."
+    },
+    "store_refresh": {
+      "zh": "刷新",
+      "en": "Refresh"
+    },
+    "store_refreshing": {
+      "zh": "正在从商店刷新目录…",
+      "en": "Refreshing the catalog…"
+    },
+    "store_refresh_fail": {
+      "zh": "刷新失败",
+      "en": "Refresh failed"
+    },
+    "store_op_unsupported": {
+      "zh": "该项不支持此操作",
+      "en": "This item does not support that action"
+    },
+    "store_op_not_started": {
+      "zh": "操作未开始：已有操作进行中或内存不足",
+      "en": "Not started: another operation is running or memory is low"
+    },
+    "store_uninstall_unsupported": {
+      "zh": "该项不支持卸载",
+      "en": "This item cannot be uninstalled"
+    },
+    "store_builtin_no_uninstall": {
+      "zh": "内置，不可卸载",
+      "en": "Built-in, cannot be uninstalled"
+    },
+    "store_available": {
+      "zh": "可安装",
+      "en": "Installable"
+    },
+    "sys_chip": {
+      "zh": "芯片类型",
+      "en": "Chip"
+    },
+    "sys_chip_fmt": {
+      "zh": "%s · %u 核 · rev %u",
+      "en": "%s - %u cores - rev %u"
+    },
+    "sys_ram": {
+      "zh": "内部 RAM",
+      "en": "Internal RAM"
+    },
+    "sys_uptime": {
+      "zh": "运行时长",
+      "en": "Uptime"
+    },
+    "sys_memory": {
+      "zh": "内存",
+      "en": "Memory"
+    },
+    "sys_storage": {
+      "zh": "存储",
+      "en": "Storage"
+    },
+    "sys_modstore": {
+      "zh": "模块仓库",
+      "en": "Module store"
+    },
+    "sys_link": {
+      "zh": "连接状态",
+      "en": "Link"
+    },
+    "sys_check_update": {
+      "zh": "检查更新",
+      "en": "Check for update"
+    },
+    "sys_upgrade_now": {
+      "zh": "立即升级",
+      "en": "Update now"
+    },
+    "sys_reboot_device": {
+      "zh": "重启设备",
+      "en": "Reboot"
+    },
+    "sys_factory_device": {
+      "zh": "恢复出厂设置",
+      "en": "Factory reset"
+    },
+    "sys_ip": {
+      "zh": "网络地址",
+      "en": "IP address"
+    },
+    "sys_fw": {
+      "zh": "固件版本",
+      "en": "Firmware"
+    },
+    "sys_ota": {
+      "zh": "固件更新",
+      "en": "Firmware update"
+    },
+    "sys_timezone": {
+      "zh": "时区",
+      "en": "Time zone"
+    },
+    "sys_reboot": {
+      "zh": "重启",
+      "en": "Reboot"
+    },
+    "sys_factory_reset": {
+      "zh": "恢复出厂",
+      "en": "Factory reset"
+    },
+    "sys_storage_fmt": {
+      "zh": "剩余 %lu KB · 共 %lu KB",
+      "en": "%lu KB free of %lu KB"
+    },
+    "sys_not_mounted": {
+      "zh": "未挂载",
+      "en": "Not mounted"
+    },
+    "sys_disconnected": {
+      "zh": "未连接",
+      "en": "Disconnected"
+    },
+    "sys_connected": {
+      "zh": "已连接",
+      "en": "Connected"
+    },
+    "sys_not_enabled": {
+      "zh": "未启用",
+      "en": "Not enabled"
+    },
+    "sys_uptime_days_fmt": {
+      "zh": "%u 天 %u 小时",
+      "en": "%u d %u h"
+    },
+    "sys_uptime_hours_fmt": {
+      "zh": "%u 小时 %u 分",
+      "en": "%u h %u min"
+    },
+    "sys_ota_busy_fmt": {
+      "zh": "升级中 %d%%",
+      "en": "Updating %d%%"
+    },
+    "sys_ota_idle": {
+      "zh": "点检查更新，从商店获取固件",
+      "en": "Check to fetch firmware from the store"
+    },
+    "sys_ota_checking": {
+      "zh": "正在检查商店…",
+      "en": "Checking the store…"
+    },
+    "sys_ota_up_to_date": {
+      "zh": "已是最新",
+      "en": "Up to date"
+    },
+    "sys_ota_available": {
+      "zh": "商店有新固件",
+      "en": "New firmware on the store"
+    },
+    "sys_ota_starting": {
+      "zh": "正在从商店启动升级…",
+      "en": "Starting the store update…"
+    },
+    "sys_ota_no_url": {
+      "zh": "未配置商店地址",
+      "en": "No store URL configured"
+    },
+    "sys_ota_fail_fmt": {
+      "zh": "失败: %s",
+      "en": "Failed: %s"
+    },
+    "sys_ota_last_fail_fmt": {
+      "zh": "上次失败: %s",
+      "en": "Last failure: %s"
+    },
+    "sys_tz_now_placeholder": {
+      "zh": "当前时间 —",
+      "en": "Local time —"
+    },
+    "sys_tz_now_fmt": {
+      "zh": "当前时间 %s",
+      "en": "Local time %s"
+    },
+    "rules_empty": {
+      "zh": "暂无规则",
+      "en": "No rules"
+    },
+    "rules_unnamed": {
+      "zh": "未命名规则",
+      "en": "Unnamed rule"
+    },
+    "rules_delay_fmt": {
+      "zh": "延时%ds",
+      "en": "Delay %ds"
+    },
+    "rules_then_fmt": {
+      "zh": "则：%.20s %.12s",
+      "en": "Then: %.20s %.12s"
+    },
+    "rules_then_no_device_fmt": {
+      "zh": "则：%.12s",
+      "en": "Then: %.12s"
+    },
+    "rules_then_device_fmt": {
+      "zh": "则：%.20s",
+      "en": "Then: %.20s"
+    },
+    "scenes_empty": {
+      "zh": "暂无场景",
+      "en": "No scenes"
+    },
+    "scenes_unnamed": {
+      "zh": "未命名场景",
+      "en": "Unnamed scene"
+    },
+    "scenes_meta_fmt": {
+      "zh": "%d 步 · 点击运行",
+      "en": "%d steps - tap to run"
+    },
+    "name_rule_title": {
+      "zh": "规则名称",
+      "en": "Rule name"
+    },
+    "name_scene_title": {
+      "zh": "场景名称",
+      "en": "Scene name"
+    },
+    "name_hint": {
+      "zh": "可用字母、数字输入名称；留空则使用默认名。",
+      "en": "Letters and digits only. Leave empty for the default name."
+    },
+    "name_placeholder": {
+      "zh": "输入名称",
+      "en": "Enter a name"
+    },
+    "picker_empty_title": {
+      "zh": "没有可用设备",
+      "en": "No devices available"
+    },
+    "picker_empty_rule_hint": {
+      "zh": "当前没有可联动的点位。",
+      "en": "No points can be linked right now."
+    },
+    "picker_empty_scene_hint": {
+      "zh": "当前没有可控制的点位。",
+      "en": "No controllable points right now."
+    },
+    "picker_rule_trigger_title": {
+      "zh": "选择触发设备",
+      "en": "Select trigger device"
+    },
+    "picker_rule_trigger_hint": {
+      "zh": "当该点位值变为 on 时，自动执行下一步。",
+      "en": "Runs when this point changes to on."
+    },
+    "picker_rule_action_title": {
+      "zh": "选择执行设备",
+      "en": "Select target device"
+    },
+    "picker_rule_action_hint": {
+      "zh": "触发设备开启时，该设备自动开启。",
+      "en": "Turns on when the trigger device turns on."
+    },
+    "picker_device_title": {
+      "zh": "选择设备",
+      "en": "Select device"
+    },
+    "picker_scene_device_hint": {
+      "zh": "选择一个点位，再设定开关动作。",
+      "en": "Pick a point, then choose its on/off action."
+    },
+    "picker_scene_action_title": {
+      "zh": "选择动作",
+      "en": "Select action"
+    },
+    "picker_scene_action_hint": {
+      "zh": "为该设备设定要执行的开关动作。",
+      "en": "Choose the on/off action for this device."
+    },
+    "picker_meta_fmt": {
+      "zh": "（%s）",
+      "en": "(%s)"
+    },
+    "action_on": {
+      "zh": "开启",
+      "en": "Turn on"
+    },
+    "action_off": {
+      "zh": "关闭",
+      "en": "Turn off"
+    },
+    "cmd_on": {
+      "zh": "开",
+      "en": "On"
+    },
+    "cmd_off": {
+      "zh": "关",
+      "en": "Off"
+    },
+    "cmd_toggle": {
+      "zh": "切换",
+      "en": "Toggle"
+    },
+    "confirm_title": {
+      "zh": "确认操作",
+      "en": "Confirm action"
+    },
+    "confirm_delete_rule_title": {
+      "zh": "删除规则",
+      "en": "Delete rule"
+    },
+    "confirm_delete_rule_msg": {
+      "zh": "确定删除该规则？删除后无法恢复。",
+      "en": "Delete this rule? This cannot be undone."
+    },
+    "confirm_delete_scene_title": {
+      "zh": "删除场景",
+      "en": "Delete scene"
+    },
+    "confirm_delete_scene_msg": {
+      "zh": "确定删除该场景？删除后无法恢复。",
+      "en": "Delete this scene? This cannot be undone."
+    },
+    "confirm_reboot_msg": {
+      "zh": "重启 MiniHub？配置和设备数据都会保留。",
+      "en": "Reboot MiniHub? Config and device data are kept."
+    },
+    "confirm_factory_msg": {
+      "zh": "恢复出厂会清除 NVS（Wi-Fi、登录密码）并重启。storage 上的设备数据会保留。继续？",
+      "en": "Factory reset clears NVS (Wi-Fi, login password) and reboots. Device data on storage is kept. Continue?"
+    },
+    "confirm_uninstall_fmt": {
+      "zh": "确定卸载 %s？",
+      "en": "Uninstall %s?"
+    },
+    "user_default_name": {
+      "zh": "用户",
+      "en": "User"
+    },
+    "tz_digits": {
+      "zh": "一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四",
+      "en": "1|2|3|4|5|6|7|8|9|10|11|12|13|14"
+    },
+    "tz_zero": {
+      "zh": "零时区（UTC）",
+      "en": "UTC"
+    },
+    "tz_label_fmt": {
+      "zh": "%s%s区（%s）",
+      "en": "%s %s (%s)"
+    },
+    "tz_east": {
+      "zh": "东",
+      "en": "East"
+    },
+    "tz_west": {
+      "zh": "西",
+      "en": "West"
+    },
+    "sys_language": {
+      "zh": "语言",
+      "en": "Language"
+    },
+    "sys_language_hint": {
+      "zh": "重启后生效",
+      "en": "Applies after reboot"
+    },
+    "lang_zh": {
+      "zh": "中文",
+      "en": "Chinese"
+    },
+    "lang_en": {
+      "zh": "English",
+      "en": "English"
+    },
+    "common_close": {
+      "zh": "关闭",
+      "en": "Close"
+    },
+    "store_detail_title": {
+      "zh": "插件详情",
+      "en": "Plugin details"
+    },
+    "store_meta_fmt": {
+      "zh": "v%s · %s · %s",
+      "en": "v%s - %s - %s"
+    },
+    "store_no_desc": {
+      "zh": "暂无描述",
+      "en": "No description available"
+    },
+    "store_vendor_unknown": {
+      "zh": "未知厂商",
+      "en": "Unknown vendor"
+    },
+    "matter_section": {
+      "zh": "Matter",
+      "en": "Matter"
+    },
+    "matter_ready": {
+      "zh": "控制器就绪",
+      "en": "Controller ready"
+    },
+    "matter_not_ready": {
+      "zh": "未就绪",
+      "en": "Not ready"
+    },
+    "matter_add": {
+      "zh": "添加",
+      "en": "Add"
+    },
+    "matter_add_hint": {
+      "zh": "请在 Web 控制台完成设备配对",
+      "en": "Complete pairing in the Web console"
+    },
+    "auth_checking": {
+      "zh": "登录状态检查中…",
+      "en": "Checking sign-in status…"
+    },
+    "ov_rename": {
+      "zh": "重命名",
+      "en": "Rename"
+    },
+    "ov_device_name": {
+      "zh": "设备名称",
+      "en": "Device name"
+    },
+    "rename_title": {
+      "zh": "重命名设备",
+      "en": "Rename device"
+    },
+    "rename_hint": {
+      "zh": "最多 48 字节",
+      "en": "Up to 48 bytes"
+    },
+    "rename_placeholder": {
+      "zh": "输入新名称",
+      "en": "Enter a new name"
+    },
+    "rename_empty": {
+      "zh": "名称不能为空",
+      "en": "Name cannot be empty"
+    },
+    "rename_too_long": {
+      "zh": "名称过长",
+      "en": "Name too long"
+    },
+    "rename_done": {
+      "zh": "已重命名",
+      "en": "Renamed"
+    },
+    "rename_failed": {
+      "zh": "重命名失败",
+      "en": "Rename failed"
+    },
+    "wifi_config": {
+      "zh": "Wi-Fi 配置",
+      "en": "Wi-Fi"
+    },
+    "wifi_ssid": {
+      "zh": "Wi-Fi 名称 (SSID)",
+      "en": "Wi-Fi SSID"
+    },
+    "wifi_password": {
+      "zh": "密码",
+      "en": "Password"
+    },
+    "wifi_open_network": {
+      "zh": "开放网络（无密码）",
+      "en": "Open network"
+    },
+    "wifi_save": {
+      "zh": "保存 Wi-Fi",
+      "en": "Save Wi-Fi"
+    },
+    "wifi_dhcp": {
+      "zh": "自动获取 (DHCP)",
+      "en": "Automatic (DHCP)"
+    },
+    "wifi_static_ip": {
+      "zh": "静态 IP",
+      "en": "Static IP"
+    },
+    "wifi_ip": {
+      "zh": "IP 地址",
+      "en": "IP address"
+    },
+    "wifi_netmask": {
+      "zh": "子网掩码",
+      "en": "Subnet mask"
+    },
+    "wifi_gateway": {
+      "zh": "网关",
+      "en": "Gateway"
+    },
+    "wifi_dns": {
+      "zh": "DNS",
+      "en": "DNS"
+    },
+    "wifi_net_save": {
+      "zh": "保存网络",
+      "en": "Save network"
+    },
+    "wifi_save_ok": {
+      "zh": "已保存，正在连接",
+      "en": "Saved, connecting"
+    },
+    "wifi_save_fail": {
+      "zh": "保存失败",
+      "en": "Save failed"
+    },
+    "wifi_addr_fmt": {
+      "zh": "%s / %s",
+      "en": "%s / %s"
+    },
+    "form_rule_title": {
+      "zh": "新建规则",
+      "en": "New rule"
+    },
+    "form_scene_title": {
+      "zh": "新建场景",
+      "en": "New scene"
+    },
+    "form_name_lbl": {
+      "zh": "名称",
+      "en": "Name"
+    },
+    "form_name_placeholder": {
+      "zh": "输入名称（留空用默认）",
+      "en": "Enter a name (blank = default)"
+    },
+    "form_enabled_on": {
+      "zh": "启用：开",
+      "en": "Enabled: on"
+    },
+    "form_enabled_off": {
+      "zh": "启用：关",
+      "en": "Enabled: off"
+    },
+    "form_hint": {
+      "zh": "点输入框弹出键盘，可拖动避免遮挡",
+      "en": "Tap a field for the draggable keyboard"
+    },
+    "form_when": {
+      "zh": "WHEN 当这个设备触发",
+      "en": "WHEN this device triggers"
+    },
+    "form_if": {
+      "zh": "AND IF 且同时满足",
+      "en": "AND IF also"
+    },
+    "form_then": {
+      "zh": "THEN 则执行",
+      "en": "THEN do"
+    },
+    "form_no_condition": {
+      "zh": "无（不附加条件）",
+      "en": "None (no extra condition)"
+    },
+    "form_no_device": {
+      "zh": "无可用设备",
+      "en": "No devices available"
+    },
+    "form_cond_on": {
+      "zh": "状态 = 开",
+      "en": "state = on"
+    },
+    "form_cond_off": {
+      "zh": "状态 = 关",
+      "en": "state = off"
+    },
+    "form_cmd_on": {
+      "zh": "打开",
+      "en": "Turn on"
+    },
+    "form_cmd_off": {
+      "zh": "关闭",
+      "en": "Turn off"
+    },
+    "form_save": {
+      "zh": "保存",
+      "en": "Save"
+    },
+    "form_default_rule": {
+      "zh": "新规则",
+      "en": "New rule"
+    },
+    "form_default_scene": {
+      "zh": "新场景",
+      "en": "New scene"
+    },
+    "form_need_device": {
+      "zh": "暂无设备，无法创建",
+      "en": "No devices to use"
+    },
+    "floating_kb_hint": {
+      "zh": "拖动此处移动键盘",
+      "en": "Drag here to move"
+    },
+    "floating_kb_close": {
+      "zh": "收起",
+      "en": "Hide"
+    },
+    "wifi_ssid_label": {
+      "zh": "Wi-Fi 名称（SSID）",
+      "en": "Wi-Fi name (SSID)"
+    },
+    "wifi_pass_label": {
+      "zh": "Wi-Fi 密码",
+      "en": "Wi-Fi password"
+    },
+    "net_cfg_label": {
+      "zh": "静态 IP（关闭 DHCP 后生效）",
+      "en": "Static IP (when DHCP is off)"
+    },
+    "sys_tz_cur_fmt": {
+      "zh": "当前 %s · %s",
+      "en": "Now %s · %s"
+    },
+    "sys_tz_cur_no_clock_fmt": {
+      "zh": "当前 %s · 时间未同步",
+      "en": "Now %s · clock not set"
+    },
+    "sys_lang_cur_fmt": {
+      "zh": "当前 %s · 重启后生效",
+      "en": "Now %s · applies after reboot"
+    },
+    "form_no_trigger": {
+      "zh": "手动执行（不自动触发）",
+      "en": "Manual (no auto trigger)"
+    },
+    "form_hint_scene": {
+      "zh": "选 WHEN 设备会同时生成自动触发规则；键盘可拖动",
+      "en": "Choosing a WHEN device also creates an auto-trigger rule; drag the keyboard"
+    },
+    "form_auto_rule_suffix": {
+      "zh": " · 自动触发",
+      "en": " · auto"
+    },
+    "floating_kb_del": {
+      "zh": "删除",
+      "en": "Del"
+    },
+    "form_when_device": {
+      "zh": "设备触发",
+      "en": "Device trigger"
+    },
+    "form_when_daily": {
+      "zh": "每天定时（HH:MM）",
+      "en": "Daily (HH:MM)"
+    },
+    "form_when_once": {
+      "zh": "单次定时（日期 时间）",
+      "en": "One-time (date time)"
+    },
+    "form_when_time_hint": {
+      "zh": "本地时间：08:30 或 2026-11-11 08:30",
+      "en": "Local: 08:30 or 2026-11-11 08:30"
+    },
+    "form_when_time_tip": {
+      "zh": "填本地时间：每天 08:30，单次 2026-11-11 08:30",
+      "en": "Local time: daily 08:30, once 2026-11-11 08:30"
+    },
+    "form_time_invalid": {
+      "zh": "时间格式不对：08:30 或 2026-11-11 08:30",
+      "en": "Bad time: 08:30 or 2026-11-11 08:30"
+    },
+    "form_rule_time_ok": {
+      "zh": "规则已保存（按 UTC 时间触发）",
+      "en": "Rule saved (fires on UTC time)"
+    }
+  }
+}

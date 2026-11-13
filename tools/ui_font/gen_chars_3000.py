@@ -42,7 +42,7 @@ def main() -> int:
         return 0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(text, encoding="utf-8")
+    args.output.write_text(text + "\n", encoding="utf-8")
     print(f"Wrote {args.output} ({len(text)} chars, {args.output.stat().st_size} bytes)")
     return 0
 

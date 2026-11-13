@@ -4,23 +4,171 @@
   "screens": [
     "overview",
     "map",
-    "store"
+    "store",
+    "system",
+    "rules",
+    "scenes"
   ],
   "initial": "overview",
   "transitions": [
     {
       "from": [],
-      "action": "nav_overview",
+      "action": "nav_overview_from_map",
       "to": "overview"
     },
     {
       "from": [],
-      "action": "nav_map",
+      "action": "nav_overview_from_store",
+      "to": "overview"
+    },
+    {
+      "from": [],
+      "action": "nav_overview_from_system",
+      "to": "overview"
+    },
+    {
+      "from": [],
+      "action": "nav_overview_from_rules",
+      "to": "overview"
+    },
+    {
+      "from": [],
+      "action": "nav_overview_from_scenes",
+      "to": "overview"
+    },
+    {
+      "from": [],
+      "action": "nav_map_from_overview",
       "to": "map"
     },
     {
       "from": [],
-      "action": "nav_store",
+      "action": "nav_map_from_store",
+      "to": "map"
+    },
+    {
+      "from": [],
+      "action": "nav_map_from_system",
+      "to": "map"
+    },
+    {
+      "from": [],
+      "action": "nav_map_from_rules",
+      "to": "map"
+    },
+    {
+      "from": [],
+      "action": "nav_map_from_scenes",
+      "to": "map"
+    },
+    {
+      "from": [],
+      "action": "nav_store_from_overview",
+      "to": "store"
+    },
+    {
+      "from": [],
+      "action": "nav_store_from_map",
+      "to": "store"
+    },
+    {
+      "from": [],
+      "action": "nav_store_from_system",
+      "to": "store"
+    },
+    {
+      "from": [],
+      "action": "nav_store_from_rules",
+      "to": "store"
+    },
+    {
+      "from": [],
+      "action": "nav_store_from_scenes",
+      "to": "store"
+    },
+    {
+      "from": [],
+      "action": "nav_system_from_overview",
+      "to": "system"
+    },
+    {
+      "from": [],
+      "action": "nav_system_from_map",
+      "to": "system"
+    },
+    {
+      "from": [],
+      "action": "nav_system_from_store",
+      "to": "system"
+    },
+    {
+      "from": [],
+      "action": "nav_system_from_rules",
+      "to": "system"
+    },
+    {
+      "from": [],
+      "action": "nav_system_from_scenes",
+      "to": "system"
+    },
+    {
+      "from": [],
+      "action": "nav_rules_from_overview",
+      "to": "rules"
+    },
+    {
+      "from": [],
+      "action": "nav_rules_from_map",
+      "to": "rules"
+    },
+    {
+      "from": [],
+      "action": "nav_rules_from_store",
+      "to": "rules"
+    },
+    {
+      "from": [],
+      "action": "nav_rules_from_system",
+      "to": "rules"
+    },
+    {
+      "from": [],
+      "action": "nav_rules_from_scenes",
+      "to": "rules"
+    },
+    {
+      "from": [],
+      "action": "nav_scenes_from_overview",
+      "to": "scenes"
+    },
+    {
+      "from": [],
+      "action": "nav_scenes_from_map",
+      "to": "scenes"
+    },
+    {
+      "from": [],
+      "action": "nav_scenes_from_store",
+      "to": "scenes"
+    },
+    {
+      "from": [],
+      "action": "nav_scenes_from_system",
+      "to": "scenes"
+    },
+    {
+      "from": [],
+      "action": "nav_scenes_from_rules",
+      "to": "scenes"
+    },
+    {
+      "from": [],
+      "action": "store_tab_available",
+      "to": "store"
+    },
+    {
+      "from": [],
+      "action": "store_tab_installed",
       "to": "store"
     }
   ]

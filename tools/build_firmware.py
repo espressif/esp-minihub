@@ -13,9 +13,12 @@ Usage:
   ./tools/build_firmware.py lint [-j N] [<file> ...]   (clang-tidy over the IDF build)
 
 Apps (-app / --app; folder under application/):
-  minihub         Generic Host (default)
+  minihub         Generic Host (default; Ethernet-oriented recipe)
+  minihub_lcd     LCD-only Host (EMAC/RGB LCD pin groups are mutually exclusive)
 
   Product = application/<app>/ (MINIHUB_APP), e.g. minihub.
+  -app / --app may appear anywhere before a literal `--`, including after
+  idf.py options such as -p PORT. MINIHUB_APP=<name> works too.
   Sdkconfig recipe: application/<app>/configs/sdkconfig/app.yml
 
 Stacks (lowercase, optional):
@@ -29,6 +32,7 @@ Stacks (lowercase, optional):
 
 Examples:
   ./tools/build_firmware.py -app minihub build
+  ./tools/build_firmware.py -p /dev/cu.usbserial-10 -app minihub_lcd flash monitor
   ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
   ./tools/build_firmware.py module my_native
@@ -58,6 +62,7 @@ from compose_sdkconfig import (  # noqa: E402
     app_feature_list,
     app_has_feature,
     expand_features,
+    feature_layers,
 )
 
 STACKS = frozenset({"ble_mesh", "zigbee", "matter", "thread"})
@@ -152,8 +157,9 @@ def usage(code: int = 0) -> None:
   ./tools/build_firmware.py merge
   ./tools/build_firmware.py lint [-j N] [<file> ...]   (clang-tidy over the IDF build)
 
-Apps: minihub (default)
-Product: -app / MINIHUB_APP (application/<name>/)
+Apps: minihub (default) | minihub_lcd (LCD-only)
+Product: -app / MINIHUB_APP (application/<name>/); -app works after -p PORT,
+         everywhere before a literal `--`.
 Stacks (optional): ble_mesh | zigbee | matter | thread
   default if omitted: zigbee ble_mesh; then reconcile with product sdkconfig
   (drop disabled; add matter/thread when already =y).
@@ -161,6 +167,7 @@ thread and zigbee may both be linked; adapters.json decides which runs.
 
 Examples:
   ./tools/build_firmware.py -app minihub build
+  ./tools/build_firmware.py -p /dev/cu.usbserial-10 -app minihub_lcd flash monitor
   ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
   ./tools/build_firmware.py module my_native
@@ -172,18 +179,28 @@ Examples:
     raise SystemExit(code)
 
 
-def parse_argv(argv: list[str]) -> tuple[str, str, list[str], list[str]]:
+def parse_argv(argv: list[str]) -> tuple[str, list[str], list[str]]:
     """Return (app, stacks, idf_args)."""
     if argv and argv[0] in {"-h", "--help", "help"}:
         usage(0)
 
     stacks: list[str] = []
     idf_args: list[str] = []
+    # `seen_sep` marks the pass-through region: the first unrecognised argument
+    # (typically idf.py's -p PORT) starts it. `-app` must still be parsed there,
+    # otherwise `-p PORT -app NAME ...` silently falls back to the default app
+    # and passes "-app NAME" straight to idf.py. Only a literal `--` stops
+    # parsing entirely.
     seen_sep = False
+    explicit_sep = False
     cli_app: str | None = None
     i = 0
     while i < len(argv):
         a = argv[i]
+        if explicit_sep:
+            idf_args.append(a)
+            i += 1
+            continue
         if not seen_sep and a in {"--board", "-B"}:
             print(
                 "ERROR: --board was removed; use -app / MINIHUB_APP (product = application/<name>/).",
@@ -196,22 +213,23 @@ def parse_argv(argv: list[str]) -> tuple[str, str, list[str], list[str]]:
                 file=sys.stderr,
             )
             usage(2)
-        if not seen_sep and a in {"-app", "--app"}:
+        if a in {"-app", "--app"}:
             if i + 1 >= len(argv):
                 print("-app requires an application/ folder name (e.g. minihub)", file=sys.stderr)
                 usage(2)
             cli_app = argv[i + 1]
             i += 2
             continue
-        if not seen_sep and a.startswith("--app="):
+        if a.startswith("--app="):
             cli_app = a.split("=", 1)[1]
             i += 1
             continue
-        if not seen_sep and a.startswith("-app="):
+        if a.startswith("-app="):
             cli_app = a.split("=", 1)[1]
             i += 1
             continue
-        if not seen_sep and a == "--":
+        if a == "--":
+            explicit_sep = True
             seen_sep = True
             i += 1
             continue
@@ -550,37 +568,103 @@ def rainmaker_components_dir() -> Path:
 
 
 def ensure_esp_rainmaker() -> None:
-    """Ensure application/minihub/components/esp-rainmaker submodule is checked out."""
-    ensure_git_submodule("application/minihub/components/esp-rainmaker")
+    """Leave RainMaker to Component Manager.
+
+    espressif/esp_rainmaker is declared in
+    components/minihub_rainmaker/idf_component.yml and downloaded into
+    managed_components when CONFIG_MINIHUB_RAINMAKER=y. The old path
+    application/minihub/components/esp-rainmaker is not in .gitmodules;
+    `git submodule update` fails with a pathspec error, and wiring that tree
+    into the build would duplicate the registry package.
+    """
+    dest = rainmaker_managed_dir()
+    if (dest / "components").is_dir():
+        print(f"esp-rainmaker: local tree present at {dest}")
+        return
+    print(
+        "esp-rainmaker: Component Manager fetches espressif/esp_rainmaker "
+        "(components/minihub_rainmaker/idf_component.yml)"
+    )
+
+
+def rainmaker_defaults_files() -> list[Path]:
+    """RainMaker fragments, shared first and the product file after it."""
+    try:
+        rels = feature_layers(ROOT, APP_NAME, "rainmaker")
+    except FileNotFoundError:
+        return []
+    return [ROOT / rel for rel in rels if (ROOT / rel).is_file()]
 
 
 def rainmaker_build_enabled() -> bool:
     """Whether to link full esp-rainmaker (submodule when enabled).
 
-    Force with MINIHUB_BUILD_RAINMAKER=1|0. Default for minihub: follow
-    application/minihub/configs/sdkconfig/feature/rainmaker.defaults.
+    Force with MINIHUB_BUILD_RAINMAKER=1|0. Otherwise follow rainmaker.defaults.
+    A product fragment overrides the shared fragment per CONFIG_* symbol.
     """
-    if APP_NAME != "minihub":
-        return os.environ.get("MINIHUB_BUILD_RAINMAKER") == "1"
     env = os.environ.get("MINIHUB_BUILD_RAINMAKER")
     if env is not None:
         return env.strip().lower() in {"1", "true", "yes"}
-    defaults = (
-        ROOT
-        / "application"
-        / "minihub"
-        / "configs"
-        / "sdkconfig"
-        / "feature"
-        / "rainmaker.defaults"
-    )
-    if not defaults.is_file():
-        return False
-    text = defaults.read_text(encoding="utf-8")
-    return any(
-        line.strip() == "CONFIG_MINIHUB_RAINMAKER=y"
-        for line in text.splitlines()
-    )
+    enabled = False
+    for path in rainmaker_defaults_files():
+        for sym, line in _rainmaker_default_assignments(path.read_text(encoding="utf-8")):
+            if sym == "CONFIG_MINIHUB_RAINMAKER":
+                enabled = line == "CONFIG_MINIHUB_RAINMAKER=y"
+    return enabled
+
+
+def _rainmaker_default_assignments(text: str) -> list[tuple[str, str]]:
+    """Return (symbol, sdkconfig line) from a defaults fragment."""
+    out: list[tuple[str, str]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("#") and line.endswith("is not set"):
+            parts = line[1:].strip().split()
+            if parts and parts[0].startswith("CONFIG_"):
+                out.append((parts[0], f"# {parts[0]} is not set"))
+            continue
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        sym, _val = line.split("=", 1)
+        if sym.startswith("CONFIG_"):
+            out.append((sym, line))
+    return out
+
+
+def sync_rainmaker_defaults_in_sdkconfig() -> None:
+    """Copy rainmaker.defaults into the product sdkconfig.
+
+    SDKCONFIG_DEFAULTS does not replace a choice already saved in sdkconfig.
+    RainMaker's Kconfig default is assisted claim, so a product sdkconfig
+    created before this fragment was on the recipe keeps
+    CONFIG_ESP_RMAKER_SELF_CLAIM unset. Rewrite the saved lines from the
+    fragment whenever RainMaker is part of the build.
+    """
+    if not rainmaker_build_enabled():
+        return
+    sources = rainmaker_defaults_files()
+    dest = APP_DIR / "sdkconfig"
+    if not sources or not dest.is_file():
+        return
+    text = dest.read_text(encoding="utf-8", errors="replace")
+    changed = False
+    for src in sources:
+        for sym, replacement in _rainmaker_default_assignments(src.read_text(encoding="utf-8")):
+            pattern = rf"(?m)^(?:#\s*)?{re.escape(sym)}(?:=.*|\s+is not set)\s*$"
+            new_text, n = re.subn(pattern, replacement, text)
+            if n == 0 and replacement not in text:
+                text = text.rstrip() + "\n" + replacement + "\n"
+                changed = True
+            elif n and new_text != text:
+                text = new_text
+                changed = True
+    if changed:
+        dest.write_text(text, encoding="utf-8")
+        print(
+            "sdkconfig: applied "
+            + ", ".join(src.relative_to(ROOT).as_posix() for src in sources),
+            flush=True,
+        )
 
 
 def sdkconfig_has(option_y: str) -> bool:
@@ -804,10 +888,15 @@ def ensure_board_manager() -> None:
             if line.startswith("board:"):
                 current = line.split(":", 1)[1].strip()
                 break
-    # Local boards/ may carry CONFIG_SPIRAM / FLASHSIZE overrides for the product.
-    # Without -c ./boards, bmgr uses the managed catalog board (codec-only) and PSRAM stays off.
+    # A product-local board must actually be the one bmgr used: the generated
+    # board_manager.defaults carries "# Source: <board dir>/sdkconfig.defaults.board".
+    # Probing for CONFIG_SPIRAM here was always true (board defaults never carry it),
+    # which re-ran codegen on every build once boards/ existed.
     defaults_text = defaults.read_text(encoding="utf-8") if defaults.is_file() else ""
-    local_boards_stale = boards_dir.is_dir() and "CONFIG_SPIRAM=y" not in defaults_text
+    customer_board = boards_dir / bmgr_name
+    local_boards_stale = customer_board.is_dir() and (
+        str(customer_board.resolve()) not in defaults_text
+    )
     # Regenerated under another checkout (e.g. MiniHub path baked into CMakeLists).
     cmake_txt = (
         (APP_DIR / "components/gen_bmgr_codes/CMakeLists.txt").read_text(encoding="utf-8")
@@ -887,6 +976,7 @@ def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True
     write_stacks_gen(stacks)
     sync_stack_symbols_in_sdkconfig(stacks)
     sync_radio_memory_in_sdkconfig(stacks)
+    sync_rainmaker_defaults_in_sdkconfig()
     defaults = sdkconfig_defaults(stacks)
     idf_path = Path(os.environ.get("IDF_PATH", str(ROOT / "esp-idf")))
     espbaud = os.environ.get("ESPBAUD", "2000000")

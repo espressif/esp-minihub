@@ -8,9 +8,31 @@ menu "LCD UI"
             Mutually exclusive with Ethernet on some boards (EMAC vs RGB LCD).
 
     config MINIHUB_LCD_UI_REFRESH_MS
-        int "LCD UI data refresh interval (ms)"
+        int "LCD UI fallback resync period (ms)"
         depends on MINIHUB_LCD_UI
-        default 2000
-        range 500 30000
+        default 30000
+        range 500 300000
+        help
+            Point updates reach the screen through the Hub event bus, so this is
+            not the refresh interval. It is how often the panel re-reads every
+            point in case an event was dropped: a subscription that silently
+            misses one update sticks, because a display has no reconnect. Set it
+            high (the default is 30 s); the coalesce window that actually gates
+            redraws is fixed at 100 ms in the firmware.
+
+endmenu
+
+menu "Storage"
+
+    config MINIHUB_STORAGE_MIN_FREE_BYTES
+        int "Minimum free bytes that must remain on the storage partition"
+        default 262144
+        range 0 4194304
+        help
+            Refuses a Store install that would leave less than this much room in
+            the LittleFS partition. The partition also holds the editable JSON UI
+            and device runtime state, so an install that succeeds here can still
+            take the space those need next. Counts the whole partition, not one
+            directory: /data/ui is already inside the used figure.
 
 endmenu

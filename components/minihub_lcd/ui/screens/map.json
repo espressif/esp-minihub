@@ -48,7 +48,7 @@
           "events": [
             {
               "type": "clicked",
-              "action": "nav_overview"
+              "action": "nav_overview_from_map"
             }
           ],
           "style": {
@@ -65,7 +65,7 @@
               "type": "label",
               "id": "nav_overview_lbl",
               "labelProps": {
-                "text": "概览"
+                "text": "${constant.strings.nav_overview}"
               },
               "placement": {
                 "mode": "relative",
@@ -80,12 +80,6 @@
         {
           "type": "button",
           "id": "nav_map",
-          "events": [
-            {
-              "type": "clicked",
-              "action": "nav_map"
-            }
-          ],
           "style": {
             "bgColor": "#6366f1",
             "borderWidth": "1dp",
@@ -100,7 +94,7 @@
               "type": "label",
               "id": "nav_map_lbl",
               "labelProps": {
-                "text": "地图"
+                "text": "${constant.strings.nav_map}"
               },
               "placement": {
                 "mode": "relative",
@@ -114,11 +108,81 @@
         },
         {
           "type": "button",
+          "id": "nav_rules",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_rules_from_map"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_rules_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_rules}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_scenes",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_scenes_from_map"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_scenes_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_scenes}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
           "id": "nav_store",
           "events": [
             {
               "type": "clicked",
-              "action": "nav_store"
+              "action": "nav_store_from_map"
             }
           ],
           "style": {
@@ -135,7 +199,42 @@
               "type": "label",
               "id": "nav_store_lbl",
               "labelProps": {
-                "text": "商店"
+                "text": "${constant.strings.nav_store}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_system",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_system_from_map"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_system_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_system}"
               },
               "placement": {
                 "mode": "relative",
@@ -163,7 +262,7 @@
           "events": [
             {
               "type": "clicked",
-              "action": "user_tap"
+              "action": "user_tap_map"
             }
           ],
           "style": {
@@ -180,7 +279,7 @@
               "type": "label",
               "id": "user_name",
               "labelProps": {
-                "text": "用户"
+                "text": "${constant.strings.user_default_name}"
               },
               "placement": {
                 "mode": "relative",
@@ -221,7 +320,7 @@
           "type": "label",
           "id": "map_title",
           "labelProps": {
-            "text": "地图"
+            "text": "${constant.strings.nav_map}"
           },
           "style": {
             "textColor": "#eef2ff",

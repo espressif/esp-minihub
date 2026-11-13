@@ -1,0 +1,102 @@
+{
+  "type": "viewTemplate",
+  "id": "scene_row",
+  "node": {
+    "type": "container",
+    "layout": {
+      "type": "flex",
+      "flexFlow": "row",
+      "mainAlign": "spaceBetween",
+      "crossAlign": "center",
+      "gap": "8dp"
+    },
+    "placement": {
+      "width": "100%",
+      "height": "56dp"
+    },
+    "style": {
+      "bgColor": "#131a2b",
+      "borderWidth": "1dp",
+      "borderColor": "#243049",
+      "padding": "10dp",
+      "radius": "8dp"
+    },
+    "children": [
+      {
+        "type": "label",
+        "id": "name",
+        "labelProps": {
+          "text": ""
+        },
+        "bindings": {
+          "labelProps.text": "card.name"
+        },
+        "placement": {
+          "width": "wrap",
+          "flexGrow": 1
+        },
+        "style": {
+          "textColor": "#eef2ff",
+          "fontSize": "15sp"
+        }
+      },
+      {
+        "type": "label",
+        "id": "meta",
+        "labelProps": {
+          "text": ""
+        },
+        "bindings": {
+          "labelProps.text": "card.meta"
+        },
+        "style": {
+          "textColor": "#5c6b85",
+          "fontSize": "13sp"
+        }
+      },
+      {
+        "type": "button",
+        "id": "delete",
+        "events": [
+          {
+            "type": "clicked",
+            "action": "scene_delete"
+          }
+        ],
+        "style": {
+          "bgColor": "#1a2238",
+          "borderWidth": "1dp",
+          "borderColor": "#ef4444",
+          "radius": "8dp"
+        },
+        "placement": {
+          "width": "72dp",
+          "height": "30dp"
+        },
+        "children": [
+          {
+            "type": "label",
+            "id": "delete_lbl",
+            "labelProps": {
+              "text": "${constant.strings.common_delete}"
+            },
+            "placement": {
+              "mode": "relative",
+              "align": "center"
+            },
+            "style": {
+              "textColor": "#ef4444",
+              "fontSize": "12sp"
+            }
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "type": "clicked",
+        "action": "scene_invoke"
+      }
+    ]
+  }
+}

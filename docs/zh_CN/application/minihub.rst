@@ -16,12 +16,13 @@ minihub
 
    ./tools/build_firmware.py -app minihub build
 
-LCD 选项
---------
+带屏（独立产品）
+----------------
 
-屏上 UI 由 ``CONFIG_MINIHUB_LCD_UI`` 打开（刷新间隔
-``CONFIG_MINIHUB_LCD_UI_REFRESH_MS``；开发期可写 UI JSON 的
-``CONFIG_MINIHUB_DEV_FS_UPLOAD``）。该选项 ``depends on !MINIHUB_NET_ETH``。
+屏上 UI **不属于** 本产品。请用 ``application/minihub_lcd``
+（``esp32_s31_korvo1``）::
+
+   ./tools/build_firmware.py -app minihub_lcd build
 
 目录结构
 --------
@@ -70,7 +71,7 @@ LCD 选项
        ``MINIHUB_PLUGIN_DIRS`` （``examples/plugins``），不是 Host 内置树；
        按环境可选 Matter / RainMaker。
    * - ``README.md``
-     - 本产品实验室编译备忘（``-app minihub``、LCD 选项）。
+     - 本产品实验室编译备忘（``-app minihub``）。
    * - ``configs/adapters.json``
      - 出厂适配器配置，打进 LittleFS ``/data/config/``。缺失则回退仓库根
        ``configs/adapters.json``。
@@ -84,7 +85,9 @@ LCD 选项
      - 仅本产品需要的 Kconfig 片段（USB MSC、RTSP、Modbus 等）。共享片段在仓库
        ``configs/sdkconfig/``。
    * - ``configs/sdkconfig/variants/``
-     - 打开 ``CONFIG_MINIHUB_LCD_UI``。
+     - ``default.yml`` 是这份配方的副本，供 ``apply_sdkconfig_variant.sh --restore``
+       使用。带屏的产品是 ``application/minihub_lcd``，用
+       ``./tools/build_firmware.py -app minihub_lcd`` 构建。
    * - ``configs/sdkconfig/local.overrides.example``
      - 复制为 ``local.overrides`` （git 忽略）写入实验室 Wi-Fi，勿提交。
    * - ``main/main.c``

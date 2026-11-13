@@ -45,38 +45,70 @@ def load_app_recipe(project_root: Path, app_name: str) -> dict[str, Any]:
     return data
 
 
-def feature_to_path(project_root: Path, app_name: str, name: str) -> str:
-    """Resolve feature id → repo-relative path (prefer app, then shared)."""
-    if name in ("common", "memory"):
-        return f"{SHARED_DIR}/{name}.defaults"
+def _feature_candidates(app_name: str, name: str) -> tuple[str, str, str]:
+    """Return (label, shared path, product path) for one feature name."""
     if name in ("generated/stacks.gen", "stacks.gen", STACKS_GEN_REL):
-        return STACKS_GEN_REL
-
+        return name, STACKS_GEN_REL, ""
+    if name in ("common", "memory"):
+        return name, f"{SHARED_DIR}/{name}.defaults", (
+            f"application/{app_name}/{APP_SDK_REL}/{name}.defaults"
+        )
     key = name
     for prefix in ("feature/", "stack/", "shared/"):
         if key.startswith(prefix):
             key = key[len(prefix) :]
             break
-
-    app_rel = f"application/{app_name}/{APP_SDK_REL}/feature/{key}.defaults"
-    shared_rel = f"{SHARED_DIR}/feature/{key}.defaults"
-    if (project_root / app_rel).is_file():
-        return app_rel
-    if (project_root / shared_rel).is_file():
-        return shared_rel
-    raise FileNotFoundError(
-        f"sdkconfig feature {key!r} not found for app={app_name!r} "
-        f"(tried {app_rel} and {shared_rel})"
+    return (
+        key,
+        f"{SHARED_DIR}/feature/{key}.defaults",
+        f"application/{app_name}/{APP_SDK_REL}/feature/{key}.defaults",
     )
 
+
+def feature_layers(project_root: Path, app_name: str, name: str) -> list[str]:
+    """Files for one feature, lowest priority first.
+
+    The file name only groups symbols for people. When both the shared
+    fragment and the product fragment exist, both are loaded. The product
+    file comes later, so a CONFIG_* line in it replaces the same symbol from
+    the shared file. A symbol that only the shared file sets is kept.
+    """
+    key, shared_rel, app_rel = _feature_candidates(app_name, name)
+    if name in ("generated/stacks.gen", "stacks.gen", STACKS_GEN_REL):
+        return [STACKS_GEN_REL]
+    layers: list[str] = []
+    if (project_root / shared_rel).is_file():
+        layers.append(shared_rel)
+    if app_rel and (project_root / app_rel).is_file():
+        layers.append(app_rel)
+    if not layers:
+        raise FileNotFoundError(
+            f"sdkconfig feature {key!r} not found for app={app_name!r} "
+            f"(tried {app_rel} and {shared_rel})"
+        )
+    return layers
+
+
+def feature_to_path(project_root: Path, app_name: str, name: str) -> str:
+    """Highest-priority fragment for one feature (product file when it exists)."""
+    return feature_layers(project_root, app_name, name)[-1]
+
+
 def expand_features(project_root: Path, app_name: str, features: list[str]) -> list[str]:
-    return [feature_to_path(project_root, app_name, f) for f in features]
+    out: list[str] = []
+    for feature in features:
+        out.extend(feature_layers(project_root, app_name, feature))
+    return out
 
 
 def append_local_overrides(
     project_root: Path, app_name: str, paths: list[str]
 ) -> list[str]:
-    """Append app then shared local.overrides when present."""
+    """Append app then shared local.overrides when those lab files exist.
+
+    This is the uncommitted lab fragment (Wi-Fi and similar). It is not how
+    application/<app>/configs and configs/ resolve the same CONFIG_* symbol.
+    """
     out = list(paths)
     for rel in (
         f"application/{app_name}/{APP_SDK_REL}/local.overrides",

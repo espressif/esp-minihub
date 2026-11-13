@@ -70,8 +70,8 @@ python3 tools/dev_sync.py --port 9000
 把 `application/<app>/configs/sdkconfig/variants/<name>.yml` 覆盖到 `app.yml`。
 
 ```bash
-./tools/apply_sdkconfig_variant.sh lcd
 ./tools/apply_sdkconfig_variant.sh --restore    # variants/default.yml
+# 带屏产品用 -app minihub_lcd，不是 minihub 的 variant。
 ```
 
 ### `compose_sdkconfig.py`
@@ -232,6 +232,21 @@ python3 tools/gen_host_export_symbols.py \
 bash tools/ci/install_git_hooks.sh
 ./tools/build_firmware.py --app minihub build merge
 ```
+
+---
+
+## LCD 屏 UI（`lcd_ui_editor/`）
+
+设备小屏 UI 的树形编辑器：改 `components/minihub_lcd/ui/` 下的 Brookesia JSON 资产（screens / templates / flows）。纯标准库，只监听本机回环。
+
+```bash
+python3 tools/lcd_ui_editor/server.py            # 起服务并打开浏览器
+python3 tools/lcd_ui_editor/server.py --port 8791 --no-open
+```
+
+保存是**事务性**的：备份 → 写入 → 跑既有的 LCD UI contract 测试（`tools/test_lcd_ui_contract.py`）→ **测试不过就回滚并拒绝保存**。contract 规则仍然只有一份，坏掉的 UI 不会留在磁盘上。写回器保留每个文件原有的排版（资产里混着展开式 / `{"a": 1}` / `{ "a": 1 }` 三种），内容没变的文件完全不会被重写。
+
+`ui_contract.json` **不在**本工具的编辑范围：它是 C++ 侧的名字注册表，不是画面树。详见 [`lcd_ui_editor/README.md`](lcd_ui_editor/README.md)。
 
 ---
 

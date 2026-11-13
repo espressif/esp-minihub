@@ -16,12 +16,13 @@ and related features). Reference board ``esp32_s31_function_coreboard_1``.
 
    ./tools/build_firmware.py -app minihub build
 
-LCD variant
------------
+LCD (separate product)
+----------------------
 
-On-device LCD UI is ``CONFIG_MINIHUB_LCD_UI`` (refresh interval
-``CONFIG_MINIHUB_LCD_UI_REFRESH_MS``; optional ``CONFIG_MINIHUB_DEV_FS_UPLOAD``
-to PUT UI JSON). The option ``depends on !MINIHUB_NET_ETH``.
+On-device LCD UI is **not** part of this product. Use
+``application/minihub_lcd`` (``esp32_s31_korvo1``)::
+
+   ./tools/build_firmware.py -app minihub_lcd build
 
 Directory layout
 ----------------
@@ -71,7 +72,7 @@ Directory layout
        ``MINIHUB_PLUGIN_DIRS`` (``examples/plugins``), not a Host builtin tree;
        optional Matter / RainMaker from the environment.
    * - ``README.md``
-     - Lab build notes for this product (``-app minihub``, LCD option).
+     - Lab build notes for this product (``-app minihub``).
    * - ``configs/adapters.json``
      - Factory adapters JSON copied into LittleFS ``/data/config/``. If missing,
        the build falls back to repo ``configs/adapters.json``.
@@ -85,7 +86,10 @@ Directory layout
      - Product-local Kconfig fragments (USB MSC, RTSP, Modbus, …). Shared
        fragments live in repo ``configs/sdkconfig/``.
    * - ``configs/sdkconfig/variants/``
-     - Enable ``CONFIG_MINIHUB_LCD_UI``.
+     - ``default.yml`` is a copy of this recipe for
+       ``apply_sdkconfig_variant.sh --restore``. The LCD product is
+       ``application/minihub_lcd``, built with
+       ``./tools/build_firmware.py -app minihub_lcd``.
    * - ``configs/sdkconfig/local.overrides.example``
      - Copy to ``local.overrides`` (gitignored) for lab Wi-Fi; do not commit.
    * - ``main/main.c``

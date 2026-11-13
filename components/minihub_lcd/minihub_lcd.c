@@ -44,4 +44,15 @@ esp_err_t minihub_lcd_start_ui(void)
 void minihub_lcd_request_refresh(void)
 {
 }
+
+/* Weak stubs keep the Store's bracket calls linkable in the disabled build.
+ * Same shape as the weak hooks in minihub_net.c / minihub_web.c, so a linked
+ * LCD UI implementation can override them without changing the plugin ABI. */
+__attribute__((weak)) void minihub_lcd_flash_write_begin(void)
+{
+}
+
+__attribute__((weak)) void minihub_lcd_flash_write_end(void)
+{
+}
 #endif

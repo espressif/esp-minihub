@@ -69,8 +69,8 @@ Stacks (optional): `ble_mesh`, `zigbee`, `matter`, `thread`. `thread` and `zigbe
 Copy `application/<app>/configs/sdkconfig/variants/<name>.yml` over `app.yml`.
 
 ```bash
-./tools/apply_sdkconfig_variant.sh lcd
 ./tools/apply_sdkconfig_variant.sh --restore    # variants/default.yml
+# LCD is -app minihub_lcd, not a minihub variant.
 ```
 
 ### `compose_sdkconfig.py`
@@ -250,6 +250,28 @@ Firmware / pack / docs CI jobs call `./tools/build_firmware.py` and `./tools/bui
 bash tools/ci/install_git_hooks.sh
 ./tools/build_firmware.py --app minihub build merge
 ```
+
+---
+
+## LCD screen UI (`lcd_ui_editor/`)
+
+Tree editor for the device screen UI: the Brookesia JSON assets under `components/minihub_lcd/ui/` (screens / templates / flows). Stdlib only, loopback only.
+
+```bash
+python3 tools/lcd_ui_editor/server.py            # serve + open a browser
+python3 tools/lcd_ui_editor/server.py --port 8791 --no-open
+```
+
+A save is **transactional**:
+
+1. Back up.
+2. Write.
+3. Run the existing LCD UI contract suite (`tools/test_lcd_ui_contract.py`).
+4. **Roll back and reject the save if the suite fails.**
+
+The contract rules stay single-sourced, and a broken UI cannot land on disk. The writer keeps each file's own layout (the assets mix expanded / `{"a": 1}` / `{ "a": 1 }`), and a file whose content did not change is not rewritten at all.
+
+`ui_contract.json` is **not** editable here — it is the C++-side name registry, not the visual tree. Details: [`lcd_ui_editor/README.md`](lcd_ui_editor/README.md).
 
 ---
 

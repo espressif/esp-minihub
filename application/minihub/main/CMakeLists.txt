@@ -127,11 +127,17 @@ if(CONFIG_MINIHUB_LCD_UI AND EXISTS ${MINIHUB_REPO_ROOT}/components/minihub_lcd/
     add_custom_command(
         OUTPUT ${MINIHUB_FS_DIR}/ui/.stamp
         COMMAND ${CMAKE_COMMAND} -E rm -rf ${MINIHUB_FS_DIR}/ui
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-                ${MINIHUB_REPO_ROOT}/components/minihub_lcd/ui ${MINIHUB_FS_DIR}/ui
+        # UI JSON keeps editor-friendly formatting in the source tree. Minify it
+        # into the image (as the Web console already does): the expanded layout
+        # alone costs ~147 KB and pushed littlefs into LFS_ERR_NOSPC at build
+        # time, which also surfaced as runtime "No more free space" on the board.
+        COMMAND ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/minify_lcd_ui_assets.py
+                --src ${MINIHUB_REPO_ROOT}/components/minihub_lcd/ui
+                --dst ${MINIHUB_FS_DIR}/ui
+                -q
         COMMAND ${CMAKE_COMMAND} -E touch ${MINIHUB_FS_DIR}/ui/.stamp
-        DEPENDS ${_minihub_ui_src}
-        COMMENT "Sync minihub_lcd UI into littlefs image"
+        DEPENDS ${_minihub_ui_src} ${MINIHUB_REPO_ROOT}/tools/minify_lcd_ui_assets.py
+        COMMENT "Minify minihub_lcd UI JSON into littlefs image"
         VERBATIM
     )
     set(_minihub_ui_dep ${MINIHUB_FS_DIR}/ui/.stamp)
