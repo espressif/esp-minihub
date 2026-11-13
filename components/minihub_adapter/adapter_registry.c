@@ -281,6 +281,24 @@ static int radio_start_rank(const char *name)
     return 3;
 }
 
+static bool adapter_is_802154(const char *name)
+{
+    return name && (strcmp(name, "zigbee") == 0 || strcmp(name, "thread") == 0);
+}
+
+static int adapter_registry_index(const minihub_adapter_t *adapter)
+{
+    if (!adapter) {
+        return 1000;
+    }
+    for (size_t i = 0; i < s_registered_count; i++) {
+        if (s_registered[i] == adapter) {
+            return (int)i;
+        }
+    }
+    return 1000;
+}
+
 static bool adapter_name_is(const minihub_adapter_t *adapter, const char *name)
 {
     return adapter && adapter->name && name && strcmp(adapter->name, name) == 0;
@@ -307,20 +325,57 @@ static bool adapter_enabled_in_config(const cJSON *adapters, const minihub_adapt
 }
 
 /* 2.4 GHz radio arbitration (docs/zh_CN/radios.rst):
- *  - Zigbee and Thread share IEEE 802.15.4 → Thread loses when both enabled.
+ *  - Zigbee and Thread share IEEE 802.15.4. adapters.json enabled flags
+ *    choose which one runs. When both are enabled, the one registered
+ *    later starts later and is skipped.
  *  - Wi-Fi + (Zigbee|Thread) + BLE Mesh is the third group → BLE Mesh loses. */
-static void compute_radio_skips(bool has_wifi, bool has_zigbee, bool has_thread, bool has_ble_mesh,
-                                bool *skip_thread, bool *skip_ble_mesh)
+static const char *later_802154_if_both_enabled(const cJSON *adapters)
 {
-    *skip_thread = has_zigbee && has_thread;
+    const char *seen = NULL;
+    size_t n = minihub_adapter_count();
+    for (size_t i = 0; i < n; i++) {
+        const minihub_adapter_t *a = minihub_adapter_get(i);
+        if (!a || !adapter_is_802154(a->name)) {
+            continue;
+        }
+        if (adapters) {
+            if (!adapter_enabled_in_config(adapters, a)) {
+                continue;
+            }
+        } else {
+            bool active = false;
+            for (size_t s = 0; s < s_active_count; s++) {
+                if (s_active[s] == a) {
+                    active = true;
+                    break;
+                }
+            }
+            if (!active) {
+                continue;
+            }
+        }
+        if (!seen) {
+            seen = a->name;
+            continue;
+        }
+        return a->name;
+    }
+    return NULL;
+}
+
+static void compute_radio_skips(bool has_wifi, bool has_zigbee, bool has_thread, bool has_ble_mesh,
+                                const char **skip_802154, bool *skip_ble_mesh, const cJSON *adapters)
+{
+    *skip_802154 = (has_zigbee && has_thread) ? later_802154_if_both_enabled(adapters) : NULL;
     *skip_ble_mesh = has_wifi && (has_zigbee || has_thread) && has_ble_mesh;
 }
 
-/* The losing radio adapter for the current arbitration (Thread, or BLE Mesh). */
-static bool adapter_is_radio_loser(const minihub_adapter_t *adapter, bool skip_thread, bool skip_ble_mesh)
+/* The losing radio adapter for the current arbitration. */
+static bool adapter_is_radio_loser(const minihub_adapter_t *adapter, const char *skip_802154,
+                                   bool skip_ble_mesh)
 {
     return adapter &&
-           ((skip_thread && adapter_name_is(adapter, "thread")) ||
+           ((skip_802154 && adapter_name_is(adapter, skip_802154)) ||
             (skip_ble_mesh && adapter_name_is(adapter, "ble_mesh")));
 }
 
@@ -330,7 +385,10 @@ static int radio_start_cmp(const void *a, const void *b)
     const minihub_adapter_t *const *pb = (const minihub_adapter_t *const *)b;
     int ra = radio_start_rank((*pa) ? (*pa)->name : NULL);
     int rb = radio_start_rank((*pb) ? (*pb)->name : NULL);
-    return ra - rb;
+    if (ra != rb) {
+        return ra - rb;
+    }
+    return adapter_registry_index(*pa) - adapter_registry_index(*pb);
 }
 
 /* Owner (module id) recorded at registration for a given adapter, or "" for core. */
@@ -527,9 +585,10 @@ esp_err_t minihub_adapter_load_all(const cJSON *config)
             has_ble_mesh = true;
         }
     }
-    bool skip_thread = false, skip_ble_mesh = false;
+    const char *skip_802154 = NULL;
+    bool skip_ble_mesh = false;
     compute_radio_skips(has_wifi, has_zigbee, has_thread, has_ble_mesh,
-                        &skip_thread, &skip_ble_mesh);
+                        &skip_802154, &skip_ble_mesh, adapters);
 
     /* Preserve radio-host adapters left active by stop_all (Zigbee / BLE Mesh).
      * Drop them if adapters.json now has enabled=false; otherwise refresh init
@@ -564,7 +623,7 @@ esp_err_t minihub_adapter_load_all(const cJSON *config)
             minihub_point_unregister_by_adapter(adapter->name);
             continue;
         }
-        if (adapter_is_radio_loser(adapter, skip_thread, skip_ble_mesh)) {
+        if (adapter_is_radio_loser(adapter, skip_802154, skip_ble_mesh)) {
             ESP_LOGW(TAG, "radio mutex: '%s' loses 2.4GHz arbitration — stopping",
                      adapter->name);
             if (adapter->stop) {
@@ -622,7 +681,7 @@ esp_err_t minihub_adapter_load_all(const cJSON *config)
             }
         }
 
-        if (adapter_is_radio_loser(adapter, skip_thread, skip_ble_mesh)) {
+        if (adapter_is_radio_loser(adapter, skip_802154, skip_ble_mesh)) {
             /* Never bring up the losing radio adapter: apply the arbitration at
              * init time, not only at start time. */
             ESP_LOGW(TAG, "radio mutex: '%s' not initialised (loses 2.4GHz arbitration)",
@@ -669,11 +728,13 @@ esp_err_t minihub_adapter_start_all(void)
         }
     }
 
-    bool skip_thread = false, skip_ble_mesh = false;
+    const char *skip_802154 = NULL;
+    bool skip_ble_mesh = false;
     compute_radio_skips(has_wifi, has_zigbee, has_thread, has_ble_mesh,
-                        &skip_thread, &skip_ble_mesh);
-    if (skip_thread) {
-        ESP_LOGW(TAG, "radio mutex: zigbee and thread both enabled — skipping thread");
+                        &skip_802154, &skip_ble_mesh, NULL);
+    if (skip_802154) {
+        ESP_LOGW(TAG, "radio mutex: zigbee and thread both enabled — skipping later start '%s'",
+                 skip_802154);
     }
     if (skip_ble_mesh) {
         ESP_LOGW(TAG, "radio mutex: wifi + 802.15.4 + ble_mesh — skipping ble_mesh");
@@ -691,7 +752,7 @@ esp_err_t minihub_adapter_start_all(void)
         if (!adapter) {
             continue;
         }
-        bool skip = (skip_thread && adapter_name_is(adapter, "thread")) ||
+        bool skip = (skip_802154 && adapter_name_is(adapter, skip_802154)) ||
                     (skip_ble_mesh && adapter_name_is(adapter, "ble_mesh"));
         bool was_kept = adapter_was_kept(adapter);
         if (skip) {

@@ -256,8 +256,8 @@ static esp_err_t prepare_wifi(void)
 
 static esp_err_t start_wifi_sta(void)
 {
-    /* CHIP ENABLE_WIFI_STATION is off (Matter over Thread/Eth); MiniHub still
-     * brings up STA for host IP. Default route follows GOT_IP (ETH, else Wi-Fi). */
+    /* Host STA. With the Matter adapter on, MINIHUB_NET_WIFI_STA selects
+     * CHIP ENABLE_WIFI_STATION. Default route follows GOT_IP (ETH, else Wi-Fi). */
     ESP_RETURN_ON_ERROR(ensure_wifi_driver_init(), TAG, "wifi init");
 
     wifi_config_t wifi_config = {0};

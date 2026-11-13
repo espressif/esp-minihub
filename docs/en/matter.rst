@@ -252,8 +252,7 @@ an empty array. The numbers above show the field shape, not a bench reading.
 Bench demo
 ^^^^^^^^^^
 
-The observable that must appear — this is the acceptance condition, see the status note
-below:
+The observable that must appear — this is the acceptance condition:
 
 1. ``GET /api/matter/status`` shows the node with ``live`` true.
 2. Reset the card, so the Hub's own write cannot be mistaken for a report:
@@ -266,13 +265,10 @@ below:
    went up and the point value moved to the device's real state. If the value moved while
    ``reports`` stayed flat, a Hub command wrote it and that run proves nothing.
 
-**Pending a reachable device.** This procedure has not been run end to end anywhere. On
-the development bench the commissioned node does not answer CASE, so ``live`` stayed
-``false``, ``reports`` stayed ``0``, and no report ever arrived — steps 3 and 4 are
-therefore unverified, including how long a report takes to show up. The subscribe
-intervals in ``components/minihub_matter/matter_ctrl.cpp`` (``MATTER_SUB_MIN_INTERVAL`` =
-5 s, ``MATTER_SUB_MAX_INTERVAL`` = 30 s) are **configured bounds** on how often the
-device may report; they are not a measured button-press-to-card latency.
+The subscribe intervals in ``components/minihub_matter/matter_ctrl.cpp``
+(``MATTER_SUB_MIN_INTERVAL`` = 5 s, ``MATTER_SUB_MAX_INTERVAL`` = 30 s) are
+**configured bounds** on how often the device may report; they are not a measured
+button-press-to-card latency.
 
 Limits
 ^^^^^^
@@ -362,10 +358,20 @@ Matter-over-Thread end-devices are **Matter** points; see :doc:`thread`.
 Who owns Wi-Fi?
 ---------------
 
-CHIP Wi-Fi station is **off** on MiniHub controller builds
-(``matter_over_eth.defaults``). MiniHub still connects Host STA via
-``minihub_net_start_wifi()`` when credentials exist. Default-route selection only
-picks the netif with IPv4 — see :doc:`networking`.
+``MINIHUB_NET_WIFI_STA`` selects CHIP ``ENABLE_WIFI_STATION`` when
+``MINIHUB_MATTER_ADAPTER`` is on and ``MINIHUB_THREAD_ADAPTER`` is off.
+
+Thread BR products keep CHIP station off (``thread.defaults``) — Host uplink
+is Ethernet and CHIP must not call ``esp_wifi_connect()``. With station off,
+``matter_over_eth.defaults`` sets ``ENABLE_ETHERNET_TELEMETRY=y`` (the only
+CHIP Kconfig that turns on ``CHIP_DEVICE_CONFIG_ENABLE_ETHERNET`` / EspDnssd)
+and clears ``ETHERNET_NETWORK_COMMISSIONING_DRIVER`` so
+``ESPEthernetDriver::Init`` does not install a second PHY — MiniHub owns EMAC
+and the Hub is commissioner-only.
+
+MiniHub connects Host STA via ``minihub_net_start_wifi()`` when credentials
+exist. Default-route selection only picks the netif with IPv4 — see
+:doc:`networking`.
 
 Terminology
 -----------

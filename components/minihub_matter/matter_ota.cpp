@@ -30,11 +30,13 @@
 #include <controller/CHIPDeviceControllerFactory.h>
 #include <credentials/FabricTable.h>
 #include <esp_matter.h>
+#include <esp_matter_client.h>
 #include <esp_matter_controller_client.h>
-#include <esp_matter_controller_cluster_command.h>
 #include <esp_matter_ota_bdx_sender.h>
 #include <esp_matter_ota_provider.h>
 #include "controller_data_model_provider.h"
+#include <lib/support/CHIPMem.h>
+#include <lib/core/ScopedNodeId.h>
 
 #include <app-common/zap-generated/ids/Clusters.h>
 #include <app-common/zap-generated/ids/Commands.h>
@@ -66,6 +68,19 @@ namespace NotifyUpdateApplied = chip::app::Clusters::OtaSoftwareUpdateProvider::
 
 static constexpr char TAG[] = "matter_ota";
 static constexpr uint64_t k_controller_node_id = 0x1ULL;
+
+class AnnounceOwner final : public esp_matter::client::invoke_command::delegate {
+public:
+    esp_matter::client::invoke_command::interaction operation;
+    void OnDone(const esp_matter::client::target_t &, CHIP_ERROR cerr) override
+    {
+        if (cerr != CHIP_NO_ERROR) {
+            ESP_LOGW(TAG, "AnnounceOTAProvider async fail: %" CHIP_ERROR_FORMAT, cerr.Format());
+        }
+        chip::Platform::Delete(this);
+    }
+};
+
 static constexpr uint16_t k_local_httpd_port = 18080;
 static constexpr uint32_t k_max_bdx_block = 1024;
 static constexpr chip::System::Clock::Timeout k_bdx_timeout = chip::System::Clock::Seconds16(5 * 60);
@@ -611,18 +626,34 @@ esp_err_t minihub_matter_ota_offer(const char *point_id, const char *file_path)
     if (vendor == 0) {
         vendor = 0xFFF1;
     }
-    char json[160];
-    snprintf(json, sizeof(json), "{\"0:U64\": %" PRIu64 ", \"1:U16\": %u, \"2:U8\": 1, \"4:U16\": 0}",
+    char inner[160];
+    snprintf(inner, sizeof(inner), "{\"0:U64\": %" PRIu64 ", \"1:U16\": %u, \"2:U8\": 1, \"4:U16\": 0}",
              k_controller_node_id, vendor);
+    char wrapped[sizeof(inner) + sizeof("{\"0:OBJ\":}")];
+    snprintf(wrapped, sizeof(wrapped), "{\"0:OBJ\":%s}", inner);
 
     constexpr uint32_t k_req_cluster = chip::app::Clusters::OtaSoftwareUpdateRequestor::Id;
     constexpr uint32_t k_announce = chip::app::Clusters::OtaSoftwareUpdateRequestor::Commands::AnnounceOTAProvider::Id;
 
     esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-    err = esp_matter::controller::send_invoke_cluster_command(node_id, 0, k_req_cluster, k_announce, json);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "AnnounceOTAProvider failed: %s", esp_err_to_name(err));
-        return err;
+    esp_matter::client::json_encodable fields(wrapped);
+    esp_matter::client::invoke_command::request_t request = {
+        .endpoint_id = 0,
+        .cluster_id = k_req_cluster,
+        .command_id = k_announce,
+        .fields = &fields,
+    };
+    auto *owner = chip::Platform::New<AnnounceOwner>();
+    if (!owner) {
+        return ESP_ERR_NO_MEM;
+    }
+    chip::ScopedNodeId peer(
+        node_id, esp_matter::controller::matter_controller_client::get_instance().get_fabric_index());
+    CHIP_ERROR cerr = owner->operation.start(peer, request, owner);
+    if (cerr != CHIP_NO_ERROR) {
+        chip::Platform::Delete(owner);
+        ESP_LOGE(TAG, "AnnounceOTAProvider failed: %" CHIP_ERROR_FORMAT, cerr.Format());
+        return ESP_FAIL;
     }
     ESP_LOGI(TAG, "AnnounceOTAProvider sent to node %" PRIu64 " (Provider 0x0029 / BDX)", node_id);
     return ESP_OK;

@@ -70,6 +70,13 @@ void zigbee_stack_subscribe_product_params(uint16_t short_addr, uint8_t endpoint
     (void)ieee;
 }
 
+void zigbee_stack_read_map_attrs(uint16_t short_addr, uint8_t endpoint, uint8_t caps)
+{
+    (void)short_addr;
+    (void)endpoint;
+    (void)caps;
+}
+
 esp_err_t zigbee_stack_write_attr(uint16_t short_addr, uint8_t endpoint, uint16_t cluster_id,
                                   uint16_t attr_id, uint8_t attr_type, void *value, uint16_t value_size)
 {

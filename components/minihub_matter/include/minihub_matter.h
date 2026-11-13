@@ -19,6 +19,10 @@ extern "C" {
 esp_err_t minihub_matter_init(void);
 bool minihub_matter_ready(void);
 
+#if !defined(CONFIG_MINIHUB_THREAD_ADAPTER) || (CONFIG_MINIHUB_THREAD_ADAPTER == 0)
+static inline bool minihub_thread_ready(void) { return false;}
+#endif
+
 /**
  * @brief Attach CHIP ThreadStackManager to MiniHub's already-running OpenThread
  * instance (after minihub_thread_init). Required so FindOperational can use
@@ -106,6 +110,27 @@ esp_err_t minihub_matter_commission_pin(uint64_t node_id, uint32_t setup_pin);
 esp_err_t minihub_matter_onoff(uint64_t node_id, uint16_t endpoint_id, bool on);
 
 /**
+ * @brief Set the LevelControl CurrentLevel (0–254) on endpoint_id of node_id.
+ * Sends MoveToLevelWithOnOff so the OnOff state is carried along. ESP_OK when the
+ * command was accepted by CHIP; the resulting report arrives via the attr callback.
+ */
+esp_err_t minihub_matter_level_set(uint64_t node_id, uint16_t endpoint_id, uint8_t level);
+
+/**
+ * @brief Set the ColorControl ColorTemperatureMireds on endpoint_id of node_id.
+ * Sends MoveToColorTemperature. ColorTemperature is expressed in mireds
+ * (mireds = 1e6 / Kelvin); convert at the caller.
+ */
+esp_err_t minihub_matter_color_temp_set(uint64_t node_id, uint16_t endpoint_id, uint16_t mireds);
+
+/**
+ * @brief Set the ColorControl current hue + saturation on endpoint_id of node_id.
+ * Sends MoveToHueAndSaturation. hue/saturation are 0–254.
+ */
+esp_err_t minihub_matter_color_xy_set(uint64_t node_id, uint16_t endpoint_id,
+                                      uint8_t hue, uint8_t saturation);
+
+/**
  * @brief Read the OnOff attribute of endpoint_id on node_id.
  *
  * ESP_OK means *out_on was written. ESP_ERR_NOT_FINISHED means the request was
@@ -116,28 +141,32 @@ esp_err_t minihub_matter_onoff(uint64_t node_id, uint16_t endpoint_id, bool on);
  */
 esp_err_t minihub_matter_read_onoff(uint64_t node_id, uint16_t endpoint_id, bool *out_on);
 
+/** Matter attribute path for subscribe / multi-attr read. */
+typedef struct {
+    uint16_t cluster_id;
+    uint16_t attribute_id;
+} minihub_matter_attr_path_t;
+
 /**
- * @brief Subscribe to the OnOff attribute (0x0000 of cluster 0x0006) for every
- * endpoint of one node. One subscription per **node**: the esp-matter
- * established/terminated callbacks report only (node_id, subscription_id), so
- * per-endpoint liveness cannot be observed; liveness is tracked per node and
- * covers all of that node's endpoints. Idempotent while the node's
- * subscription is live — while live the endpoint list is not re-read.
- * Reports go to the callback from minihub_matter_set_attr_cb().
- *
- * @param endpoint_ids  OnOff endpoints of this node, up to 16 (same cap as one.
- *                      commissioning); ESP_ERR_INVALID_ARG above that, never a
- *                      silent truncation. The table itself is keyed by node and
- *                      holds CONFIG_MINIHUB_MATTER_MAX_NODES nodes (default 128,
- *                      range 16-1024), so it outgrows the 16-endpoint cap; a node
- *                      past the configured cap fails with ESP_ERR_NO_MEM.
- *
- * ESP_OK means already live; ESP_ERR_NOT_FINISHED means the request was handed
- * to CHIP (liveness shows up in minihub_matter_subscriptions_json()); any
- * other code means the request was not accepted and the tracked row is rolled
- * back so its slot stays reusable. While a node's subscription is live the
- * endpoint list is NOT re-read, so to change a live node's endpoints the caller
- * must drop the node first and re-subscribe — see minihub_matter_drop_node().
+ * @brief Read every (endpoint × attr path) asynchronously; values arrive via
+ * minihub_matter_set_attr_cb(). ESP_ERR_NOT_FINISHED means the request was accepted.
+ */
+esp_err_t minihub_matter_read_attrs(uint64_t node_id, const uint16_t *endpoint_ids, size_t ep_count,
+                                    const minihub_matter_attr_path_t *attrs, size_t attr_count);
+
+/**
+ * @brief Subscribe to the given attribute paths on every listed endpoint.
+ * One subscription per **node**. Idempotent while live.
+ * @p attrs must be non-empty. Same return codes as minihub_matter_subscribe_node().
+ */
+esp_err_t minihub_matter_subscribe_node_attrs(uint64_t node_id, const uint16_t *endpoint_ids,
+                                              size_t ep_count, const minihub_matter_attr_path_t *attrs,
+                                              size_t attr_count);
+
+/**
+ * @brief Subscribe to OnOff (0x0006/0x0000) on every endpoint — thin wrapper
+ * around minihub_matter_subscribe_node_attrs() for callers that still want
+ * power-only. Prefer subscribe_node_attrs with the capability map paths.
  */
 esp_err_t minihub_matter_subscribe_node(uint64_t node_id, const uint16_t *endpoint_ids, size_t count);
 
@@ -243,6 +272,46 @@ typedef void (*minihub_matter_attr_bool_cb_t)(uint64_t node_id, uint16_t endpoin
                                               bool value, void *ctx);
 
 esp_err_t minihub_matter_set_attr_cb(minihub_matter_attr_bool_cb_t cb, void *ctx);
+
+/**
+ * @brief Typed attribute report callback (Item 3). Superset of the bool callback:
+ * `value` carries the decoded attribute (or UNKNOWN when the delivery layer has
+ * not yet decoded that type). The OnOff boolean case is delivered with
+ * `type == MINIHUB_MATTER_VAL_BOOL` so existing consumers can migrate.
+ *
+ * Numeric decoding (U8/U16/I16/U32/I32/FLOAT) is enabled once
+ * `matter_ctrl.cpp::on_attr_report` decodes the TLV beyond bool — until then
+ * non-boolean reports arrive as MINIHUB_MATTER_VAL_UNKNOWN and a consumer should
+ * fall back to the bool callback for OnOff. This API is additive; the bool
+ * callback above is kept for backward compatibility.
+ *
+ * Called on the CHIP event task with the stack lock held: copy what you need
+ * and return. Do not call back into minihub_matter_*.
+ */
+typedef enum {
+    MINIHUB_MATTER_VAL_BOOL = 0,
+    MINIHUB_MATTER_VAL_UINT,   /*!< unsigned integer attribute (any width) */
+    MINIHUB_MATTER_VAL_INT,    /*!< signed integer attribute (any width) */
+    MINIHUB_MATTER_VAL_DOUBLE, /*!< float / double attribute */
+    MINIHUB_MATTER_VAL_UNKNOWN
+} minihub_matter_attr_value_type_t;
+
+typedef struct {
+    minihub_matter_attr_value_type_t type;
+    union {
+        bool b;
+        uint64_t u; /*!< unsigned integer attribute (any width) */
+        int64_t i;  /*!< signed integer attribute (any width) */
+        double d;   /*!< float / double attribute */
+    } v;
+} minihub_matter_attr_value_t;
+
+typedef void (*minihub_matter_attr_typed_cb_t)(uint64_t node_id, uint16_t endpoint_id,
+                                               uint32_t cluster_id, uint32_t attribute_id,
+                                               const minihub_matter_attr_value_t *value,
+                                               void *ctx);
+
+esp_err_t minihub_matter_set_attr_typed_cb(minihub_matter_attr_typed_cb_t cb, void *ctx);
 
 /**
  * @brief Best-effort read of Basic Information. Failure does not unwind commission.

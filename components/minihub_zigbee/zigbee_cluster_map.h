@@ -95,6 +95,18 @@ bool minihub_zb_map_access_is_readonly(const char *access);
 size_t minihub_zb_map_params_for_caps(uint8_t caps, char out_params[][MINIHUB_ZB_MAP_PARAM_MAX],
                                       size_t cap);
 
+/** Compact read target — keep this small; callers may run on esp_timer. */
+typedef struct {
+    uint16_t cluster;
+    uint16_t attr;
+} minihub_zb_map_path_t;
+
+/**
+ * Deduped (cluster, attr) pairs for @p caps — Hub restart / join read-back.
+ * Returns count written to @p out.
+ */
+size_t minihub_zb_map_read_paths_for_caps(uint8_t caps, minihub_zb_map_path_t *out, size_t out_cap);
+
 /** Find first attr entry for a props.params name. */
 const minihub_zb_map_attr_t *minihub_zb_map_attr_by_param(const char *param);
 

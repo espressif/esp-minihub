@@ -1,5 +1,13 @@
 menu "Matter"
 
+    # CHIP Ethernet Options: GPIO_RANGE_MAX is unprompted and has no
+    # IDF_TARGET_ESP32S31 default upstream; without one, kconfgen
+    # write_json_menus does int('') on ETH_* range bounds. Keep this even
+    # when esp-matter CHIP Kconfig already has the S31 line — merged defaults.
+    config GPIO_RANGE_MAX
+        int
+        default 63 if IDF_TARGET_ESP32S31
+
     config MINIHUB_MATTER_ADAPTER
         bool "Enable Matter adapter / commissioner"
         default n

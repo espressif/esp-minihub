@@ -1,7 +1,29 @@
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Matter commissioner over MiniHub Ethernet (disable CHIP Wi-Fi station).
-# Do NOT set CONFIG_ENABLE_ETHERNET_TELEMETRY — invalid on ESP32-S31.
+# Matter commissioner over MiniHub Ethernet.
+#
+# CHIP only exposes Ethernet via ENABLE_ETHERNET_TELEMETRY (sets
+# CHIP_DEVICE_CONFIG_ENABLE_ETHERNET + chip_enable_ethernet / EspDnssd).
+# Keep ETHERNET_NETWORK_COMMISSIONING_DRIVER off: MiniHub owns EMAC on S31;
+# ESPEthernetDriver::Init would install a second PHY with wrong default GPIOs.
+# Hub is commissioner-only (no Matter server NetworkCommissioning endpoint).
+#
+# CHIP GPIO_RANGE_MAX is unprompted: sdkconfig assignments are ignored; the
+# S31 default must live in Kconfig (chip Kconfig and/or minihub_matter
+# Kconfig.minihub). Placeholders below are unused while NETWORK_COMMISSIONING
+# DRIVER is off; keep them so ETH_* ints are explicit after configure.
+#
+# MINIHUB_NET_WIFI_STA selects ENABLE_WIFI_STATION only when Matter is on and
+# Thread BR is off; that select wins over the STA-off line below. Thread BR
+# products also clear station in thread.defaults.
+
+CONFIG_ENABLE_ETHERNET_TELEMETRY=y
+# CONFIG_ETHERNET_NETWORK_COMMISSIONING_DRIVER is not set
+CONFIG_GPIO_RANGE_MAX=63
+CONFIG_ETH_MDC_GPIO=0
+CONFIG_ETH_MDIO_GPIO=0
+CONFIG_ETH_PHY_RST_GPIO=-1
+CONFIG_ETH_PHY_ADDR=1
 
 # CONFIG_ENABLE_WIFI_STATION is not set

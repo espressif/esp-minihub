@@ -1,0 +1,33 @@
+From: MiniHub Contributors
+Subject: esp-matter: include OTAProviderCluster.h (CHIP rename)
+
+CHIP renamed ota-provider-cluster.h → OTAProviderCluster.h
+(b069a68a24). Update esp-matter includes so the controller builds.
+
+Component: esp-matter (sibling checkout via ESP_MATTER_PATH)
+Apply-Root: ../esp-matter
+
+Apply: ./tools/apply_component_patches.sh
+---
+--- a/components/esp_matter_controller/data_model_provider/controller_data_model_provider.h
++++ b/components/esp_matter_controller/data_model_provider/controller_data_model_provider.h
+@@ -34,7 +34,7 @@
+ #include <app/ConcreteEventPath.h>
+ 
+ #ifdef CONFIG_ESP_MATTER_OTA_PROVIDER_ENABLED
+-#include <app/clusters/ota-provider/ota-provider-cluster.h>
++#include <app/clusters/ota-provider/OTAProviderCluster.h> /* MiniHub: CHIP UpperCamelCase rename */
+ #endif
+ 
+ using chip::ClusterId;
+--- a/components/esp_matter_controller/core/esp_matter_controller_client.cpp
++++ b/components/esp_matter_controller/core/esp_matter_controller_client.cpp
+@@ -46,7 +46,7 @@
+ #endif // CONFIG_ENABLE_ESP32_BLE_CONTROLLER
+ 
+ #if CHIP_DEVICE_CONFIG_DYNAMIC_SERVER
+-#include <app/clusters/ota-provider/ota-provider-cluster.h>
++#include <app/clusters/ota-provider/OTAProviderCluster.h> /* MiniHub: CHIP UpperCamelCase rename */
+ #include <app/dynamic_server/AccessControl.h>
+ #include <esp_matter_ota_provider.h>
+ #endif // CHIP_DEVICE_CONFIG_DYNAMIC_SERVER

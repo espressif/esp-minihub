@@ -204,7 +204,7 @@ static void upsert_control(const minihub_zb_map_control_t *in)
     s_controls[s_control_count++] = *in;
 }
 
-static void merge_clusters_array(const cJSON *arr)
+static void merge_models_array(const cJSON *arr)
 {
     if (!cJSON_IsArray(arr)) {
         return;
@@ -265,7 +265,7 @@ static void merge_classify_array(const cJSON *arr)
     }
 }
 
-static void merge_attrs_array(const cJSON *arr)
+static void merge_sensors_array(const cJSON *arr)
 {
     if (!cJSON_IsArray(arr)) {
         return;
@@ -351,9 +351,9 @@ static void merge_root(const cJSON *root)
     if (!cJSON_IsObject(root)) {
         return;
     }
-    merge_clusters_array(cJSON_GetObjectItem(root, "clusters"));
+    merge_models_array(cJSON_GetObjectItem(root, "models"));
     merge_classify_array(cJSON_GetObjectItem(root, "classify"));
-    merge_attrs_array(cJSON_GetObjectItem(root, "attrs"));
+    merge_sensors_array(cJSON_GetObjectItem(root, "sensors"));
     merge_controls_array(cJSON_GetObjectItem(root, "controls"));
 }
 
@@ -516,6 +516,35 @@ size_t minihub_zb_map_params_for_caps(uint8_t caps, char out_params[][MINIHUB_ZB
         }
         strncpy(out_params[n], s_attrs[i].param, MINIHUB_ZB_MAP_PARAM_MAX - 1);
         out_params[n][MINIHUB_ZB_MAP_PARAM_MAX - 1] = '\0';
+        n++;
+    }
+    return n;
+}
+
+size_t minihub_zb_map_read_paths_for_caps(uint8_t caps, minihub_zb_map_path_t *out, size_t out_cap)
+{
+    (void)minihub_zb_cluster_map_init();
+    size_t n = 0;
+    if (!out || out_cap == 0 || caps == 0) {
+        return 0;
+    }
+    for (size_t i = 0; i < s_attr_count && n < out_cap; i++) {
+        uint8_t bit = cap_for_cluster(s_attrs[i].cluster);
+        if (bit == 0 || (caps & bit) == 0) {
+            continue;
+        }
+        bool seen = false;
+        for (size_t j = 0; j < n; j++) {
+            if (out[j].cluster == s_attrs[i].cluster && out[j].attr == s_attrs[i].attr) {
+                seen = true;
+                break;
+            }
+        }
+        if (seen) {
+            continue;
+        }
+        out[n].cluster = s_attrs[i].cluster;
+        out[n].attr = s_attrs[i].attr;
         n++;
     }
     return n;

@@ -64,7 +64,8 @@ GROUPS = {
                        "gen_abi_contract.py", "gen_host_export_symbols.py",
                        "abi_contract_lib.py", "test_deploy_index.py",
                        "test_build_plugin_standalone.py", "test_doc_figures.py",
-                       "test_hide_l3_strip.py"],
+                       "test_hide_l3_strip.py", "test_ble_mesh_map.py",
+                       "test_capability_map.py"],
     "Work with a running Hub": ["dev_sync.py", "athena_hook.py"],
     "For plugin authors": ["minihub_plugin_mcp.py"],
 }

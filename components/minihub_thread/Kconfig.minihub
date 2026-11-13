@@ -6,5 +6,9 @@ menu "Thread"
         select MINIHUB_MATTER_ADAPTER
         select OPENTHREAD_ENABLED
         select ESP_COEX_SW_COEXIST_ENABLE
+        help
+            OpenThread Border Router on native 802.15.4. Implies Matter.
+            Host uplink is Ethernet — keep CONFIG_ENABLE_WIFI_STATION off so
+            CHIP does not call esp_wifi_connect() beside MiniHub/OT BR.
 
 endmenu

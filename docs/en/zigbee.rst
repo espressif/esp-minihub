@@ -9,13 +9,15 @@ are in :doc:`data_model` (:ref:`adapters-JSON`); this chapter covers build,
 join, and REST.
 
 Zigbee takes the 2.4 GHz radio to itself: it shares it with neither Wi-Fi nor BLE
-Mesh, and Thread wants the same 802.15.4 radio, so the two stacks are **mutually
-exclusive at build time** — ``tools/build_firmware.py`` stops a build that enables
-both, since neither Kconfig option depends on the other. JSON that still asks for
-both is honored by skipping Thread; JSON that asks for Zigbee beside Wi-Fi or BLE
-Mesh is honored by skipping Zigbee. A Zigbee Hub therefore reaches the LAN over
-Ethernet. See :doc:`getting_started` and :doc:`networking` for Hub bring-up, and
-:doc:`radios` for the full matrix.
+Mesh, and Thread wants the same 802.15.4 radio. The two stacks may both be
+linked; neither Kconfig option depends on the other. The ``enabled`` flag in
+``adapters.json`` chooses which one runs. When both are true, the one that
+starts later is skipped (Zigbee is registered first, so Thread).
+
+JSON that asks for Zigbee beside Wi-Fi or BLE Mesh is honored by skipping
+Zigbee. A Zigbee Hub therefore reaches the LAN over Ethernet. See
+:doc:`getting_started` and :doc:`networking` for Hub bring-up, and :doc:`radios`
+for the full matrix.
 
 Build
 -----
