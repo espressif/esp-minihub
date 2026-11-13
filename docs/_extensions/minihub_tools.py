@@ -58,6 +58,7 @@ GROUPS = {
                          "sync_store_catalog.py", "gen_deploy_index.py",
                          "publish_firmware.py", "deploy.sh", "store_server.py",
                          "store_paths.py", "product_assets.py", "minify_web_assets.py",
+                         "minify_lcd_ui_assets.py",
                          "generate_devices_property_from_json.py"],
     "The guide itself": ["build_docs.sh", "preview_docs.py", "publish_docs.sh"],
     "Check and gate": ["check_plugin_sdk.py", "check_module_so_layout.py",
@@ -66,7 +67,8 @@ GROUPS = {
                        "test_build_plugin_standalone.py", "test_doc_figures.py",
                        "test_hide_l3_strip.py", "test_ble_mesh_map.py",
                        "test_capability_map.py", "gen_lcd_ui_contract.py",
-                       "test_lcd_recipe.py", "test_lcd_ui_contract.py"],
+                       "gen_lcd_i18n.py", "test_lcd_recipe.py",
+                       "test_lcd_ui_contract.py", "test_lcd_ui_editor.py"],
     "Work with a running Hub": ["dev_sync.py", "athena_hook.py"],
     "For plugin authors": ["minihub_plugin_mcp.py"],
 }

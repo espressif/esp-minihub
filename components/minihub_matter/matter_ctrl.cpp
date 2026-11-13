@@ -883,8 +883,10 @@ esp_err_t minihub_matter_init(void)
      * on minihub_thread_ready(). Retry attach later via minihub_matter_attach_thread. */
     err = matter_thread_stack_attach();
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "CHIP ThreadStack not attached yet (%s); continuing commissioner on Ethernet",
+        set_error("thread stack attach failed");
+        ESP_LOGE(TAG, "CHIP ThreadStack attach required before DeviceControllerFactory: %s",
                  esp_err_to_name(err));
+        return err;
     }
 #endif
 
