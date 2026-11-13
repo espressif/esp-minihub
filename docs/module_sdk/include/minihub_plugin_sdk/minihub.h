@@ -39,7 +39,7 @@ extern "C" {
 #define MINIHUB_POINT_ID_MAX        64
 /** @brief Maximum point type string length.
  *  @note MiniHub: ``components/minihub_core/include/minihub_core.h`` */
-#define MINIHUB_TYPE_MAX            16
+#define MINIHUB_TYPE_MAX            32
 /** @brief Maximum point value string length.
  *  @note MiniHub: ``components/minihub_core/include/minihub_core.h`` */
 #define MINIHUB_VALUE_MAX           32

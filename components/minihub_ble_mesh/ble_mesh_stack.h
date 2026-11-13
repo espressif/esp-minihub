@@ -21,6 +21,8 @@ bool ble_mesh_stack_running(void);
 esp_err_t ble_mesh_stack_onoff(uint16_t unicast, minihub_ble_mesh_onoff_cmd_t cmd);
 esp_err_t ble_mesh_stack_level(uint16_t unicast, int16_t level);
 esp_err_t ble_mesh_stack_lightness(uint16_t unicast, uint16_t lightness);
+/** Light HSL set (hue 0..65535, saturation 0..65535, lightness 0..65535). */
+esp_err_t ble_mesh_stack_hsl(uint16_t unicast, uint16_t hue, uint16_t saturation, uint16_t lightness);
 esp_err_t ble_mesh_stack_ctl(uint16_t unicast, uint16_t lightness, uint16_t temperature,
                              int16_t delta_uv);
 
@@ -28,11 +30,11 @@ esp_err_t ble_mesh_stack_ctl(uint16_t unicast, uint16_t lightness, uint16_t temp
 esp_err_t ble_mesh_stack_delete_node(uint16_t unicast);
 
 /**
- * Rehydrate control cache after reboot (NVS has the map; s_nodes is RAM-only).
- * uuid may be all-zero if unknown — unicast is enough for OnOff Set.
+ * Rehydrate control cache after reboot (NVS has the map; s_nodes is RAM-only)
+ * and Get each persisted bound model so points leave map init values.
+ * uuid_hex may be empty — unicast is enough for control.
  */
-esp_err_t ble_mesh_stack_restore_node(const uint8_t uuid[16], uint16_t unicast, uint8_t elem_num,
-                                      uint8_t caps);
+esp_err_t ble_mesh_stack_restore_node(const minihub_ble_mesh_device_t *dev);
 
 /** Apply before start(); stack copies the policy. */
 esp_err_t ble_mesh_stack_set_provision_policy(const minihub_bm_provision_policy_t *policy);

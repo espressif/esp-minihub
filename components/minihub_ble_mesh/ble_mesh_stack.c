@@ -9,6 +9,7 @@
 #include "ble_mesh_stack.h"
 #include "ble_mesh_map.h"
 #include "ble_mesh_bt.h"
+#include "ble_mesh_sensor.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -39,6 +40,7 @@ static SemaphoreHandle_t s_net_gate;
 static volatile int s_net_comp_err;
 static SemaphoreHandle_t s_bind_gate;
 static volatile int s_bind_comp_err;
+static bool s_local_models_bound;
 static SemaphoreHandle_t s_appkey_gate;
 static esp_timer_handle_t s_permit_timer;
 /** Return BLE Mesh coex scheme to STANDBY after a short TRAFFIC window. */
@@ -57,6 +59,8 @@ static uint8_t s_permit_busy_extends;
 #include "esp_ble_mesh_config_model_api.h"
 #include "esp_ble_mesh_generic_model_api.h"
 #include "esp_ble_mesh_lighting_model_api.h"
+#include "esp_ble_mesh_sensor_model_api.h"
+#include "esp_ble_mesh_local_data_operation_api.h"
 #if CONFIG_BLE_MESH_GATT_PROXY_CLIENT
 #include "esp_ble_mesh_proxy_api.h"
 #endif
@@ -83,6 +87,9 @@ extern int bt_mesh_scan_enable(void);
 #define CFG_PROXY_RECONNECT_DELAY_US (2500 * 1000LL)
 #define CFG_TIMEOUT_RETRIES_MAX 5
 #define CFG_PROXY_RECONNECT_MAX 6
+/** Publication is an enhancement, so it gets a shorter budget than binding and
+ *  never purges the node when it runs out. */
+#define PUB_TIMEOUT_RETRIES_MAX 2
 /** PB-GATT connect can hang without LINK_OPEN/CLOSE — escape hatch. */
 #define PROV_BUSY_WATCHDOG_US (45 * 1000000ULL)
 /** Cap "busy → extend permit" so a stuck busy cannot hold the window forever. */
@@ -96,10 +103,16 @@ typedef struct {
     uint16_t unicast;
     uint8_t elem_num;
     uint8_t onoff;
-    uint8_t caps;
+    uint16_t caps;
     uint16_t cid;
     uint16_t pid;
     uint16_t vid;
+    /** Sensor property ids seen in the Sensor Descriptor (classification input). */
+    uint16_t props[MINIHUB_BM_MAP_MAX_PROPS];
+    size_t prop_count;
+    /** Snapshot of s_bind_jobs for this node (survives sensor-delayed notify). */
+    minihub_bm_bound_model_t binds[MINIHUB_BM_BIND_MODEL_MAX];
+    size_t bind_count;
 } node_info_t;
 
 typedef struct {
@@ -122,10 +135,16 @@ static uint16_t s_cfg_pending_unicast;
 static uint8_t s_cfg_timeout_retries;
 static int s_cfg_timer_action;
 static size_t s_bind_model_idx;
+static size_t s_pub_model_idx;
+/** This model already had its Publication Set retried with period 0. */
+static bool s_pub_no_period;
+static uint8_t s_pub_retries;
 static bind_job_t s_bind_jobs[MINIHUB_BM_BIND_MODEL_MAX];
 static size_t s_bind_job_count;
 static minihub_bm_provision_policy_t s_policy;
 static bool s_policy_set;
+/** Nodes that matched no classify rule — diagnostic counter for D4a. */
+static uint32_t s_unclassified_nodes;
 /** True from add_unprov until link close / prov complete — blocks re-entry and
  *  keeps BLE coex priority (PB-GATT close_link always reports HCI 0x16). */
 static bool s_prov_busy;
@@ -146,23 +165,31 @@ static bool s_pending_have_addr;
 static bool s_prov_link_was_gatt;
 #endif
 
+/** The server models the map table knows — the bind list an OEM overlay can extend. */
+static size_t map_bind_models(minihub_bm_bind_model_t *out, size_t max)
+{
+    size_t n = 0;
+    size_t models = minihub_bm_model_count();
+    for (size_t i = 0; i < models && n < max; i++) {
+        const minihub_bm_map_model_t *m = minihub_bm_model_at(i);
+        if (!m || !m->model_id) {
+            continue;
+        }
+        out[n].model_id = m->model_id;
+        out[n].company_id = MINIHUB_BM_CID_SIG;
+        n++;
+    }
+    return n;
+}
+
 static void policy_apply_defaults(void)
 {
     memset(&s_policy, 0, sizeof(s_policy));
     /* Open until packs / adapters.json inject uuid_filters. */
     s_policy.filter_count = 0;
     s_policy.accept_all_uuid = true;
-    static const uint16_t k_default_binds[] = {
-        ESP_BLE_MESH_MODEL_ID_GEN_ONOFF_SRV,
-        ESP_BLE_MESH_MODEL_ID_GEN_LEVEL_SRV,
-        ESP_BLE_MESH_MODEL_ID_LIGHT_LIGHTNESS_SRV,
-        ESP_BLE_MESH_MODEL_ID_LIGHT_CTL_SRV,
-    };
-    for (size_t i = 0; i < ARRAY_SIZE(k_default_binds); i++) {
-        s_policy.bind_models[i].model_id = k_default_binds[i];
-        s_policy.bind_models[i].company_id = MINIHUB_BM_CID_SIG;
-    }
-    s_policy.bind_model_count = ARRAY_SIZE(k_default_binds);
+    s_policy.bind_model_count = map_bind_models(s_policy.bind_models,
+                                                 MINIHUB_BM_BIND_MODEL_MAX);
 }
 
 esp_err_t ble_mesh_stack_set_provision_policy(const minihub_bm_provision_policy_t *policy)
@@ -171,19 +198,30 @@ esp_err_t ble_mesh_stack_set_provision_policy(const minihub_bm_provision_policy_
         return ESP_ERR_INVALID_ARG;
     }
     s_policy = *policy;
-    if (s_policy.bind_model_count == 0) {
-        static const uint16_t k_default_binds[] = {
-            ESP_BLE_MESH_MODEL_ID_GEN_ONOFF_SRV,
-            ESP_BLE_MESH_MODEL_ID_GEN_LEVEL_SRV,
-            ESP_BLE_MESH_MODEL_ID_LIGHT_LIGHTNESS_SRV,
-            ESP_BLE_MESH_MODEL_ID_LIGHT_CTL_SRV,
-        };
-        for (size_t i = 0; i < ARRAY_SIZE(k_default_binds); i++) {
-            s_policy.bind_models[i].model_id = k_default_binds[i];
-            s_policy.bind_models[i].company_id = MINIHUB_BM_CID_SIG;
-        }
-        s_policy.bind_model_count = ARRAY_SIZE(k_default_binds);
+    /* The map owns the models the Host binds; a policy (adapters.json or a
+     * pack) adds to that list instead of replacing it. The map models come
+     * first so a full policy list cannot push them out of the bind set. */
+    minihub_bm_bind_model_t map_models[MINIHUB_BM_BIND_MODEL_MAX];
+    size_t map_count = map_bind_models(map_models, ARRAY_SIZE(map_models));
+    minihub_bm_bind_model_t merged[MINIHUB_BM_BIND_MODEL_MAX];
+    size_t merged_count = 0;
+    for (size_t i = 0; i < map_count; i++) {
+        merged[merged_count++] = map_models[i];
     }
+    for (size_t i = 0; i < s_policy.bind_model_count; i++) {
+        bool known = false;
+        for (size_t j = 0; j < merged_count; j++) {
+            if (merged[j].model_id == s_policy.bind_models[i].model_id) {
+                known = true;
+                break;
+            }
+        }
+        if (!known && merged_count < MINIHUB_BM_BIND_MODEL_MAX) {
+            merged[merged_count++] = s_policy.bind_models[i];
+        }
+    }
+    memcpy(s_policy.bind_models, merged, sizeof(merged));
+    s_policy.bind_model_count = merged_count;
     s_policy_set = true;
     ESP_LOGI(TAG, "provision policy: filters=%u accept_all=%d bind_models=%u%s",
              (unsigned)s_policy.filter_count, (int)s_policy.accept_all_uuid,
@@ -226,6 +264,8 @@ static esp_ble_mesh_client_t s_onoff_client;
 static esp_ble_mesh_client_t s_level_client;
 static esp_ble_mesh_client_t s_lightness_client;
 static esp_ble_mesh_client_t s_ctl_client;
+static esp_ble_mesh_client_t s_hsl_client;
+static esp_ble_mesh_client_t s_sensor_client;
 
 static esp_ble_mesh_cfg_srv_t s_config_server = {
     .net_transmit = ESP_BLE_MESH_TRANSMIT(2, 20),
@@ -253,11 +293,50 @@ static esp_ble_mesh_model_t s_root_models[] = {
     ESP_BLE_MESH_MODEL_GEN_LEVEL_CLI(NULL, &s_level_client),
     ESP_BLE_MESH_MODEL_LIGHT_LIGHTNESS_CLI(NULL, &s_lightness_client),
     ESP_BLE_MESH_MODEL_LIGHT_CTL_CLI(NULL, &s_ctl_client),
+    ESP_BLE_MESH_MODEL_LIGHT_HSL_CLI(NULL, &s_hsl_client),
+    ESP_BLE_MESH_MODEL_SENSOR_CLI(NULL, &s_sensor_client),
 };
 
 static esp_ble_mesh_elem_t s_elements[] = {
     ESP_BLE_MESH_ELEMENT(0, s_root_models, ESP_BLE_MESH_MODEL_NONE),
 };
+
+/**
+ * The client models the app key has to be bound to: the ones the map pairs
+ * with a server model and that this element actually carries.
+ */
+static size_t map_local_client_models(uint16_t *out, size_t max)
+{
+    size_t n = 0;
+    size_t models = minihub_bm_model_count();
+    for (size_t i = 0; i < models && n < max; i++) {
+        const minihub_bm_map_model_t *m = minihub_bm_model_at(i);
+        if (!m || !m->client_id) {
+            continue;
+        }
+        bool carried = false;
+        for (size_t r = 0; r < ARRAY_SIZE(s_root_models); r++) {
+            if (s_root_models[r].model_id == m->client_id) {
+                carried = true;
+                break;
+            }
+        }
+        if (!carried) {
+            continue;
+        }
+        bool seen = false;
+        for (size_t k = 0; k < n; k++) {
+            if (out[k] == m->client_id) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen) {
+            out[n++] = m->client_id;
+        }
+    }
+    return n;
+}
 
 static esp_ble_mesh_comp_t s_composition = {
     .cid = CID_ESP,
@@ -362,9 +441,25 @@ static void notify_device_ready(const node_info_t *node)
     if (!node || !s_on_device) {
         return;
     }
-    uint8_t caps = node->caps ? node->caps : MINIHUB_BM_CAP_ONOFF;
+    uint16_t caps = node->caps;
+    const char *type = minihub_bm_classify(caps, node->props, node->prop_count);
+    if (!type) {
+        if ((caps & MINIHUB_BM_CAP_SENSOR) && node->prop_count == 0) {
+            /* A sensor node is typed by the properties it reports, so it waits
+             * for its descriptor instead of being written off as unknown. */
+            ESP_LOGI(TAG, "node 0x%04x: sensor node, waiting for the descriptor",
+                     node->unicast);
+            return;
+        }
+        /* D4a: an unmatched node gets no point — it must not masquerade as a
+         * controllable switch. It stays in s_nodes so a later re-classify can
+         * still find it. */
+        s_unclassified_nodes++;
+        ESP_LOGW(TAG, "node 0x%04x: no classify rule (caps=0x%04x), not registered (unclassified=%u)",
+                 node->unicast, caps, (unsigned)s_unclassified_nodes);
+        return;
+    }
     minihub_ble_mesh_device_t dev = {0};
-    const char *type = minihub_bm_classify_type(caps);
     strncpy(dev.type, type, sizeof(dev.type) - 1);
     (void)minihub_bm_format_point_id(dev.point_id, sizeof(dev.point_id), node->unicast);
     (void)minihub_bm_uuid_to_hex(node->uuid, dev.uuid_hex, sizeof(dev.uuid_hex));
@@ -374,6 +469,14 @@ static void notify_device_ready(const node_info_t *node)
     dev.cid = node->cid;
     dev.pid = node->pid;
     dev.vid = node->vid;
+    dev.prop_count = node->prop_count;
+    for (size_t i = 0; i < node->prop_count && i < MINIHUB_BM_MAX_PROPS; i++) {
+        dev.props[i] = node->props[i];
+    }
+    dev.bind_count = node->bind_count;
+    for (size_t i = 0; i < node->bind_count && i < MINIHUB_BM_BIND_MODEL_MAX; i++) {
+        dev.binds[i] = node->binds[i];
+    }
     s_on_device(&dev, s_cb_ctx);
 }
 
@@ -390,20 +493,13 @@ static void notify_onoff(uint16_t unicast, bool on)
     s_on_attr(&evt, s_cb_ctx);
 }
 
-static uint8_t model_id_to_cap(uint16_t model_id)
+static uint16_t model_id_to_cap(uint16_t model_id)
 {
-    switch (model_id) {
-    case ESP_BLE_MESH_MODEL_ID_GEN_ONOFF_SRV:
-        return MINIHUB_BM_CAP_ONOFF;
-    case ESP_BLE_MESH_MODEL_ID_GEN_LEVEL_SRV:
-        return MINIHUB_BM_CAP_LEVEL;
-    case ESP_BLE_MESH_MODEL_ID_LIGHT_LIGHTNESS_SRV:
-        return MINIHUB_BM_CAP_LIGHTNESS;
-    case ESP_BLE_MESH_MODEL_ID_LIGHT_CTL_SRV:
-        return (uint8_t)(MINIHUB_BM_CAP_CTL | MINIHUB_BM_CAP_LIGHTNESS);
-    default:
+    uint16_t caps = 0;
+    if (!minihub_bm_model_cap(model_id, &caps, NULL)) {
         return 0;
     }
+    return caps;
 }
 
 static bool policy_wants_model(uint16_t model_id)
@@ -542,31 +638,196 @@ static esp_err_t send_model_app_bind(node_info_t *node)
     return send_model_app_bind_at(node, s_bind_model_idx);
 }
 
+/** Ask a node which sensors it carries: the descriptor names the property ids. */
+static esp_err_t send_sensor_descriptor_get(node_info_t *node)
+{
+    esp_ble_mesh_client_common_param_t common = {0};
+    esp_ble_mesh_sensor_client_get_state_t get_state = {0};
+    set_msg_common(&common, node, s_sensor_client.model, ESP_BLE_MESH_MODEL_OP_SENSOR_DESCRIPTOR_GET);
+    get_state.descriptor_get.op_en = false;
+    esp_err_t err = esp_ble_mesh_sensor_client_get_state(&common, &get_state);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Sensor Descriptor Get failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    return ESP_OK;
+}
+
+/** Ask a node for the sensor values it currently holds. */
+static esp_err_t send_sensor_get(node_info_t *node)
+{
+    esp_ble_mesh_client_common_param_t common = {0};
+    esp_ble_mesh_sensor_client_get_state_t get_state = {0};
+    set_msg_common(&common, node, s_sensor_client.model, ESP_BLE_MESH_MODEL_OP_SENSOR_GET);
+    get_state.sensor_get.op_en = false;
+    esp_err_t err = esp_ble_mesh_sensor_client_get_state(&common, &get_state);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Sensor Get failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    return ESP_OK;
+}
+
+/* One Publication Set at a time: the config client answers a second outstanding
+ * acknowledged message to the same node with -EBUSY, so a loop over the models
+ * would configure only the first one. */
+static esp_err_t send_model_pub_set_at(node_info_t *node, size_t idx)
+{
+    const minihub_bm_report_t *rep = minihub_bm_report();
+    if (!node || idx >= s_bind_job_count) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    const bind_job_t *job = &s_bind_jobs[idx];
+    esp_ble_mesh_client_common_param_t common = {0};
+    esp_ble_mesh_cfg_client_set_state_t set_state = {0};
+    set_msg_common(&common, node, s_config_client.model, ESP_BLE_MESH_MODEL_OP_MODEL_PUB_SET);
+    set_state.model_pub_set.element_addr = job->elem_addr;
+    set_state.model_pub_set.publish_addr = rep->group;
+    set_state.model_pub_set.publish_app_idx = s_prov_key.app_idx;
+    set_state.model_pub_set.cred_flag = false;
+    set_state.model_pub_set.publish_ttl = rep->ttl;
+    set_state.model_pub_set.publish_period = s_pub_no_period ? 0 : rep->period_octet;
+    /* The macro's interval field is (ms / 50) - 1, so a zero count must not
+     * go through it. */
+    set_state.model_pub_set.publish_retransmit = rep->retransmit_count
+        ? ESP_BLE_MESH_PUBLISH_TRANSMIT(rep->retransmit_count, rep->retransmit_ms)
+        : 0;
+    set_state.model_pub_set.model_id = job->model_id;
+    set_state.model_pub_set.company_id =
+        (job->company_id == MINIHUB_BM_CID_SIG) ? ESP_BLE_MESH_CID_NVAL : job->company_id;
+    int err = esp_ble_mesh_config_client_set_state(&common, &set_state);
+    if (err) {
+        ESP_LOGW(TAG, "pub set model 0x%04x elem 0x%04x -> 0x%04x: %d",
+                 job->model_id, job->elem_addr, rep->group, err);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+static void configure_status_reporting(node_info_t *node)
+{
+    const minihub_bm_report_t *rep = minihub_bm_report();
+    if (!rep->enabled || !ESP_BLE_MESH_ADDR_IS_GROUP(rep->group)) {
+        return;
+    }
+    s_pub_model_idx = 0;
+    s_pub_no_period = false;
+    s_pub_retries = 0;
+    if (s_bind_job_count == 0) {
+        return;
+    }
+    ESP_LOGI(TAG, "publication: %u server model(s) of 0x%04x -> group 0x%04x period 0x%02x",
+             (unsigned)s_bind_job_count, node->unicast, (unsigned)rep->group,
+             (unsigned)rep->period_octet);
+    (void)send_model_pub_set_at(node, 0);
+}
+
+static void advance_status_reporting(node_info_t *node)
+{
+    s_pub_model_idx++;
+    s_pub_no_period = false;
+    s_pub_retries = 0;
+    if (s_pub_model_idx < s_bind_job_count) {
+        (void)send_model_pub_set_at(node, s_pub_model_idx);
+        return;
+    }
+    ESP_LOGI(TAG, "publication finished on 0x%04x (%u server model(s))",
+             (unsigned)s_bind_job_count, node->unicast);
+}
+
+static void snapshot_bind_jobs(node_info_t *node)
+{
+    if (!node) {
+        return;
+    }
+    node->bind_count = 0;
+    for (size_t i = 0; i < s_bind_job_count && i < MINIHUB_BM_BIND_MODEL_MAX; i++) {
+        node->binds[node->bind_count].model_id = s_bind_jobs[i].model_id;
+        node->binds[node->bind_count].elem_addr = s_bind_jobs[i].elem_addr;
+        node->bind_count++;
+    }
+}
+
+/**
+ * Ask every bound model that declares a Get for its state. The point registers
+ * with the map's init values, so a model that is never asked leaves the UI
+ * showing a default as if the node had reported it. Each client model owns its
+ * own outstanding-message queue, so these go back to back.
+ */
+static void read_back_bound_state(node_info_t *node, const minihub_bm_bound_model_t *binds,
+                                  size_t bind_count)
+{
+    if (!node || !binds || bind_count == 0) {
+        return;
+    }
+    size_t sent = 0;
+    bool bound_sensor = false;
+    for (size_t i = 0; i < bind_count; i++) {
+        const minihub_bm_bound_model_t *job = &binds[i];
+        if (job->model_id == ESP_BLE_MESH_MODEL_ID_SENSOR_SRV) {
+            bound_sensor = true;
+        }
+        const minihub_bm_map_model_t *m = minihub_bm_model_by_id(job->model_id);
+        if (!m || !m->get_opcode || !m->client_id) {
+            continue;
+        }
+        esp_ble_mesh_model_t *client = NULL;
+        for (size_t r = 0; r < ARRAY_SIZE(s_root_models); r++) {
+            if (s_root_models[r].model_id == m->client_id) {
+                client = &s_root_models[r];
+                break;
+            }
+        }
+        if (!client || !client->user_data) {
+            continue;
+        }
+        esp_ble_mesh_client_common_param_t common = {0};
+        esp_ble_mesh_generic_client_get_state_t generic_get = {0};
+        set_msg_common(&common, node, client, m->get_opcode);
+        common.ctx.addr = job->elem_addr;
+        bool lighting = client->user_data == &s_lightness_client ||
+                        client->user_data == &s_ctl_client ||
+                        client->user_data == &s_hsl_client;
+        int err = lighting ? esp_ble_mesh_light_client_get_state(&common, NULL)
+                           : esp_ble_mesh_generic_client_get_state(&common, &generic_get);
+        if (err) {
+            ESP_LOGW(TAG, "state get model 0x%04x elem 0x%04x op=0x%04x: %d",
+                     job->model_id, job->elem_addr, (unsigned)m->get_opcode, err);
+            continue;
+        }
+        sent++;
+    }
+    ESP_LOGI(TAG, "state read-back: %u Get(s) sent to 0x%04x", (unsigned)sent, node->unicast);
+    /* First provision: Descriptor fills props then sends Sensor Get. Reboot:
+     * props were restored from NVS — Get values without another Descriptor. */
+    if ((bound_sensor || (node->caps & MINIHUB_BM_CAP_SENSOR)) && node->prop_count > 0) {
+        (void)send_sensor_get(node);
+    }
+}
+
 static void finish_model_binds(node_info_t *node)
 {
     s_cfg_pending_unicast = 0;
+    snapshot_bind_jobs(node);
     ESP_LOGI(TAG, "model binds complete on 0x%04x (%u jobs) caps=0x%02x",
-             node->unicast, (unsigned)s_bind_job_count, node->caps);
+             node->unicast, (unsigned)node->bind_count, node->caps);
     notify_device_ready(node);
 
-    bool bound_onoff = false;
-    for (size_t i = 0; i < s_bind_job_count; i++) {
-        if (s_bind_jobs[i].model_id == ESP_BLE_MESH_MODEL_ID_GEN_ONOFF_SRV) {
-            bound_onoff = true;
-            break;
+    read_back_bound_state(node, node->binds, node->bind_count);
+
+    bool bound_sensor = false;
+    for (size_t i = 0; i < node->bind_count; i++) {
+        if (node->binds[i].model_id == ESP_BLE_MESH_MODEL_ID_SENSOR_SRV) {
+            bound_sensor = true;
         }
     }
-    if (!bound_onoff) {
-        return;
+    if (bound_sensor) {
+        /* The property ids decide the device type, so the node is registered
+         * only once its descriptor arrives. */
+        ESP_LOGI(TAG, "Sensor Server bound on 0x%04x", node->unicast);
+        (void)send_sensor_descriptor_get(node);
     }
-    ESP_LOGI(TAG, "OnOff Server bound on 0x%04x", node->unicast);
-    esp_ble_mesh_client_common_param_t common = {0};
-    esp_ble_mesh_generic_client_get_state_t get_state = {0};
-    set_msg_common(&common, node, s_onoff_client.model, ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_GET);
-    int err = esp_ble_mesh_generic_client_get_state(&common, &get_state);
-    if (err) {
-        ESP_LOGW(TAG, "OnOff Get failed: %d", err);
-    }
+    configure_status_reporting(node);
 }
 
 static void schedule_cfg_timer(int action, int64_t delay_us);
@@ -574,12 +835,8 @@ static void schedule_cfg_timer(int action, int64_t delay_us);
 /** Bind AppKey to local client models — required after every boot for OnOff Set. */
 static esp_err_t bind_local_client_models(void)
 {
-    static const uint16_t k_local_binds[] = {
-        ESP_BLE_MESH_MODEL_ID_GEN_ONOFF_CLI,
-        ESP_BLE_MESH_MODEL_ID_GEN_LEVEL_CLI,
-        ESP_BLE_MESH_MODEL_ID_LIGHT_LIGHTNESS_CLI,
-        ESP_BLE_MESH_MODEL_ID_LIGHT_CTL_CLI,
-    };
+    uint16_t local_binds[MINIHUB_BM_BIND_MODEL_MAX];
+    size_t local_bind_count = map_local_client_models(local_binds, ARRAY_SIZE(local_binds));
     if (!s_bind_gate) {
         s_bind_gate = xSemaphoreCreateCounting(16, 0);
     }
@@ -592,11 +849,11 @@ static esp_err_t bind_local_client_models(void)
     s_bind_comp_err = 0;
 
     size_t queued = 0;
-    for (size_t i = 0; i < ARRAY_SIZE(k_local_binds); i++) {
+    for (size_t i = 0; i < local_bind_count; i++) {
         esp_err_t err = esp_ble_mesh_provisioner_bind_app_key_to_local_model(
-            PROV_OWN_ADDR, s_prov_key.app_idx, k_local_binds[i], ESP_BLE_MESH_CID_NVAL);
+            PROV_OWN_ADDR, s_prov_key.app_idx, local_binds[i], ESP_BLE_MESH_CID_NVAL);
         if (err != ESP_OK) {
-            ESP_LOGW(TAG, "bind local model 0x%04x queue: %s", k_local_binds[i],
+            ESP_LOGW(TAG, "bind local model 0x%04x queue: %s", local_binds[i],
                      esp_err_to_name(err));
             continue;
         }
@@ -613,6 +870,31 @@ static esp_err_t bind_local_client_models(void)
     }
     ESP_LOGI(TAG, "local client models bound to app_idx=%u (%u)", (unsigned)s_prov_key.app_idx,
              (unsigned)queued);
+    /* The binding is persisted and provisioner disable does not drop it, so a
+     * clean pass is needed only once; anything short of it is retried on the next TX. */
+    s_local_models_bound = (queued == local_bind_count && s_bind_comp_err == 0);
+
+    /* A published Status is delivered only to models subscribed to its group, so
+     * the listener has to be in place before any node publishes anything. */
+    const minihub_bm_report_t *rep = minihub_bm_report();
+    if (rep->enabled) {
+        if (!ESP_BLE_MESH_ADDR_IS_GROUP(rep->group)) {
+            ESP_LOGW(TAG, "report group 0x%04x is not a group address — reporting stays off",
+                     (unsigned)rep->group);
+        } else {
+            for (size_t i = 0; i < local_bind_count; i++) {
+                esp_err_t serr = esp_ble_mesh_model_subscribe_group_addr(
+                    PROV_OWN_ADDR, ESP_BLE_MESH_CID_NVAL, local_binds[i], rep->group);
+                if (serr != ESP_OK) {
+                    ESP_LOGW(TAG, "subscribe local model 0x%04x to 0x%04x: %s",
+                             (unsigned)local_binds[i], (unsigned)rep->group,
+                             esp_err_to_name(serr));
+                }
+            }
+            ESP_LOGI(TAG, "local client models subscribed to status group 0x%04x",
+                     (unsigned)rep->group);
+        }
+    }
     return ESP_OK;
 }
 
@@ -785,12 +1067,167 @@ static esp_err_t mesh_prepare_tx(void)
         return err;
     }
     /* Bind is async (BTC); wait for COMP or OnOff fails with EINVAL (-22). */
-    err = bind_local_client_models();
-    if (err != ESP_OK) {
-        return err;
+    if (!s_local_models_bound) {
+        err = bind_local_client_models();
+        if (err != ESP_OK) {
+            return err;
+        }
     }
     coex_mesh_traffic();
     return ESP_OK;
+}
+
+/*
+ * Control Sets over the ADV bearer get no link-layer retry: a lost packet is a
+ * lost command. Each Set is therefore repeated as the Unack opcode with the
+ * same TID. A server drops a message whose (src, dst, TID) matches the last one
+ * it handled within 6 s, so a repeat that follows a
+ * delivered Set changes nothing, and one that follows a lost Set applies it.
+ * A newer Set of the same kind to the same node replaces the pending repeats,
+ * so a stale value is never replayed over it. Repeats stay inside the 1.5 s
+ * TRAFFIC coex window opened by mesh_prepare_tx().
+ */
+#define TX_REPEAT_COUNT       2
+#define TX_REPEAT_INTERVAL_US (150 * 1000LL)
+#define TX_REPEAT_TICK_US     (50 * 1000LL)
+#define TX_REPEAT_SLOTS       8
+
+typedef struct {
+    bool used;
+    bool light; /* light client API vs generic client API */
+    uint8_t left;
+    int64_t due_us;
+    esp_ble_mesh_client_common_param_t common;
+    union {
+        esp_ble_mesh_generic_client_set_state_t gen;
+        esp_ble_mesh_light_client_set_state_t light;
+    } set;
+} tx_repeat_t;
+
+static tx_repeat_t s_tx_repeat[TX_REPEAT_SLOTS];
+static portMUX_TYPE s_tx_repeat_lock = portMUX_INITIALIZER_UNLOCKED;
+static esp_timer_handle_t s_tx_repeat_timer;
+
+static uint32_t tx_unack_opcode(uint32_t opcode)
+{
+    switch (opcode) {
+    case ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_SET:
+        return ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_SET_UNACK;
+    case ESP_BLE_MESH_MODEL_OP_GEN_LEVEL_SET:
+        return ESP_BLE_MESH_MODEL_OP_GEN_LEVEL_SET_UNACK;
+    case ESP_BLE_MESH_MODEL_OP_LIGHT_LIGHTNESS_SET:
+        return ESP_BLE_MESH_MODEL_OP_LIGHT_LIGHTNESS_SET_UNACK;
+    case ESP_BLE_MESH_MODEL_OP_LIGHT_CTL_SET:
+        return ESP_BLE_MESH_MODEL_OP_LIGHT_CTL_SET_UNACK;
+    case ESP_BLE_MESH_MODEL_OP_LIGHT_HSL_SET:
+        return ESP_BLE_MESH_MODEL_OP_LIGHT_HSL_SET_UNACK;
+    default:
+        return opcode;
+    }
+}
+
+static void tx_repeat_timer_cb(void *arg)
+{
+    (void)arg;
+    tx_repeat_t due[TX_REPEAT_SLOTS];
+    size_t n_due = 0;
+    bool pending = false;
+    int64_t now = esp_timer_get_time();
+
+    portENTER_CRITICAL(&s_tx_repeat_lock);
+    for (size_t i = 0; i < TX_REPEAT_SLOTS; i++) {
+        tx_repeat_t *r = &s_tx_repeat[i];
+        if (!r->used) {
+            continue;
+        }
+        if (now >= r->due_us) {
+            due[n_due++] = *r;
+            if (--r->left == 0) {
+                r->used = false;
+                continue;
+            }
+            r->due_us = now + TX_REPEAT_INTERVAL_US;
+        }
+        pending = true;
+    }
+    if (!pending) {
+        (void)esp_timer_stop(s_tx_repeat_timer);
+    }
+    portEXIT_CRITICAL(&s_tx_repeat_lock);
+
+    for (size_t i = 0; i < n_due; i++) {
+        esp_err_t err = due[i].light
+                            ? esp_ble_mesh_light_client_set_state(&due[i].common, &due[i].set.light)
+                            : esp_ble_mesh_generic_client_set_state(&due[i].common, &due[i].set.gen);
+        if (err != ESP_OK) {
+            ESP_LOGD(TAG, "repeat 0x%04" PRIx32 " -> 0x%04x: %s", due[i].common.opcode,
+                     due[i].common.ctx.addr, esp_err_to_name(err));
+        }
+    }
+}
+
+static void tx_repeat_queue(const esp_ble_mesh_client_common_param_t *common, const void *set,
+                            bool light)
+{
+    if (!s_tx_repeat_timer) {
+        const esp_timer_create_args_t args = {
+            .callback = &tx_repeat_timer_cb,
+            .name = "bm_tx_repeat",
+        };
+        if (esp_timer_create(&args, &s_tx_repeat_timer) != ESP_OK) {
+            s_tx_repeat_timer = NULL;
+            return;
+        }
+    }
+
+    tx_repeat_t r = {
+        .used = true,
+        .light = light,
+        .left = TX_REPEAT_COUNT,
+        .due_us = esp_timer_get_time() + TX_REPEAT_INTERVAL_US,
+        .common = *common,
+    };
+    r.common.opcode = tx_unack_opcode(common->opcode);
+    if (light) {
+        r.set.light = *(const esp_ble_mesh_light_client_set_state_t *)set;
+    } else {
+        r.set.gen = *(const esp_ble_mesh_generic_client_set_state_t *)set;
+    }
+
+    portENTER_CRITICAL(&s_tx_repeat_lock);
+    size_t slot = TX_REPEAT_SLOTS;
+    size_t soonest = 0;
+    for (size_t i = 0; i < TX_REPEAT_SLOTS; i++) {
+        tx_repeat_t *cur = &s_tx_repeat[i];
+        if (cur->used && cur->common.ctx.addr == r.common.ctx.addr &&
+            cur->common.opcode == r.common.opcode) {
+            slot = i;
+            break;
+        }
+        if (slot == TX_REPEAT_SLOTS && !cur->used) {
+            slot = i;
+        }
+        if (cur->left < s_tx_repeat[soonest].left) {
+            soonest = i;
+        }
+    }
+    /* All slots busy with other nodes: drop the one closest to finishing. */
+    s_tx_repeat[slot < TX_REPEAT_SLOTS ? slot : soonest] = r;
+    if (!esp_timer_is_active(s_tx_repeat_timer)) {
+        (void)esp_timer_start_periodic(s_tx_repeat_timer, TX_REPEAT_TICK_US);
+    }
+    portEXIT_CRITICAL(&s_tx_repeat_lock);
+}
+
+static void tx_repeat_cancel_all(void)
+{
+    if (!s_tx_repeat_timer) {
+        return;
+    }
+    portENTER_CRITICAL(&s_tx_repeat_lock);
+    memset(s_tx_repeat, 0, sizeof(s_tx_repeat));
+    (void)esp_timer_stop(s_tx_repeat_timer);
+    portEXIT_CRITICAL(&s_tx_repeat_lock);
 }
 
 bool ble_mesh_stack_rf_critical(void)
@@ -1385,9 +1822,8 @@ static void config_client_cb(esp_ble_mesh_cfg_client_cb_event_t event,
                 for (size_t i = 0; i < s_policy.bind_model_count; i++) {
                     bind_job_add(node->unicast, s_policy.bind_models[i].model_id);
                 }
-                if (!node->caps) {
-                    node->caps = MINIHUB_BM_CAP_ONOFF;
-                }
+                /* Unknown caps stay zero: classify decides, and an unclassifiable
+                 * node must not masquerade as a controllable switch. */
             }
             ESP_LOGI(TAG, "Composition Data ok, AppKey Add -> 0x%04x", node->unicast);
             (void)send_app_key_add(node);
@@ -1418,10 +1854,45 @@ static void config_client_cb(esp_ble_mesh_cfg_client_cb_event_t event,
             } else {
                 finish_model_binds(node);
             }
+        } else if (opcode == ESP_BLE_MESH_MODEL_OP_MODEL_PUB_SET) {
+            const esp_ble_mesh_cfg_model_pub_status_cb_t *st = &param->status_cb.model_pub_status;
+            s_pub_retries = 0;
+            if (st->status == ESP_BLE_MESH_CFG_STATUS_SUCCESS) {
+                advance_status_reporting(node);
+            } else if (st->status == ESP_BLE_MESH_CFG_STATUS_INVALID_PUBLISH_PARAMETERS &&
+                       !s_pub_no_period) {
+                /* A model whose publish-update callback is absent rejects a
+                 * non-zero period outright; without one it still publishes on
+                 * every state change, which is the half that matters. */
+                ESP_LOGW(TAG, "pub set model 0x%04x refused the period — retrying without one",
+                         st->model_id);
+                s_pub_no_period = true;
+                (void)send_model_pub_set_at(node, s_pub_model_idx);
+            } else {
+                ESP_LOGW(TAG, "pub set model 0x%04x elem 0x%04x status 0x%02x — model skipped",
+                         st->model_id, st->element_addr, st->status);
+                advance_status_reporting(node);
+            }
         }
         break;
 
     case ESP_BLE_MESH_CFG_CLIENT_TIMEOUT_EVT:
+        if (opcode == ESP_BLE_MESH_MODEL_OP_MODEL_PUB_SET) {
+            /* Reporting is optional: a node that stops answering here keeps its
+             * provisioning and its binds, unlike the binding path below. */
+            if (s_pub_retries >= PUB_TIMEOUT_RETRIES_MAX) {
+                ESP_LOGW(TAG,
+                         "publication: node 0x%04x stopped answering at model %u/%u"
+                         " — reporting left partly configured",
+                         node->unicast, (unsigned)(s_pub_model_idx + 1),
+                         (unsigned)s_bind_job_count);
+                break;
+            }
+            s_pub_retries++;
+            ESP_LOGW(TAG, "pub set timeout retry %u/%u", s_pub_retries, PUB_TIMEOUT_RETRIES_MAX);
+            (void)send_model_pub_set_at(node, s_pub_model_idx);
+            break;
+        }
         if (s_cfg_timeout_retries >= CFG_TIMEOUT_RETRIES_MAX) {
             ESP_LOGE(TAG,
                      "config timeout exhausted op=0x%04" PRIx32
@@ -1547,6 +2018,80 @@ static void light_client_cb(esp_ble_mesh_light_client_cb_event_t event,
             .u.ctl.delta_uv = 0,
         };
         s_on_attr(&evt, s_cb_ctx);
+    } else if (opcode == ESP_BLE_MESH_MODEL_OP_LIGHT_HSL_GET ||
+               opcode == ESP_BLE_MESH_MODEL_OP_LIGHT_HSL_SET ||
+               opcode == ESP_BLE_MESH_MODEL_OP_LIGHT_HSL_STATUS) {
+        minihub_ble_mesh_attr_evt_t evt = {
+            .unicast = node->unicast,
+            .kind = MINIHUB_BM_ATTR_HSL,
+            .u.hsl.lightness = param->status_cb.hsl_status.hsl_lightness,
+            .u.hsl.hue = param->status_cb.hsl_status.hsl_hue,
+            .u.hsl.saturation = param->status_cb.hsl_status.hsl_saturation,
+        };
+        s_on_attr(&evt, s_cb_ctx);
+    }
+}
+
+static void sensor_client_cb(esp_ble_mesh_sensor_client_cb_event_t event,
+                             esp_ble_mesh_sensor_client_cb_param_t *param)
+{
+    (void)event;
+    if (!param || !param->params) {
+        return;
+    }
+    if (param->error_code != 0) {
+        ESP_LOGW(TAG, "sensor client err=%d op=0x%04" PRIx32 " addr=0x%04x", param->error_code,
+                 param->params->opcode, param->params->ctx.addr);
+        return;
+    }
+    node_info_t *node = get_node_info(param->params->ctx.addr);
+    if (!node) {
+        return;
+    }
+    uint32_t opcode = param->params->opcode;
+    if (opcode == ESP_BLE_MESH_MODEL_OP_SENSOR_DESCRIPTOR_STATUS) {
+        const struct net_buf_simple *desc = param->status_cb.descriptor_status.descriptor;
+        uint16_t ids[MINIHUB_BM_MAX_PROPS];
+        size_t n = minihub_bm_descriptor_props(desc ? desc->data : NULL,
+                                               desc ? desc->len : 0, ids, ARRAY_SIZE(ids));
+        node->prop_count = n;
+        for (size_t i = 0; i < n; i++) {
+            node->props[i] = ids[i];
+        }
+        ESP_LOGI(TAG, "node 0x%04x: descriptor lists %u propert(ies)", node->unicast,
+                 (unsigned)n);
+        /* The properties decide the type, so the node is registered now. */
+        notify_device_ready(node);
+        (void)send_sensor_get(node);
+        return;
+    }
+    if (opcode == ESP_BLE_MESH_MODEL_OP_SENSOR_STATUS) {
+        const struct net_buf_simple *data = param->status_cb.sensor_status.marshalled_sensor_data;
+        if (!data || !data->data || data->len == 0) {
+            return;
+        }
+        size_t off = 0;
+        minihub_bm_mpid_t mpid;
+        while (minihub_bm_mpid_next(data->data, data->len, &off, &mpid)) {
+            const minihub_bm_sensor_t *row = minihub_bm_sensor_by_property(mpid.property_id);
+            if (!row) {
+                continue;
+            }
+            double value = 0;
+            if (!minihub_bm_sensor_value(row, mpid.data, mpid.len, &value)) {
+                continue;
+            }
+            if (!s_on_attr) {
+                return;
+            }
+            minihub_ble_mesh_attr_evt_t evt = {
+                .unicast = node->unicast,
+                .kind = MINIHUB_BM_ATTR_SENSOR,
+                .u.sensor.property_id = mpid.property_id,
+                .u.sensor.value = value,
+            };
+            s_on_attr(&evt, s_cb_ctx);
+        }
     }
 }
 
@@ -1593,6 +2138,7 @@ esp_err_t ble_mesh_stack_start(void)
     esp_ble_mesh_register_config_client_callback(config_client_cb);
     esp_ble_mesh_register_generic_client_callback(generic_client_cb);
     esp_ble_mesh_register_light_client_callback(light_client_cb);
+    esp_ble_mesh_register_sensor_client_callback(sensor_client_cb);
 
     if (!s_cfg_delay_timer) {
         const esp_timer_create_args_t args = {
@@ -1689,6 +2235,7 @@ esp_err_t ble_mesh_stack_stop(void)
     if (s_cfg_delay_timer) {
         esp_timer_stop(s_cfg_delay_timer);
     }
+    tx_repeat_cancel_all();
     (void)prov_network_set(false);
     ESP_LOGI(TAG, "provisioner stopped (BT controller kept)");
     s_running = false;
@@ -1822,6 +2369,7 @@ esp_err_t ble_mesh_stack_onoff(uint16_t unicast, minihub_ble_mesh_onoff_cmd_t cm
         ESP_LOGE(TAG, "OnOff SetUnack failed: %s", esp_err_to_name(err));
         return err;
     }
+    tx_repeat_queue(&common, &set_state, false);
     node->onoff = onoff;
     notify_onoff(unicast, onoff != 0);
     return ESP_OK;
@@ -1846,7 +2394,11 @@ esp_err_t ble_mesh_stack_level(uint16_t unicast, int16_t level)
     set_state.level_set.op_en = false;
     set_state.level_set.level = level;
     set_state.level_set.tid = ++s_tid;
-    return esp_ble_mesh_generic_client_set_state(&common, &set_state);
+    err = esp_ble_mesh_generic_client_set_state(&common, &set_state);
+    if (err == ESP_OK) {
+        tx_repeat_queue(&common, &set_state, false);
+    }
+    return err;
 }
 
 esp_err_t ble_mesh_stack_lightness(uint16_t unicast, uint16_t lightness)
@@ -1868,7 +2420,11 @@ esp_err_t ble_mesh_stack_lightness(uint16_t unicast, uint16_t lightness)
     set_state.lightness_set.op_en = false;
     set_state.lightness_set.lightness = lightness;
     set_state.lightness_set.tid = ++s_tid;
-    return esp_ble_mesh_light_client_set_state(&common, &set_state);
+    err = esp_ble_mesh_light_client_set_state(&common, &set_state);
+    if (err == ESP_OK) {
+        tx_repeat_queue(&common, &set_state, true);
+    }
+    return err;
 }
 
 esp_err_t ble_mesh_stack_ctl(uint16_t unicast, uint16_t lightness, uint16_t temperature,
@@ -1898,7 +2454,39 @@ esp_err_t ble_mesh_stack_ctl(uint16_t unicast, uint16_t lightness, uint16_t temp
     set_state.ctl_set.ctl_temperature = temperature;
     set_state.ctl_set.ctl_delta_uv = delta_uv;
     set_state.ctl_set.tid = ++s_tid;
-    return esp_ble_mesh_light_client_set_state(&common, &set_state);
+    err = esp_ble_mesh_light_client_set_state(&common, &set_state);
+    if (err == ESP_OK) {
+        tx_repeat_queue(&common, &set_state, true);
+    }
+    return err;
+}
+
+esp_err_t ble_mesh_stack_hsl(uint16_t unicast, uint16_t hue, uint16_t saturation, uint16_t lightness)
+{
+    if (!s_running) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    node_info_t *node = get_node_info(unicast);
+    if (!node) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    esp_err_t err = mesh_prepare_tx();
+    if (err != ESP_OK) {
+        return err;
+    }
+    esp_ble_mesh_client_common_param_t common = {0};
+    esp_ble_mesh_light_client_set_state_t set_state = {0};
+    set_msg_common(&common, node, s_hsl_client.model, ESP_BLE_MESH_MODEL_OP_LIGHT_HSL_SET);
+    set_state.hsl_set.op_en = false;
+    set_state.hsl_set.hsl_lightness = lightness;
+    set_state.hsl_set.hsl_hue = hue;
+    set_state.hsl_set.hsl_saturation = saturation;
+    set_state.hsl_set.tid = ++s_tid;
+    err = esp_ble_mesh_light_client_set_state(&common, &set_state);
+    if (err == ESP_OK) {
+        tx_repeat_queue(&common, &set_state, true);
+    }
+    return err;
 }
 
 esp_err_t ble_mesh_stack_delete_node(uint16_t unicast)
@@ -1921,35 +2509,47 @@ esp_err_t ble_mesh_stack_delete_node(uint16_t unicast)
     return err == ESP_ERR_INVALID_STATE ? ESP_OK : err;
 }
 
-esp_err_t ble_mesh_stack_restore_node(const uint8_t uuid[16], uint16_t unicast, uint8_t elem_num,
-                                      uint8_t caps)
+esp_err_t ble_mesh_stack_restore_node(const minihub_ble_mesh_device_t *dev)
 {
-    if (!ESP_BLE_MESH_ADDR_IS_UNICAST(unicast)) {
+    if (!dev || !ESP_BLE_MESH_ADDR_IS_UNICAST(dev->unicast)) {
         return ESP_ERR_INVALID_ARG;
     }
     uint8_t uuid_buf[16] = {0};
-    if (uuid) {
-        memcpy(uuid_buf, uuid, 16);
+    if (dev->uuid_hex[0] && minihub_bm_hex_to_uuid(dev->uuid_hex, uuid_buf) != 0) {
+        ESP_LOGW(TAG, "restore 0x%04x: bad uuid, continuing by unicast", dev->unicast);
+        memset(uuid_buf, 0, sizeof(uuid_buf));
     }
-    if (elem_num == 0) {
-        elem_num = 1;
-    }
-    node_info_t *existing = get_node_info(unicast);
-    if (existing) {
-        existing->elem_num = elem_num;
-        existing->caps = caps ? caps : MINIHUB_BM_CAP_ONOFF;
-        if (uuid) {
-            memcpy(existing->uuid, uuid_buf, 16);
+    uint8_t elem_num = dev->elem_num ? dev->elem_num : 1;
+    node_info_t *node = get_node_info(dev->unicast);
+    if (!node) {
+        esp_err_t err = store_node_info(uuid_buf, dev->unicast, elem_num, 0);
+        if (err != ESP_OK) {
+            return err;
         }
-        return ESP_OK;
+        node = get_node_info(dev->unicast);
+        if (!node) {
+            return ESP_FAIL;
+        }
+    } else {
+        node->elem_num = elem_num;
+        memcpy(node->uuid, uuid_buf, 16);
     }
-    esp_err_t err = store_node_info(uuid_buf, unicast, elem_num, 0);
-    if (err != ESP_OK) {
-        return err;
+    node->caps = dev->caps;
+    node->cid = dev->cid;
+    node->pid = dev->pid;
+    node->vid = dev->vid;
+    node->prop_count = 0;
+    for (size_t i = 0; i < dev->prop_count && i < MINIHUB_BM_MAX_PROPS; i++) {
+        node->props[i] = dev->props[i];
+        node->prop_count++;
     }
-    node_info_t *node = get_node_info(unicast);
-    if (node) {
-        node->caps = caps ? caps : MINIHUB_BM_CAP_ONOFF;
+    node->bind_count = 0;
+    for (size_t i = 0; i < dev->bind_count && i < MINIHUB_BM_BIND_MODEL_MAX; i++) {
+        node->binds[i] = dev->binds[i];
+        node->bind_count++;
+    }
+    if (node->bind_count > 0 || node->prop_count > 0) {
+        read_back_bound_state(node, node->binds, node->bind_count);
     }
     return ESP_OK;
 }
@@ -2005,6 +2605,15 @@ esp_err_t ble_mesh_stack_lightness(uint16_t unicast, uint16_t lightness)
     (void)lightness;
     return ESP_ERR_NOT_SUPPORTED;
 }
+esp_err_t ble_mesh_stack_hsl(uint16_t unicast, uint16_t hue, uint16_t saturation, uint16_t lightness)
+{
+    (void)unicast;
+    (void)hue;
+    (void)saturation;
+    (void)lightness;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 esp_err_t ble_mesh_stack_ctl(uint16_t unicast, uint16_t lightness, uint16_t temperature,
                              int16_t delta_uv)
 {
@@ -2021,13 +2630,9 @@ esp_err_t ble_mesh_stack_delete_node(uint16_t unicast)
     return ESP_OK;
 }
 
-esp_err_t ble_mesh_stack_restore_node(const uint8_t uuid[16], uint16_t unicast, uint8_t elem_num,
-                                      uint8_t caps)
+esp_err_t ble_mesh_stack_restore_node(const minihub_ble_mesh_device_t *dev)
 {
-    (void)uuid;
-    (void)unicast;
-    (void)elem_num;
-    (void)caps;
+    (void)dev;
     return ESP_ERR_NOT_SUPPORTED;
 }
 

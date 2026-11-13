@@ -40,6 +40,26 @@ static cJSON *devices_to_json(const minihub_ble_mesh_device_t *devs, size_t coun
         cJSON_AddNumberToObject(obj, "cid", d->cid);
         cJSON_AddNumberToObject(obj, "pid", d->pid);
         cJSON_AddNumberToObject(obj, "vid", d->vid);
+        cJSON *props = cJSON_CreateArray();
+        if (props) {
+            for (size_t p = 0; p < d->prop_count && p < MINIHUB_BM_MAX_PROPS; p++) {
+                cJSON_AddNumberToObject(props, NULL, d->props[p]);
+            }
+            cJSON_AddItemToObject(obj, "props", props);
+        }
+        cJSON *binds = cJSON_CreateArray();
+        if (binds) {
+            for (size_t b = 0; b < d->bind_count && b < MINIHUB_BM_BIND_MODEL_MAX; b++) {
+                cJSON *row = cJSON_CreateObject();
+                if (!row) {
+                    break;
+                }
+                cJSON_AddNumberToObject(row, "model", d->binds[b].model_id);
+                cJSON_AddNumberToObject(row, "elem", d->binds[b].elem_addr);
+                cJSON_AddItemToArray(binds, row);
+            }
+            cJSON_AddItemToObject(obj, "binds", binds);
+        }
         cJSON_AddItemToArray(arr, obj);
     }
     return arr;
@@ -84,9 +104,11 @@ static esp_err_t devices_from_json(const cJSON *arr, minihub_ble_mesh_device_t *
             d->elem_num = 1;
         }
         if (cJSON_IsNumber(caps)) {
-            d->caps = (uint8_t)caps->valuedouble;
+            d->caps = (uint16_t)caps->valuedouble;
         } else {
-            d->caps = MINIHUB_BM_CAP_ONOFF;
+            /* No stored caps means unknown, not OnOff: classify decides, and an
+             * unclassifiable node must not masquerade as a controllable switch. */
+            d->caps = 0;
         }
         if (cJSON_IsNumber(cid)) {
             d->cid = (uint16_t)cid->valuedouble;
@@ -96,6 +118,35 @@ static esp_err_t devices_from_json(const cJSON *arr, minihub_ble_mesh_device_t *
         }
         if (cJSON_IsNumber(vid)) {
             d->vid = (uint16_t)vid->valuedouble;
+        }
+        const cJSON *props = cJSON_GetObjectItem(item, "props");
+        if (cJSON_IsArray(props)) {
+            const cJSON *pid = NULL;
+            cJSON_ArrayForEach(pid, props) {
+                if (d->prop_count >= MINIHUB_BM_MAX_PROPS) {
+                    break;
+                }
+                if (cJSON_IsNumber(pid)) {
+                    d->props[d->prop_count++] = (uint16_t)pid->valuedouble;
+                }
+            }
+        }
+        const cJSON *binds = cJSON_GetObjectItem(item, "binds");
+        if (cJSON_IsArray(binds)) {
+            const cJSON *row = NULL;
+            cJSON_ArrayForEach(row, binds) {
+                if (d->bind_count >= MINIHUB_BM_BIND_MODEL_MAX) {
+                    break;
+                }
+                const cJSON *model = cJSON_GetObjectItem(row, "model");
+                const cJSON *elem = cJSON_GetObjectItem(row, "elem");
+                if (!cJSON_IsNumber(model) || !cJSON_IsNumber(elem)) {
+                    continue;
+                }
+                d->binds[d->bind_count].model_id = (uint16_t)model->valuedouble;
+                d->binds[d->bind_count].elem_addr = (uint16_t)elem->valuedouble;
+                d->bind_count++;
+            }
         }
         n++;
     }

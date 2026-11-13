@@ -26,7 +26,7 @@ parameter renders (widget, label, bounds, CSS). Source of truth:
 |--------|---------|
 | `device_id` | Type id, e.g. `light`, `switch` |
 | `parameters` | Comma-separated parameter names |
-| `primary_param` | e.g. `power` |
+| `primary_param` | Parameter that summarises the type, e.g. `power` |
 | `mandatory_params` | Comma-separated mandatory names |
 | `image` | Optional device-icon file name under `images/devices/` |
 
@@ -148,6 +148,7 @@ See [`tools/README.md`](../../tools/README.md).
 #include "minihub_device_widget.h"
 
 const minihub_device_widget_device_t *d = minihub_device_widget_get("light");
+// d->primary_param is "power" — the parameter that summarises the type
 const minihub_device_widget_entry_t *e =
     minihub_device_widget_find("light", "brightness");
 

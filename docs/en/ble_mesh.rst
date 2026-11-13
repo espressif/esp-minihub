@@ -44,10 +44,126 @@ Enable in ``/data/config/adapters.json``:
 
 Set ``adapters.ble_mesh.enabled``. Provisioning policy lives under
 ``provision`` (``uuid_filters`` / ``bind_models``). Bound nodes are in
-``devices[]``. Entries with ``type`` ``sensor`` are skipped. Fields:
+``devices[]``. A declaration's ``models[]`` decide its capabilities when
+present; without them the ``type`` decides, through the parameters the
+capability map knows for that type. A declaration left with no known
+capability is skipped and logged. Fields:
 :ref:`adapters-JSON`. JSON packs may **merge** extra bind/filter defaults
 (demo ``examples/plugins/ble_mesh_pack``); they must not invent
 ``devices[]``.
+
+Capability map
+--------------
+
+Everything the adapter does with a node comes from one table:
+``components/minihub_ble_mesh/config/ble_mesh_map.json`` in the firmware
+image. It maps *model → capability → type → parameter → command*:
+
+* ``models[]`` — the Composition models the Hub understands, each with its
+  capability bit, the client model that talks to it, the ``get`` opcode that
+  reads its state back, and the names a ``devices[]`` declaration may use
+  (``cap`` and the published ``alias``)
+* ``classify[]`` — which capabilities and sensor properties make a node a
+  ``light``, a ``switch`` or a sensor type
+* ``params[]`` — the parameters a node exposes, with access and default value
+* ``controls[]`` — which Mesh message drives which parameter
+* ``sensors[]`` — how a sensor property is decoded: octet count, signedness,
+  scale, the "value unknown" sentinel and the catalog bounds
+
+The table decides the bind list, the client models the app key is bound to, the
+seeded parameters and the commands. Adding a device type is a JSON edit, not a
+firmware change. A policy in ``provision.bind_models`` does not replace that
+bind list: the Host binds every model the table knows **plus** the models the
+policy names, so a JSON pack can add a vendor model without dropping the
+built-in ones.
+
+An OEM can overlay the table without rebuilding: put a file of the same shape at
+``/store/preinstall/ble_mesh_map.json`` (modstore image) or
+``/data/config/ble_mesh_map.json`` (storage partition). A later file replaces
+the rows it names and leaves the other built-in rows alone.
+
+``tools/test_ble_mesh_map.py`` fails when the table drifts from the widget
+catalog, from the control fields the adapter looks up, from the model names the
+repo publishes, or from the Bluetooth SIG characteristic sizes it quotes.
+
+A node whose Composition matches no ``classify[]`` rule gets **no** point. It is
+logged and counted as unclassified, never registered as a controllable switch.
+
+Device types
+------------
+
+``light``
+   OnOff / Level / Lightness / CTL / HSL.
+
+``switch``
+   OnOff only.
+
+Not available over BLE Mesh:
+
+* ``intensity`` — the Mesh lighting models have no intensity path. The catalog
+  lists it for ``light``, but the Mesh adapter never seeds it and refuses a
+  write to it with ``ESP_ERR_NOT_SUPPORTED``.
+* ``sensor_contact`` / ``sensor_smoke`` / ``sensor_tamper`` / ``sensor_water`` /
+  ``pm25`` / ``speaker`` — the Bluetooth SIG defines no matching sensor
+  property and no audio model. Only a vendor model can carry them, and the map
+  table cannot invent one.
+* ``battery`` — the Generic Battery model is not in the map yet.
+
+State sync
+----------
+
+The Hub asks; nodes do not report. ``ble_mesh_adapter_poll()`` returns without
+doing anything, so the adapter poll task fetches nothing, and no client model
+subscribes to a group address, so a Status message a node publishes to a group is
+never received. State reaches a point at four moments: once when the model binds
+finish, with one Get per bound model whose ``models[]`` row declares a ``get``
+opcode, plus a Sensor Descriptor Get for a node carrying a Sensor Server; once
+after that descriptor answers -- it names the property ids, and a single Sensor
+Get with no property operand returns all of them; on every Set reply; and again
+when the Hub reboots, using the ``(model, elem)`` bind list saved with the
+device in NVS (a Sensor Server already listed in that store gets a Sensor Get,
+not another Descriptor). Every parameter the map marks readable has a Get behind
+it. Until a Get answers, a parameter shows the ``init`` value from the map, not
+a value the node reported. Devices provisioned before this bind list existed
+keep working for control but stay on ``init`` until they are commanded or
+re-provisioned.
+
+A node whose state changes by itself, a wall switch pressed or a sensor value
+drifting, therefore stays stale in the console until the Hub next Gets, which in
+practice means the next command, a Hub reboot (when binds are stored), or a
+re-provision. A Get-only design costs a battery node twice: it must stay awake
+to receive the Get, and the Mesh bandwidth the publication path would have saved
+goes into requests instead.
+
+The Bluetooth SIG defines the other half of this. A Server model can publish its
+own Status message, and a Sensor Server can publish Sensor Value messages
+periodically or when a property pattern changes; the client model meant to receive
+them must be subscribed to the same group and bound to the same app key.
+
+The map turns that on with a ``report`` block:
+
+.. code-block:: json
+
+   "report": { "group": "0xC001", "period_s": 30, "retransmit_count": 2,
+               "retransmit_ms": 200, "ttl": 3 }
+
+With the block present, each local client model subscribes to ``group`` right
+after the app key is bound to it, and every Server model bound to a node gets a
+Config Model Publication Set naming that group. A published Status then lands in
+the same decode as a Get reply: the generic and light callbacks gate on the
+publish event (``ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT``,
+``ESP_BLE_MESH_LIGHT_CLIENT_PUBLISH_EVT``) and the sensor callback dispatches on
+the opcode alone.
+
+Without the block, nothing is written to any node. Reporting is opt-in because
+enabling it adds configuration traffic to every provisioning and changes what the
+radio carries. ``period_s`` has to survive the Model Publication Period octet
+exactly -- one-second steps up to 63 s, then tens of seconds, then tens of
+minutes -- and a period with no exact encoding is logged and refused rather than
+rounded to a nearby one. ``group`` must be a group address: a value the stack's
+``ESP_BLE_MESH_ADDR_IS_GROUP`` rejects leaves reporting off, with one log line.
+``ttl`` is 0-127, or 255 to keep the node's default. A node that refuses the
+period is configured again without one, and then publishes only on state change.
 
 REST endpoints
 --------------
@@ -121,10 +237,14 @@ sliders):
   type-catalog label (``light`` → “灯”). A plugin may merge a product
   name as category
 
-Telemetry (including CTL temperature / lightness) uses
-``minihub_point_merge_params`` or a value-only ``point_set``. Do **not** replace
-the whole ``props`` object, or uuid / manufacturer / ``owner`` / ``ota`` are
-wiped.
+Live params (``props.params.<name>.value``) are seeded at register from the
+node's capabilities — Composition for a provisioned node, the declared type for
+a ``devices[]`` entry — with the defaults ``params[]`` quotes (``power``,
+``brightness``, ``cct``, ``hue``, ``saturation``), and updated read-modify-write
+on telemetry and on ``set`` commands (``brightness`` → Lightness/Level,
+``hue``/``saturation`` → HSL Set, ``cct`` → CTL). Do **not** replace the whole
+``props`` object, or uuid / manufacturer / ``owner`` / ``ota`` / other params
+are wiped.
 
 Plugins (JS) match ``props.manufacturer`` (local filter, e.g.
 packed ``catalog.json``) on that same ``point_id``:

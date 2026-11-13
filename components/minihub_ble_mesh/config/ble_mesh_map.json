@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "models": [
+    { "id": "0x1000", "cap": "onoff",     "client": "0x1001", "get": "0x8201", "alias": "gen_onoff_srv" },
+    { "id": "0x1002", "cap": "level",     "client": "0x1003", "get": "0x8205", "alias": "gen_level_srv" },
+    { "id": "0x1300", "cap": "lightness", "client": "0x1302", "get": "0x824b", "alias": "light_lightness_srv" },
+    { "id": "0x1303", "cap": "ctl",       "client": "0x1305", "get": "0x825d", "also": "lightness", "alias": "light_ctl_srv" },
+    { "id": "0x1307", "cap": "hsl",       "client": "0x1309", "get": "0x826d", "also": "lightness", "alias": "light_hsl_srv" },
+    { "id": "0x1100", "cap": "sensor",    "client": "0x1102" }
+  ],
+  "classify": [
+    { "type": "sensor_temp_humidity", "priority": 120, "all_props": ["0x0076"], "any_props": ["0x004f", "0x0075"] },
+    { "type": "sensor_air_quality",   "priority": 110, "any_props": ["0x0077", "0x00a9"] },
+    { "type": "sensor_illuminance",   "priority": 100, "any_props": ["0x0055"] },
+    { "type": "sensor_occupancy",     "priority": 95,  "any_props": ["0x004d"] },
+    { "type": "sensor_motion",        "priority": 90,  "any_props": ["0x0042"] },
+    { "type": "light",                "priority": 50,  "any_caps": ["lightness", "ctl", "hsl", "level"] },
+    { "type": "switch",               "priority": 10,  "any_caps": ["onoff"] }
+  ],
+  "params": [
+    { "cap": "onoff",     "param": "power",      "access": "RW", "init": "off" },
+    { "cap": "lightness", "param": "brightness", "access": "RW", "init": 100 },
+    { "cap": "level",     "param": "brightness", "access": "RW", "init": 100 },
+    { "cap": "ctl",       "param": "cct",        "access": "RW", "init": 4000 },
+    { "cap": "hsl",       "param": "hue",        "access": "RW", "init": 0 },
+    { "cap": "hsl",       "param": "saturation", "access": "RW", "init": 0 },
+    { "prop": "0x004f", "param": "temperature",  "access": "R" },
+    { "prop": "0x0075", "param": "temperature",  "access": "R" },
+    { "prop": "0x0076", "param": "humidity",     "access": "R" },
+    { "prop": "0x0055", "param": "illuminance",  "access": "R" },
+    { "prop": "0x004d", "param": "occupancy",    "access": "R" },
+    { "prop": "0x0042", "param": "motion",       "access": "R" },
+    { "prop": "0x0077", "param": "co2",          "access": "R" },
+    { "prop": "0x00a9", "param": "pressure_hpa", "access": "R" }
+  ],
+  "controls": [
+    { "param": "power",      "kind": "onoff",     "model": "0x1000", "field": "onoff" },
+    { "param": "brightness", "kind": "lightness", "model": "0x1300", "fallback": "level", "field": "lightness" },
+    { "param": "cct",        "kind": "ctl",       "model": "0x1303", "field": "temperature" },
+    { "param": "hue",        "kind": "hsl",       "model": "0x1307", "field": "hue" },
+    { "param": "saturation", "kind": "hsl",       "model": "0x1307", "field": "saturation" }
+  ],
+  "sensors": [
+    { "property": "0x004f", "param": "temperature",  "size": 1, "signed": true,  "scale": 0.5,   "unknown": "0x7f", "min": -40, "max": 125 },
+    { "property": "0x0075", "param": "temperature",  "size": 2, "signed": true,  "scale": 0.01,  "min": -40, "max": 125 },
+    { "property": "0x0076", "param": "humidity",     "size": 2, "signed": false, "scale": 0.01,  "unknown": "0xffff", "min": 0, "max": 100 },
+    { "property": "0x0055", "param": "illuminance",  "size": 3, "signed": false, "scale": 0.01,  "unknown": "0xffffff", "min": 0, "max": 100000 },
+    { "property": "0x0042", "param": "motion",       "size": 1, "signed": false, "scale": 0.5,   "unknown": "0xff", "bool_threshold": 0 },
+    { "property": "0x004d", "param": "occupancy",    "size": 1, "signed": false, "scale": 1,     "bool_threshold": 0 },
+    { "property": "0x0077", "param": "co2",          "size": 2, "signed": false, "scale": 1,     "unknown": "0xffff", "min": 0, "max": 5000 },
+    { "property": "0x00a9", "param": "pressure_hpa", "size": 4, "signed": false, "scale": 0.001, "min": 300, "max": 1100 }
+  ]
+}

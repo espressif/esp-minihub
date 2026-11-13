@@ -37,7 +37,7 @@ ROWS: list[tuple] = [
      ("define", "components/minihub_core/include/minihub_core.h", "MINIHUB_MAX_POINTS")),
     ("core", "point_id length", "point_id 长度", "64", 64,
      ("define", "components/minihub_core/include/minihub_core.h", "MINIHUB_POINT_ID_MAX")),
-    ("core", "type string length", "type 字符串长度", "16", 16,
+    ("core", "type string length", "type 字符串长度", "32", 32,
      ("define", "components/minihub_core/include/minihub_core.h", "MINIHUB_TYPE_MAX")),
     ("core", "value string length", "value 字符串长度", "32", 32,
      ("define", "components/minihub_core/include/minihub_core.h", "MINIHUB_VALUE_MAX")),

@@ -56,12 +56,7 @@ static void restore_stack_nodes_from_map(void)
         if (!d->unicast) {
             continue;
         }
-        uint8_t uuid[16] = {0};
-        if (d->uuid_hex[0] && minihub_bm_hex_to_uuid(d->uuid_hex, uuid) != 0) {
-            ESP_LOGW(TAG, "bad uuid for %s — restore by unicast only", d->point_id);
-            memset(uuid, 0, sizeof(uuid));
-        }
-        esp_err_t err = ble_mesh_stack_restore_node(uuid, d->unicast, d->elem_num, d->caps);
+        esp_err_t err = ble_mesh_stack_restore_node(d);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "restore %s (0x%04x): %s", d->point_id, d->unicast, esp_err_to_name(err));
             continue;
@@ -220,6 +215,12 @@ esp_err_t minihub_ble_mesh_ctl(uint16_t unicast, uint16_t lightness, uint16_t te
                                int16_t delta_uv)
 {
     return ble_mesh_stack_ctl(unicast, lightness, temperature, delta_uv);
+}
+
+esp_err_t minihub_ble_mesh_hsl(uint16_t unicast, uint16_t hue, uint16_t saturation,
+                               uint16_t lightness)
+{
+    return ble_mesh_stack_hsl(unicast, hue, saturation, lightness);
 }
 
 esp_err_t minihub_ble_mesh_set_callbacks(minihub_ble_mesh_device_cb_t on_device,

@@ -21,16 +21,17 @@ Host `minihub_pack` 在加载或 `POST /api/hub/reload` 时把 `inject` **合并
 
 ## 合并内容
 
-追加一条出厂 `adapters.json` **没有** 的 SIG bind：
+追加一条 **厂商** bind —— 模型 ID 不在 Host 自己的能力表里：
 
 | 字段 | 值 |
 |------|-----|
-| `model_id` | `0x1307`（Light HSL Server） |
-| `name` | `l1_demo_light_hsl_srv`（用来辨认合并结果） |
+| `model_id` | `0xFF01`（厂商模型） |
+| `name` | `l1_demo_vendor_model`（用来辨认合并结果） |
 
-Host 当前 BLE Mesh **客户端** 绑定 OnOff / Level / Lightness / CTL。这一行用于
-演示 inject，不是新的调光链路。 **不会** 写入 `uuid_filters`，入网仍接受任意
-未配网节点。
+Host 会绑定能力表里已知的全部模型（OnOff / Level / Lightness / CTL / HSL /
+Sensor Server），**再加上** 策略点名的模型，所以这一行是追加厂商模型，不会挤掉
+内置那些。这一行用于演示 inject，不是新的调光链路。 **不会** 写入
+``uuid_filters``，入网仍接受任意未配网节点。
 
 若 `adapters.ble_mesh.enabled` 为 **false**，Host **跳过** 本 pack（串口：
 `skip pack 'ble_mesh_pack'`）。
@@ -69,7 +70,7 @@ curl -X POST http://$HUB/api/hub/reload
   `merged pack 'ble_mesh_pack' into adapter 'ble_mesh'`
 * `GET /api/packs` — `id=ble_mesh_pack`，`inject_adapter=ble_mesh`
 * `GET /api/config/adapters` — `bind_models` 含
-  `{ "model_id": "0x1307", "name": "l1_demo_light_hsl_srv" }`
+  `{ "model_id": "0xFF01", "name": "l1_demo_vendor_model" }`
 * 设备页 **不会** 多一张卡，直到真实 Mesh 节点入网（L1 不登记点）
 
 ## UI 能 / 不能

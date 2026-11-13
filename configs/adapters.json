@@ -43,6 +43,10 @@
           {
             "model_id": "0x1303",
             "name": "light_ctl_srv"
+          },
+          {
+            "model_id": "0x1307",
+            "name": "light_hsl_srv"
           }
         ]
       },

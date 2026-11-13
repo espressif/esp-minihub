@@ -43,9 +43,106 @@ Zigbee 正在入网，或 BLE Mesh 已在配网）。可用 ``GET /api/radio/pro
 
 设置 ``adapters.ble_mesh.enabled``。配网策略在 ``provision`` （
 ``uuid_filters`` / ``bind_models`` ）。已绑定节点在 ``devices[]``。
-``type`` 为 ``sensor`` 的条目会被跳过。字段见 :ref:`adapters-JSON`。
+条目带 ``models[]`` 时由它决定能力；不带时由 ``type`` 决定 —— 看能力映射表为
+该类型认识哪些参数。最终没有任何已知能力的条目会被跳过并记日志。
+字段见 :ref:`adapters-JSON`。
 JSON 包可 **合并** 额外 bind/过滤默认值（演示
 ``examples/plugins/ble_mesh_pack`` ）； **不要** 用 JSON 发明 ``devices[]``。
+
+能力映射表
+----------
+
+适配器对节点做的每件事都来自一张表：固件镜像里的
+``components/minihub_ble_mesh/config/ble_mesh_map.json``。它描述
+*model → 能力 → 类型 → 参数 → 命令*：
+
+* ``models[]`` — Hub 认识的 Composition 模型，各自带能力位、对应的客户端模型、
+  读回状态用的 ``get`` opcode，以及 ``devices[]`` 条目可以写的名字
+  （``cap`` 与公开的 ``alias`` ）
+* ``classify[]`` — 哪些能力、哪些传感器属性让一个节点成为 ``light`` /
+  ``switch`` 或某个传感器类型
+* ``params[]`` — 节点暴露的参数，含访问权限与默认值
+* ``controls[]`` — 哪个参数由哪条 Mesh 消息驱动
+* ``sensors[]`` — 传感器属性如何解码：字节数、有无符号、缩放、「值未知」
+  哨兵与目录上下界
+
+这张表决定绑定名单、AppKey 绑定的客户端模型、种子参数与下发命令。新增一种设备
+类型是改 JSON，不是改固件。``provision.bind_models`` 里的策略 **不会** 替换这份
+绑定名单：Host 绑定表里已知的全部模型，**再加上** 策略点名的模型 —— 所以 JSON
+包可以追加厂商模型，而不会挤掉内置那些。
+
+OEM 不重编也能覆盖这张表：把同样结构的文件放在
+``/store/preinstall/ble_mesh_map.json`` （modstore 镜像）或
+``/data/config/ble_mesh_map.json`` （storage 分区）。靠后的文件替换它点名的行，
+没点名的行保留内置值。
+
+``tools/test_ble_mesh_map.py`` 在这张表与组件目录（widget catalog）、适配器查找
+的控制字段、仓库公开的模型名字，或它引用的蓝牙 SIG 特性尺寸发生漂移时报错。
+
+Composition 没有命中任何 ``classify[]`` 规则的节点 **不会** 获得点位：它只被
+记日志并计入未分类计数，绝不冒充成可控开关。
+
+设备类型
+--------
+
+``light``
+   OnOff / Level / Lightness / CTL / HSL。
+
+``switch``
+   仅 OnOff。
+
+BLE Mesh 上做不到的：
+
+* ``intensity`` —— Mesh 灯光模型没有强度通路。类型目录给 ``light`` 列了它，
+  但 Mesh 适配器从不种子它，写入它返回 ``ESP_ERR_NOT_SUPPORTED``。
+* ``sensor_contact`` / ``sensor_smoke`` / ``sensor_tamper`` / ``sensor_water`` /
+  ``pm25`` / ``speaker`` —— 蓝牙 SIG 没有对应的传感器属性，也没有音频模型。
+  只能靠厂商模型承载，映射表变不出来。
+* ``battery`` —— Generic Battery 模型尚未进表。
+
+状态同步
+--------
+
+Hub 主动去取，设备不会自己报。 ``ble_mesh_adapter_poll()`` 直接返回、什么都不做，
+适配器轮询任务因此不取任何东西；client model 也没有订阅任何 group 地址，设备发到
+group 的 Status 收不到。状态只在四个时刻落到点上：model 绑定完成时，每个已绑定且
+``models[]`` 行声明了 ``get`` opcode 的模型各取一次，带 Sensor Server 的节点还要取
+Sensor Descriptor；descriptor 回答之后再取一次 —— 它给出 property id，一条不带
+property 操作数的 Sensor Get 就把全部属性取回；每次 Set 的回复；以及 Hub 重启时，
+按 NVS 里随设备保存的 ``(model, elem)`` 绑定列表再 Get 一遍（已存过的 Sensor Server
+只发 Sensor Get，不再 Descriptor）。映射表标为可读的参数，背后都有一条 Get。Get
+回答之前，参数显示的是映射表里的 ``init`` 值，不是节点回报的值。在这份绑定列表出现
+之前配过网的设备仍能控制，但会停在 ``init``，直到有命令或重新配网。
+
+所以设备自己变了状态（有人手按墙面开关、传感器数值漂移），控制台里的值就一直是旧的，
+直到 Hub 下一次 Get —— 实际就是下一条命令、Hub 重启（且已存绑定列表），或重新配网。
+只靠 Get 对电池供电节点是双重代价：它得醒着接收 Get，而发布路径本可以省下的 Mesh
+带宽全花在了请求上。
+
+蓝牙 SIG 定义了另一半。Server model 可以发布自己的 Status 消息，Sensor Server 还能
+周期性发布 Sensor Value，或在 property 模式变化时发布；要收到这些，接收侧的
+client model 必须订阅同一个 group 并绑定同一个 app key。
+
+映射表用一个 ``report`` 块把它打开：
+
+.. code-block:: json
+
+   "report": { "group": "0xC001", "period_s": 30, "retransmit_count": 2,
+               "retransmit_ms": 200, "ttl": 3 }
+
+有这个块时，每个本地 client model 在 app key 绑定之后随即订阅 ``group`` ，节点上每个
+被绑定的 Server model 都会收到一条 Config Model Publication Set，发布地址就是那个
+group。于是发布的 Status 与 Get 的回复走同一套解码：generic 与 light 回调以 publish
+事件为门（ ``ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT`` 、
+``ESP_BLE_MESH_LIGHT_CLIENT_PUBLISH_EVT`` ），sensor 回调不看事件、只按 opcode 分派。
+
+没有这个块就什么都不写给节点，上报默认是关闭的 —— 打开它会给每次配网加上配置流量，
+并改变射频上跑的内容。 ``period_s`` 必须能被 Model Publication Period 那个字节精确
+表示：63 秒以内按 1 秒步进，之后按 10 秒、再按 10 分钟步进；编码不出的周期会被记日志
+并拒绝，而不是就近取整。 ``group`` 必须是 group 地址：被射频栈的
+``ESP_BLE_MESH_ADDR_IS_GROUP`` 拒绝的值会让上报保持关闭，只留一行日志。
+``ttl`` 取 0-127，或 255 表示沿用节点自己的默认值。节点拒绝这个周期时，Hub 会不带
+周期再配一次，该节点此后只在状态变化时发布。
 
 REST 接口
 ---------
@@ -112,9 +209,12 @@ Zigbee 入网或 BLE Mesh 配网是否进行中，以及表示射频关键窗口
 * ``props.category`` — BLE Mesh Host **不** 填写。缺省时 UI 用类型目录标签
   （``light`` →「灯」）。插件可 merge 产品名作为品类
 
-遥测（含 CTL 色温 / 亮度）只通过 ``minihub_point_merge_params`` 或只改
-``value``，**不得** ``minihub_point_set`` 整份替换 ``props``，否则会冲掉
-uuid / 厂商 / ``owner`` / ``ota``。
+运行参数（``props.params.<name>.value``）登记时按节点能力种子 —— 已配网节点看
+Composition，``devices[]`` 条目看声明的 ``type`` —— 默认值取 ``params[]`` 里写的
+（``power`` / ``brightness`` / ``cct`` / ``hue`` / ``saturation``），遥测与 ``set``
+命令按读-改-写更新（``brightness`` → Lightness/Level，``hue``/``saturation`` → HSL Set，
+``cct`` → CTL）。**不得** ``minihub_point_set`` 整份替换 ``props``，否则会冲掉
+uuid / 厂商 / ``owner`` / ``ota`` / 其他参数。
 
 插件（JS）按 ``props.manufacturer`` 匹配（本地过滤，如打包的
 ``catalog.json``），写在同一 ``point_id`` 上：
