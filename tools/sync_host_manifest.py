@@ -299,12 +299,9 @@ def sync(project_root: Path, app_name: str) -> None:
         "\n".join(sdk_extra) + ("\n" if sdk_extra else ""), encoding="utf-8"
     )
 
-    lcd_ui = bool(components.get("lcd_ui"))
-    (gen_dir / "lcd_ui.txt").write_text("1\n" if lcd_ui else "0\n", encoding="utf-8")
-
     print(
         f"sync_host_manifest: app={app_name} components={profile_name} "
-        f"partition={partition} lcd_ui={lcd_ui} hand_maintained={hand_maintained}"
+        f"partition={partition} hand_maintained={hand_maintained}"
     )
     if lcd_yml.exists():
         print(f"  → {lcd_yml}")

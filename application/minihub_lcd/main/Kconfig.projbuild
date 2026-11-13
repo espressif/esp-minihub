@@ -1,0 +1,2 @@
+# MiniHub CONFIG_*: cmake/minihub_bundle/Kconfig.projbuild (menu "MiniHub").
+# Requires minihub_bundle in the build graph (manifest require / yml path).

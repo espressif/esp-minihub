@@ -509,7 +509,9 @@ Hub runtime summary for Web UI and ops scripts.
      ``ram`` (``internal_free`` / ``internal_total`` / ``psram_free`` /
      ``psram_total``), ``storage`` and ``modstore`` usage, ``local_ip``,
      ``web_base``, ``net`` (``eth`` / ``wifi``, the latter with ``ssid`` and
-     ``has_password``), and ``timezone`` (``id``, ``offset_min``, ``zones``).
+     ``has_password``), ``timezone`` (``id``, ``offset_min``, ``zones``), and
+     ``display_name`` (sidebar label shared by Web and LCD; empty means the UI
+     default).
 
    Wall clock is not among these fields: ``uptime_s`` counts from boot, so this
    answer tells you how long the Hub has been up, not what time it thinks it is
@@ -558,6 +560,25 @@ or 45), with ``UTC`` for zero. The choice is stored in NVS and applied immediate
 
    * **HTTP 200** — the same status JSON as GET
    * **HTTP 400** — unknown ``id``
+
+GET / POST /api/system/display_name
+-----------------------------------
+
+.. container:: mh-api-block mh-api-command
+
+   ``GET / POST /api/system/display_name``
+
+GET returns ``{"display_name":"..."}``. POST body is
+``{"display_name":"Lab Hub"}``: 1 to 48 printable bytes, no control characters.
+Stored in ``/data/config/display_name.json`` and shared by the Web sidebar and
+the LCD user row.
+
+.. container:: mh-api-block mh-api-returns
+
+   **Returns**
+
+   * **HTTP 200** — ``{"display_name":"..."}``
+   * **HTTP 400** — missing, empty, or invalid ``display_name``
 
 GET /api/location
 -----------------

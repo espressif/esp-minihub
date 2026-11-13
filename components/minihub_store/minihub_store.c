@@ -35,6 +35,15 @@
 #include "nvs.h"
 #include "sdkconfig.h"
 #include <stdbool.h>
+#include "esp_littlefs.h"
+#include "minihub_lcd.h"
+
+/* U lane owns this symbol (Kconfig.minihub + feature/lcd.defaults, 262144).
+ * Keep a compile-time fallback so the gate still builds in a config where
+ * the symbol has not been generated yet. */
+#ifndef CONFIG_MINIHUB_STORAGE_MIN_FREE_BYTES
+#define CONFIG_MINIHUB_STORAGE_MIN_FREE_BYTES 262144
+#endif
 
 static const char *TAG = "minihub_store";
 
@@ -1660,8 +1669,22 @@ static esp_err_t install_pack_from_staging(const char *id, const char *staging_d
         cJSON_DeleteItemFromObject(pack, "version");
         cJSON_AddStringToObject(pack, "version", version_j->valuestring);
     }
-    if (!cJSON_GetObjectItem(pack, "enabled")) {
+    /* Fresh install starts the pack. A package that still says enabled:false
+     * must not stay off; the user disables it afterwards. Upgrade keeps the
+     * flag already stored on the device. */
+    if (!upgrade) {
+        cJSON_DeleteItemFromObject(pack, "enabled");
         cJSON_AddBoolToObject(pack, "enabled", true);
+    } else {
+        cJSON *old = load_json_file(config_path);
+        const cJSON *old_en = cJSON_GetObjectItem(old, "enabled");
+        if (cJSON_IsBool(old_en)) {
+            cJSON_DeleteItemFromObject(pack, "enabled");
+            cJSON_AddBoolToObject(pack, "enabled", cJSON_IsTrue(old_en));
+        } else if (!cJSON_GetObjectItem(pack, "enabled")) {
+            cJSON_AddBoolToObject(pack, "enabled", true);
+        }
+        cJSON_Delete(old);
     }
     char *json = cJSON_Print(pack);
     cJSON_Delete(pack);
@@ -1817,6 +1840,30 @@ static esp_err_t install_module(const cJSON *item, bool upgrade)
         }
         cJSON_Delete(existing);
         existing = NULL;
+    } else {
+        /* Packages are not a switch. Fresh install writes enabled:true even
+         * when module.json still says false; upgrade keeps the saved flag. */
+        char staging_manifest[MINIHUB_MODULE_FILE_PATH_MAX];
+        snprintf(staging_manifest, sizeof(staging_manifest), "%s/module.json", staging_dir);
+        cJSON *manifest = load_json_file(staging_manifest);
+        if (!manifest) {
+            (void)minihub_hub_remove_tree(staging_dir);
+            return ESP_FAIL;
+        }
+        cJSON_DeleteItemFromObject(manifest, "enabled");
+        cJSON_AddBoolToObject(manifest, "enabled", true);
+        char *json = cJSON_Print(manifest);
+        cJSON_Delete(manifest);
+        if (!json) {
+            (void)minihub_hub_remove_tree(staging_dir);
+            return ESP_ERR_NO_MEM;
+        }
+        err = write_file_atomic(staging_manifest, json);
+        free(json);
+        if (err != ESP_OK) {
+            (void)minihub_hub_remove_tree(staging_dir);
+            return err;
+        }
     }
 
     (void)minihub_hub_remove_tree(pkg_dir);
@@ -1976,6 +2023,34 @@ static esp_err_t store_install_item(const cJSON *item, const char *kind, bool up
     return ESP_ERR_INVALID_ARG;
 }
 
+/* One gate, one place: install / upgrade / reinstall all funnel through
+ * store_install_from_catalog(). Read by partition label, not a VFS path, so
+ * the answer survives the LCD handing "storage" over to brookesia's VFS.
+ * A breached floor is an error that callers must propagate, not swallow. */
+static esp_err_t store_check_free_space(const char *kind, const char *id)
+{
+    size_t total = 0;
+    size_t used = 0;
+    esp_err_t info_err = esp_littlefs_info("storage", &total, &used);
+    if (info_err != ESP_OK) {
+        /* Do not mask a failed probe as "enough room": surface the error and
+         * let the caller refuse the install. */
+        ESP_LOGE(TAG, "quota probe failed for %s %s: %s",
+                 kind, id, esp_err_to_name(info_err));
+        return info_err;
+    }
+
+    size_t free_bytes = (total > used) ? (total - used) : 0;
+    if (free_bytes < (size_t)CONFIG_MINIHUB_STORAGE_MIN_FREE_BYTES) {
+        ESP_LOGE(TAG, "refuse %s %s: storage has %u B free, floor is %d B",
+                 kind, id, (unsigned)free_bytes, CONFIG_MINIHUB_STORAGE_MIN_FREE_BYTES);
+        return ESP_ERR_NO_MEM;
+    }
+    ESP_LOGI(TAG, "storage free %u B (floor %d B) before %s %s",
+             (unsigned)free_bytes, CONFIG_MINIHUB_STORAGE_MIN_FREE_BYTES, kind, id);
+    return ESP_OK;
+}
+
 static esp_err_t store_install_from_catalog(const char *kind, const char *id, bool upgrade, bool force)
 {
     if (!kind || !id) {
@@ -2039,7 +2114,22 @@ static esp_err_t store_install_from_catalog(const char *kind, const char *id, bo
         }
     }
 
-    esp_err_t err = store_install_item(item, kind, upgrade, force);
+    /* Quota gate: install / upgrade / reinstall all reach this one funnel. */
+    esp_err_t err = store_check_free_space(kind, id);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "install %s %s blocked by storage quota: %s",
+                 kind, id, esp_err_to_name(err));
+        cJSON_Delete(catalog);
+        return err;
+    }
+
+    /* Freeze the panel for the whole write window. No early return sits
+     * between the two hooks, so a failed install still closes the window;
+     * the gate failure above returns before the window is ever opened. */
+    minihub_lcd_flash_write_begin();
+    err = store_install_item(item, kind, upgrade, force);
+    minihub_lcd_flash_write_end();
+
     if (err == ESP_OK) {
         /* A freshly installed/upgraded module may reference device types whose
          * icon or parameter style is not yet on the device. Notify the update
@@ -2076,7 +2166,10 @@ esp_err_t minihub_store_reinstall(const char *kind, const char *id)
     return store_install_from_catalog(kind, id, true, true);
 }
 
-esp_err_t minihub_store_uninstall(const char *kind, const char *id)
+/* Uninstall writes littlefs as well (unlink, remove_tree, pack/module delete),
+ * and its body has several early returns. The freeze window is therefore opened
+ * by a single-exit wrapper below, not inline: no return path can leak it open. */
+static esp_err_t store_uninstall_item(const char *kind, const char *id)
 {
     if (!kind || !id) {
         return ESP_ERR_INVALID_ARG;
@@ -2147,6 +2240,14 @@ esp_err_t minihub_store_uninstall(const char *kind, const char *id)
 #endif
     }
     return ESP_ERR_INVALID_ARG;
+}
+
+esp_err_t minihub_store_uninstall(const char *kind, const char *id)
+{
+    minihub_lcd_flash_write_begin();
+    const esp_err_t err = store_uninstall_item(kind, id);
+    minihub_lcd_flash_write_end();
+    return err;
 }
 
 esp_err_t minihub_store_factory_reset(void)
@@ -2343,3 +2444,12 @@ esp_err_t minihub_store_list_upgrades(cJSON **out)
 }
 
 #endif /* CONFIG_MINIHUB_STORE */
+
+esp_err_t minihub_store_partition_usage(const char *label, size_t *total, size_t *used)
+{
+    if (label == NULL || total == NULL || used == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    /* Same numbers the Web console shows in its Storage / Modstore cards. */
+    return esp_littlefs_info(label, total, used);
+}

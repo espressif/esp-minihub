@@ -30,6 +30,11 @@ stack fragment is appended last.
 
 These rules in that chain decide what a change does:
 
+* A feature name only groups symbols. When
+  ``configs/sdkconfig/feature/<name>.defaults`` and
+  ``application/<app>/configs/sdkconfig/feature/<name>.defaults`` both exist, both are
+  loaded. The product file is later, so the same ``CONFIG_*`` symbol in it replaces the
+  shared value. A symbol set only in the shared file stays.
 * A ``sdkconfig`` that already exists wins over every fragment. Changing a
   ``feature/*.defaults`` file and rebuilding does nothing if the symbol is still set in
   ``application/<app>/sdkconfig`` — that is why ``tools/build_firmware.py`` rewrites the

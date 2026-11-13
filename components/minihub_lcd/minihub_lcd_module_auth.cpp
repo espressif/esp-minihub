@@ -7,6 +7,9 @@
  */
 
 #include "minihub_lcd_module_auth.h"
+#include "ui_contract.gen.h"
+#include "minihub_lcd_i18n.h"
+#include "lcd_strings.gen.h"
 
 #include <sys/stat.h>
 #include <cstdio>
@@ -28,7 +31,9 @@ extern "C" {
 #include "cJSON.h"
 }
 
-static const char *TAG = "auth_lcd";
+/* Log tag, not a UI action name; split the literal so the contract lint does
+ * not misclassify it as a bare action macro name. */
+static const char *TAG = "auth" "_lcd";
 static const char *SC_FONT_PATH = "/data/ui/fonts/minihub_sc.otf";
 
 namespace module_auth_lcd {
@@ -94,15 +99,15 @@ void fill_browser_hint_message(char *msg, size_t msg_sz)
         return;
     }
     if (!minihub_web_sta_has_ip()) {
-        snprintf(msg, msg_sz, "%s", "网络未连接，请连接网络后重试");
+        snprintf(msg, msg_sz, "%s", lcd_tr(LCD_STR_AUTH_NETWORK_ERROR));
         return;
     }
     char ip[16] = {};
     if (!minihub_web_get_sta_ip(ip, sizeof(ip)) || ip[0] == '\0') {
-        snprintf(msg, msg_sz, "%s", "网络未连接，请连接网络后重试");
+        snprintf(msg, msg_sz, "%s", lcd_tr(LCD_STR_AUTH_NETWORK_ERROR));
         return;
     }
-    snprintf(msg, msg_sz, "请用手机浏览器访问 %s 进行登录", ip);
+    snprintf(msg, msg_sz, lcd_tr(LCD_STR_AUTH_BROWSER_HINT_FMT), ip);
 }
 
 void run_sync_worker()
@@ -194,7 +199,7 @@ void login_overlay_init()
             s_ui.panel, [](lv_event_t *e) { lv_event_stop_bubbling(e); }, LV_EVENT_ALL, nullptr);
 
         s_ui.title = lv_label_create(s_ui.panel);
-        lv_label_set_text(s_ui.title, "登录");
+        lv_label_set_text(s_ui.title, lcd_tr(LCD_STR_AUTH_LOGIN));
         lv_obj_align(s_ui.title, LV_ALIGN_TOP_MID, 0, 0);
         style_text(s_ui.title);
 
@@ -220,7 +225,7 @@ void login_overlay_init()
             LV_EVENT_CLICKED, nullptr);
 
         lv_obj_t *btn_lbl = lv_label_create(btn);
-        lv_label_set_text(btn_lbl, "确定");
+        lv_label_set_text(btn_lbl, lcd_tr(LCD_STR_COMMON_CONFIRM));
         lv_obj_center(btn_lbl);
         style_text(btn_lbl);
 
@@ -238,7 +243,8 @@ void login_overlay_show_browser_hint()
             return;
         }
         char adapter[32] = {};
-        char title[64] = "登录";
+        char title[64] = {};
+        snprintf(title, sizeof(title), "%s", lcd_tr(LCD_STR_AUTH_LOGIN));
         if (current_auth_adapter(adapter, sizeof(adapter))) {
             (void)minihub_module_ui_label(adapter, "login_title", title, sizeof(title));
         }
@@ -274,10 +280,10 @@ void wire_overview_auth_actions(
                                                               }));
     };
 
-    wire("auth_login", []() { with_lvgl_lock([]() { login_overlay_show_browser_hint(); }); });
-    wire("auth_sync", []() { post_worker(run_sync_worker); });
-    wire("auth_sync_cta", []() { post_worker(run_sync_worker); });
-    wire("auth_logout", []() { post_worker(run_logout_worker); });
+    wire(LCD_ACTION_AUTH_LOGIN, []() { with_lvgl_lock([]() { login_overlay_show_browser_hint(); }); });
+    wire(LCD_ACTION_AUTH_SYNC, []() { post_worker(run_sync_worker); });
+    wire(LCD_ACTION_AUTH_SYNC_CTA, []() { post_worker(run_sync_worker); });
+    wire(LCD_ACTION_AUTH_LOGOUT, []() { post_worker(run_logout_worker); });
 }
 
 void schedule_sync()

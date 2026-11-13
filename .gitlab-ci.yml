@@ -120,6 +120,17 @@ include:
       echo "cloned branch $cloned ($(git -C "$dest" rev-parse --short HEAD))"
     - export MINIHUB_PLUGIN_DIRS="$MINIHUB_PLUGINS_DIR"
 
+check:lcd_contract:
+  # The LCD variant is invisible to the default build, so its contract checks
+  # run here on the plain python image instead of waiting for an IDF job.
+  extends: .pre_check_template
+  stage: pre_check
+  before_script:
+    - pip install --quiet pyyaml
+  script:
+    - python3 tools/test_lcd_recipe.py
+    - python3 tools/test_lcd_ui_contract.py
+
 build:app:
   extends:
     - .idf_env
@@ -147,6 +158,35 @@ build:app:
       - $MINIHUB_PLUGINS_DEPLOY_DIR/**/*.mhub
       - application/$MINIHUB_APP/dependencies.lock
       - application/$MINIHUB_APP/sdkconfig
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+build:app_lcd:
+  # Standalone product application/minihub_lcd. Do not apply an LCD variant
+  # onto application/minihub.
+  extends:
+    - .idf_env
+    - .clone_plugins
+  stage: build
+  variables:
+    MINIHUB_APP: minihub_lcd
+    MINIHUB_SKIP_MHUB: "1"
+    MINIHUB_BUILD_MATTER: "0"
+  script:
+    - git submodule update --init --depth 1
+    - export MINIHUB_PLUGIN_DIRS=$MINIHUB_PLUGIN_DIRS:$CI_PROJECT_DIR/examples/plugins
+    - ./tools/build_firmware.py --app "$MINIHUB_APP" build
+  artifacts:
+    when: on_success
+    expire_in: 14 days
+    name: "$MINIHUB_APP-lcd-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - application/$MINIHUB_APP/build/*.bin
+      - application/$MINIHUB_APP/build/*.elf
+      - application/$MINIHUB_APP/dependencies.lock
+      - application/$MINIHUB_APP/sdkconfig
+      - application/$MINIHUB_APP/components/gen_bmgr_codes/board_manager.defaults
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH

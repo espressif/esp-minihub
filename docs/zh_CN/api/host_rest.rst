@@ -477,7 +477,8 @@ GET /api/system
      ``ram`` （``internal_free`` / ``internal_total`` / ``psram_free`` /
      ``psram_total``）、``storage`` 与 ``modstore`` 占用、``local_ip``、
      ``web_base``、``net`` （``eth`` / ``wifi``，后者带 ``ssid`` 与
-     ``has_password``），以及 ``timezone`` （``id``、``offset_min``、``zones``）。
+     ``has_password``）、``timezone`` （``id``、``offset_min``、``zones``），以及
+     ``display_name`` （Web 与 LCD 共用的侧栏显示名；空字符串表示用界面默认文案）。
 
    这里没有墙钟字段：``uptime_s`` 从启动开始计数，所以它告诉你 Hub 跑了多久，不告诉你
    设备认为现在是几点 （ :doc:`../time` ）。
@@ -523,6 +524,24 @@ NVS 并立即生效。
 
    * **HTTP 200** — 与 GET 相同的状态 JSON
    * **HTTP 400** — 未知 ``id``
+
+GET / POST /api/system/display_name
+-----------------------------------
+
+.. container:: mh-api-block mh-api-command
+
+   ``GET / POST /api/system/display_name``
+
+GET 返回 ``{"display_name":"..."}``。POST 请求体为
+``{"display_name":"Lab Hub"}``：1 到 48 个可打印字节，不含控制字符。写入
+``/data/config/display_name.json``，由 Web 侧栏与 LCD 用户行共用。
+
+.. container:: mh-api-block mh-api-returns
+
+   **Returns**
+
+   * **HTTP 200** — ``{"display_name":"..."}``
+   * **HTTP 400** — 缺少、为空或非法的 ``display_name``
 
 GET /api/location
 -----------------

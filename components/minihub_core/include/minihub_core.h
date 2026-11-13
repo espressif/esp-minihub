@@ -327,6 +327,22 @@ esp_err_t minihub_point_merge_props(const char *point_id, const char *value, cJS
  */
 esp_err_t minihub_device_name_set(const char *point_id, const char *name);
 
+/** Max length of the Hub console display name (sidebar "User"). */
+#define MINIHUB_DISPLAY_NAME_MAX 48
+
+/**
+ * @brief Read the Hub console display name shared by Web and LCD.
+ *
+ * Stored in /data/config/display_name.json. Empty string means use the UI
+ * default label.
+ */
+esp_err_t minihub_display_name_get(char *buf, size_t buf_len);
+
+/**
+ * @brief Persist the Hub console display name (1..48 printable bytes).
+ */
+esp_err_t minihub_display_name_set(const char *name);
+
 /**
  * @brief Copy current point snapshot into caller buffer.
  *

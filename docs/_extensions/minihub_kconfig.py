@@ -316,16 +316,17 @@ def features(app: str) -> list[dict]:
     except FileNotFoundError as exc:
         raise ExtensionError(f"minihub-kconfig: {exc}") from exc
     rows = []
-    for name, rel in zip(names, compose.expand_features(ROOT, app, names)):
-        path = ROOT / rel
-        if not path.is_file():
-            # stacks.gen is written by tools/build_firmware.py on every build.
-            rows.append({"name": name, "path": rel, "sets": [], "generated": True})
-            continue
-        sets = re.findall(r"^(CONFIG_MINIHUB_\w+)=(.*)$", _read(path), re.M)
-        rows.append({"name": name, "path": rel,
-                     "sets": [f"{k.split('CONFIG_MINIHUB_')[1]}={v}" for k, v in sets],
-                     "generated": False})
+    for name in names:
+        for rel in compose.feature_layers(ROOT, app, name):
+            path = ROOT / rel
+            if not path.is_file():
+                # stacks.gen is written by tools/build_firmware.py on every build.
+                rows.append({"name": name, "path": rel, "sets": [], "generated": True})
+                continue
+            sets = re.findall(r"^(CONFIG_MINIHUB_\w+)=(.*)$", _read(path), re.M)
+            rows.append({"name": name, "path": rel,
+                         "sets": [f"{k.split('CONFIG_MINIHUB_')[1]}={v}" for k, v in sets],
+                         "generated": False})
     rows.append({"name": "board", "path": f"application/{app}/configs/sdkconfig/app.yml",
                  "sets": [f"board={board}"], "generated": False})
     return rows

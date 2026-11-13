@@ -1407,6 +1407,68 @@ static esp_err_t handle_api_system(httpd_req_t *req)
         cJSON_AddItemToObject(root, "timezone", tz);
     }
 
+    {
+        char display_name[MINIHUB_DISPLAY_NAME_MAX + 1] = {0};
+        if (minihub_display_name_get(display_name, sizeof(display_name)) == ESP_OK) {
+            cJSON_AddStringToObject(root, "display_name", display_name);
+        } else {
+            cJSON_AddStringToObject(root, "display_name", "");
+        }
+    }
+
+    err = send_json(req, root);
+    cJSON_Delete(root);
+    return err;
+}
+
+static esp_err_t handle_api_system_display_name_get(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char display_name[MINIHUB_DISPLAY_NAME_MAX + 1] = {0};
+    if (minihub_display_name_get(display_name, sizeof(display_name)) != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddStringToObject(root, "display_name", display_name);
+    err = send_json(req, root);
+    cJSON_Delete(root);
+    return err;
+}
+
+static esp_err_t handle_api_system_display_name_post(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char *buf = NULL;
+    size_t buflen = 0;
+    if (read_http_body(req, &buf, &buflen, 256) != ESP_OK || !buf) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad body");
+    }
+    cJSON *body = cJSON_Parse(buf);
+    free(buf);
+    const cJSON *name = body ? cJSON_GetObjectItem(body, "display_name") : NULL;
+    if (!cJSON_IsString(name) || minihub_display_name_set(name->valuestring) != ESP_OK) {
+        cJSON_Delete(body);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad display_name");
+    }
+    cJSON_Delete(body);
+
+    char display_name[MINIHUB_DISPLAY_NAME_MAX + 1] = {0};
+    (void)minihub_display_name_get(display_name, sizeof(display_name));
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddStringToObject(root, "display_name", display_name);
     err = send_json(req, root);
     cJSON_Delete(root);
     return err;
@@ -5860,6 +5922,10 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
                                       .handler = handle_api_system_timezone_get };
     httpd_uri_t api_system_tz_post = { .uri = "/api/system/timezone", .method = HTTP_POST,
                                        .handler = handle_api_system_timezone_post };
+    httpd_uri_t api_system_display_name_get = { .uri = "/api/system/display_name", .method = HTTP_GET,
+                                                .handler = handle_api_system_display_name_get };
+    httpd_uri_t api_system_display_name_post = { .uri = "/api/system/display_name", .method = HTTP_POST,
+                                                 .handler = handle_api_system_display_name_post };
     httpd_uri_t api_net_cfg = { .uri = "/api/net/config", .method = HTTP_POST, .handler = handle_api_net_config };
     httpd_uri_t api_net_wifi = { .uri = "/api/net/wifi", .method = HTTP_POST, .handler = handle_api_net_wifi };
     httpd_uri_t adapters_api = { .uri = "/api/adapters", .method = HTTP_GET, .handler = handle_api_adapters };
@@ -5968,6 +6034,10 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_reset), TAG, "/api/system/reset");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_tz_get), TAG, "/api/system/timezone GET");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_tz_post), TAG, "/api/system/timezone POST");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_display_name_get), TAG,
+                        "/api/system/display_name GET");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_system_display_name_post), TAG,
+                        "/api/system/display_name POST");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_net_cfg), TAG, "/api/net/config");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &api_net_wifi), TAG, "/api/net/wifi");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &adapters_api), TAG, "/api/adapters");

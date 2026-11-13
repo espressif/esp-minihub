@@ -2,7 +2,6 @@ menu "RTSP camera"
 
     config MINIHUB_RTSP_CAM
         bool "Enable RTSP → USB H.265 recorder"
-        default y if IDF_TARGET_ESP32S31
         default n
         depends on MINIHUB_USB_MSC
         help

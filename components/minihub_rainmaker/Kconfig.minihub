@@ -2,6 +2,6 @@ menu "RainMaker"
 
     config MINIHUB_RAINMAKER
         bool "Enable ESP RainMaker bridge"
-        default n
+        default y
 
 endmenu

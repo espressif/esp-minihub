@@ -113,17 +113,20 @@ Core 是共用的，一台出货设备和通用 Host 的差别只有几处：跑
 
 .. code-block:: bash
 
-   ./tools/apply_sdkconfig_variant.sh lcd          # variants/lcd.yml -> app.yml
+   ./tools/apply_sdkconfig_variant.sh <name>       # variants/<name>.yml -> app.yml
    ./tools/apply_sdkconfig_variant.sh --restore    # variants/default.yml -> app.yml
 
 在两者之间切换。变体是 ``app.yml`` 的整份替换—— 换的是特性列表，不是在它上面打补丁。
 你手工写进 ``app.yml`` 的东西（实验室 SSID、多加的一个特性）正是会被盖掉的东西。
 
-一个变体其实牵动两样东西，而 ``variants/<name>.yml`` 只管其中一样。组件集、板子与
-ESP-IDF 依赖写在 ``manifest.yml`` 的 ``variants:`` 块里，构建时由
-``tools/sync_host_manifest.py`` 挑选：它看 ``app.yml`` 的特性里有没有 ``lcd``，有且
-``variants.lcd`` 存在才换那一套组件 —— 这个名字是写死的。换个名字的变体只换
-sdkconfig 特性，组件集仍是产品自己那份。
+带屏的固件是独立产品 ``application/minihub_lcd``（``esp32_s31_korvo1``），用
+``-app minihub_lcd`` 构建。``application/minihub`` 只做以太网 Function CoreBoard
+（``esp32_s31_function_coreboard_1``）—— 不要把 ``lcd`` 写进它的 ``app.yml``，也不要
+加 ``variants.lcd``。
+
+``variants/<name>.yml`` 只替换 ``app.yml`` 的特性列表。组件集、板子与 ESP-IDF 依赖
+来自该产品自己的 ``manifest.yml``（若 ``app.yml`` 含 ``lcd`` 特性，且已合并
+``_<app>_lcd`` 覆盖配置，则用那份）。
 
 .. warning::
 
@@ -195,3 +198,46 @@ Web 控制台
 ``index.html`` / ``login.html`` 或用 curl 推文件见 :doc:`web_console`。通用
 ``CMakeLists.txt`` 只拷 ``components/minihub_web/web/``，没有
 ``application/APP/web/`` 覆盖层。
+
+不换固件改屏上界面
+--------------------
+
+屏上界面是固件运行时从 ``storage`` LittleFS 分区的 ``/data/ui/`` 读出的一组
+JSON 文档。 ``application/minihub/manifest.yml`` 只决定这块屏是否编进镜像
+（ ``CONFIG_MINIHUB_LCD_UI`` ）。屏上显示什么，由 ``/data/ui/root.json`` 及它列出
+的文件决定。
+
+``root.json`` 按加载顺序列出资产::
+
+    /data/ui/root.json
+      constants/theme.json      colors, sizes
+      assets/device_icons.json  icon ids referenced as ${image.<id>}
+      templates/device_card.json
+      screens/overview.json     screens/map.json  screens/store.json
+      flows/main.json           screen list, initial screen, transitions
+
+改屏上界面可以这样做：
+
+- 改某个 screen 就能改布局、样式或显示哪些参数。
+- 要加一屏：加一个文件并在 ``assets`` 里列出，再往 ``flows/main.json`` 加一条
+  transition，并配一个 ``nav_*`` action 让它可达。
+- 产物可以烧 ``storage`` 镜像，或开发期开 ``CONFIG_MINIHUB_DEV_FS_UPLOAD`` 后用
+  ``PUT /api/dev/fs/ui/<path>`` 推送。该路由只接受 ``ui/`` 路径，单次上传上限
+  2 MiB。
+
+两件事保证 OEM 改动不越界，且都在构建期跑：
+
+- ``tools/test_lcd_ui_contract.py`` 拿 ``ui/**/*.json`` 对照
+  ``components/minihub_lcd/ui_contract.json`` 校验。固件会读的每个 view 路径和
+  action 名都必须存在于 JSON 里。 ``root.json`` 必须带上契约要求的版本。device
+  槽位数必须与模板一致。固件不认识的改名会让 ``idf.py`` configure 失败，而不是
+  等到屏上才出错。
+- ``CONFIG_MINIHUB_STORAGE_MIN_FREE_BYTES`` （在 Store 安装路径上检查）会拒绝
+  吃掉 UI 与设备状态所需余量的包。
+
+设备名等自由文本来自网络，不受内置字形集限制。 ``ui/fonts/`` 放的是给这些文本
+用的可选 FreeType 字体。UI chrome 由 LVGL 内置的 Han Sans 渲染，该文件缺失时
+仍可读。
+
+屏 **不是** 什么：它不是一个 hub point，不出现在类型目录里，不能被规则指向，
+也没有自己的设备卡片。

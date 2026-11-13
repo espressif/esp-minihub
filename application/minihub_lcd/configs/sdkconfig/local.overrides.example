@@ -1,0 +1,6 @@
+# Copy to local.overrides (gitignored) for lab Wi-Fi credentials.
+# Appended last by build_firmware / set_sdkconfig_profile when present.
+CONFIG_MINIHUB_WIFI_SSID="YOUR_SSID"
+CONFIG_MINIHUB_WIFI_PASS="YOUR_PASSWORD"
+CONFIG_DEFAULT_WIFI_SSID="YOUR_SSID"
+CONFIG_DEFAULT_WIFI_PASSWORD="YOUR_PASSWORD"

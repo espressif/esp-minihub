@@ -125,19 +125,22 @@ One product can carry more than one board recipe: put extra YAML files under
 
 .. code-block:: bash
 
-   ./tools/apply_sdkconfig_variant.sh lcd          # variants/lcd.yml -> app.yml
+   ./tools/apply_sdkconfig_variant.sh <name>       # variants/<name>.yml -> app.yml
    ./tools/apply_sdkconfig_variant.sh --restore    # variants/default.yml -> app.yml
 
 A variant is a whole replacement for ``app.yml`` — the feature list, not a patch on top
 of it. Whatever you put in ``app.yml`` by hand (a lab SSID, an extra feature) is what
 gets overwritten.
 
-One variant really touches two things, and ``variants/<name>.yml`` covers only the
-first. The component set, board and ESP-IDF dependencies live in the ``variants:``
-block of ``manifest.yml``, and ``tools/sync_host_manifest.py`` picks them at build
-time: it looks for the ``lcd`` feature in ``app.yml`` and switches components only
-if ``variants.lcd`` exists — that name is hardcoded. A variant under any other name
-changes the sdkconfig features and leaves the component set as the product's own.
+The LCD firmware is the separate product ``application/minihub_lcd``
+(``esp32_s31_korvo1``), built with ``-app minihub_lcd``. ``application/minihub``
+is Ethernet Function CoreBoard only (``esp32_s31_function_coreboard_1``) — do not
+put ``lcd`` in its ``app.yml`` or add a ``variants.lcd`` block.
+
+A ``variants/<name>.yml`` file replaces ``app.yml`` features only. Component set,
+board and ESP-IDF dependencies come from that product's ``manifest.yml`` (or, when
+``app.yml`` includes the ``lcd`` feature, from a ``_<app>_lcd`` overlay profile if
+one was merged in).
 
 .. warning::
 
@@ -212,3 +215,47 @@ The console HTML is staged on ``storage`` as ``/data/web/``.
 To skin ``index.html`` / ``login.html`` or push files with curl:
 :doc:`web_console`. The generic ``CMakeLists.txt`` copies
 ``components/minihub_web/web/`` only (no ``application/APP/web/`` overlay).
+
+Restyling the on-screen UI without a rebuild
+--------------------------------------------
+
+The LCD interface is a set of JSON documents the firmware reads at runtime from
+``/data/ui/`` on the ``storage`` LittleFS partition. ``application/minihub/manifest.yml``
+only decides whether the panel is built in (``CONFIG_MINIHUB_LCD_UI``). What the panel
+shows is ``/data/ui/root.json`` and the files that document lists.
+
+``root.json`` names the assets in load order::
+
+    /data/ui/root.json
+      constants/theme.json      colors, sizes
+      assets/device_icons.json  icon ids referenced as ${image.<id>}
+      templates/device_card.json
+      screens/overview.json     screens/map.json  screens/store.json
+      flows/main.json           screen list, initial screen, transitions
+
+To change the on-screen UI:
+
+- Edit a screen to change layout, styles, or which parameters appear.
+- To add a screen, add a file, list it under ``assets``, add one transition in
+  ``flows/main.json``, and add one ``nav_*`` action so the screen is reachable.
+- Push the result by flashing the ``storage`` image, or during development with
+  ``CONFIG_MINIHUB_DEV_FS_UPLOAD`` and ``PUT /api/dev/fs/ui/<path>``. That route
+  accepts ``ui/`` only and caps one upload at 2 MiB.
+
+Two checks keep an OEM edit within the firmware contract. Both run at build time:
+
+- ``tools/test_lcd_ui_contract.py`` checks ``ui/**/*.json`` against
+  ``components/minihub_lcd/ui_contract.json``. Every view path and action name the
+  firmware reads must exist in the JSON. ``root.json`` must carry the version the
+  contract expects. The device-slot count must match the template. A rename that
+  the firmware does not know about fails ``idf.py`` configure, not the panel.
+- ``CONFIG_MINIHUB_STORAGE_MIN_FREE_BYTES`` (checked in the Store install path)
+  refuses a package that would eat the headroom the UI and device state need.
+
+Device names and other free text come from the network, so they are not limited
+to the built-in glyph set. ``ui/fonts/`` holds the optional FreeType face used
+for those. UI chrome renders with LVGL's built-in Han Sans and stays readable
+when that file is absent.
+
+What the panel is **not**: it is not a hub point. It does not appear in the type
+catalog, cannot be targeted by a rule, and has no device card of its own.

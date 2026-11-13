@@ -16,9 +16,6 @@
       "warn": "#f59e0b",
       "bad": "#ef4444"
     },
-    "user": {
-      "display_name": "用户"
-    },
     "stats": {
       "devices": "0",
       "online": "0",

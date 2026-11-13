@@ -229,6 +229,27 @@ function(minihub_after_project)
     if(CONFIG_MINIHUB_MATTER_ADAPTER)
         include("${MINIHUB_IMPORT_ROOT}/cmake/matter_no_rtti.cmake")
     endif()
+    if(CONFIG_MINIHUB_MQTT_BROKER)
+        # espressif/mosquitto 2.0.20~9 ships port/sysconf.c with a *strong*
+        # sysconf() that returns 64 for _SC_OPEN_MAX; its mux_poll.c calls it.
+        # IDF esp_libc defines sysconf() in the same object as pathconf(), which
+        # libstdc++ <filesystem> (pulled in by the LCD's brookesia storage
+        # service) references. Linking both gives "multiple definition of
+        # sysconf". Keep both semantics by renaming only mosquitto's private
+        # override: its own declaration, definition and calls all become
+        # mosq_sysconf, while IDF's sysconf stays the single global symbol.
+        # This touches no registry source and no product feature set.
+        idf_build_get_property(_minihub_build_components BUILD_COMPONENTS)
+        if("espressif__mosquitto" IN_LIST _minihub_build_components)
+            idf_component_get_property(_mosq_lib espressif__mosquitto COMPONENT_LIB)
+            if(_mosq_lib)
+                get_target_property(_mosq_lib_type ${_mosq_lib} TYPE)
+                if(NOT _mosq_lib_type STREQUAL "INTERFACE_LIBRARY")
+                    target_compile_definitions(${_mosq_lib} PRIVATE "sysconf=mosq_sysconf")
+                endif()
+            endif()
+        endif()
+    endif()
 endfunction()
 
 cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL minihub_after_project)

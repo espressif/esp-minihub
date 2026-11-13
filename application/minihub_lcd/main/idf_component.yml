@@ -1,0 +1,16 @@
+dependencies:
+  joltwallet/littlefs: ~=1.21.0
+  espressif/cjson: ^1.7.19
+  espressif/network_provisioning: ^1.1.0
+  espressif/mqtt: ^1.0.0
+  espressif/esp_flash_dispatcher: ^1.0.2
+  espressif/esp_board_manager: ~0.5.15
+  espressif/esp_lcd_touch_gt1151: '*'
+  espressif/brookesia_lib_utils: 0.8.*
+  espressif/brookesia_gui_lvgl: '>=0.8.6,<0.9'
+  espressif/brookesia_hal_adaptor: 0.8.*
+  espressif/brookesia_service_manager: 0.8.*
+  espressif/brookesia_service_helper: 0.8.*
+  espressif/brookesia_service_display: 0.8.*
+  espressif/brookesia_gui_interface: 0.8.*
+  espressif/esp_lvgl_adapter: 0.6.*

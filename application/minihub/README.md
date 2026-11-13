@@ -4,14 +4,7 @@
 
 Default recipe `configs/sdkconfig/app.yml`: Ethernet-oriented (Wi-Fi STA fallback, USB MSC, RTSP, Modbus, …). Reference board `esp32_s31_function_coreboard_1`.
 
-Optional LCD recipe `configs/sdkconfig/variants/lcd.yml`:
-
-```bash
-./tools/apply_sdkconfig_variant.sh lcd
-./tools/build_firmware.py -app minihub build
-# Restore default:
-./tools/apply_sdkconfig_variant.sh --restore
-```
+LCD is a separate product. Build it with `-app minihub_lcd`. This recipe does not list `lcd`.
 
 ## Build
 

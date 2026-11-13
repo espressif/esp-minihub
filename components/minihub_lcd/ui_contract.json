@@ -1,0 +1,561 @@
+{
+  "schema": "minihub.lcd.ui_contract/1",
+  "root_version": "0.2.0",
+  "flow_id": "main",
+  "counts": {
+    "device_slots": 12,
+    "store_rows": 4,
+    "store_avail_rows": 4,
+    "store_row_slots": 4,
+    "rule_slots": 16,
+    "scene_slots": 16
+  },
+  "enums": {
+    "screens": ["overview", "map", "store", "system", "rules", "scenes"],
+    "store_prefixes": ["pack", "mod"],
+    "store_row_prefixes": ["avail", "pack", "mod"],
+    "nav_ids": ["nav_overview", "nav_map", "nav_rules", "nav_scenes", "nav_store", "nav_system"],
+    "store_tabs": ["tab_available", "tab_installed"],
+    "filters": ["filter_all", "filter_auth", "filter_matter"],
+    "confirm_screens": ["rules", "scenes", "store", "system"],
+    "name_screens": [
+      "overview"
+    ],
+    "form_screens": [
+      "rules",
+      "scenes"
+    ]
+  },
+  "views": {
+    "SIDEBAR": "/overview/sidebar",
+    "OVERVIEW_TITLE": "/overview/overview_main/header_row/overview_title",
+    "OVERVIEW_UPDATED": "/overview/overview_main/header_row/overview_updated",
+    "STAT_DEVICES": "/overview/overview_main/stats_row/stat_devices/stat_devices_val",
+    "STAT_ONLINE": "/overview/overview_main/stats_row/stat_online/stat_online_val",
+    "STAT_ADAPTERS": "/overview/overview_main/stats_row/stat_adapters/stat_adapters_val",
+    "OVERVIEW_TOOLBAR": "/overview/overview_main/overview_toolbar",
+    "AUTH_BAR": "/overview/overview_main/overview_toolbar/auth_bar",
+    "AUTH_SECTION_LABEL": "/overview/overview_main/overview_toolbar/auth_bar/auth_section_lbl",
+    "AUTH_ACCOUNT": "/overview/overview_main/overview_toolbar/auth_bar/auth_acct",
+    "AUTH_COUNT": "/overview/overview_main/overview_toolbar/auth_bar/auth_count",
+    "AUTH_BTN_LOGIN": "/overview/overview_main/overview_toolbar/auth_bar/auth_btn_login",
+    "AUTH_BTN_SYNC": "/overview/overview_main/overview_toolbar/auth_bar/auth_btn_sync",
+    "AUTH_BTN_LOGOUT": "/overview/overview_main/overview_toolbar/auth_bar/auth_btn_logout",
+    "AUTH_FILTER_LABEL": "/overview/overview_main/overview_toolbar/filter_row/filter_auth/filter_auth_lbl",
+    "AUTH_CTA": "/overview/overview_main/auth_cta",
+    "DEVICE_LIST": "/overview/overview_main/device_list",
+    "MAP_IMAGE": "/map/map_main/map_canvas_wrap/map_image",
+    "MAP_STATUS": "/map/map_main/map_canvas_wrap/map_status",
+    "MAP_HUB": "/map/map_main/map_hub",
+    "MAP_INFO": "/map/map_main/map_info",
+    "STORE_PACK_SECTION": "/store/store_main/pack_section",
+    "STORE_MOD_SECTION": "/store/store_main/mod_section",
+    "STORE_AVAIL_SECTION": "/store/store_main/avail_section",
+    "STORE_AVAIL_EMPTY": "/store/store_main/avail_section/avail_empty",
+    "STORE_AVAIL_HDR": "/store/store_main/avail_section/avail_hdr",
+    "STORE_LIST_HDR": "/store/store_main/store_list_bar/store_list_hdr",
+    "STORE_PACK_HDR": "/store/store_main/pack_section/pack_hdr",
+    "STORE_MOD_HDR": "/store/store_main/mod_section/mod_hdr",
+    "STORE_INST_EMPTY": "/store/store_main/inst_empty",
+    "SYSTEM_MAIN": "/system/system_main",
+    "SYSTEM_FW": "/system/system_main/sys_grid/sys_card_fw/sys_fw_val",
+    "SYSTEM_WIFI": "/system/system_main/sys_grid/sys_card_wifi/sys_wifi_val",
+    "SYSTEM_OTA": "/system/system_main/sys_grid/sys_card_ota/sys_ota_val",
+    "SYSTEM_IP": "/system/system_main/sys_grid/sys_card_ip/sys_ip_val",
+    "SYSTEM_UPTIME": "/system/system_main/sys_grid/sys_card_uptime/sys_uptime_val",
+    "SYSTEM_RAM": "/system/system_main/sys_grid/sys_card_ram/sys_ram_val",
+    "SYSTEM_PSRAM": "/system/system_main/sys_grid/sys_card_psram/sys_psram_val",
+    "SYSTEM_CHIP": "/system/system_main/sys_grid/sys_card_chip/sys_chip_val",
+    "SYSTEM_FLASH": "/system/system_main/sys_grid/sys_card_flash/sys_flash_val",
+    "SYSTEM_STORAGE": "/system/system_main/sys_grid/sys_card_storage/sys_storage_val",
+    "SYSTEM_MODSTORE": "/system/system_main/sys_grid/sys_card_modstore/sys_modstore_val",
+    "RULES_MAIN": "/rules/rules_main",
+    "RULES_LIST": "/rules/rules_main/rules_list",
+    "RULES_EMPTY": "/rules/rules_main/rules_empty",
+    "SCENES_MAIN": "/scenes/scenes_main",
+    "SCENES_LIST": "/scenes/scenes_main/scenes_list",
+    "SCENES_EMPTY": "/scenes/scenes_main/scenes_empty",
+    "STORE_MODAL": "/store/store_modal",
+    "STORE_MODAL_TITLE": "/store/store_modal/store_modal_card/store_modal_title",
+    "STORE_MODAL_MSG": "/store/store_modal/store_modal_card/store_modal_msg",
+    "STORE_MODAL_INSTALL": "/store/store_modal/store_modal_card/store_modal_btns/store_do_install",
+    "STORE_MODAL_UPGRADE": "/store/store_modal/store_modal_card/store_modal_btns/store_do_upgrade",
+    "STORE_MODAL_REINSTALL": "/store/store_modal/store_modal_card/store_modal_btns/store_do_reinstall",
+    "STORE_MODAL_ENABLE": "/store/store_modal/store_modal_card/store_modal_btns/store_do_enable",
+    "STORE_MODAL_ENABLE_LBL": "/store/store_modal/store_modal_card/store_modal_btns/store_do_enable/store_do_enable_lbl",
+    "STORE_MODAL_UNINSTALL": "/store/store_modal/store_modal_card/store_modal_btns/store_do_uninstall",
+    "STORE_MODAL_CANCEL": "/store/store_modal/store_modal_card/store_modal_btns/store_modal_cancel",
+    "SYSTEM_REBOOT": "/system/system_main/sys_btn_row/reboot_btn",
+    "SYSTEM_FACTORY": "/system/system_main/sys_btn_row/factory_btn",
+    "SYSTEM_TZ": "/system/system_main/sys_grid/sys_tz_row/sys_tz_val",
+    "SYSTEM_TZ_NOW": "/system/system_main/sys_grid/sys_tz_row/sys_tz_now",
+    "RULES_ADD_BTN": "/rules/rules_main/rules_header/rules_add_btn",
+    "SCENES_ADD_BTN": "/scenes/scenes_main/scenes_header/scenes_add_btn",
+    "SYSTEM_LANG": "/system/system_main/sys_grid/sys_lang_row/sys_lang_val",
+    "SYSTEM_LANG_HINT": "/system/system_main/sys_grid/sys_lang_row/sys_lang_hint",
+    "STORE_MODAL_DESC": "/store/store_modal/store_modal_card/store_modal_desc",
+    "FILTER_AUTH_BTN": "/overview/overview_main/overview_toolbar/filter_row/filter_auth",
+    "FILTER_MATTER_BTN": "/overview/overview_main/overview_toolbar/filter_row/filter_matter",
+    "MATTER_BAR": "/overview/overview_main/overview_toolbar/matter_bar",
+    "MATTER_STATUS": "/overview/overview_main/overview_toolbar/matter_bar/matter_status",
+    "MATTER_ADD_BTN": "/overview/overview_main/overview_toolbar/matter_bar/matter_add_btn",
+    "RENAME_HINT": "/overview/name_modal/name_card/name_hint",
+    "RENAME_TITLE": "/overview/name_modal/name_card/name_title",
+    "SYSTEM_WIFI_CFG": "/system/system_main/sys_grid/sys_card_wifi",
+    "SYSTEM_WIFI_SSID": "/system/system_main/sys_grid/sys_card_wifi/wifi_ssid_input",
+    "SYSTEM_WIFI_PASS": "/system/system_main/sys_grid/sys_card_wifi/wifi_pass_input",
+    "SYSTEM_WIFI_OPEN": "/system/system_main/sys_grid/sys_card_wifi/wifi_btn_row/wifi_open_btn/wifi_open_btn_lbl",
+    "SYSTEM_WIFI_SAVE": "/system/system_main/sys_grid/sys_card_wifi/wifi_btn_row/wifi_save_btn",
+    "SYSTEM_NET_MODE": "/system/system_main/sys_grid/sys_card_wifi/net_mode_btn/net_mode_btn_lbl",
+    "SYSTEM_NET_IP": "/system/system_main/sys_grid/sys_card_wifi/net_ip_input",
+    "SYSTEM_NET_MASK": "/system/system_main/sys_grid/sys_card_wifi/net_mask_input",
+    "SYSTEM_NET_DNS": "/system/system_main/sys_grid/sys_card_wifi/net_dns_input",
+    "SYSTEM_NET_SAVE": "/system/system_main/sys_grid/sys_card_wifi/net_save_btn"
+  },
+  "view_patterns": {
+    "FILTER_CHIP": {
+      "format": "/overview/overview_main/overview_toolbar/filter_row/%s",
+      "args": [
+        "filters"
+      ]
+    },
+    "FILTER_CHIP_LABEL": {
+      "format": "/overview/overview_main/overview_toolbar/filter_row/%s/%s_lbl",
+      "args": [
+        "filters",
+        "filters"
+      ]
+    },
+    "STORE_ROW": {
+      "format": "/store/store_main/%s_section/%s_row_%d",
+      "args": [
+        "store_prefixes",
+        "store_prefixes",
+        "store_rows"
+      ]
+    },
+    "STORE_ROW_NAME": {
+      "format": "/store/store_main/%s_section/%s_row_%d/%s_name_%d",
+      "args": [
+        "store_prefixes",
+        "store_prefixes",
+        "store_rows",
+        "store_prefixes",
+        "store_rows"
+      ]
+    },
+    "STORE_ROW_DESC": {
+      "format": "/store/store_main/%s_section/%s_row_%d/%s_desc_%d",
+      "args": [
+        "store_prefixes",
+        "store_prefixes",
+        "store_rows",
+        "store_prefixes",
+        "store_rows"
+      ]
+    },
+    "STORE_ROW_STATE": {
+      "format": "/store/store_main/%s_section/%s_row_%d/%s_state_%d",
+      "args": [
+        "store_prefixes",
+        "store_prefixes",
+        "store_rows",
+        "store_prefixes",
+        "store_rows"
+      ]
+    },
+    "STORE_AVAIL_INSTALL_BTN": {
+      "format": "/store/store_main/avail_section/avail_row_%d/avail_install_%d",
+      "args": ["store_avail_rows", "store_avail_rows"]
+    },
+    "STORE_AVAIL_ROW": {
+      "format": "/store/store_main/avail_section/avail_row_%d",
+      "args": [
+        "store_avail_rows"
+      ]
+    },
+    "STORE_AVAIL_ROW_NAME": {
+      "format": "/store/store_main/avail_section/avail_row_%d/avail_name_%d",
+      "args": [
+        "store_avail_rows",
+        "store_avail_rows"
+      ]
+    },
+    "STORE_AVAIL_ROW_DESC": {
+      "format": "/store/store_main/avail_section/avail_row_%d/avail_desc_%d",
+      "args": [
+        "store_avail_rows",
+        "store_avail_rows"
+      ]
+    },
+    "STORE_TAB_BTN": {
+      "format": "/store/store_main/store_tabs/%s",
+      "args": [
+        "store_tabs"
+      ]
+    },
+    "USER_NAME": {
+      "format": "/%s/sidebar/user_btn/user_name",
+      "args": [
+        "screens"
+      ]
+    },
+    "CONFIRM_MODAL": {
+      "format": "/%s/confirm_modal",
+      "args": [
+        "confirm_screens"
+      ]
+    },
+    "CONFIRM_TITLE": {
+      "format": "/%s/confirm_modal/confirm_card/confirm_title",
+      "args": [
+        "confirm_screens"
+      ]
+    },
+    "CONFIRM_CANCEL_BTN": {
+      "format": "/%s/confirm_modal/confirm_card/confirm_btn_row/confirm_cancel",
+      "args": ["confirm_screens"]
+    },
+    "SIDEBAR_NAV_BTN": {
+      "format": "/%s/sidebar/%s",
+      "args": ["screens", "nav_ids"]
+    },
+    "CONFIRM_MSG": {
+      "format": "/%s/confirm_modal/confirm_card/confirm_msg",
+      "args": [
+        "confirm_screens"
+      ]
+    },
+    "NAME_MODAL": {
+      "format": "/%s/name_modal",
+      "args": [
+        "name_screens"
+      ]
+    },
+    "NAME_INPUT": {
+      "format": "/%s/name_modal/name_card/name_input",
+      "args": [
+        "name_screens"
+      ]
+    },
+    "NAME_OK_BTN": {
+      "format": "/%s/name_modal/name_card/name_btn_row/name_ok",
+      "args": [
+        "name_screens"
+      ]
+    },
+    "NAME_CANCEL_BTN": {
+      "format": "/%s/name_modal/name_card/name_btn_row/name_cancel",
+      "args": [
+        "name_screens"
+      ]
+    },
+    "FORM_MODAL": {
+      "format": "/%s/form_modal",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_TITLE": {
+      "format": "/%s/form_modal/form_card/form_title",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_NAME_INPUT": {
+      "format": "/%s/form_modal/form_card/form_name_row/form_name_input",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_ENABLED_LBL": {
+      "format": "/%s/form_modal/form_card/form_top_row/form_enabled_btn/form_enabled_btn_lbl",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_HINT": {
+      "format": "/%s/form_modal/form_card/form_top_row/form_hint",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_WHEN_SECTION": {
+      "format": "/%s/form_modal/form_card/form_when_section",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_IF_SECTION": {
+      "format": "/%s/form_modal/form_card/form_if_section",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_WHEN_DEV": {
+      "format": "/%s/form_modal/form_card/form_when_section/form_when_dev",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_IF_DEV": {
+      "format": "/%s/form_modal/form_card/form_if_section/form_if_row/form_if_dev",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_IF_COND": {
+      "format": "/%s/form_modal/form_card/form_if_section/form_if_row/form_if_cond",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_THEN_DEV": {
+      "format": "/%s/form_modal/form_card/form_then_section/form_then_row/form_then_dev",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_THEN_CMD": {
+      "format": "/%s/form_modal/form_card/form_then_section/form_then_row/form_then_cmd",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_WHEN_TYPE": {
+      "format": "/%s/form_modal/form_card/form_when_section/form_when_type",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_WHEN_TIME": {
+      "format": "/%s/form_modal/form_card/form_when_section/form_when_time",
+      "args": [
+        "form_screens"
+      ]
+    }
+  },
+  "actions": {
+    "NAV_MAP_FROM_OVERVIEW": "nav_map_from_overview",
+    "NAV_STORE_FROM_OVERVIEW": "nav_store_from_overview",
+    "NAV_SYSTEM_FROM_OVERVIEW": "nav_system_from_overview",
+    "NAV_RULES_FROM_OVERVIEW": "nav_rules_from_overview",
+    "NAV_SCENES_FROM_OVERVIEW": "nav_scenes_from_overview",
+    "NAV_OVERVIEW_FROM_MAP": "nav_overview_from_map",
+    "NAV_STORE_FROM_MAP": "nav_store_from_map",
+    "NAV_SYSTEM_FROM_MAP": "nav_system_from_map",
+    "NAV_RULES_FROM_MAP": "nav_rules_from_map",
+    "NAV_SCENES_FROM_MAP": "nav_scenes_from_map",
+    "NAV_OVERVIEW_FROM_STORE": "nav_overview_from_store",
+    "NAV_MAP_FROM_STORE": "nav_map_from_store",
+    "NAV_SYSTEM_FROM_STORE": "nav_system_from_store",
+    "NAV_RULES_FROM_STORE": "nav_rules_from_store",
+    "NAV_SCENES_FROM_STORE": "nav_scenes_from_store",
+    "NAV_OVERVIEW_FROM_SYSTEM": "nav_overview_from_system",
+    "NAV_MAP_FROM_SYSTEM": "nav_map_from_system",
+    "NAV_STORE_FROM_SYSTEM": "nav_store_from_system",
+    "NAV_RULES_FROM_SYSTEM": "nav_rules_from_system",
+    "NAV_SCENES_FROM_SYSTEM": "nav_scenes_from_system",
+    "NAV_OVERVIEW_FROM_RULES": "nav_overview_from_rules",
+    "NAV_MAP_FROM_RULES": "nav_map_from_rules",
+    "NAV_STORE_FROM_RULES": "nav_store_from_rules",
+    "NAV_SYSTEM_FROM_RULES": "nav_system_from_rules",
+    "NAV_SCENES_FROM_RULES": "nav_scenes_from_rules",
+    "NAV_OVERVIEW_FROM_SCENES": "nav_overview_from_scenes",
+    "NAV_MAP_FROM_SCENES": "nav_map_from_scenes",
+    "NAV_STORE_FROM_SCENES": "nav_store_from_scenes",
+    "NAV_SYSTEM_FROM_SCENES": "nav_system_from_scenes",
+    "NAV_RULES_FROM_SCENES": "nav_rules_from_scenes",
+    "USER_TAP_OVERVIEW": "user_tap_overview",
+    "USER_TAP_MAP": "user_tap_map",
+    "USER_TAP_STORE": "user_tap_store",
+    "USER_TAP_SYSTEM": "user_tap_system",
+    "USER_TAP_RULES": "user_tap_rules",
+    "USER_TAP_SCENES": "user_tap_scenes",
+    "RULE_TOGGLE": "rule_toggle",
+    "RULE_DELETE": "rule_delete",
+    "SCENE_DELETE": "scene_delete",
+    "SCENE_INVOKE": "scene_invoke",
+    "SYSTEM_REBOOT": "system_reboot",
+    "SYSTEM_FACTORY_RESET": "system_factory_reset",
+    "FILTER_ALL": "filter_all",
+    "FILTER_AUTH": "filter_auth",
+    "FILTER_MATTER": "filter_matter",
+    "AUTH_LOGIN": "auth_login",
+    "AUTH_SYNC": "auth_sync",
+    "AUTH_LOGOUT": "auth_logout",
+    "AUTH_SYNC_CTA": "auth_sync_cta",
+    "DEVICE_TAP": "device_tap",
+    "STORE_TAB_AVAILABLE": "store_tab_available",
+    "STORE_TAB_INSTALLED": "store_tab_installed",
+    "STORE_INSTALL": "store_install",
+    "STORE_UPGRADE": "store_upgrade",
+    "STORE_REINSTALL": "store_reinstall",
+    "STORE_ENABLE": "store_enable",
+    "STORE_UNINSTALL": "store_uninstall",
+    "STORE_MODAL_CANCEL": "store_modal_cancel",
+    "SYSTEM_TZ_PICK": "system_tz_pick",
+    "RULE_ADD_OPEN": "rule_add_open",
+    "SCENE_ADD_OPEN": "scene_add_open",
+    "SYSTEM_LANG_PICK": "system_lang_pick",
+    "DEVICE_RENAME": "device_rename",
+    "MATTER_ADD": "matter_add",
+    "WIFI_SSID_CHANGED": "wifi_ssid_changed",
+    "WIFI_PASS_CHANGED": "wifi_pass_changed",
+    "WIFI_OPEN_TOGGLE": "wifi_open_toggle",
+    "WIFI_SAVE": "wifi_save",
+    "NET_IP_CHANGED": "net_ip_changed",
+    "NET_MASK_CHANGED": "net_mask_changed",
+    "NET_DNS_CHANGED": "net_dns_changed",
+    "NET_MODE_TOGGLE": "net_mode_toggle",
+    "NET_SAVE": "net_save"
+  },
+  "action_patterns": {
+    "STORE_INSTALL_AVAIL": {
+      "format": "store_install_avail_%d",
+      "args": ["store_avail_rows"]
+    },
+    "STORE_ROW_TAP": {
+      "format": "store_row_tap_%s_%d",
+      "args": ["store_row_prefixes", "store_row_slots"]
+    },
+    "CONFIRM_OK": {
+      "format": "confirm_%s_ok",
+      "args": ["confirm_screens"]
+    },
+    "CONFIRM_CANCEL": {
+      "format": "confirm_%s_cancel",
+      "args": ["confirm_screens"]
+    },
+    "NAME_CHANGED": {
+      "format": "name_%s_changed",
+      "args": [
+        "name_screens"
+      ]
+    },
+    "NAME_OK": {
+      "format": "name_%s_ok",
+      "args": [
+        "name_screens"
+      ]
+    },
+    "NAME_CANCEL": {
+      "format": "name_%s_cancel",
+      "args": [
+        "name_screens"
+      ]
+    },
+    "FORM_NAME_CHANGED": {
+      "format": "form_%s_name_changed",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_ENABLED": {
+      "format": "form_%s_enabled",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_WHEN_PICK": {
+      "format": "form_%s_when_pick",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_IF_PICK": {
+      "format": "form_%s_if_pick",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_COND_PICK": {
+      "format": "form_%s_cond_pick",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_THEN_PICK": {
+      "format": "form_%s_then_pick",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_CMD_PICK": {
+      "format": "form_%s_cmd_pick",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_CANCEL": {
+      "format": "form_%s_cancel",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_SAVE": {
+      "format": "form_%s_save",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_WHEN_TYPE_PICK": {
+      "format": "form_%s_when_type_pick",
+      "args": [
+        "form_screens"
+      ]
+    },
+    "FORM_WHEN_TIME_CHANGED": {
+      "format": "form_%s_when_time_changed",
+      "args": [
+        "form_screens"
+      ]
+    }
+  },
+  "binding_keys": ["card.meta", "card.name", "card.state", "card.then", "card.type", "card.value", "chip.bg", "chip.border", "chip.text", "form.devices", "form.index", "form.name", "form.when_time", "lang.options", "lang.selected", "net.dns", "net.ip", "net.netmask", "rename.text", "store_tab.bg", "store_tab.border", "store_tab.text", "tz.options", "tz.selected", "wifi.password", "wifi.ssid"],
+  "templates": {
+    "DEVICE_CARD": {
+      "template_id": "device_card",
+      "parent": "/overview/overview_main/device_list",
+      "instance_format": "dev_%d",
+      "instance_prefix": "dev_",
+      "count_key": "device_slots",
+      "children": [
+        "icon",
+        "name",
+        "type",
+        "meta",
+        "val",
+        "rename_btn"
+      ],
+      "action": "device_tap"
+    },
+    "RULE_ROW": {
+      "template_id": "rule_row",
+      "parent": "/rules/rules_main/rules_list",
+      "instance_format": "rule_%d",
+      "instance_prefix": "rule_",
+      "count_key": "rule_slots",
+      "children": [
+        "name",
+        "state",
+        "then",
+        "delete"
+      ],
+      "action": "rule_toggle"
+    },
+    "SCENE_ROW": {
+      "template_id": "scene_row",
+      "parent": "/scenes/scenes_main/scenes_list",
+      "instance_format": "scene_%d",
+      "instance_prefix": "scene_",
+      "count_key": "scene_slots",
+      "children": [
+        "name",
+        "meta",
+        "delete"
+      ],
+      "action": "scene_invoke"
+    }
+  }
+}

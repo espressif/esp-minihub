@@ -1,11 +1,31 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "assets": [
     "constants/theme.json",
     "assets/device_icons.json",
+    "templates/device_card.json",
+    "templates/rule_row.json",
+    "templates/scene_row.json",
     "screens/overview.json",
     "screens/map.json",
     "screens/store.json",
+    "screens/system.json",
+    "screens/rules.json",
+    "screens/scenes.json",
     "flows/main.json"
+  ],
+  "variants": [
+    {
+      "when": "${expr(${env.language} == \"zh\")}",
+      "assets": [
+        "constants/i18n_zh.json"
+      ]
+    },
+    {
+      "when": "${expr(${env.language} == \"en\")}",
+      "assets": [
+        "constants/i18n_en.json"
+      ]
+    }
   ]
 }

@@ -243,8 +243,32 @@ function renderToolbar() {
     if (filter !== 'all' && !adapterEnabled(filter)) filter = 'all';
 }
 
+/* Hub-persisted sidebar label; empty means the i18n default. */
+let hubDisplayName = '';
+
 function localName() {
-    return localStorage.getItem('minihub_display_name') || t('ov.user');
+    return hubDisplayName || t('ov.user');
+}
+
+async function loadDisplayName() {
+    try {
+        const r = await fetch('/api/system/display_name');
+        if (!r.ok) return;
+        const j = await r.json();
+        hubDisplayName = (j && typeof j.display_name === 'string') ? j.display_name.trim() : '';
+        if (typeof renderLocalUser === 'function') renderLocalUser();
+    } catch (e) {}
+}
+
+async function saveDisplayName(name) {
+    const r = await fetch('/api/system/display_name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: name })
+    });
+    if (!r.ok) throw new Error('display_name');
+    const j = await r.json();
+    hubDisplayName = (j && typeof j.display_name === 'string') ? j.display_name.trim() : name;
 }
 
 /* Compact Store upgrade control after group title+version+count — only when update exists. */
