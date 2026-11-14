@@ -533,9 +533,17 @@ function switchView(v) {
     }
     /* The device list paints from what is already cached — a synchronous render —
      * and only then catches up over the network. Awaiting points here would hold
-     * the empty grid on screen for a whole round trip. */
-    if (v === 'overview' && (!pts.length || Date.now() - lastPtsAt > 2000)) {
-        loadPoints();
+     * the empty grid on screen for a whole round trip.
+     * Always repaint on return to the overview: while another view was active the
+     * poll/WS stream kept `pts` current but skipped renderOverview (it is gated on
+     * `view === 'overview'`), so the cached DOM would otherwise show stale device
+     * state until the next unrelated refresh. Re-fetch only when the cache is known
+     * stale (>2s old or never populated). */
+    if (v === 'overview') {
+        renderOverview();
+        if (!pts.length || Date.now() - lastPtsAt > 2000) {
+            loadPoints();
+        }
     }
 }
 function renderLocalUser() {

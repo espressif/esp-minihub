@@ -1186,6 +1186,13 @@ static void hint_task(void *arg)
         s_hint_refresh_busy = false;
         s_hint_refresh_want = false;
         asset_sync_once();
+        /* Refresh the cloud plugin catalog (writes /store/catalog.json) on every
+         * power-up probe and hourly pass, so the Store UI is not stuck on a locally
+         * cached list until a manual Refresh. ESP_ERR_INVALID_STATE just means a
+         * refresh is already in flight — leave it be; the next pass retries. */
+        if (minihub_store_refresh_catalog_async() == ESP_ERR_NO_MEM) {
+            ESP_LOGW(TAG, "catalog refresh skipped: out of memory");
+        }
         /* Sleep out the period, or wake immediately when the console asks. */
         (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(MH_UPDATE_HINT_PERIOD_MS));
     }

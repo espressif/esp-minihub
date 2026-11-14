@@ -251,13 +251,29 @@ function scenesEditCancel() {
 function scenesActRow(act, si, aj) {
     const pid = act.point_id || '';
     const type = (rulesFindPoint(pid) || {}).type || '';
-    const defs = rulesCmdDefsForType(type);
+    let defs = rulesCmdDefsForType(type);
+    /* No device chosen yet: there is no catalog type to derive commands from, so
+     * fall back to the generic power commands with localized labels instead of the
+     * raw stored cmd string (issue: switch step initially showed "turn_on"). */
+    if (!pid && defs.length === 0) {
+        defs = [
+            { cmd: 'turn_on', labelKey: 'rules.opt_on' },
+            { cmd: 'turn_off', labelKey: 'rules.opt_off' },
+            { cmd: 'toggle', labelKey: 'rules.opt_toggle' }
+        ];
+    }
     const cmd = act.cmd || (defs[0] && defs[0].cmd) || 'turn_on';
     const cmdOpts = defs.map(function (d) {
         return '<option value="' + d.cmd + '"' + (d.cmd === cmd ? ' selected' : '') + '>' + esc(rulesCmdLabel(d)) + '</option>';
     }).join('');
-    const extra = (rulesCmdDefFor(cmd, type) == null)
-        ? '<option value="' + escAttr(cmd) + '" selected>' + esc(cmd) + '</option>' : '';
+    /* Last-resort fallback for a stored cmd not in the current command list: show
+     * it with a localized label when possible rather than the raw command string. */
+    const inDefs = defs.some(function (d) { return d.cmd === cmd; });
+    const extraLabel = (cmd === 'turn_on' || cmd === 'turn_off' || cmd === 'toggle')
+        ? t(cmd === 'turn_on' ? 'rules.opt_on' : cmd === 'turn_off' ? 'rules.opt_off' : 'rules.opt_toggle')
+        : cmd;
+    const extra = (!inDefs)
+        ? '<option value="' + escAttr(cmd) + '" selected>' + esc(extraLabel) + '</option>' : '';
     let h = '<div class="rule-then-row" data-step="' + si + '" data-act="' + aj + '"><div class="rule-then-fields">';
     h += '<div><label>' + t('scenes.field_point') + '</label>' +
         rulesSelectHtml('sc-step-' + si + '-act-' + aj + '-pid', rulesDeviceOptionsHtml(pid), 'scenesEditOnDeviceChange(' + si + ',' + aj + ')') + '</div>';
