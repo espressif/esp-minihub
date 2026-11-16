@@ -7,8 +7,8 @@
 # git@github.com:espressif/esp-minihub.git (GH_PUSH_KEY, internet runner).
 # Products: .app_matrix (application/<name>/). Add a folder name to the list.
 #
-# IDF: ESP32-S31 / MiniHub expects IDF ~6.2. Override IDF_CI_IMAGE in GitLab
-# CI/CD variables for an internal 6.2 / S31 image.
+# IDF: espressif/idf:release-v6.2 (tracks esp-idf release/v6.2; see docs pin).
+# Override IDF_CI_IMAGE in GitLab CI/CD variables only for a private image.
 #
 # MINIHUB_PLUGINS_REPO_URL (git@ URL) and GITLAB_KEY come from CI/CD Variables.
 
@@ -33,7 +33,7 @@ stages:
   - deploy
 
 variables:
-  IDF_CI_IMAGE: "espressif/idf:latest"
+  IDF_CI_IMAGE: "espressif/idf:release-v6.2"
   MINIHUB_APP: "minihub"
   MINIHUB_SKIP_MHUB: "1"
   MINIHUB_BUILD_MATTER: "0"
@@ -165,6 +165,8 @@ build:app:
 build:app_lcd:
   # Standalone product application/minihub_lcd. Do not apply an LCD variant
   # onto application/minihub.
+  # Cap ninja -j: Brookesia/Boost C++ units OOM the runner when unbounded
+  # (cc1plus Killed). build_firmware.py forwards -j to idf.py.
   extends:
     - .idf_env
     - .clone_plugins
@@ -176,7 +178,7 @@ build:app_lcd:
   script:
     - git submodule update --init --depth 1
     - export MINIHUB_PLUGIN_DIRS=$MINIHUB_PLUGIN_DIRS:$CI_PROJECT_DIR/examples/plugins
-    - ./tools/build_firmware.py --app "$MINIHUB_APP" build
+    - ./tools/build_firmware.py --app "$MINIHUB_APP" -j 4 build
   artifacts:
     when: on_success
     expire_in: 14 days

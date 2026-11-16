@@ -46,9 +46,9 @@ Modbus / Thread 边界路由器）。
 
 ## 环境
 
-* ESP-IDF 6.2，固定在 `master` 的 `8f8481b790354212b7016282eb08f5074aa91820`
-  （`git describe` = `qa-test-full-v6.2-20261030-164-g8f8481b7903`）；ESP32-S31 的支持比任何
-  6.2 release tag 都新。构建读取 `$IDF_PATH`，默认 `./esp-idf`
+* ESP-IDF 6.2，固定在 `release/v6.2` 的 `2b10d1278a547f5dc92efbe516144b4ae85f80cb`
+  （`git describe` = `qa-test-full-v6.2-20261115`）。构建读取 `$IDF_PATH`，默认
+  `./esp-idf`
 * Python 3.10+ 与 PyYAML
 * 可选：编进 Matter 时设置 `ESP_MATTER_PATH`
 

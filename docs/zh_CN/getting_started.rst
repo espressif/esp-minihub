@@ -29,10 +29,9 @@
      - 当前使用的修订
      - 为什么重要
    * - ESP-IDF
-     - ``master`` 分支 ``8f8481b790354212b7016282eb08f5074aa91820``，
-       ``git describe`` 为 ``qa-test-full-v6.2-20261030-164-g8f8481b7903``
-       （即 ESP-IDF 6.2.0 之后再 164 个提交）
-     - ESP32-S31 的支持比任何 6.2 release tag 都新；IDF 5.x 完全没有 S31 工具链
+     - ``release/v6.2`` 分支 ``2b10d1278a547f5dc92efbe516144b4ae85f80cb``，
+       ``git describe`` 为 ``qa-test-full-v6.2-20261115``
+     - MiniHub 需要基于 IDF 6.2 及之后的版本
    * - Target
      - ``esp32s31``，且每次都要 ``--preview``
      - 该 target 仍是 preview 状态，不加参数 ``idf.py`` 会直接拒绝
@@ -41,8 +40,8 @@
 
 .. code-block:: bash
 
-   git clone -b master https://github.com/espressif/esp-idf.git
-   cd esp-idf && git checkout 8f8481b790354212b7016282eb08f5074aa91820
+   git clone -b release/v6.2 https://github.com/espressif/esp-idf.git
+   cd esp-idf && git checkout 2b10d1278a547f5dc92efbe516144b4ae85f80cb
    ./install.sh esp32s31 && . ./export.sh
 
 ``tools/build_firmware.py`` 读取 ``$IDF_PATH``，未设置时使用仓库同级的
