@@ -31,11 +31,9 @@ anything else and an ESP32-S31 failure may simply be a toolchain mismatch.
      - Revision in use
      - Why it matters
    * - ESP-IDF
-     - ``master`` at ``8f8481b790354212b7016282eb08f5074aa91820``, which
-       ``git describe`` reports as ``qa-test-full-v6.2-20261030-164-g8f8481b7903``
-       (ESP-IDF 6.2.0 plus 164 commits)
-     - ESP32-S31 support is newer than any 6.2 release tag; IDF 5.x has no S31
-       toolchain at all
+     - ``release/v6.2`` at ``2b10d1278a547f5dc92efbe516144b4ae85f80cb``, which
+       ``git describe`` reports as ``qa-test-full-v6.2-20261115``
+     - MiniHub requires ESP-IDF 6.2 or later
    * - Target
      - ``esp32s31``, always with ``--preview``
      - The target is still preview, so ``idf.py`` refuses it without the flag
@@ -44,8 +42,8 @@ To pin your own build to this exact ESP-IDF instead of guessing:
 
 .. code-block:: bash
 
-   git clone -b master https://github.com/espressif/esp-idf.git
-   cd esp-idf && git checkout 8f8481b790354212b7016282eb08f5074aa91820
+   git clone -b release/v6.2 https://github.com/espressif/esp-idf.git
+   cd esp-idf && git checkout 2b10d1278a547f5dc92efbe516144b4ae85f80cb
    ./install.sh esp32s31 && . ./export.sh
 
 ``tools/build_firmware.py`` reads ``$IDF_PATH`` and otherwise uses the

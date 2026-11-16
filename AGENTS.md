@@ -66,12 +66,12 @@ Repo configs live in `.agent/mcp/` (`cursor.mcp.json`, `vscode.mcp.json`), symli
 - Product = `application/<name>/`. Default public Host: `application/minihub`.
 - Shared Core: `components/minihub_*`, bundled Hub adapters under `components/minihub_protocol_adapters/`. Store plugin sources: `examples/plugins/<id>/` (in-tree demos) or a sibling repo via `MINIHUB_PLUGIN_DIRS`. Products include `cmake/minihub_bundle/minihub_import.cmake` then `minihub_register_kconfig()`; or one yml path `cmake/minihub_bundle`. Do not put ecosystem-specific rules in Core.
 - Vendor / demo adapters ship as Store `.mhub`, not Host `require`. Public Host `store_preinstall` stays empty unless intentionally bundling factory modules.
-- ESP-IDF **6.2, pinned to `master` @ `8f8481b790354212b7016282eb08f5074aa91820`**
-  (`git describe` = `qa-test-full-v6.2-20261030-164-g8f8481b7903`) + target **esp32s31**
-  (`idf.py --preview`). `tools/build_firmware.py` uses `$IDF_PATH`, else the gitignored
-  `esp-idf/` beside the repo. IDF 5.x has no S31 toolchain. Python is not pinned: 3.10+
-  is enough for `idf.py` and this repo's `tools/*.py`. On a re-pin, move every copy at
-  once: `grep -rl 8f8481b README.md README_CN.md AGENTS.md docs/en docs/zh_CN`.
+- ESP-IDF **6.2, pinned to `release/v6.2` @ `2b10d1278a547f5dc92efbe516144b4ae85f80cb`**
+  (`git describe` = `qa-test-full-v6.2-20261115`) + target **esp32s31**
+  (`idf.py --preview`). `tools/build_firmware.py` uses `$IDF_PATH`,
+  else the gitignored `esp-idf/` beside the repo. MiniHub needs IDF 6.2 or later. Python is
+  not pinned: 3.10+ is enough for `idf.py` and this repo's `tools/*.py`. On a re-pin, move
+  every copy at once: `grep -rl 2b10d127 README.md README_CN.md AGENTS.md docs/en docs/zh_CN`.
 - Optional **on-device** MCP: `CONFIG_MINIHUB_MCP_SERVER=y` + `git submodule update --init components/esp-claw`. Unrelated to the plugin-author IDE MCP above.
 
 ## Deploy root
