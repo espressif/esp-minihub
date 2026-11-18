@@ -143,7 +143,7 @@ group。于是发布的 Status 与 Get 的回复走同一套解码：generic 与
 ``ESP_BLE_MESH_LIGHT_CLIENT_PUBLISH_EVT`` ），sensor 回调不看事件、只按 opcode 分派。
 
 没有这个块就什么都不写给节点，上报默认是关闭的 —— 打开它会给每次配网加上配置流量，
-并改变射频上跑的内容。 ``period_s`` 必须能被 Model Publication Period 那个字节精确
+并改变射频上运行的内容。 ``period_s`` 必须能被 Model Publication Period 那个字节精确
 表示：63 秒以内按 1 秒步进，之后按 10 秒、再按 10 分钟步进；编码不出的周期会被记日志
 并拒绝，而不是就近取整。 ``group`` 必须是 group 地址：被射频栈的
 ``ESP_BLE_MESH_ADDR_IS_GROUP`` 拒绝的值会让上报保持关闭，只留一行日志。
@@ -165,7 +165,7 @@ REST 接口
 
 请求体 JSON 可选。 ``seconds`` 缺省 60。 ``0`` 关闭窗口。
 
-窗口实际长度并不等于 ``seconds``：到期时若还有配网在跑，Hub 会把它 **延长一次**
+窗口实际长度并不等于 ``seconds``：到期时若仍有配网进行中，Hub 会把它 **延长一次**
 30 秒，第二次到期就中止卡住的配网并关窗。所以 60 秒的请求最长会占用射频约 90 秒。
 另请注意 BLE Mesh 属于 Wi-Fi 那一组： ``adapters.ble_mesh.enabled`` 与
 ``adapters.zigbee.enabled`` 同时为真时，留下的是 Wi-Fi 与 BLE Mesh，运行时被丢掉

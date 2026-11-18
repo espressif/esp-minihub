@@ -98,7 +98,7 @@
    卸载因此不会留下悬空订阅者。投递是尽力而为：队列满即丢事件，消费者必须容忍缺口。
    同一条总线上还有 ``point.registered`` / ``point.unregistered``、
    ``command.invoked``（在适配器执行 **之前** 发布，成败都会发；点和它的适配器处理
-   函数压根解析不出来时不发）、``hub.reloaded``、``device_widgets.updated``
+   函数根本无法解析时不发）、``hub.reloaded``、``device_widgets.updated``
    与 ``store.module.installed``。
 
 5. 消费者：屏幕与规则

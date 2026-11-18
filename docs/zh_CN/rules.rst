@@ -13,9 +13,6 @@
 
 `交互版 <_static/rules/index.html>`_ —— 按求值顺序展示各阶段；每一站对应一项约束（悬停可暂停）。
 
-场景看着像规则，但是 ``scenes.json`` 里的独立文档，由 REST 调用，永远 **不是**
-``then`` 类型：场景是一串等人手动触发的命令，规则是自己触发自己。
-
 实现：``components/minihub_rules/minihub_rules.c``。持久化与 REST：
 ``GET /api/rules``、``POST /api/rules/import`` （:doc:`api/host_rest`）。
 

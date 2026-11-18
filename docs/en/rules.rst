@@ -15,10 +15,6 @@ internet is down. The rules live in ``rules.json`` and are evaluated by
 `Interactive version <_static/rules/index.html>`_ — rule evaluation in the same
 order as the static figure; each stage lists one constraint (hover pauses).
 
-Scenes look similar but are a separate document in ``scenes.json``. They are
-fired by REST and are never a ``then`` type: a scene is a list of commands a
-person invokes; a rule invokes itself.
-
 Implementation: ``components/minihub_rules/minihub_rules.c``. Persistence and
 REST: ``GET /api/rules``, ``POST /api/rules/import`` (:doc:`api/host_rest`).
 

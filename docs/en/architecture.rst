@@ -206,11 +206,12 @@ Hub soft reload
 
 ``POST /api/hub/reload`` calls ``minihub_hub_reload()`` synchronously; MCP
 ``hub.reload``, a Store install and an ``adapters.json`` write all go through
-``minihub_hub_reload_async()`` on the ``hub_reload`` task, guarded so a second
-reload waits up to 60 s. The steps, in ``minihub_hub_reload()`` order:
+``minihub_hub_reload_async()`` on the ``hub_reload`` task. A mutex serializes
+reloads so a second request waits up to 60 s. The steps, in
+``minihub_hub_reload()`` order:
 
-1. ``minihub_js_unload_all()`` first — JS handlers must stop touching points
-   before anything below them is torn down
+1. ``minihub_js_unload_all()`` first — stop JS handlers before adapters stop and
+   config is re-read, so callbacks cannot keep touching points
 2. Adapter lifecycle lock (60 s; ``ESP_ERR_TIMEOUT`` aborts the reload)
 3. ``minihub_config_reload()`` — re-read JSON from flash (aborts on error)
 4. ``minihub_pack_reload()`` — merge JSON packs into the adapters view

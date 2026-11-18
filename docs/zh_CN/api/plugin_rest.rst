@@ -192,7 +192,7 @@ POST /api/store/refresh
 
    **Returns**
 
-   * **HTTP 200** — ``{"result":"pending"}``；已有刷新在跑时同样是 200
+   * **HTTP 200** — ``{"result":"pending"}``；已有刷新进行中时同样是 200
      ``pending``，不会排第二次
    * **HTTP 500** — 后台任务无法启动
 

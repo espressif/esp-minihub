@@ -62,7 +62,7 @@ Wi-Fi SSID/PSK 保存在 NVS （命名空间 ``minihub_wifi``），由
 控制台，用 ``POST /api/net/wifi`` 配 Wi-Fi。这里刻意 **不** 调
 ``minihub_provision_start()``：ESP-IDF 的配网管理器自己要在 80 端口起页面，而 80
 是控制台的端口。Wi-Fi 配网没有蓝牙这条路 —— BLE 传输已移除，配网不需要
-``CONFIG_BT_ENABLED``，也不需要额外的配对工具，浏览器就够了。
+``CONFIG_BT_ENABLED``，也不需要额外的配对工具，使用浏览器即可。
 
 管理器入口留给把控制台挪到别的端口的产品。``CONFIG_MINIHUB_WIFI_PROVISIONING=n``
 连那个开放热点也不开，此时无凭据的设备只留一行
@@ -71,7 +71,7 @@ Wi-Fi SSID/PSK 保存在 NVS （命名空间 ``minihub_wifi``），由
 MQTT broker
 -----------
 
-``components/minihub_mqtt_broker`` 在 Hub 上跑一个
+``components/minihub_mqtt_broker`` 在 Hub 上运行一个
 `mosquitto <https://components.espressif.com/components/espressif/mosquitto>`_
 broker，站点里的 MQTT 设备因此连 Hub 本身，不再需要一台常开的机器。它只做传输：
 不注册任何点位。打开它的同时，Hub 也会在 ``127.0.0.1`` 上起一个自己的 MQTT 客户端

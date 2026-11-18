@@ -75,7 +75,7 @@ Hub 只会拉取匹配当前芯片的固件，选出版本号高于 ``CONFIG_MIN
 :doc:`api/deploy_index`；这条路径不读取 ``/api/catalog`` 的 ``firmware_upgrade``
 字段（该字段只报告本芯片已发布的最高版本）。
 
-抓取只跑一次：不续传、不重试，HTTP 非 200 或读取卡死都会记成失败。
+抓取只执行一次：不续传、不重试，HTTP 非 200 或读取卡死都会记成失败。
 
 下面的 URL OTA 与上传 OTA 是手动路径，也可在 Web UI 的 ``系统`` 页用固件 URL 或
 选择 ``.bin`` 文件触发。设备不检查 URL 的 scheme，实验室内网用 ``http`` 也能刷；
@@ -105,7 +105,7 @@ URL OTA
 Web UI：在 ``系统`` 页的固件更新区填入固件 URL，点 ``开始更新``。
 
 也可走 REST（辅助）： ``POST /api/ota`` ，JSON 请求体， **HTTP 200** 已启动；
-已有 OTA 在跑则 **409** ，响应体是纯文本 ``busy`` ：
+已有 OTA 进行中则 **409** ，响应体是纯文本 ``busy`` ：
 
 .. code-block:: bash
 

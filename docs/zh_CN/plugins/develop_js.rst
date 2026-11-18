@@ -137,7 +137,7 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
    }
 
 示例里的 ``sensor`` 是省略 ``type`` 时加载器填进去的默认值（见 ``minihub_js.c`` ），
-而它 **不是** 类型目录里的 ``device_id`` ：点照样登记、照样进规则和 REST，
+而它 **不是** 类型目录里的 ``device_id`` ：点仍会登记、仍可进入规则和 REST ，
 但控制台画不出控件卡片，走的是「类型未登记」的退化渲染 —— 参数名在参数表里有条目的照条目画，
 其余画成一行只读文本（:doc:`../type_catalog` ）。要卡片就写真实的 ``device_id``
 （ ``light`` / ``switch`` / ``sensor_contact`` 等）。

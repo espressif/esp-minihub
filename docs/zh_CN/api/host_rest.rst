@@ -155,8 +155,8 @@ GET /api/device_widgets
      ``requires``），以及可选 ``point_id`` （已登记的点里，该类型且带这个参数的
      第一条）。
    * 顶层 ``parameters`` 以参数名为键，覆盖上传的 ``model/parameters.csv`` 里的
-     每一行，包括没有任何类型在用的参数；控制台就是靠它给「目录里查不到的类型的
-     参数」取名。没上传过模型 CSV 的原机，这里是空对象。
+     每一行，包括没有任何类型在用的参数；控制台据此为「目录里查不到的类型的
+     参数」取名。未上传过模型 CSV 的原机，这里是空对象。
 
 .. container:: mh-api-block mh-api-attention
 
@@ -268,7 +268,7 @@ POST /api/devices/ota
    * **HTTP 400** — 缺 ``point_id``，或适配器返回 ``ESP_ERR_NOT_SUPPORTED``
    * **HTTP 404** — 未知点位
    * **HTTP 500** — 其他适配器错误。注意：请求里没有任何镜像地址时，Host **不会**
-     提前拒绝，命令照样下发（不带镜像），适配器的 ``ESP_ERR_INVALID_ARG`` 于是变成
+     提前拒绝，命令仍会下发（不带镜像），适配器的 ``ESP_ERR_INVALID_ARG`` 于是变成
      500；Matter 在控制器未就绪时返回的 ``ESP_ERR_INVALID_STATE`` 同样记 500。
 
 .. container:: mh-api-block mh-api-attention
@@ -480,7 +480,7 @@ GET /api/system
      ``has_password``）、``timezone`` （``id``、``offset_min``、``zones``），以及
      ``display_name`` （Web 与 LCD 共用的侧栏显示名；空字符串表示用界面默认文案）。
 
-   这里没有墙钟字段：``uptime_s`` 从启动开始计数，所以它告诉你 Hub 跑了多久，不告诉你
+   这里没有系统时间字段：``uptime_s`` 从启动开始计数，所以它告诉你 Hub 跑了多久，不告诉你
    设备认为现在是几点 （ :doc:`../time` ）。
 
 POST /api/system/reboot · POST /api/system/reset
@@ -678,7 +678,7 @@ GET /api/update/notes
 这些是 ``系统`` 页更新角标背后的 REST 调用。``hints`` 只返回缓存的更新项：
 ``firmware``、``web``、``assets`` （对象或 ``null``）与 ``plugins`` （数组），
 不会发起任何请求。``POST /api/update/check`` 启动后台探测并回
-``{"result":"pending"}``，已有探测在跑时回 ``"unavailable"``；
+``{"result":"pending"}``，已有探测进行中时回 ``"unavailable"``；
 ``GET /api/update/check`` 报 ``"pending"`` 或 ``"idle"``。``apply`` 请求体为
 ``{"type":"firmware"|"asset"|"web","force":false}`` （上限 256 字节），从配置的
 商店根地址取内容；``force`` 表示重装当前版本，而不是跳过它。
