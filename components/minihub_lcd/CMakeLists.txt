@@ -57,6 +57,9 @@ if(CONFIG_MINIHUB_LCD_UI)
         # read minihub_ota_is_busy() from app.cpp, so an include path is enough;
         # do not add a component dependency edge back into the cycle.
         "${CMAKE_CURRENT_LIST_DIR}/../minihub_ota/include"
+        # Same cycle-resolution situation as minihub_ota: only an include path
+        # for mask / device string constants used by the System OTA target UI.
+        "${CMAKE_CURRENT_LIST_DIR}/../minihub_vibe/include"
         # Same cycle-resolution situation as minihub_ota above: a REQUIRES edge
         # from minihub_lcd into these components is dropped by IDF, so only the
         # include path is added here. The symbols themselves are already in the

@@ -47,6 +47,7 @@ extern "C" {
 #include "minihub_geo.h"
 #include "minihub_map.h"
 #include "minihub_ota.h"
+#include "minihub_vibe.h"
 #include "minihub_task.h"
 #include "minihub_update.h"
 #include "minihub_net_cfg.h"
@@ -131,7 +132,17 @@ std::atomic<bool> s_store_refresh_wait{false};
 std::atomic<bool> s_ota_query_busy{false};
 
 enum class StoreOp { Install, Upgrade, Reinstall, Uninstall };
-enum class PendingConfirm { None, Reboot, FactoryReset, StoreUninstall, RuleDelete, SceneDelete };
+enum class PendingConfirm {
+    None,
+    Reboot,
+    FactoryReset,
+    StoreUninstall,
+    RuleDelete,
+    SceneDelete,
+    OtaFormat,
+};
+static PendingConfirm s_pending_confirm = PendingConfirm::None;
+static void show_confirm(const char *title, const char *msg, PendingConfirm kind);
 
 /* What the visible store rows refer to. The renderers fill this; the tap handler
  * reads it back through the index parsed out of Event.path. Fields mirror the
@@ -3337,27 +3348,120 @@ void handle_rename_ok()
     request_display_refresh();
 }
 
+static const char *const kOtaStatusPath = LCD_VIEW_SYSTEM_OTA_STATUS;
+
+#if CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+static void paint_ota_target_label(const char *path, bool on, const char *name_key)
+{
+    /* ASCII only: Montserrat / the CJK panel fonts have no ✓ glyph (it falls
+     * back to a box or "x"). Match the form-enabled style with a clear mark. */
+    char buf[48];
+    snprintf(buf, sizeof(buf), "%s%s", on ? "[*] " : "[ ] ", lcd_tr(name_key));
+    set_label_text(path, buf);
+}
+
+static void refresh_ota_targets()
+{
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid()) {
+        return;
+    }
+    const uint8_t mask = minihub_ota_target_mask();
+    paint_ota_target_label(LCD_VIEW_SYSTEM_OTA_SEL_SD,
+                           (mask & MINIHUB_VIBE_DEV_SDMMC_BIT) != 0, LCD_STR_SYS_TARGET_SD);
+    paint_ota_target_label(LCD_VIEW_SYSTEM_OTA_SEL_USB,
+                           (mask & MINIHUB_VIBE_DEV_USB_BIT) != 0, LCD_STR_SYS_TARGET_USB);
+    set_label_text(LCD_VIEW_SYSTEM_OTA_TARGET_HINT, lcd_tr(LCD_STR_SYS_OTA_TARGET_HINT));
+}
+
+static void toggle_ota_target(uint8_t bit)
+{
+    uint8_t mask = minihub_ota_target_mask();
+    if (mask & bit) {
+        mask = static_cast<uint8_t>(mask & ~bit);
+    } else {
+        mask = static_cast<uint8_t>(mask | bit);
+    }
+    if (mask == 0) {
+        set_label_text(kOtaStatusPath, lcd_tr(LCD_STR_SYS_OTA_TARGET_EMPTY));
+        refresh_ota_targets();
+        request_display_refresh();
+        return;
+    }
+    const char *list[2];
+    size_t n = 0;
+    if (mask & MINIHUB_VIBE_DEV_SDMMC_BIT) {
+        list[n++] = MINIHUB_VIBE_DEVICE_SDMMC;
+    }
+    if (mask & MINIHUB_VIBE_DEV_USB_BIT) {
+        list[n++] = MINIHUB_VIBE_DEVICE_USB;
+    }
+    const esp_err_t err = minihub_ota_set_targets(list, n);
+    if (err != ESP_OK) {
+        set_label_text_fmt(kOtaStatusPath, lcd_tr(LCD_STR_SYS_OTA_FAIL_FMT), esp_err_to_name(err));
+    }
+    refresh_ota_targets();
+    request_display_refresh();
+}
+
+static void show_ota_format_confirm()
+{
+    const char *target = minihub_ota_get_format_target();
+    const char *medium = (target && strcmp(target, MINIHUB_VIBE_DEVICE_USB) == 0)
+                             ? lcd_tr(LCD_STR_SYS_TARGET_USB)
+                             : lcd_tr(LCD_STR_SYS_TARGET_SD);
+    char msg[192];
+    snprintf(msg, sizeof(msg), lcd_tr(LCD_STR_SYS_FORMAT_MSG_FMT), medium);
+    show_confirm(lcd_tr(LCD_STR_SYS_FORMAT_TITLE), msg, PendingConfirm::OtaFormat);
+}
+#endif /* CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE */
+
+static void refresh_ota_status();
+static void schedule_ota_status_poll();
+
 static void refresh_ota_status()
 {
     if (!s_lcd.runtime || !s_lcd.document_id.is_valid()) {
         return;
     }
     set_label_text_fmt(LCD_VIEW_SYSTEM_OTA, "v%s", CONFIG_MINIHUB_VERSION);
-    const char *p = "/system/system_main/sys_grid/sys_card_ota/sys_ota_status";
-    if (minihub_ota_is_busy()) {
-        set_label_text_fmt(p, lcd_tr(LCD_STR_SYS_OTA_BUSY_FMT), minihub_ota_get_progress());
-    } else {
-        const char *err = minihub_ota_get_error();
-        if (err && err[0]) {
-            set_label_text_fmt(p, lcd_tr(LCD_STR_SYS_OTA_LAST_FAIL_FMT), err);
-        } else {
-            set_label_text(p, lcd_tr(LCD_STR_SYS_OTA_IDLE));
+#if CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+    refresh_ota_targets();
+#endif
+    const minihub_ota_state_t state = minihub_ota_get_state();
+    if (state == MINIHUB_OTA_IN_PROGRESS) {
+        set_label_text_fmt(kOtaStatusPath, lcd_tr(LCD_STR_SYS_OTA_BUSY_FMT),
+                           minihub_ota_get_progress());
+        schedule_ota_status_poll();
+        return;
+    }
+#if CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+    if (state == MINIHUB_OTA_NEEDS_FORMAT) {
+        set_label_text(kOtaStatusPath, lcd_tr(LCD_STR_SYS_OTA_NEEDS_FORMAT));
+        if (s_pending_confirm != PendingConfirm::OtaFormat) {
+            show_ota_format_confirm();
         }
+        return;
+    }
+#endif
+    const char *err = minihub_ota_get_error();
+    if (err && err[0]) {
+        set_label_text_fmt(kOtaStatusPath, lcd_tr(LCD_STR_SYS_OTA_LAST_FAIL_FMT), err);
+    } else {
+        set_label_text(kOtaStatusPath, lcd_tr(LCD_STR_SYS_OTA_IDLE));
     }
 }
 
-static const char *const kOtaStatusPath =
-    "/system/system_main/sys_grid/sys_card_ota/sys_ota_status";
+static void schedule_ota_status_poll()
+{
+    if (!s_lcd.scheduler) {
+        return;
+    }
+    s_lcd.scheduler->post_delayed(
+        []() {
+            with_lvgl_lock([]() { refresh_ota_status(); });
+        },
+        500);
+}
 
 static void post_ota_status(std::string text)
 {
@@ -3397,8 +3501,13 @@ static void ota_query_task(void *arg)
         text = buf;
     }
     post_ota_status(std::move(text));
-    if (apply && minihub_ota_is_busy() && s_lcd.scheduler) {
-        s_lcd.scheduler->post([]() { with_lvgl_lock([]() { refresh_ota_status(); }); });
+    /* URL staging is async: progress and NEEDS_FORMAT appear after start_url. */
+    if (apply && s_lcd.scheduler) {
+        s_lcd.scheduler->post_delayed(
+            []() {
+                with_lvgl_lock([]() { refresh_ota_status(); });
+            },
+            400);
     }
     s_ota_query_busy.store(false, std::memory_order_release);
     vTaskDelete(nullptr);
@@ -3684,8 +3793,14 @@ static void wire_update_center()
 {
     /* Same deploy root the Web console uses (CONFIG_MINIHUB_STORE_URL, default
      * https://minihub.espressif.com, unless a custom store URL is saved). */
-    wire_action("system_check_update", []() { start_ota_query(false); });
-    wire_action("system_do_ota", []() { start_ota_query(true); });
+    wire_action(LCD_ACTION_SYSTEM_CHECK_UPDATE, []() { start_ota_query(false); });
+    wire_action(LCD_ACTION_SYSTEM_DO_OTA, []() { start_ota_query(true); });
+#if CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+    wire_action(LCD_ACTION_SYSTEM_OTA_TARGET_SD,
+                []() { toggle_ota_target(MINIHUB_VIBE_DEV_SDMMC_BIT); });
+    wire_action(LCD_ACTION_SYSTEM_OTA_TARGET_USB,
+                []() { toggle_ota_target(MINIHUB_VIBE_DEV_USB_BIT); });
+#endif
 }
 
 void refresh_system()
@@ -4078,8 +4193,6 @@ bool store_start_request(const StoreOpRequest &request)
     return true;
 }
 
-static PendingConfirm s_pending_confirm = PendingConfirm::None;
-
 /* The modal is a child of its own screen, and a screen flow hides the inactive
  * screen — unhiding a descendant would not make it visible. Resolve the modal on
  * whichever screen raised the confirm (system: reboot/factory, store: uninstall). */
@@ -4178,12 +4291,52 @@ void handle_confirm_ok()
             }
         }
         refresh_scenes();
+#if CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+    } else if (kind == PendingConfirm::OtaFormat) {
+        const char *target = minihub_ota_get_format_target();
+        if (!target || !target[0]) {
+            target = MINIHUB_VIBE_DEVICE_SDMMC;
+        }
+        set_label_text_fmt(kOtaStatusPath, lcd_tr(LCD_STR_SYS_OTA_FORMATTING_FMT),
+                           strcmp(target, MINIHUB_VIBE_DEVICE_USB) == 0
+                               ? lcd_tr(LCD_STR_SYS_TARGET_USB)
+                               : lcd_tr(LCD_STR_SYS_TARGET_SD));
+        request_display_refresh();
+        auto *arg = new (std::nothrow) std::string(target);
+        if (arg == nullptr ||
+            minihub_task_create_psram(
+                [](void *p) {
+                    auto *t = static_cast<std::string *>(p);
+                    const esp_err_t err = minihub_ota_format_target(t->c_str());
+                    delete t;
+                    if (s_lcd.scheduler) {
+                        s_lcd.scheduler->post([err]() {
+                            with_lvgl_lock([err]() {
+                                if (err != ESP_OK) {
+                                    set_label_text(kOtaStatusPath, lcd_tr(LCD_STR_SYS_FORMAT_FAILED));
+                                }
+                                refresh_ota_status();
+                            });
+                        });
+                    }
+                    vTaskDelete(nullptr);
+                },
+                "lcd_ota_fmt", 8192, arg, 5, nullptr) != pdPASS) {
+            delete arg;
+            set_label_text(kOtaStatusPath, lcd_tr(LCD_STR_SYS_FORMAT_FAILED));
+        }
+#endif
     }
 }
 
 void handle_confirm_cancel()
 {
     hide_confirm();
+#if CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+    if (s_pending_confirm == PendingConfirm::OtaFormat) {
+        minihub_ota_abort();
+    }
+#endif
     s_pending_confirm = PendingConfirm::None;
     s_store_pending = StoreOpRequest{};
     s_pending_delete_slot = -1;

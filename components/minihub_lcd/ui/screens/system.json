@@ -1454,6 +1454,115 @@
                   }
                 },
                 {
+                  "type": "label",
+                  "id": "sys_ota_target_label",
+                  "labelProps": {
+                    "text": "${constant.strings.sys_ota_target_label}"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "12sp"
+                  }
+                },
+                {
+                  "type": "container",
+                  "id": "sys_ota_target_row",
+                  "layout": {
+                    "type": "flex",
+                    "flexFlow": "row",
+                    "mainAlign": "start",
+                    "crossAlign": "center",
+                    "gap": "10dp"
+                  },
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "sys_ota_sel_sd",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_ota_target_sd"
+                        }
+                      ],
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "borderWidth": "1dp",
+                        "borderColor": "#243049",
+                        "radius": "8dp"
+                      },
+                      "placement": {
+                        "width": "120dp",
+                        "height": "36dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "sys_ota_sel_sd_lbl",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_target_sd}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "13sp"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "id": "sys_ota_sel_usb",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_ota_target_usb"
+                        }
+                      ],
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "borderWidth": "1dp",
+                        "borderColor": "#243049",
+                        "radius": "8dp"
+                      },
+                      "placement": {
+                        "width": "120dp",
+                        "height": "36dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "sys_ota_sel_usb_lbl",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_target_usb}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "13sp"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "label",
+                  "id": "sys_ota_target_hint",
+                  "labelProps": {
+                    "text": "${constant.strings.sys_ota_target_hint}"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "11sp"
+                  }
+                },
+                {
                   "type": "container",
                   "id": "sys_ota_btn_row",
                   "layout": {
