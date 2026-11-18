@@ -1,4 +1,5 @@
 # Firmware: ./tools/build_firmware.py --app $MINIHUB_APP build merge
+# Release logs: ./tools/build_firmware.py --app $MINIHUB_APP --release build merge
 # Store pack: ./tools/build_firmware.py --app $MINIHUB_APP pack all
 # Docs: ./tools/build_docs.sh
 # Docs CI: .gitlab/ci/{rules,build_docs,deploy_docs}.yml — branch push / MR only
@@ -162,6 +163,49 @@ build:app:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
 
+build:app_release:
+  # Same Host matrix as build:app, with --release (Warning logs via
+  # configs/sdkconfig/feature/release.defaults + sdkconfig rewrite).
+  # Keeps the default build:app at INFO for lab/debug; this job guards the
+  # production log recipe. LCD counterpart: build:app_lcd_release.
+  extends:
+    - .idf_env
+    - .clone_plugins
+    - .app_matrix
+  stage: build
+  needs: []
+  variables:
+    MINIHUB_SKIP_MHUB: "0"
+    MINIHUB_PLUGINS_DEPLOY_DIR: "$CI_PROJECT_DIR/application/$MINIHUB_APP/build/store_release"
+  script:
+    - git submodule update --init --depth 1
+    - export MINIHUB_PLUGIN_DIRS=$MINIHUB_PLUGIN_DIRS:$CI_PROJECT_DIR/examples/plugins
+    - ./tools/build_firmware.py --app "$MINIHUB_APP" --release build merge
+    - |
+      set -euo pipefail
+      cfg="application/${MINIHUB_APP}/sdkconfig"
+      grep -q '^CONFIG_MINIHUB_RELEASE=y$' "$cfg"
+      grep -q '^CONFIG_LOG_DEFAULT_LEVEL_WARN=y$' "$cfg"
+      grep -q '^# CONFIG_LOG_DEFAULT_LEVEL_INFO is not set$' "$cfg"
+      echo "release sdkconfig ok: MINIHUB_RELEASE + LOG_DEFAULT_LEVEL_WARN"
+  artifacts:
+    when: on_success
+    expire_in: 14 days
+    name: "$MINIHUB_APP-release-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - application/$MINIHUB_APP/build/*.bin
+      - application/$MINIHUB_APP/build/*.elf
+      - application/$MINIHUB_APP/build/bootloader/bootloader.bin
+      - application/$MINIHUB_APP/build/bootloader/bootloader.elf
+      - application/$MINIHUB_APP/build/partition_table/*.bin
+      - application/$MINIHUB_APP/build/flasher_args.json
+      - $MINIHUB_PLUGINS_DEPLOY_DIR/**/*.mhub
+      - application/$MINIHUB_APP/dependencies.lock
+      - application/$MINIHUB_APP/sdkconfig
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
 build:app_lcd:
   # Standalone product application/minihub_lcd. Do not apply an LCD variant
   # onto application/minihub.
@@ -185,6 +229,46 @@ build:app_lcd:
     when: on_success
     expire_in: 14 days
     name: "$MINIHUB_APP-lcd-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - application/$MINIHUB_APP/build/*.bin
+      - application/$MINIHUB_APP/build/*.elf
+      - application/$MINIHUB_APP/build/bootloader/bootloader.bin
+      - application/$MINIHUB_APP/build/bootloader/bootloader.elf
+      - application/$MINIHUB_APP/build/partition_table/*.bin
+      - application/$MINIHUB_APP/build/flasher_args.json
+      - application/$MINIHUB_APP/dependencies.lock
+      - application/$MINIHUB_APP/sdkconfig
+      - application/$MINIHUB_APP/components/gen_bmgr_codes/board_manager.defaults
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+build:app_lcd_release:
+  # minihub_lcd with --release. Same -j 4 cap as build:app_lcd (Brookesia OOM).
+  extends:
+    - .idf_env
+    - .clone_plugins
+  stage: build
+  needs: []
+  variables:
+    MINIHUB_APP: minihub_lcd
+    MINIHUB_SKIP_MHUB: "1"
+    MINIHUB_BUILD_MATTER: "0"
+  script:
+    - git submodule update --init --depth 1
+    - export MINIHUB_PLUGIN_DIRS=$MINIHUB_PLUGIN_DIRS:$CI_PROJECT_DIR/examples/plugins
+    - ./tools/build_firmware.py --app "$MINIHUB_APP" --release -j 4 build merge
+    - |
+      set -euo pipefail
+      cfg="application/${MINIHUB_APP}/sdkconfig"
+      grep -q '^CONFIG_MINIHUB_RELEASE=y$' "$cfg"
+      grep -q '^CONFIG_LOG_DEFAULT_LEVEL_WARN=y$' "$cfg"
+      grep -q '^# CONFIG_LOG_DEFAULT_LEVEL_INFO is not set$' "$cfg"
+      echo "release sdkconfig ok: MINIHUB_RELEASE + LOG_DEFAULT_LEVEL_WARN"
+  artifacts:
+    when: on_success
+    expire_in: 14 days
+    name: "$MINIHUB_APP-lcd-release-$CI_COMMIT_SHORT_SHA"
     paths:
       - application/$MINIHUB_APP/build/*.bin
       - application/$MINIHUB_APP/build/*.elf

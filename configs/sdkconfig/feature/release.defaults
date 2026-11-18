@@ -1,0 +1,12 @@
+# Production log recipe. Triggered by:
+#   - app.yml features: [..., release]
+#   - ./tools/build_firmware.py --release ...
+# build_firmware.py also rewrites the saved application sdkconfig from this
+# file (Kconfig `select` on choice members does not flip LOG_DEFAULT_LEVEL_INFO).
+CONFIG_MINIHUB_RELEASE=y
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+# CONFIG_LOG_DEFAULT_LEVEL_INFO is not set
+CONFIG_LOG_DEFAULT_LEVEL=2
+CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=y
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+# CONFIG_BOOTLOADER_LOG_LEVEL_INFO is not set

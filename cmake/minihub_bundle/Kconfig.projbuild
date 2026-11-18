@@ -23,6 +23,28 @@ menu "MiniHub"
             — e.g. ESP32-S31-Function-Coreboard-1 (minihub) or
             ESP32-S31-Korvo-1 (minihub_lcd). Empty means the query is omitted.
 
+    config MINIHUB_RELEASE
+        bool "Release build (Warning log level)"
+        default n
+        select LOG_DEFAULT_LEVEL_WARN
+        select LOG_MAXIMUM_EQUALS_DEFAULT
+        select BOOTLOADER_LOG_LEVEL_WARN
+        select BT_NIMBLE_LOG_LEVEL_WARNING if BT_NIMBLE_ENABLED
+        select BROOKESIA_UTILS_LOG_LEVEL_WARNING if MINIHUB_LCD_UI
+        select LV_LOG_LEVEL_WARN if LV_USE_LOG
+        help
+            Production-oriented logging. Tries to select Warning for the app
+            default/maximum log level and the bootloader. Optional stacks only
+            when present: NimBLE (BT_NIMBLE_ENABLED), Brookesia (MINIHUB_LCD_UI),
+            LVGL (LV_USE_LOG).
+
+            Note: Kconfig `select` on choice members often does not rewrite an
+            already-saved sdkconfig (e.g. LOG_DEFAULT_LEVEL_INFO left from an
+            older defaults fragment). For a reliable release image use
+            ./tools/build_firmware.py --release, or add `release` to the product
+            app.yml features list (both load release.defaults and rewrite the
+            saved sdkconfig).
+
     rsource "../../components/minihub_core/Kconfig.minihub"
     rsource "../../components/minihub_mcp_server/Kconfig.minihub"
     rsource "../../components/minihub_net/Kconfig.minihub"
