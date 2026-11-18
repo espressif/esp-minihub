@@ -114,6 +114,16 @@ EventGroupHandle_t minihub_net_event_group(void);
 esp_err_t minihub_net_get_wifi_sta(char *ssid, size_t ssid_len, bool *has_password);
 
 /**
+ * @brief Copy STA SSID and password for the on-device UI (LCD).
+ *
+ * Prefer this over minihub_net_get_wifi_sta() when the local screen must show
+ * the saved passphrase. Do not expose the password over the network.
+ * Either buffer may be NULL to skip that field.
+ */
+esp_err_t minihub_net_get_wifi_credentials(char *ssid, size_t ssid_len,
+                                           char *password, size_t password_len);
+
+/**
  * @brief Save STA credentials and reconnect.
  *
  * An empty password keeps the stored one unless @p open_network is true.

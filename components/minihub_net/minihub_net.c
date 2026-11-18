@@ -204,7 +204,6 @@ static void on_got_ip(const char *ifname, esp_netif_t *netif)
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     (void)arg;
-    (void)event_data;
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         /* While the provisioning manager is up it owns connect; auto-connect
          * here races set_config and yields ESP_ERR_WIFI_STATE. */
@@ -212,6 +211,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             esp_wifi_connect();
         }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        wifi_event_sta_disconnected_t *disc =
+            (wifi_event_sta_disconnected_t *)event_data;
+        if (disc) {
+            ESP_LOGW(TAG, "Wi-Fi STA disconnected reason=%u rssi=%d",
+                     (unsigned)disc->reason, (int)disc->rssi);
+        }
         refresh_default_netif();
         if (s_wifi_sta_disabled) {
             /* Wi-Fi explicitly disabled (empty SSID); stay disconnected. */
@@ -281,6 +286,9 @@ static esp_err_t start_wifi_sta(void)
             ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
             return ESP_OK;
         }
+        ESP_LOGI(TAG, "Wi-Fi STA boot ssid=%s pass=%s",
+                 (const char *)wifi_config.sta.ssid,
+                 wifi_config.sta.password[0] ? "yes" : "no");
         ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "set mode");
         ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config), TAG, "set config");
         ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
@@ -770,6 +778,35 @@ esp_err_t minihub_net_get_wifi_sta(char *ssid, size_t ssid_len, bool *has_passwo
     ssid[ssid_len - 1] = '\0';
     if (has_password) {
         *has_password = cfg.sta.password[0] != '\0';
+    }
+    return ESP_OK;
+#endif
+}
+
+esp_err_t minihub_net_get_wifi_credentials(char *ssid, size_t ssid_len,
+                                           char *password, size_t password_len)
+{
+    if (ssid && ssid_len > 0) {
+        ssid[0] = '\0';
+    }
+    if (password && password_len > 0) {
+        password[0] = '\0';
+    }
+#if !CONFIG_MINIHUB_NET_WIFI_STA
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    wifi_config_t cfg = {0};
+    esp_err_t err = minihub_provision_load_credentials(&cfg);
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (ssid && ssid_len > 0) {
+        strncpy(ssid, (const char *)cfg.sta.ssid, ssid_len - 1);
+        ssid[ssid_len - 1] = '\0';
+    }
+    if (password && password_len > 0) {
+        strncpy(password, (const char *)cfg.sta.password, password_len - 1);
+        password[password_len - 1] = '\0';
     }
     return ESP_OK;
 #endif

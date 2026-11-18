@@ -53,6 +53,8 @@ extern "C" {
 #include "minihub_net_cfg.h"
 extern "C" {
 esp_err_t minihub_net_get_wifi_sta(char *ssid, size_t ssid_len, bool *has_password);
+esp_err_t minihub_net_get_wifi_credentials(char *ssid, size_t ssid_len,
+                                           char *password, size_t password_len);
 esp_err_t minihub_net_set_wifi_sta(const char *ssid, const char *password, bool open_network);
 }
 #include "minihub_config.h"
@@ -134,6 +136,7 @@ std::atomic<bool> s_ota_query_busy{false};
 enum class StoreOp { Install, Upgrade, Reinstall, Uninstall };
 enum class PendingConfirm {
     None,
+    Alert,
     Reboot,
     FactoryReset,
     StoreUninstall,
@@ -143,6 +146,7 @@ enum class PendingConfirm {
 };
 static PendingConfirm s_pending_confirm = PendingConfirm::None;
 static void show_confirm(const char *title, const char *msg, PendingConfirm kind);
+static void show_alert(const char *title, const char *msg);
 
 /* What the visible store rows refer to. The renderers fill this; the tap handler
  * reads it back through the index parsed out of Event.path. Fields mirror the
@@ -730,6 +734,11 @@ static void floating_keyboard_watch(lv_obj_t *obj)
     if ((is_ta || is_dd) && !lv_obj_has_flag(obj, LV_OBJ_FLAG_USER_1)) {
         lv_obj_add_flag(obj, LV_OBJ_FLAG_USER_1);
         lv_obj_add_event_cb(obj, floating_keyboard_target_cb, LV_EVENT_CLICKED, nullptr);
+        if (is_ta) {
+            /* Default LVGL bullet (U+2022 / LV_SYMBOL_BULLET) often renders as a
+             * box or "x" with our fonts; use ASCII '*' for password masks. */
+            lv_textarea_set_password_bullet(obj, "*");
+        }
         if (is_dd) {
             /* The list object is created in lv_dropdown's constructor (hidden),
              * so it can be styled before the popup is ever opened. */
@@ -3315,6 +3324,7 @@ void handle_rename_ok()
         s_rename_text.clear();
         set_view_hidden(modal_path, true);
         refresh_user_sidebar();
+        show_alert(lcd_tr(LCD_STR_USER_RENAME_TITLE), lcd_tr(LCD_STR_COMMON_SAVED));
         request_display_refresh();
         return;
     }
@@ -3345,6 +3355,7 @@ void handle_rename_ok()
     s_rename_text.clear();
     set_view_hidden(modal_path, true);
     refresh_overview();
+    show_alert(lcd_tr(LCD_STR_RENAME_TITLE), lcd_tr(LCD_STR_COMMON_SAVED));
     request_display_refresh();
 }
 
@@ -3648,6 +3659,7 @@ static void handle_form_save()
     } else {
         create_scene(snapshot, name.c_str());
     }
+    show_alert(lcd_tr(LCD_STR_FORM_SAVE), lcd_tr(LCD_STR_COMMON_SAVED));
     request_display_refresh();
 }
 
@@ -3901,8 +3913,36 @@ void refresh_system()
 static std::string s_wifi_ssid;
 static std::string s_wifi_pass;
 static bool s_wifi_open = false;
+static bool s_wifi_pass_visible = false;
 static bool s_net_static = false;
 static std::string s_net_ip, s_net_mask, s_net_dns;
+
+/* Brookesia ValueChanged updates text_input_props on the GUI task; Save reads
+ * live TextInput props so the NVS write cannot race an empty cache. */
+static std::string read_text_input(const char *path)
+{
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid() || !path) {
+        return {};
+    }
+    auto view = s_lcd.runtime->find_view(s_lcd.document_id, path);
+    if (!view.valid()) {
+        return {};
+    }
+    return view.as_text_input().text();
+}
+
+static void apply_wifi_pass_mask()
+{
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid()) {
+        return;
+    }
+    s_lcd.runtime->set_binding_value(s_lcd.document_id, LCD_VIEW_SYSTEM_WIFI_PASS,
+                                     "wifi.pass_masked",
+                                     s_wifi_pass_visible ? "false" : "true");
+    set_label_text(LCD_VIEW_SYSTEM_WIFI_PASS_SHOW,
+                   s_wifi_pass_visible ? lcd_tr(LCD_STR_WIFI_PASS_HIDE)
+                                       : lcd_tr(LCD_STR_WIFI_PASS_SHOW));
+}
 
 void refresh_system_wifi()
 {
@@ -3910,10 +3950,30 @@ void refresh_system_wifi()
         return;
     }
     char ssid[64] = {};
-    bool has_pass = false;
-    if (minihub_net_get_wifi_sta(ssid, sizeof(ssid), &has_pass) == ESP_OK) {
-        s_wifi_ssid = ssid;
-        s_lcd.runtime->set_binding_value(s_lcd.document_id, LCD_VIEW_SYSTEM_WIFI_SSID, "wifi.ssid", s_wifi_ssid);
+    char pass[64] = {};
+    if (minihub_net_get_wifi_credentials(ssid, sizeof(ssid), pass, sizeof(pass)) == ESP_OK) {
+        /* Seed empty fields from NVS only — do not clobber in-progress edits. */
+        const std::string shown_ssid = read_text_input(LCD_VIEW_SYSTEM_WIFI_SSID);
+        if (shown_ssid.empty() && ssid[0] != '\0') {
+            s_wifi_ssid = ssid;
+            s_lcd.runtime->set_binding_value(s_lcd.document_id, LCD_VIEW_SYSTEM_WIFI_SSID,
+                                             "wifi.ssid", s_wifi_ssid);
+        } else if (!shown_ssid.empty()) {
+            s_wifi_ssid = shown_ssid;
+        } else {
+            s_wifi_ssid = ssid;
+        }
+        const std::string shown_pass = read_text_input(LCD_VIEW_SYSTEM_WIFI_PASS);
+        if (shown_pass.empty() && pass[0] != '\0') {
+            s_wifi_pass = pass;
+            s_lcd.runtime->set_binding_value(s_lcd.document_id, LCD_VIEW_SYSTEM_WIFI_PASS,
+                                             "wifi.password", s_wifi_pass);
+        } else if (!shown_pass.empty()) {
+            s_wifi_pass = shown_pass;
+        } else if (pass[0] != '\0') {
+            s_wifi_pass = pass;
+        }
+        apply_wifi_pass_mask();
     }
     minihub_net_iface_status_t st{};
     if (minihub_net_get_iface_status(MINIHUB_NET_IF_WIFI, &st) == ESP_OK) {
@@ -3942,6 +4002,13 @@ static void handle_net_ip_changed(const std::string &v) { s_net_ip = v; }
 static void handle_net_mask_changed(const std::string &v) { s_net_mask = v; }
 static void handle_net_dns_changed(const std::string &v) { s_net_dns = v; }
 
+static void handle_wifi_pass_show_toggle()
+{
+    s_wifi_pass_visible = !s_wifi_pass_visible;
+    apply_wifi_pass_mask();
+    request_display_refresh();
+}
+
 static void handle_wifi_open_toggle()
 {
     s_wifi_open = !s_wifi_open;
@@ -3965,28 +4032,84 @@ static void handle_net_mode_toggle()
 
 static void handle_wifi_save()
 {
-    const esp_err_t err = minihub_net_set_wifi_sta(
-        s_wifi_ssid.c_str(), s_wifi_pass.c_str(), s_wifi_open);
+    /* Dedicated subscribe path (not wire_action): read under the LVGL lock,
+     * then release it before the blocking STA reconnect. */
+    std::string ssid;
+    std::string pass;
+    bool open = false;
+    with_lvgl_lock([&]() {
+        floating_keyboard_hide();
+        ssid = read_text_input(LCD_VIEW_SYSTEM_WIFI_SSID);
+        pass = read_text_input(LCD_VIEW_SYSTEM_WIFI_PASS);
+        if (ssid.empty()) {
+            ssid = s_wifi_ssid;
+        } else {
+            s_wifi_ssid = ssid;
+        }
+        /* Empty password keeps NVS (same as web). Prefer live field, else cache. */
+        if (!pass.empty()) {
+            s_wifi_pass = pass;
+        } else if (!s_wifi_pass.empty()) {
+            pass = s_wifi_pass;
+        }
+        open = s_wifi_open;
+    });
+    const esp_err_t err = minihub_net_set_wifi_sta(ssid.c_str(), pass.c_str(), open);
+    ESP_LOGI(TAG, "Wi-Fi save ssid=%s pass=%s open=%d -> %s",
+             ssid.c_str(), pass.empty() ? "keep/empty" : "set", open ? 1 : 0,
+             esp_err_to_name(err));
     with_lvgl_lock([err]() {
         set_label_text(LCD_VIEW_SYSTEM_WIFI,
-                       err == ESP_OK ? lcd_tr(LCD_STR_WIFI_SAVE_OK)
-                                     : lcd_tr(LCD_STR_WIFI_SAVE_FAIL));
+                       minihub_web_sta_has_ip() ? lcd_tr(LCD_STR_SYS_CONNECTED)
+                                               : lcd_tr(LCD_STR_SYS_DISCONNECTED));
+        show_alert(lcd_tr(LCD_STR_WIFI_SAVE),
+                   err == ESP_OK ? lcd_tr(LCD_STR_COMMON_SAVED)
+                                 : lcd_tr(LCD_STR_WIFI_SAVE_FAIL));
         request_display_refresh();
     });
 }
 
 static void handle_net_save()
 {
+    std::string ip;
+    std::string mask;
+    std::string dns;
+    bool dhcp = true;
+    with_lvgl_lock([&]() {
+        floating_keyboard_hide();
+        ip = read_text_input(LCD_VIEW_SYSTEM_NET_IP);
+        mask = read_text_input(LCD_VIEW_SYSTEM_NET_MASK);
+        dns = read_text_input(LCD_VIEW_SYSTEM_NET_DNS);
+        if (!ip.empty()) {
+            s_net_ip = ip;
+        } else {
+            ip = s_net_ip;
+        }
+        if (!mask.empty()) {
+            s_net_mask = mask;
+        } else {
+            mask = s_net_mask;
+        }
+        if (!dns.empty()) {
+            s_net_dns = dns;
+        } else {
+            dns = s_net_dns;
+        }
+        dhcp = !s_net_static;
+    });
     minihub_net_iface_config_t cfg{};
-    cfg.dhcp = !s_net_static;
-    strncpy(cfg.ip, s_net_ip.c_str(), sizeof(cfg.ip) - 1);
-    strncpy(cfg.netmask, s_net_mask.c_str(), sizeof(cfg.netmask) - 1);
-    strncpy(cfg.dns_main, s_net_dns.c_str(), sizeof(cfg.dns_main) - 1);
+    cfg.dhcp = dhcp;
+    strncpy(cfg.ip, ip.c_str(), sizeof(cfg.ip) - 1);
+    strncpy(cfg.netmask, mask.c_str(), sizeof(cfg.netmask) - 1);
+    strncpy(cfg.dns_main, dns.c_str(), sizeof(cfg.dns_main) - 1);
     const esp_err_t err = minihub_net_set_iface_config(MINIHUB_NET_IF_WIFI, &cfg);
     with_lvgl_lock([err]() {
         set_label_text(LCD_VIEW_SYSTEM_WIFI,
-                       err == ESP_OK ? lcd_tr(LCD_STR_WIFI_SAVE_OK)
-                                     : lcd_tr(LCD_STR_WIFI_SAVE_FAIL));
+                       minihub_web_sta_has_ip() ? lcd_tr(LCD_STR_SYS_CONNECTED)
+                                               : lcd_tr(LCD_STR_SYS_DISCONNECTED));
+        show_alert(lcd_tr(LCD_STR_WIFI_NET_SAVE),
+                   err == ESP_OK ? lcd_tr(LCD_STR_COMMON_SAVED)
+                                 : lcd_tr(LCD_STR_WIFI_SAVE_FAIL));
         request_display_refresh();
     });
 }
@@ -3998,13 +4121,13 @@ static void wire_wifi()
             s_lcd.document_id, action,
             [fn](const gui::Event &ev) {
                 const auto text = ev.get_string("text");
-                if (!text || !s_lcd.scheduler) {
+                if (!text) {
                     return;
                 }
-                const std::string value(*text);
-                s_lcd.scheduler->post([value, fn]() {
-                    with_lvgl_lock([value, fn]() { fn(value); });
-                });
+                /* Apply on the dispatch thread (no extra scheduler hop). A
+                 * posted update raced Save and could leave s_wifi_pass empty
+                 * for the NVS write. String caches need no LVGL lock. */
+                fn(std::string(*text));
             }));
     };
     changed(LCD_ACTION_WIFI_SSID_CHANGED, handle_wifi_ssid_changed);
@@ -4012,10 +4135,25 @@ static void wire_wifi()
     changed(LCD_ACTION_NET_IP_CHANGED, handle_net_ip_changed);
     changed(LCD_ACTION_NET_MASK_CHANGED, handle_net_mask_changed);
     changed(LCD_ACTION_NET_DNS_CHANGED, handle_net_dns_changed);
+    wire_action(LCD_ACTION_WIFI_PASS_SHOW_TOGGLE, handle_wifi_pass_show_toggle);
     wire_action(LCD_ACTION_WIFI_OPEN_TOGGLE, handle_wifi_open_toggle);
-    wire_action(LCD_ACTION_WIFI_SAVE, handle_wifi_save);
     wire_action(LCD_ACTION_NET_MODE_TOGGLE, handle_net_mode_toggle);
-    wire_action(LCD_ACTION_NET_SAVE, handle_net_save);
+    /* Save paths: read fields under LVGL lock, then call net APIs unlocked.
+     * wire_action() wraps the whole handler in with_lvgl_lock, which would
+     * block the UI for the STA disconnect wait inside set_wifi_sta. */
+    auto wire_unlocked = [](const char *action, void (*handler)()) {
+        s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
+            s_lcd.document_id, action,
+            [handler](const gui::Event &ev) {
+                (void)ev;
+                if (!s_lcd.scheduler) {
+                    return;
+                }
+                s_lcd.scheduler->post([handler]() { handler(); });
+            }));
+    };
+    wire_unlocked(LCD_ACTION_WIFI_SAVE, handle_wifi_save);
+    wire_unlocked(LCD_ACTION_NET_SAVE, handle_net_save);
 }
 
 void handle_rule_tap(int slot)
@@ -4205,6 +4343,14 @@ std::string current_screen()
     return (state && !state->empty()) ? *state : std::string("system");
 }
 
+static void set_confirm_cancel_hidden(bool hidden)
+{
+    const std::string screen = current_screen();
+    char path[96];
+    snprintf(path, sizeof(path), LCD_VIEW_PATTERN_CONFIRM_CANCEL_BTN, screen.c_str());
+    set_view_hidden(path, hidden);
+}
+
 static void show_confirm(const char *title, const char *msg, PendingConfirm kind)
 {
     const std::string screen = current_screen();
@@ -4214,6 +4360,23 @@ static void show_confirm(const char *title, const char *msg, PendingConfirm kind
     snprintf(path, sizeof(path), LCD_VIEW_PATTERN_CONFIRM_MSG, screen.c_str());
     set_label_text(path, msg);
     s_pending_confirm = kind;
+    set_confirm_cancel_hidden(false);
+    snprintf(path, sizeof(path), LCD_VIEW_PATTERN_CONFIRM_MODAL, screen.c_str());
+    set_view_hidden(path, false);
+    request_display_refresh();
+}
+
+/* Non-destructive notice: same modal, cancel hidden, OK only dismisses. */
+static void show_alert(const char *title, const char *msg)
+{
+    const std::string screen = current_screen();
+    char path[96];
+    snprintf(path, sizeof(path), LCD_VIEW_PATTERN_CONFIRM_TITLE, screen.c_str());
+    set_label_text(path, title ? title : "");
+    snprintf(path, sizeof(path), LCD_VIEW_PATTERN_CONFIRM_MSG, screen.c_str());
+    set_label_text(path, msg ? msg : "");
+    s_pending_confirm = PendingConfirm::Alert;
+    set_confirm_cancel_hidden(true);
     snprintf(path, sizeof(path), LCD_VIEW_PATTERN_CONFIRM_MODAL, screen.c_str());
     set_view_hidden(path, false);
     request_display_refresh();
@@ -4225,6 +4388,7 @@ static void hide_confirm()
     char path[96];
     snprintf(path, sizeof(path), LCD_VIEW_PATTERN_CONFIRM_MODAL, screen.c_str());
     set_view_hidden(path, true);
+    set_confirm_cancel_hidden(false);
 }
 
 void handle_system_reboot()

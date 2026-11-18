@@ -1222,6 +1222,167 @@
           ]
         }
       ]
+    },
+    {
+      "type": "container",
+      "id": "confirm_modal",
+      "commonProps": {
+        "hidden": true
+      },
+      "layout": {
+        "type": "flex",
+        "flexFlow": "column",
+        "mainAlign": "center",
+        "crossAlign": "center"
+      },
+      "placement": {
+        "x": "0dp",
+        "y": "0dp",
+        "width": "800dp",
+        "height": "480dp"
+      },
+      "style": {
+        "bgColor": "#0b0f1a"
+      },
+      "children": [
+        {
+          "type": "container",
+          "id": "confirm_card",
+          "layout": {
+            "type": "flex",
+            "flexFlow": "column",
+            "mainAlign": "start",
+            "crossAlign": "stretch",
+            "gap": "12dp"
+          },
+          "placement": {
+            "width": "420dp",
+            "height": "wrap"
+          },
+          "style": {
+            "bgColor": "#131a2b",
+            "borderWidth": "1dp",
+            "borderColor": "#243049",
+            "radius": "10dp",
+            "padding": "16dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "confirm_title",
+              "labelProps": {
+                "text": "${constant.strings.confirm_title}"
+              },
+              "style": {
+                "textColor": "#eef2ff",
+                "fontSize": "17sp"
+              }
+            },
+            {
+              "type": "label",
+              "id": "confirm_msg",
+              "labelProps": {
+                "text": ""
+              },
+              "style": {
+                "textColor": "#8b9bb4",
+                "fontSize": "13sp"
+              }
+            },
+            {
+              "type": "container",
+              "id": "confirm_btn_row",
+              "layout": {
+                "type": "flex",
+                "flexFlow": "row",
+                "mainAlign": "end",
+                "crossAlign": "center",
+                "gap": "10dp"
+              },
+              "placement": {
+                "width": "wrap",
+                "height": "wrap"
+              },
+              "children": [
+                {
+                  "type": "button",
+                  "id": "confirm_cancel",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "confirm_overview_cancel"
+                    }
+                  ],
+                  "style": {
+                    "bgColor": "#1a2238",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049",
+                    "radius": "8dp"
+                  },
+                  "placement": {
+                    "width": "100dp",
+                    "height": "36dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "confirm_cancel_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.common_cancel}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#8b9bb4",
+                        "fontSize": "13sp"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "confirm_ok",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "confirm_overview_ok"
+                    }
+                  ],
+                  "style": {
+                    "bgColor": "#1d4ed8",
+                    "borderWidth": "1dp",
+                    "borderColor": "#1d4ed8",
+                    "radius": "8dp"
+                  },
+                  "placement": {
+                    "width": "100dp",
+                    "height": "36dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "confirm_ok_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.common_ok}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#ffffff",
+                        "fontSize": "13sp"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ]
 }

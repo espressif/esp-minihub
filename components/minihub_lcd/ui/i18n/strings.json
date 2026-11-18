@@ -22,6 +22,10 @@
       "zh": "确认",
       "en": "OK"
     },
+    "common_saved": {
+      "zh": "已保存",
+      "en": "Saved"
+    },
     "common_delete": {
       "zh": "删除",
       "en": "Delete"
@@ -735,6 +739,14 @@
       "zh": "密码",
       "en": "Password"
     },
+    "wifi_pass_show": {
+      "zh": "显示",
+      "en": "Show"
+    },
+    "wifi_pass_hide": {
+      "zh": "隐藏",
+      "en": "Hide"
+    },
     "wifi_open_network": {
       "zh": "开放网络（无密码）",
       "en": "Open network"
@@ -772,8 +784,8 @@
       "en": "Save network"
     },
     "wifi_save_ok": {
-      "zh": "已保存，正在连接",
-      "en": "Saved, connecting"
+      "zh": "已保存",
+      "en": "Saved"
     },
     "wifi_save_fail": {
       "zh": "保存失败",

@@ -1099,36 +1099,91 @@
                   }
                 },
                 {
-                  "type": "textInput",
-                  "id": "wifi_pass_input",
-                  "textInputProps": {
-                    "placeholder": "${constant.strings.wifi_password}",
-                    "maxLength": 63
+                  "type": "container",
+                  "id": "wifi_pass_row",
+                  "layout": {
+                    "type": "flex",
+                    "flexFlow": "row",
+                    "mainAlign": "start",
+                    "crossAlign": "center",
+                    "gap": "8dp"
                   },
-                  "bindings": {
-                    "textInputProps.text": "wifi.password"
-                  },
-                  "events": [
-                    {
-                      "type": "valueChanged",
-                      "action": "wifi_pass_changed"
-                    }
-                  ],
                   "placement": {
                     "mode": "flow",
                     "width": "100%",
-                    "height": "40dp",
                     "alignSelf": "stretch"
                   },
-                  "style": {
-                    "bgColor": "#0b0f1a",
-                    "borderWidth": "1dp",
-                    "borderColor": "#243049",
-                    "radius": "8dp",
-                    "padding": "6dp",
-                    "textColor": "#eef2ff",
-                    "fontSize": "14sp"
-                  }
+                  "children": [
+                    {
+                      "type": "textInput",
+                      "id": "wifi_pass_input",
+                      "textInputProps": {
+                        "placeholder": "${constant.strings.wifi_password}",
+                        "maxLength": 63,
+                        "password": true
+                      },
+                      "bindings": {
+                        "textInputProps.text": "wifi.password",
+                        "textInputProps.password": "wifi.pass_masked"
+                      },
+                      "events": [
+                        {
+                          "type": "valueChanged",
+                          "action": "wifi_pass_changed"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap",
+                        "height": "40dp",
+                        "flexGrow": 1
+                      },
+                      "style": {
+                        "bgColor": "#0b0f1a",
+                        "borderWidth": "1dp",
+                        "borderColor": "#243049",
+                        "radius": "8dp",
+                        "padding": "6dp",
+                        "textColor": "#eef2ff",
+                        "fontSize": "14sp"
+                      }
+                    },
+                    {
+                      "type": "button",
+                      "id": "wifi_pass_show_btn",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "wifi_pass_show_toggle"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "72dp",
+                        "height": "40dp"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "wifi_pass_show_btn_lbl",
+                          "labelProps": {
+                            "text": "${constant.strings.wifi_pass_show}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          }
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "type": "container",

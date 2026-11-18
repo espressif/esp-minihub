@@ -17,7 +17,7 @@
     "nav_ids": ["nav_overview", "nav_map", "nav_rules", "nav_scenes", "nav_store", "nav_system"],
     "store_tabs": ["tab_available", "tab_installed"],
     "filters": ["filter_all", "filter_auth", "filter_matter"],
-    "confirm_screens": ["rules", "scenes", "store", "system"],
+    "confirm_screens": ["overview", "rules", "scenes", "store", "system"],
     "name_screens": [
       "overview"
     ],
@@ -107,7 +107,8 @@
     "RENAME_TITLE": "/overview/name_modal/name_card/name_title",
     "SYSTEM_WIFI_CFG": "/system/system_main/sys_grid/sys_card_wifi",
     "SYSTEM_WIFI_SSID": "/system/system_main/sys_grid/sys_card_wifi/wifi_ssid_input",
-    "SYSTEM_WIFI_PASS": "/system/system_main/sys_grid/sys_card_wifi/wifi_pass_input",
+    "SYSTEM_WIFI_PASS": "/system/system_main/sys_grid/sys_card_wifi/wifi_pass_row/wifi_pass_input",
+    "SYSTEM_WIFI_PASS_SHOW": "/system/system_main/sys_grid/sys_card_wifi/wifi_pass_row/wifi_pass_show_btn/wifi_pass_show_btn_lbl",
     "SYSTEM_WIFI_OPEN": "/system/system_main/sys_grid/sys_card_wifi/wifi_btn_row/wifi_open_btn/wifi_open_btn_lbl",
     "SYSTEM_WIFI_SAVE": "/system/system_main/sys_grid/sys_card_wifi/wifi_btn_row/wifi_save_btn",
     "SYSTEM_NET_MODE": "/system/system_main/sys_grid/sys_card_wifi/net_mode_btn/net_mode_btn_lbl",
@@ -410,6 +411,7 @@
     "MATTER_ADD": "matter_add",
     "WIFI_SSID_CHANGED": "wifi_ssid_changed",
     "WIFI_PASS_CHANGED": "wifi_pass_changed",
+    "WIFI_PASS_SHOW_TOGGLE": "wifi_pass_show_toggle",
     "WIFI_OPEN_TOGGLE": "wifi_open_toggle",
     "WIFI_SAVE": "wifi_save",
     "NET_IP_CHANGED": "net_ip_changed",
@@ -520,7 +522,7 @@
       ]
     }
   },
-  "binding_keys": ["card.meta", "card.name", "card.state", "card.then", "card.type", "card.value", "chip.bg", "chip.border", "chip.text", "form.devices", "form.index", "form.name", "form.when_time", "lang.options", "lang.selected", "net.dns", "net.ip", "net.netmask", "rename.text", "store_tab.bg", "store_tab.border", "store_tab.text", "tz.options", "tz.selected", "wifi.password", "wifi.ssid"],
+  "binding_keys": ["card.meta", "card.name", "card.state", "card.then", "card.type", "card.value", "chip.bg", "chip.border", "chip.text", "form.devices", "form.index", "form.name", "form.when_time", "lang.options", "lang.selected", "net.dns", "net.ip", "net.netmask", "rename.text", "store_tab.bg", "store_tab.border", "store_tab.text", "tz.options", "tz.selected", "wifi.pass_masked", "wifi.password", "wifi.ssid"],
   "templates": {
     "DEVICE_CARD": {
       "template_id": "device_card",
