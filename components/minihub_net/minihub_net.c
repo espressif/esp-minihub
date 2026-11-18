@@ -29,7 +29,9 @@
 #if CONFIG_MINIHUB_NET_ETH
 #include "esp_eth.h"
 #include "esp_eth_mac_esp.h"
+#include "esp_eth_netif_glue.h"
 #include "esp_eth_phy.h"
+#include "eth_phy_802_3_regs.h"
 #include "esp_mac.h"
 #endif
 
@@ -41,6 +43,9 @@ static const char *TAG = "minihub_net";
 
 static EventGroupHandle_t s_net_eg;
 static bool s_started;
+/* ETH is optional hardware; track whether the uplink actually came up rather
+ * than just whether it was compiled in. */
+static bool s_eth_up;
 #if CONFIG_MINIHUB_NET_ETH
 static esp_netif_t *s_eth_netif;
 static esp_eth_handle_t s_eth_handle;
@@ -97,7 +102,9 @@ static void log_netif_dns(const char *ifname, esp_netif_t *netif)
         } else if (dns.ip.type == ESP_IPADDR_TYPE_V6) {
             ESP_LOGI(TAG, "%s dns[%s]=IPv6 (set)", ifname ? ifname : "netif", dns_name[i]);
         } else {
-            ESP_LOGW(TAG, "%s dns[%s]=(empty)", ifname ? ifname : "netif", dns_name[i]);
+            /* A router commonly supplies only main+backup DNS; an unset
+             * fallback is normal, not a warning. */
+            ESP_LOGD(TAG, "%s dns[%s]=(empty)", ifname ? ifname : "netif", dns_name[i]);
         }
     }
 }
@@ -280,12 +287,11 @@ static esp_err_t start_wifi_sta(void)
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "Wi-Fi set_ps(NONE) failed: %s", esp_err_to_name(err));
         }
-        if (!minihub_provision_busy()) {
-            esp_err_t cerr = esp_wifi_connect();
-            if (cerr != ESP_OK && cerr != ESP_ERR_WIFI_CONN) {
-                ESP_LOGW(TAG, "Wi-Fi connect: %s", esp_err_to_name(cerr));
-            }
-        }
+        /* The initial connect is owned by wifi_event_handler() on
+         * WIFI_EVENT_STA_START (it also skips connect while provisioning owns
+         * the radio or STA is explicitly disabled). Calling esp_wifi_connect()
+         * here as well raced that handler and made the Wi-Fi driver log
+         * "sta is connecting, return error" on every boot. */
         return ESP_OK;
     }
 
@@ -391,44 +397,147 @@ static void eth_got_ip_handler(void *arg, esp_event_base_t event_base, int32_t e
     on_got_ip("eth", event ? event->esp_netif : s_eth_netif);
 }
 
+/* RGMII sources the EMAC clock from the PHY RX pad. With no PHY fitted or
+ * clocked, the MAC software reset never completes and IDF reports
+ * "emac_esp32_init: reset timeout" from esp_eth_driver_install(). Probe the
+ * MDIO bus before installing the driver, so a missing PHY is an unavailable
+ * optional uplink instead of a boot error. The probe also pins the address, so
+ * the driver no longer needs its post-MAC-init auto-detection. */
+static int eth_phy_probe_addr(esp_eth_mac_t *mac, int configured)
+{
+    const int first = configured >= 0 ? configured : 0;
+    const int last = configured >= 0 ? configured : 31;
+    for (int addr = first; addr <= last; ++addr) {
+        uint32_t id1 = 0;
+        if (mac->read_phy_reg(mac, (uint32_t)addr, ETH_PHY_IDR1_REG_ADDR, &id1) != ESP_OK) {
+            return -1; /* MDIO bus itself is not usable */
+        }
+        if (id1 != 0x0000 && id1 != 0xFFFF) {
+            return addr;
+        }
+    }
+    return -1;
+}
+
+/* Roll back a half-installed optional uplink. Order follows the IDF ethernet
+ * example: stop driver, drop glue, destroy netif, uninstall driver. */
+static void eth_teardown(esp_eth_mac_t *mac, esp_eth_phy_t *phy,
+                         esp_eth_netif_glue_handle_t glue)
+{
+    s_eth_up = false;
+    bool installed = (s_eth_handle != NULL);
+    if (installed) {
+        (void)esp_eth_stop(s_eth_handle);
+    }
+    if (glue) {
+        (void)esp_eth_del_netif_glue(glue);
+    }
+    if (s_eth_netif) {
+        esp_netif_destroy(s_eth_netif);
+        s_eth_netif = NULL;
+    }
+    if (installed) {
+        (void)esp_eth_driver_uninstall(s_eth_handle);
+        s_eth_handle = NULL;
+    } else {
+        /* Install never succeeded, so mac/phy are still owned by us. */
+        if (phy) {
+            phy->del(phy);
+        }
+        if (mac) {
+            mac->del(mac);
+        }
+    }
+    (void)esp_event_handler_unregister(IP_EVENT, IP_EVENT_ETH_GOT_IP, &eth_got_ip_handler);
+    (void)esp_event_handler_unregister(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler);
+}
+
 static esp_err_t start_eth(void)
 {
+    esp_err_t err;
+    esp_eth_mac_t *mac = NULL;
+    esp_eth_phy_t *phy = NULL;
+    esp_eth_netif_glue_handle_t glue = NULL;
+
     eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
     eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();
     phy_config.phy_addr = CONFIG_MINIHUB_NET_ETH_PHY_ADDR;
     phy_config.reset_gpio_num = CONFIG_MINIHUB_NET_ETH_PHY_RST_GPIO;
 
     eth_esp32_emac_config_t emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
-    esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&emac_config, &mac_config);
-    ESP_RETURN_ON_FALSE(mac, ESP_FAIL, TAG, "MAC create failed");
-    esp_eth_phy_t *phy = esp_eth_phy_new_generic(&phy_config);
+    mac = esp_eth_mac_new_esp32(&emac_config, &mac_config);
+    if (!mac) {
+        return ESP_FAIL;
+    }
+
+    const int addr = eth_phy_probe_addr(mac, phy_config.phy_addr);
+    if (addr < 0) {
+        ESP_LOGI(TAG, "Ethernet PHY not detected; ETH uplink skipped");
+        mac->del(mac);
+        return ESP_ERR_NOT_FOUND;
+    }
+    phy_config.phy_addr = addr;
+
+    phy = esp_eth_phy_new_generic(&phy_config);
     if (!phy) {
         mac->del(mac);
-        ESP_LOGE(TAG, "PHY create failed");
         return ESP_FAIL;
     }
 
     esp_eth_config_t eth_config = ETH_DEFAULT_CONFIG(mac, phy);
-    ESP_RETURN_ON_ERROR(esp_eth_driver_install(&eth_config, &s_eth_handle), TAG, "eth install");
+    err = esp_eth_driver_install(&eth_config, &s_eth_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "eth install: %s", esp_err_to_name(err));
+        s_eth_handle = NULL;
+        goto fail;
+    }
+    mac = NULL;
+    phy = NULL; /* the driver owns them now */
 
 #if CONFIG_MINIHUB_NET_ETH_YT8531_INIT
-    ESP_RETURN_ON_ERROR(eth_phy_yt8531_specific_init(s_eth_handle), TAG, "YT8531 init");
+    err = eth_phy_yt8531_specific_init(s_eth_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "YT8531 init: %s", esp_err_to_name(err));
+        goto fail;
+    }
 #endif
 
     esp_netif_config_t netif_cfg = ESP_NETIF_DEFAULT_ETH();
     s_eth_netif = esp_netif_new(&netif_cfg);
-    ESP_RETURN_ON_FALSE(s_eth_netif, ESP_ERR_NO_MEM, TAG, "eth netif");
+    if (!s_eth_netif) {
+        err = ESP_ERR_NO_MEM;
+        goto fail;
+    }
 
-    esp_eth_netif_glue_handle_t glue = esp_eth_new_netif_glue(s_eth_handle);
-    ESP_RETURN_ON_ERROR(esp_netif_attach(s_eth_netif, glue), TAG, "netif attach");
+    glue = esp_eth_new_netif_glue(s_eth_handle);
+    if (!glue) {
+        err = ESP_ERR_NO_MEM;
+        goto fail;
+    }
+    err = esp_netif_attach(s_eth_netif, glue);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "eth netif attach: %s", esp_err_to_name(err));
+        goto fail;
+    }
 
-    ESP_RETURN_ON_ERROR(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler, NULL),
-                        TAG, "eth event");
-    ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &eth_got_ip_handler, NULL),
-                        TAG, "eth got ip");
-
-    ESP_RETURN_ON_ERROR(esp_eth_start(s_eth_handle), TAG, "eth start");
+    err = esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler, NULL);
+    if (err != ESP_OK) {
+        goto fail;
+    }
+    err = esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &eth_got_ip_handler, NULL);
+    if (err != ESP_OK) {
+        goto fail;
+    }
+    err = esp_eth_start(s_eth_handle);
+    if (err != ESP_OK) {
+        goto fail;
+    }
+    s_eth_up = true;
     return ESP_OK;
+
+fail:
+    eth_teardown(mac, phy, glue);
+    return err;
 }
 #endif /* ETH */
 
@@ -458,8 +567,17 @@ esp_err_t minihub_net_init(void)
 #if CONFIG_MINIHUB_NET_ETH
     err = start_eth();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Ethernet start failed: %s", esp_err_to_name(err));
-        return err;
+        /* Ethernet is an optional uplink. A board without a fitted/clocked
+         * RGMII PHY — or a genuine ETH init failure — must not take down
+         * esp_netif, the saved IP configuration or the Wi-Fi STA. Returning
+         * here used to leave s_started false, which made every later
+         * minihub_net_start_wifi() call fail with ESP_ERR_INVALID_STATE. */
+        if (err == ESP_ERR_NOT_FOUND) {
+            ESP_LOGI(TAG, "Ethernet uplink not present; continuing without ETH");
+        } else {
+            ESP_LOGW(TAG, "Ethernet uplink unavailable: %s (continuing without ETH)",
+                     esp_err_to_name(err));
+        }
     }
 #endif
 
@@ -484,7 +602,7 @@ esp_err_t minihub_net_init(void)
              0,
 #endif
 #if CONFIG_MINIHUB_NET_ETH
-             1
+             s_eth_up ? 1 : 0
 #else
              0
 #endif

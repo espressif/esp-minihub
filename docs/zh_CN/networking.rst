@@ -76,7 +76,7 @@ MQTT broker
 `mosquitto <https://components.espressif.com/components/espressif/mosquitto>`_
 broker，站点里的 MQTT 设备因此连 Hub 本身，不再需要一台常开的机器。它只做传输：
 不注册任何点位。打开它的同时，Hub 也会在 ``127.0.0.1`` 上起一个自己的 MQTT 客户端
-—— ``components/minihub_protocol_adapters/adapter_mqtt`` ，登记在同一个
+—— 与 broker 同属 ``minihub_mqtt_broker`` （``mqtt_adapter.c``），登记在同一个
 ``mqtt_broker`` 名字下 —— 因为 JS 插件用的 ``host.mqtt`` 就挂在这个客户端上。
 没有连外部 broker 的模式：broker 不启动，客户端也就不会被创建。
 

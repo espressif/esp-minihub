@@ -4,7 +4,7 @@
 menu "MiniHub"
 
     config MINIHUB_VERSION
-        string "Version (firmware / product / OTA)"
+        string "MiniHub Version"
         default "0.1.0"
         help
             Single version for the device: reported by the firmware as
@@ -14,25 +14,36 @@ menu "MiniHub"
             string; that is reported separately as the commit line.
 
     rsource "../../components/minihub_core/Kconfig.minihub"
-    rsource "../../components/minihub_auth/Kconfig.minihub"
-    rsource "../../components/minihub_ble_mesh/Kconfig.minihub"
-    rsource "../../components/minihub_hub/Kconfig.minihub"
-    rsource "../../components/minihub_js/Kconfig.minihub"
-    rsource "../../components/minihub_lcd/Kconfig.minihub"
-    rsource "../../components/minihub_matter/Kconfig.minihub"
     rsource "../../components/minihub_mcp_server/Kconfig.minihub"
-    rsource "../../components/minihub_module/Kconfig.minihub"
-    rsource "../../components/minihub_mqtt_broker/Kconfig.minihub"
     rsource "../../components/minihub_net/Kconfig.minihub"
+    menu "Plugins"
+        rsource "../../components/minihub_store/Kconfig.minihub"
+        rsource "../../components/minihub_module/Kconfig.minihub"
+        rsource "../../components/minihub_js/Kconfig.minihub"
+    endmenu
+    menu "Builtin Adapters"
+        rsource "../../components/minihub_ble_mesh/Kconfig.minihub"
+        rsource "../../components/minihub_thread/Kconfig.minihub"
+        rsource "../../components/minihub_zigbee/Kconfig.minihub"
+        rsource "../../components/minihub_matter/Kconfig.minihub"
+        rsource "../../components/minihub_mqtt_broker/Kconfig.minihub"
+        rsource "../../components/minihub_protocol_adapters/adapter_modbus/Kconfig.minihub"
+        rsource "../../components/minihub_rtsp_cam/Kconfig.minihub"
+    endmenu
+    menu "Firmware update"
+        rsource "../../components/minihub_ota/Kconfig.minihub"
+        rsource "../../components/minihub_vibe/Kconfig.minihub"
+    endmenu
+    menu "Peripherals"
+        rsource "../../components/minihub_usb_msc/Kconfig.minihub"
+    endmenu
+    menu "UI"
+        rsource "../../components/minihub_lcd/Kconfig.minihub"
+        rsource "../../components/minihub_web/Kconfig.minihub"
+    endmenu
+    menu "Cloud"
+        rsource "../../components/minihub_rainmaker/Kconfig.minihub"
+    endmenu
     rsource "../../components/minihub_provision/Kconfig.minihub"
-    rsource "../../components/minihub_rainmaker/Kconfig.minihub"
-    rsource "../../components/minihub_rtsp_cam/Kconfig.minihub"
-    rsource "../../components/minihub_store/Kconfig.minihub"
-    rsource "../../components/minihub_thread/Kconfig.minihub"
-    rsource "../../components/minihub_usb_msc/Kconfig.minihub"
-    rsource "../../components/minihub_web/Kconfig.minihub"
-    rsource "../../components/minihub_zigbee/Kconfig.minihub"
-    rsource "../../components/minihub_protocol_adapters/adapter_modbus/Kconfig.minihub"
-    rsource "../../components/minihub_protocol_adapters/adapter_mqtt/Kconfig.minihub"
 
 endmenu

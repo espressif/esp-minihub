@@ -9,9 +9,10 @@ idf_component_register(
     INCLUDE_DIRS "include" "."
     # NOTE: do NOT put REQUIRES inside a CONFIG_ guard — IDF resolves this list
     # before Kconfig, and a conditional here desyncs incremental builds.
-    # adapter_mqtt supplies minihub_mqtt.h + the hook implementation; when its
-    # Kconfig is off the component is an INTERFACE lib, so this stays valid.
-    REQUIRES minihub_core minihub_config minihub_module minihub_adapter esp_http_client mbedtls lwip minihub_ble_gatt mdns adapter_mqtt
+    # minihub_mqtt_broker supplies minihub_mqtt.h + the loopback client; when
+    # CONFIG_MINIHUB_MQTT_ADAPTER is off that source is omitted and the
+    # component may be INTERFACE-only, so this stays valid.
+    REQUIRES minihub_core minihub_config minihub_module minihub_adapter esp_http_client mbedtls lwip minihub_ble_gatt mdns minihub_mqtt_broker
 )
 
 if(CONFIG_MINIHUB_JS_PLUGINS)

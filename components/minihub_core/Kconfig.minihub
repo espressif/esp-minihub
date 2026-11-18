@@ -1,11 +1,5 @@
 menu "Core"
 
-    config CODEC_UAC_SUPPORT
-        bool "USB Audio Class (UAC) codec support"
-        default n
-        help
-            Stub for esp_codec_dev optional dep. Default off.
-
     config MINIHUB_POINT_DEBOUNCE_MS
         int "Point update debounce (ms, 0=off)"
         default 1000
@@ -15,5 +9,15 @@ menu "Core"
         int "Periodic heap log interval (seconds, 0=off)"
         default 0
         range 0 3600
+
+    config MINIHUB_HUB_RELOAD_STACK_SIZE
+        int "hub_reload task stack size (bytes, PSRAM)"
+        default 24576
+        range 8192 65536
+        help
+            FreeRTOS stack for the async hub reload task. Reload walks
+            config / packs / adapters before handing JS compile to
+            js_worker; keep enough headroom for that call chain. JS
+            evaluation itself does not run on this stack.
 
 endmenu

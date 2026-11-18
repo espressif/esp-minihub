@@ -14,7 +14,7 @@
 #include <stdbool.h>
 #include "esp_log.h"
 
-static const char *TAG = "adapter_wifi";
+static const char *TAG = "wifi_adapter";
 static bool s_started;
 
 static esp_err_t wifi_adapter_init(const cJSON *config)

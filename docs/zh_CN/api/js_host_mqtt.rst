@@ -4,7 +4,8 @@ JS 插件 MQTT Host API
 :link_to_translation:`en:[English]`
 
 此命名空间实现在 ``components/minihub_js/minihub_js_mqtt.c``，底层为
-``components/minihub_protocol_adapters/adapter_mqtt``。下表在构建时从 C 绑定读出。
+``components/minihub_mqtt_broker`` 里的 loopback 客户端（``mqtt_adapter.c`` /
+``minihub_mqtt.h``）。下表在构建时从 C 绑定读出。
 
 .. minihub-JS-api:: mqtt
 

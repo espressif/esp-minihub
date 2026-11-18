@@ -87,10 +87,10 @@ MQTT broker
 broker on the Hub, so the MQTT devices at a site connect to the Hub instead of a
 separate always-on machine. It is a transport service only: it registers no
 points. Turning it on also starts the Hub's own MQTT client on ``127.0.0.1`` —
-``components/minihub_protocol_adapters/adapter_mqtt``, registered under the same
-``mqtt_broker`` name — because that client is what carries ``host.mqtt`` for JS
-plugins. There is no external-broker mode: with the broker off, no client is
-created.
+built in the same ``minihub_mqtt_broker`` component (``mqtt_adapter.c``),
+registered under the same ``mqtt_broker`` name — because that client is what
+carries ``host.mqtt`` for JS plugins. There is no external-broker mode: with
+the broker off, no client is created.
 
 The firmware carries the broker whenever ``CONFIG_MINIHUB_MQTT_BROKER`` is on,
 which is the default. Whether it listens is decided at run time by

@@ -3,9 +3,9 @@ JS plugin MQTT host API
 
 :link_to_translation:`zh_CN:[中文]`
 
-This namespace lives in ``components/minihub_js/minihub_js_mqtt.c`` over
-``components/minihub_protocol_adapters/adapter_mqtt``. The table is read from
-the C bindings at build time.
+This namespace lives in ``components/minihub_js/minihub_js_mqtt.c`` over the
+loopback client in ``components/minihub_mqtt_broker`` (``mqtt_adapter.c`` /
+``minihub_mqtt.h``). The table is read from the C bindings at build time.
 
 .. minihub-JS-api:: mqtt
 

@@ -182,7 +182,7 @@ ROWS: list[tuple] = [
      ("define", "components/minihub_js/minihub_js.c", "MINIHUB_JS_HTTP_BODY_MAX")),
 
     ("hub", "Hub reload task stack", "Hub 重载任务栈", "24 KiB", 24576,
-     ("kconfig", "components/minihub_hub/Kconfig.minihub", "MINIHUB_HUB_RELOAD_STACK_SIZE")),
+     ("kconfig", "components/minihub_core/Kconfig.minihub", "MINIHUB_HUB_RELOAD_STACK_SIZE")),
 ]
 
 GROUPS = ("core", "rules", "scenes", "store", "web", "auth", "matter", "radios",

@@ -79,9 +79,13 @@ Core and services
     session and the optional API token are ``minihub_auth`` ; network credentials
     over SoftAP and the factory reset are ``minihub_provision`` ; Ethernet and
     Wi-Fi STA come up in ``minihub_net`` ; firmware update state and progress are
-    ``minihub_ota`` ; fetching and applying firmware, asset and console
-    packages from the deploy root is ``minihub_update`` , and the on-device MQTT
-    broker that the site's devices connect to is ``minihub_mqtt_broker`` .
+    ``minihub_ota`` ; staging firmware on external media, the SHA-256 tail
+    trailer and the Vibe Mode hand-off are ``minihub_vibe`` (Host library plus a
+    nested ``subproject/`` that emits the retained ``app,factory`` image — not a
+    product under ``application/``) ; fetching and applying
+    firmware, asset and console packages from the deploy root is
+    ``minihub_update`` , and the on-device MQTT broker that the site's devices
+    connect to is ``minihub_mqtt_broker`` .
 
 Device model and UI
     This group decides what a device looks like and when automation fires.
@@ -109,14 +113,15 @@ Radios
     ``minihub_thread`` — and the generic NimBLE GATT client that modules use is
     ``minihub_ble_gatt`` .
 
-    The seven bundled adapters live under ``components/minihub_protocol_adapters/`` :
-    ``adapter_wifi`` , ``adapter_zigbee`` , ``adapter_ble_mesh`` ,
-    ``adapter_matter`` , ``adapter_thread`` , ``adapter_mqtt`` ,
-    ``adapter_modbus`` . Four register device points — Zigbee, BLE Mesh, Matter
-    and Modbus; Wi-Fi STA is an uplink only, Thread is an OpenThread Border
-    Router, and MQTT is the client for the Hub's own broker, so none of those
-    three owns a device and none registers a point (:doc:`radios`). Each adapter
-    is its own component, so a product can leave one out without touching the
+    Radio/device adapters live under ``components/minihub_protocol_adapters/`` :
+    ``adapter_zigbee`` , ``adapter_ble_mesh`` , ``adapter_matter`` ,
+    ``adapter_thread`` , ``adapter_modbus`` . Four register device points —
+    Zigbee, BLE Mesh, Matter and Modbus; Thread is an OpenThread Border Router
+    and registers no device points (:doc:`radios`). Network uplink (Wi-Fi STA /
+    SoftAP / Ethernet) is ``minihub_net`` (including the thin ``wifi`` adapter
+    registration). The MQTT loopback client that carries ``host.mqtt`` lives in
+    ``minihub_mqtt_broker`` next to the on-device broker. Each radio adapter is
+    its own component, so a product can leave one out without touching the
     others.
 
 Optional hardware
