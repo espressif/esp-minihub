@@ -7,18 +7,18 @@
    :local:
    :depth: 2
 
-本页跟着一次控制走完整条回路：点击控件，命令经适配器下到设备；设备把新状态报回来，
-新值写进点位，作为 ``point.updated`` 进入事件总线；总线一边让屏幕重画，一边触发
-规则；规则的动作又开启下一轮。命令没能送达设备时，这次尝试仍会以
-``command.invoked`` 上总线，但不会有 ``point.updated`` 跟着发出，回路就此停在调用方。
-参与的四个子系统是 ``minihub_device_widget``（类型目录）、商店模块、
-``minihub_rules`` 与 Web API。每一环只把值交出去，并不知道下一环是谁。
+一次控制动作构成完整回路：用户在控件上触发命令，经适配器下发至设备；设备上报新
+状态后写入点位，并以 ``point.updated`` 进入事件总线；总线同步更新界面并触发规则，
+规则动作可开启下一轮。命令未送达设备时，仍会发出 ``command.invoked``，但不会伴随
+``point.updated``，回路在调用方终止。参与的四个子系统是 ``minihub_device_widget``
+（类型目录）、商店模块、``minihub_rules`` 与 Web API。每一环只把值交出去，并不知道
+下一环是谁。
 
 .. image:: ../_static/data_flow/data_flow.svg
    :align: center
    :alt: MiniHub 端到端数据流：控制 → 设备 → 点位更新 → 事件总线 → 屏幕/规则 → 商店模块
 
-`交互版 <_static/data_flow/index.html>`_ — 卡片自动逐站导览（悬停暂停），每张卡承担一项约束。
+`交互版 <_static/data_flow/index.html>`_ — 按回路顺序展示各子系统；每张卡片对应一项约束（悬停可暂停）。
 
 静态结构（哪一层允许依赖哪一层）见 :doc:`architecture`。字段定义见
 :doc:`data_model` 与 :doc:`type_catalog`。
@@ -112,7 +112,7 @@
      ``hub.reloaded``）会调度一次去抖后的 ``GET /api/points`` 重新拉取，随后
      ``overview.js`` 重画网格——回路在此闭合，用户看到新值。
      ``device_widgets.js`` 提供目录求交与详情视图里的逐参数控件。socket 表只有 8
-     个槽位：第 9 个连接不会被拒绝，只是再也收不到广播，看起来连着、实际早已脱节；
+     个槽位：第 9 个连接不会被拒绝，只是再也收不到广播，连接仍在但事件已停；
      断线按退避重连（2 秒起、×1.5、上限 15 秒）并重新拉取，断开期间每 3 秒轮询兜底。
    * **规则引擎** （``minihub_rules``）逐事件评估 ``when`` / ``if`` / ``then``
      ——上面的去抖与同值抑制因此同样作用于规则。命中后执行 ``command``、

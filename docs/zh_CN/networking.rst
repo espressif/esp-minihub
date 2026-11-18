@@ -3,9 +3,8 @@
 
 :link_to_translation:`en:[English]`
 
-Hub 多数功能都要先有 IP，所以网络很早起来。``components/minihub_net`` 基于
-ESP-IDF 的 ESP-NETIF、Wi-Fi 驱动，以及带 EMAC 的 SoC 上的以太网，搭出 IP 上行。
-三者都是 IDF 层，上游文档如下：
+``components/minihub_net`` 在 ESP-IDF 的 ESP-NETIF、Wi-Fi 驱动，以及带 EMAC 的
+SoC 上的以太网之上建立 IP 上行。这三层都是 IDF，上游文档如下：
 
 * `ESP-IDF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/>`_
 * `ESP-NETIF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_netif.html>`_
@@ -32,7 +31,7 @@ Kconfig
    :align: center
    :alt: MiniHub 网络启动：先起以太网 → 轮到 Wi-Fi 适配器 → 连 STA → 选默认路由 → 控制台上线
 
-`交互版 <_static/net_boot/index.html>`_ —— 按开机顺序走五站，青色回程线是没有凭据时走的那条配网路。
+`交互版 <_static/net_boot/index.html>`_ —— 对应上电后的五段网络启动顺序；尚未保存凭据时，流程经 SoftAP 配网分支返回。
 
 1. ``minihub_net_init()`` — netif/事件循环；启动以太网；Wi-Fi **仅注册处理** （日志含 ``wifi STA deferred``）。
 2. ``minihub_adapter_start_all()`` — 射频互斥后按 Wi-Fi → Zigbee 或 Thread →

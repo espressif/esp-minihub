@@ -3,10 +3,10 @@ PC-side Tools
 
 :link_to_translation:`zh_CN:[中文]`
 
-Every runnable script under ``tools/`` is in the tables below: what it does, how you
-invoke it, and where this guide explains it — ``this page only`` means nowhere else.
-The hand-written walkthroughs for the common sequences live in ``tools/README.md`` in
-the repository; this page is the index.
+Every runnable script under ``tools/`` is listed below: what it does, how to
+invoke it, and where this guide documents it — ``this page only`` means the table
+below is the only description. Common sequences are covered in
+``tools/README.md`` in the repository; the sections below are the index.
 
 Two environment variables are shared by most of them:
 

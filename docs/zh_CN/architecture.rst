@@ -4,7 +4,7 @@
 :link_to_translation:`en:[English]`
 
 设备上跑着什么、哪一层允许依赖哪一层、从上电到第一次点位更新之间发生了什么。
-如果要跟着一次控制走完整条回路，读 :doc:`data_flow`。
+一次控制动作的端到端回路见 :doc:`data_flow`。
 
 分层
 --------
@@ -15,7 +15,7 @@
 
 命令从控制台、REST 或 MCP 进来，Host Core 把它落到一条点上，适配器或商店模块去说
 协议，产生的 ``point.updated`` 沿同一条路回到 UI、规则引擎与 MCP 客户端。同一带里的
-目录名，都相对带标题右半边那个前缀。
+目录名，均相对于该层标题行所示前缀。
 
 有两条边是朝上的。 ``minihub_net`` 自己定义了 ``minihub_web_refresh_geo_async()`` 、
 ``minihub_lcd_request_refresh()`` 与 ``minihub_rainmaker_notify_got_ip()`` 三个 weak
@@ -48,8 +48,8 @@ Thread）、站点自己跑的 MQTT broker 与部署服务器 —— 它们同�
 
 IP 上行：``minihub_net`` —— 见 :doc:`networking`。
 
-`交互版 <_static/architecture/index.html>`_ —— 各层自上而下自动导览（悬停暂停）；
-悬停一层看它的约束，点击一个方块即可单独留下它，并读出它被禁止做什么。
+`交互版 <_static/architecture/index.html>`_ —— 自外向内展示各层及依赖约束（悬停可暂停）；
+可选中单层查看该层禁止的依赖。
 
 .. only:: not hide_l3
 
@@ -164,7 +164,7 @@ NVS 保存 Wi-Fi 凭据、商店 URL 覆盖、Web 密码与 API token。OTA 状�
 3. ``minihub_config_init()`` — 挂载 ``/data`` 与 ``/store`` 的就是这一步
 4. 适配器注册表初始化 + 静态适配器注册；随后模块加载器初始化、
    ``minihub_module_load_all()``、包初始化与合并
-5. ``minihub_adapter_load_all()`` — 网络起来之前先把 manifest 读完
+5. ``minihub_adapter_load_all()`` — 在网络就绪前读完 manifest
 6. ``minihub_net_init()`` — 启动以太网；Wi-Fi **仅准备** （延迟 STA）
 7. 按构建执行 ``minihub_thread_init()``，加载规则与场景
 8. ``minihub_web_start(80)`` — 射频 start 期间 UI 仍可访问

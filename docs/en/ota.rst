@@ -21,26 +21,27 @@ image is the only code allowed to write an app slot.
 1. URL, upload and deploy-server updates download the bare OTA ``.bin`` to
    ``/Firmware/firmware.bin`` on the external LittleFS volume. The running
    firmware does not write flash.
-2. The device records which volume was used in NVS (``minihub/vibe_dev``), arms
-   ``minihub/vibe_pending`` once, then selects ``vibe_mode``. ESP-IDF handles an
-   ``app,factory`` target by erasing ``otadata``, so the next boot starts Vibe
-   Mode.
-3. Vibe Mode mounts the volume, computes the SHA-256 and length of the staged
-   image, and compares both with the trailer in the last erase sector of
-   ``ota_0``. A matching trailer means the image is already installed and the
-   copy is skipped.
-4. Otherwise Vibe Mode clears the trailer, writes the image with
-   ``esp_ota_begin()`` / ``esp_ota_write()`` / ``esp_ota_end()`` into ``ota_0``,
-   then writes the trailer. The trailer is the commit marker: a power cut before
-   that write leaves a blank trailer, so the next run copies the image again.
+2. The device records which volume was used in NVS (``minihub/vibe_dev``),
+   hashes the staged file, writes ``firmware.bin.sha256`` beside it, stores the
+   SHA in ``minihub/vibe_sha``, arms ``minihub/vibe_pending`` once, then selects
+   ``vibe_mode``. ESP-IDF handles an ``app,factory`` target by erasing
+   ``otadata``, so the next boot starts Vibe Mode.
+3. Vibe Mode copies only when ``vibe_pending`` is set, or when
+   ``CONFIG_MINIHUB_VIBE_FORCE_GPIO`` is held (``-1`` disables the button). Before
+   any flash write it reads the staged ``esp_app_desc`` and compares it with
+   ``ota_0``: a differing ``project_name`` is rejected (for example ``minihub``
+   must not replace ``minihub_lcd``; the check is skipped if ``ota_0`` has no
+   valid descriptor); equal ``app_elf_sha256`` values skip the copy. When a
+   copy is required, the file SHA is recomputed and must match NVS (or the
+   sidecar for force-GPIO recovery).
+4. Otherwise Vibe Mode writes the image with ``esp_ota_begin()`` /
+   ``esp_ota_write()`` / ``esp_ota_end()`` into ``ota_0``. ``esp_ota_end()``
+   verifies the image. An incomplete write leaves an invalid slot and the next
+   run copies again.
 5. Vibe Mode rewrites ``otadata`` to select ``ota_0`` and restarts. It does this
-   even when no image is present or the copy fails. Without that step the
-   bootloader would keep selecting the factory app on every boot.
-
-The trailer never sits directly after the image. ESP-IDF appends its own SHA-256,
-checksum and padding after the last segment, and ``esp_image_verify()`` validates
-that region. ``OTA_WITH_SEQUENTIAL_WRITES`` only erases sectors the write
-reaches, so the trailer sector is erased explicitly before each copy.
+   even when no image is present, the run was not armed, or the copy fails.
+   Without that step the bootloader would keep selecting the factory app on
+   every boot.
 
 External media
 --------------
@@ -57,8 +58,8 @@ mount. Vibe Mode falls back to probing both devices when that key is absent.
 retried on the next boot up to three times; after that Vibe Mode stays running
 and waits for the media to be replaced.
 
-The new image must fit before the trailer sector. An oversized image is rejected
-before any flash is erased (:doc:`production`).
+The new image must fit in ``ota_0``. An oversized image is rejected before any
+flash is erased (:doc:`production`).
 
 Pull from the OTA server
 -------------------------
@@ -84,9 +85,9 @@ The Hub pulls only images matching the current chip and picks the highest versio
 above ``CONFIG_MINIHUB_VERSION``. The download is **not** digest-verified: the
 deploy index's ``sha256`` is only recorded so a same-version rebuild can be
 detected and re-fetched. Vibe Mode validates the image with ``esp_ota_end()``
-when it copies the image, and compares its own SHA-256 with the trailer to skip
-an unchanged copy. Console and asset downloads are the ones that verify
-``sha256`` before replacing a file. The deploy index fields and version-selection
+on copy, and skips the copy when staged and ``ota_0`` share the same
+``app_elf_sha256``. Console and asset downloads verify ``sha256`` before
+replacing a file. The deploy index fields and version-selection
 logic are in :doc:`api/deploy_index`. This path does not read the
 ``firmware_upgrade`` field of ``/api/catalog`` (that field only reports the
 highest published firmware for the chip).
@@ -116,10 +117,10 @@ The Web UI OTA status bar already shows progress live; REST clients can poll
 * ``bytes_written`` — bytes staged on the external volume
 * ``source`` — ``none``, ``url``, ``upload``, or ``rainmaker``
 
-``2`` means the image was staged and the hand-off to Vibe Mode started; it is
-easy to miss because the device restarts about 800 ms later. Two restarts follow,
-so expect the status to return to ``0`` on the updated firmware. Poll
-``GET /api/system`` for the running version.
+``2`` means the image was staged and the hand-off to Vibe Mode started. The device
+restarts after approximately 800 ms, so clients often observe ``state`` return to
+``0`` only on the updated firmware. Poll ``GET /api/system`` for the running
+version.
 
 URL OTA
 -------

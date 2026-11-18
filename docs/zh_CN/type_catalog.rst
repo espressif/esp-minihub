@@ -30,8 +30,8 @@
 内置设备类型与参数
 ------------------
 
-权威源码：``components/minihub_device_widget/model/*.csv``。本页直接从这些 CSV
-渲染设备类型、参数与 UI 元素。
+权威源码为 ``components/minihub_device_widget/model/*.csv``。内置设备类型、参数与
+UI 元素由文档构建自上述 CSV 生成（见下文表格）。
 
 * :download:`devices.csv <../_static/catalog/model/devices.csv>`
 * :download:`parameters.csv <../_static/catalog/model/parameters.csv>`

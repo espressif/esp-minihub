@@ -4,8 +4,8 @@ Layers and principles
 :link_to_translation:`zh_CN:[中文]`
 
 What runs on a Hub, which part is allowed to depend on which, and what happens
-between power-on and the first device update. To follow one control action
-around the loop instead, read :doc:`data_flow`.
+between power-on and the first device update. The end-to-end control loop is
+in :doc:`data_flow`.
 
 Layering
 --------
@@ -59,9 +59,9 @@ into Core.
 
 IP uplink: ``minihub_net`` -- see :doc:`networking`.
 
-`Interactive version <_static/architecture/index.html>`_ -- the bands tour top
-to bottom on their own (hover pauses); hover a band for its constraint, click a
-block to isolate it and read what it forbids.
+`Interactive version <_static/architecture/index.html>`_ -- the same layering as
+the static figure. Each band lists dependency rules; each block lists what it
+must not call (hover pauses).
 
 .. only:: not hide_l3
 

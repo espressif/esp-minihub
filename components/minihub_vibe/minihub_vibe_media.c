@@ -133,6 +133,7 @@ static const esp_blockdev_ops_t s_borrowed_ops = {
 };
 
 #if CONFIG_MINIHUB_VIBE_USB
+#if !(defined(CONFIG_MINIHUB_USB_MSC) && CONFIG_MINIHUB_USB_MSC)
 static SemaphoreHandle_t s_usb_event;
 static uint8_t s_usb_address;
 static msc_host_device_handle_t s_msc_device;
@@ -142,10 +143,27 @@ static TaskHandle_t s_usb_lib_task;
 static TaskHandle_t s_usb_lib_waiter;
 static volatile bool s_usb_lib_stop;
 #endif
+#endif
 
 #if CONFIG_MINIHUB_VIBE_SDMMC
+/* Tear down the SDMMC host after a failed probe so the next attempt starts
+ * clean. esp_sdmmc's send_op_cond timeout often needs a host re-init (the
+ * driver hint says "reboot"), which this approximates without resetting the
+ * chip. */
+static void sd_host_teardown(void)
+{
+    if (s_sd_host_initialized) {
+        (void)sdmmc_host_deinit();
+        s_sd_host_initialized = false;
+    }
+    free(s_card);
+    s_card = NULL;
+}
+
 static esp_err_t sd_acquire(esp_blockdev_handle_t *out)
 {
+    sd_host_teardown();
+
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
     slot.width = (CONFIG_MINIHUB_VIBE_SD_BUS_WIDTH == 4) ? 4 : 1;
@@ -179,21 +197,25 @@ static esp_err_t sd_acquire(esp_blockdev_handle_t *out)
     s_sd_host_initialized = true;
     err = sdmmc_host_init_slot(host.slot, &slot);
     if (err != ESP_OK) {
+        sd_host_teardown();
         return err;
     }
 
     sdmmc_card_t *card = (sdmmc_card_t *)calloc(1, sizeof(sdmmc_card_t));
     if (!card) {
+        sd_host_teardown();
         return ESP_ERR_NO_MEM;
     }
     err = sdmmc_card_init(&host, card);
     if (err != ESP_OK) {
         free(card);
+        sd_host_teardown();
         return err;
     }
     err = sdmmc_get_blockdev(card, out);
     if (err != ESP_OK) {
         free(card);
+        sd_host_teardown();
         return err;
     }
     s_card = card;
@@ -202,6 +224,20 @@ static esp_err_t sd_acquire(esp_blockdev_handle_t *out)
 #endif
 
 #if CONFIG_MINIHUB_VIBE_USB
+#if defined(CONFIG_MINIHUB_USB_MSC) && CONFIG_MINIHUB_USB_MSC
+static esp_err_t usb_acquire(esp_blockdev_handle_t *out)
+{
+#ifndef MSC_HOST_BDL_API_SUPPORTED
+#error "Vibe Mode needs usb_host_msc with msc_host_get_blockdev() (IDF >= 6.0.4)"
+#else
+    /* Board 10 (and any Host with CONFIG_MINIHUB_USB_MSC) already installed
+     * usb_host + msc_host for FAT at /usb0. A second usb_host_install here
+     * returns ESP_ERR_INVALID_STATE and OTA never reaches LittleFS / needs_format.
+     * Borrow the stick through that owner instead. */
+    return minihub_usb_msc_acquire_blockdev(out);
+#endif
+}
+#else /* standalone USB stack (vibe_mode without Host MSC owner) */
 static void usb_event_cb(const msc_host_event_t *event, void *arg)
 {
     (void)arg;
@@ -230,13 +266,6 @@ static void usb_lib_task(void *arg)
 
 static void usb_release_all(void)
 {
-#if defined(CONFIG_MINIHUB_USB_MSC) && CONFIG_MINIHUB_USB_MSC
-    /* Host already owns the USB stack. Do not remount FAT: the stick may now
-     * be LittleFS (OTA format). RTSP recording stays unavailable until a FAT
-     * stick is inserted again. */
-    minihub_usb_msc_release_blockdev(false);
-    return;
-#endif
     if (s_msc_device) {
         (void)msc_host_uninstall_device(s_msc_device);
         s_msc_device = NULL;
@@ -268,13 +297,6 @@ static esp_err_t usb_acquire(esp_blockdev_handle_t *out)
 {
 #ifndef MSC_HOST_BDL_API_SUPPORTED
 #error "Vibe Mode needs usb_host_msc with msc_host_get_blockdev() (IDF >= 6.0.4)"
-#else
-#if defined(CONFIG_MINIHUB_USB_MSC) && CONFIG_MINIHUB_USB_MSC
-    /* Board 10 (and any Host with CONFIG_MINIHUB_USB_MSC) already installed
-     * usb_host + msc_host for FAT at /usb0. A second usb_host_install here
-     * returns ESP_ERR_INVALID_STATE and OTA never reaches LittleFS / needs_format.
-     * Borrow the stick through that owner instead. */
-    return minihub_usb_msc_acquire_blockdev(out);
 #else
     if (!s_usb_event) {
         s_usb_event = xSemaphoreCreateBinary();
@@ -334,10 +356,10 @@ static esp_err_t usb_acquire(esp_blockdev_handle_t *out)
     /* Independent handle: the one msc_host_install_device() owns is reserved
      * for the FAT VFS helper and is released by msc_host_uninstall_device(). */
     return msc_host_get_blockdev(s_msc_device, out);
-#endif /* CONFIG_MINIHUB_USB_MSC */
 #endif /* MSC_HOST_BDL_API_SUPPORTED */
 }
-#endif
+#endif /* CONFIG_MINIHUB_USB_MSC */
+#endif /* CONFIG_MINIHUB_VIBE_USB */
 
 static void release_blockdev(esp_blockdev_handle_t bd)
 {
@@ -436,10 +458,88 @@ static esp_err_t mount(esp_blockdev_handle_t bd)
     snprintf(dir, sizeof(dir), "%s/%s", MINIHUB_VIBE_MOUNT_PATH, MINIHUB_VIBE_FIRMWARE_DIR);
     if (mkdir(dir, 0775) != 0 && errno != EEXIST) {
         ESP_LOGW(TAG, "mkdir %s: %s", dir, strerror(errno));
+        (void)esp_vfs_littlefs_unregister_blockdev(bd);
+        return ESP_FAIL;
     }
     s_blockdev = bd;
     s_mounted = true;
     return ESP_OK;
+}
+
+/* Transient SD/USB failures (OCR timeout, MSC URB errors) often clear after a
+ * short host re-init. Unformatted media (ESP_ERR_NOT_FOUND) is not retried. */
+#define MEDIA_PROBE_ATTEMPTS 3
+#define MEDIA_PROBE_RETRY_MS 200
+
+static void probe_release(minihub_vibe_device_t dev, esp_blockdev_handle_t bd, bool remount_fat)
+{
+    if (s_mounted) {
+        (void)esp_vfs_littlefs_unregister_blockdev(s_blockdev ? s_blockdev : bd);
+        s_mounted = false;
+        s_blockdev = NULL;
+    } else {
+        release_blockdev(bd);
+    }
+#if CONFIG_MINIHUB_VIBE_SDMMC
+    if (dev == MINIHUB_VIBE_DEVICE_SDMMC_ID) {
+        sd_host_teardown();
+    }
+#endif
+#if defined(CONFIG_MINIHUB_USB_MSC) && CONFIG_MINIHUB_USB_MSC
+    if (dev == MINIHUB_VIBE_DEVICE_USB_ID) {
+        minihub_usb_msc_release_blockdev(remount_fat);
+    }
+#else
+    (void)remount_fat;
+#if CONFIG_MINIHUB_VIBE_USB
+    if (dev == MINIHUB_VIBE_DEVICE_USB_ID) {
+        usb_release_all();
+    }
+#endif
+#endif
+}
+
+static esp_err_t probe_one(minihub_vibe_device_t dev)
+{
+    esp_err_t last = ESP_ERR_NOT_FOUND;
+    for (int attempt = 1; attempt <= MEDIA_PROBE_ATTEMPTS; ++attempt) {
+        esp_blockdev_handle_t bd = NULL;
+        esp_err_t err = acquire(dev, &bd);
+        if (err != ESP_OK) {
+            ESP_LOGI(TAG, "device %d unavailable (try %d/%d): %s",
+                     (int)dev, attempt, MEDIA_PROBE_ATTEMPTS, esp_err_to_name(err));
+            last = err;
+            if (attempt < MEDIA_PROBE_ATTEMPTS) {
+                vTaskDelay(pdMS_TO_TICKS(MEDIA_PROBE_RETRY_MS));
+            }
+            continue;
+        }
+        err = mount(bd);
+        if (err == ESP_OK) {
+            s_device = dev;
+            return ESP_OK;
+        }
+        if (err == ESP_ERR_NOT_FOUND) {
+            ESP_LOGI(TAG, "no LittleFS volume on device %d", (int)dev);
+            /* Medium present but not LittleFS — remount FAT on USB for Host use. */
+            probe_release(dev, bd, true);
+            return ESP_ERR_NOT_FOUND;
+        }
+        ESP_LOGW(TAG, "LittleFS mount on device %d failed (try %d/%d): %s",
+                 (int)dev, attempt, MEDIA_PROBE_ATTEMPTS, esp_err_to_name(err));
+        last = err;
+        /* Leave USB unre-mounted as FAT until retries finish; SD host is reset. */
+        probe_release(dev, bd, false);
+        if (attempt < MEDIA_PROBE_ATTEMPTS) {
+            vTaskDelay(pdMS_TO_TICKS(MEDIA_PROBE_RETRY_MS));
+        }
+    }
+#if defined(CONFIG_MINIHUB_USB_MSC) && CONFIG_MINIHUB_USB_MSC
+    if (dev == MINIHUB_VIBE_DEVICE_USB_ID) {
+        minihub_usb_msc_release_blockdev(true);
+    }
+#endif
+    return last;
 }
 
 esp_err_t minihub_vibe_media_open(minihub_vibe_device_t *out_device)
@@ -478,15 +578,8 @@ esp_err_t minihub_vibe_media_open(minihub_vibe_device_t *out_device)
         if (!(mask & bit)) {
             continue;
         }
-        esp_blockdev_handle_t bd = NULL;
-        esp_err_t err = acquire(dev, &bd);
-        if (err != ESP_OK) {
-            ESP_LOGI(TAG, "device %d unavailable: %s", dev, esp_err_to_name(err));
-            continue;
-        }
-        err = mount(bd);
+        esp_err_t err = probe_one(dev);
         if (err == ESP_OK) {
-            s_device = dev;
             s_needs_format = MINIHUB_VIBE_DEVICE_NONE;
             ESP_LOGI(TAG, "LittleFS mounted at %s (device=%d)", MINIHUB_VIBE_MOUNT_PATH, s_device);
             if (out_device) {
@@ -494,24 +587,9 @@ esp_err_t minihub_vibe_media_open(minihub_vibe_device_t *out_device)
             }
             return ESP_OK;
         }
-        if (err == ESP_ERR_NOT_FOUND) {
-            ESP_LOGI(TAG, "no LittleFS volume on device %d", dev);
-            if (first_unformatted == MINIHUB_VIBE_DEVICE_NONE) {
-                first_unformatted = dev;
-            }
-        } else {
-            ESP_LOGW(TAG, "LittleFS mount on device %d failed: %s", dev, esp_err_to_name(err));
+        if (err == ESP_ERR_NOT_FOUND && first_unformatted == MINIHUB_VIBE_DEVICE_NONE) {
+            first_unformatted = dev;
         }
-        /* LittleFS may already have released the handle on this failure path.
-         * s_borrowed_ops.release is idempotent, so this is safe either way. */
-        release_blockdev(bd);
-#if defined(CONFIG_MINIHUB_USB_MSC) && CONFIG_MINIHUB_USB_MSC
-        if (dev == MINIHUB_VIBE_DEVICE_USB_ID) {
-            /* Probe left the stick unchanged — remount FAT for RTSP until the
-             * operator confirms LittleFS format. */
-            minihub_usb_msc_release_blockdev(true);
-        }
-#endif
     }
     s_needs_format = first_unformatted;
     return ESP_ERR_NOT_FOUND;
@@ -623,15 +701,17 @@ esp_err_t minihub_vibe_media_close(void)
     }
 
 #if CONFIG_MINIHUB_VIBE_SDMMC
-    if (s_sd_host_initialized) {
-        sdmmc_host_deinit();
-        s_sd_host_initialized = false;
-    }
-    free(s_card);
-    s_card = NULL;
+    sd_host_teardown();
 #endif
 #if CONFIG_MINIHUB_VIBE_USB
+#if defined(CONFIG_MINIHUB_USB_MSC) && CONFIG_MINIHUB_USB_MSC
+    /* Host already owns the USB stack. Do not remount FAT: the stick may now
+     * be LittleFS (OTA format). RTSP recording stays unavailable until a FAT
+     * stick is inserted again. */
+    minihub_usb_msc_release_blockdev(false);
+#else
     usb_release_all();
+#endif
 #endif
     s_device = MINIHUB_VIBE_DEVICE_NONE;
     return ESP_OK;

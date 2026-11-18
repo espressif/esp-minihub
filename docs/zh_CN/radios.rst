@@ -17,7 +17,7 @@ Thread 的 Hub，IP 上行就得走以太网。
 
 ``minihub_adapter_start_all()`` 按 Wi-Fi、802.15.4、BLE Mesh 的顺序 start；不占
 射频的适配器（如 Modbus）排在最后。Wi-Fi 一组优先： ``adapters.json`` 同时要求
-Wi-Fi 或 BLE Mesh 与 Zigbee/Thread 时，输的是 802.15.4 那个适配器：
+Wi-Fi 或 BLE Mesh 与 Zigbee/Thread 时，固件跳过 802.15.4 适配器：
 
 * 不会被 init
 * 不会 start

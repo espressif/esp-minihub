@@ -136,6 +136,23 @@ esp_err_t minihub_net_format_mac(char *out, size_t out_len);
  */
 esp_err_t minihub_net_copy_url_with_mac(const char *url, char *out, size_t out_len);
 
+/**
+ * @brief Append `chip=` and `board=` (when known) onto an in-place URL buffer.
+ *
+ * `chip` is lowercase `CONFIG_IDF_TARGET`. `board` is `CONFIG_MINIHUB_BOARD`
+ * when that Kconfig is non-empty. Truncates quietly if `url_len` is too small.
+ */
+void minihub_net_append_chip_board_query(char *url, size_t url_len);
+
+/**
+ * @brief Heap-allocate `url` with mac, chip, board, and optional `cur_version`.
+ *
+ * Same fields the Store expects on `/api/catalog`, `/api/firmware`, and
+ * `/files/…`. Caller frees the result with `free()`. Returns NULL on OOM or
+ * when `url` is NULL.
+ */
+char *minihub_net_url_with_device_queries(const char *url, const char *cur_version);
+
 #ifdef __cplusplus
 }
 #endif

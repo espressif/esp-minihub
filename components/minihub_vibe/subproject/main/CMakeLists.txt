@@ -12,11 +12,14 @@ idf_component_register(
     REQUIRES
         nvs_flash
         app_update
+        esp_app_format
+        bootloader_support
         esp_partition
         mbedtls
         vfs
         sdmmc
         esp_blockdev
+        driver
         joltwallet__littlefs
         espressif__usb_host_msc
 )

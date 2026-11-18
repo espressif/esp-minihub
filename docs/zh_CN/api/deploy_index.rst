@@ -6,9 +6,10 @@
 PC 部署根（``MINIHUB_PLUGINS_DEPLOY_DIR``，默认 ``~/workspace/minihub_store`` ）
 集中存放插件、固件、资源与 Web 控制台。``python3 tools/store_server.py
 --deploy ROOT`` 在该目录上以 8080 端口（可用 ``--port`` 覆盖）提供服务。
-本页就是这套契约。 ``https://minihub.espressif.com`` 是
-``MINIHUB_STORE_URL`` 的编译期缺省，它是同一组接口的另一个实现，所以从响应里
-读到的下载 URL 要原样使用：商店给的地址可以带版本号，跟导入目录里的路径不一样。
+下文约定部署根目录布局及 ``store_server.py`` 提供的 API 语义。
+``https://minihub.espressif.com`` 是 ``MINIHUB_STORE_URL`` 的编译期缺省，它是同一组
+接口的另一个实现，所以从响应里读到的下载 URL 要原样使用：商店给的地址可以带版本号，
+跟导入目录里的路径不一样。
 
 插件
 ----
@@ -79,15 +80,20 @@ catalog 条目字段
 --------------
 
 所有设备请求 —— ``/api/catalog``、 ``/api/firmware``、 ``/api/assets``、
-``/api/web`` 与每个 ``/files/…`` 下载 —— 都带同样的三个查询参数：
+``/api/web`` 与每个 ``/files/…`` 下载 —— 都带同样的查询参数：
 
 * ``mac`` —— 小写、冒号分隔。只用于服务端按设备的强制授权（overrides）；不带
   ``mac`` 的请求照常返回，只在访问日志里记下缺失。
 * ``chip`` —— 设备的小写 ``CONFIG_IDF_TARGET``。服务端据此丢弃 ``targets``
   指向其他芯片的条目；不带 ``chip`` 的请求不做过滤。
+* ``board`` —— 产品的 ``CONFIG_MINIHUB_BOARD``（例如
+  ``ESP32-S31-Function-Coreboard-1``）。可选。若带上，仅当该版本目录的
+  ``boards.txt`` 列出该板（或 ``*`` / ``ALL``）时才提供固件；没有
+  ``boards.txt`` 的版本只对未带 ``board`` 的请求视为芯片级包。与
+  esp_board_manager 的硬件板名无关。
 * ``cur_version`` —— 设备当前运行的固件版本，可选。
 
-服务端按 ``chip`` 过滤，设备再对结果本地过滤一次，作为纵深防御。
+服务端按 ``chip`` 与 ``board`` 过滤，设备再对结果本地过滤一次，作为纵深防御。
 
 拉取协议（``/api/catalog``）
 ----------------------------------------
@@ -95,8 +101,8 @@ catalog 条目字段
 服务端遍历 ``Stores/Common``，返回每个插件 id 的最新构建；零匹配时 ``status``
 为 ``no_plugin_for_version``， ``plugins`` 为空。
 
-``firmware_upgrade.version`` 是该芯片固件目录下版本号最高的 MiniHub
-固件目录名。 ``available`` 为真表示该版本目录里有 ``.bin``。
+``firmware_upgrade.version`` 是该芯片下、且匹配 ``board`` （若有）的最高
+MiniHub 固件目录名。 ``available`` 为真表示该版本目录里有 ``.bin``。
 ``firmware_url`` 指向这个文件。若请求带了 ``cur_version``， ``newer`` 为真表示
 已发布版本比设备当前更新；设备安装固件时不读这个字段，判定在下面的
 ``GET /api/firmware``。
@@ -108,7 +114,7 @@ catalog 条目字段
 
 .. code-block:: bash
 
-   curl -s "http://127.0.0.1:8080/api/catalog?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
+   curl -s "http://127.0.0.1:8080/api/catalog?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&board=ESP32-S31-Function-Coreboard-1&cur_version=0.1.0"
 
 HTTP 200。匹配的插件与已发布的最高固件版本：
 
@@ -149,21 +155,25 @@ HTTP 200。匹配的插件与已发布的最高固件版本：
 
    ROOT/Firmwares/esp32s31/0.1.0/minihub-esp32s31-0.1.0.bin
    ROOT/Firmwares/esp32s31/0.1.0/release_notes.txt
+   ROOT/Firmwares/esp32s31/0.1.0/boards.txt
    ROOT/Firmwares/esp32s31/0.1.0/bootloader.bin
    ROOT/Firmwares/esp32s31/0.1.0/partition-table.bin
    ROOT/Firmwares/esp32s31/0.1.0/merged.bin
    ROOT/Firmwares/esp32s31/0.1.0/minihub.elf
    ROOT/Firmwares/esp32s31/0.1.0/flash_command.txt
 
-``python3 tools/publish_firmware.py`` 拷贝应用 ``.bin`` 与说明。
-``python3 tools/gen_flash_binaries.py`` 把其余烧录文件放进同一目录。芯片目录名为小写。
+``boards.txt`` 列出 ``CONFIG_MINIHUB_BOARD`` （每行一个），或 ``*`` / ``ALL``。
+带 ``board=`` 的设备只会看到列出自己的版本。
+``python3 tools/publish_firmware.py --board …`` 拷贝应用 ``.bin``、说明与
+``boards.txt``。 ``python3 tools/gen_flash_binaries.py`` 把其余烧录文件放进同一
+目录。芯片目录名为小写。
 
-``GET /api/firmware`` 返回 JSON 数组，逐项列出请求的 ``chip`` 可运行的应用
-镜像（设备会再按 ``targets`` 过滤一次）：
+``GET /api/firmware`` 返回 JSON 数组，逐项列出请求的 ``chip`` （及 ``board``）
+可运行的应用镜像（设备会再按 ``targets`` / ``boards`` 过滤一次）：
 
 .. code-block:: bash
 
-   curl -s "http://127.0.0.1:8080/api/firmware?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
+   curl -s "http://127.0.0.1:8080/api/firmware?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&board=ESP32-S31-Function-Coreboard-1&cur_version=0.1.0"
    curl -s -o minihub.bin "http://127.0.0.1:8080/files/Firmwares/esp32s31/0.1.0/minihub-esp32s31-0.1.0.bin?mac=aa:bb:cc:dd:ee:ff&cur_version=0.1.0"
 
 .. code-block:: JSON
@@ -191,16 +201,16 @@ HTTP 200。匹配的插件与已发布的最高固件版本：
 
 设备上 ``minihub_update_check()`` 与 ``minihub_update_apply()`` 的步骤：
 
-1. 请求上面的数组，附带 ``mac``、``chip`` 与 ``cur_version``。
+1. 请求上面的数组，附带 ``mac``、``chip``、``board`` 与 ``cur_version``。
 2. 用本机芯片名过滤 ``targets`` （不区分大小写），留下版本号最高的一项。比较时去掉
    版本号开头的 ``v``。
 3. 该项版本高于 ``CONFIG_MINIHUB_VERSION`` （没有该配置时用应用描述里的版本）则下载。
    版本相同，但 ``size`` 或 ``sha256`` 与上次下载记录不同，也会再下一次。
-4. ``minihub_ota_start_url()`` 打开 ``url``，并附带 ``mac`` 与 ``cur_version``。固件
+4. ``minihub_ota_start_url()`` 打开 ``url``，并附带 ``mac``、``chip``、``board`` 与 ``cur_version``。固件
    下载流 **不** 按 ``sha256`` 比对：摘要只是第 3 步用的元数据，作用是让同一版本号但
    重新构建过的镜像被再下一次。下载流暂存到外部 LittleFS 介质，由 Vibe Mode 搬运到
-   ``ota_0`` ；搬运结束时 ``esp_ota_end()`` 检查镜像头与序列号校验和，分区尾部的
-   SHA-256 trailer 让 Vibe Mode 可以跳过未变化的镜像。见 :doc:`../ota`。只有资源与
+   ``ota_0`` ；搬运结束时 ``esp_ota_end()`` 检查镜像头与序列号校验和，
+   ``app_elf_sha256`` 一致时 Vibe Mode 可跳过未变化的镜像。见 :doc:`../ota`。只有资源与
    控制台文件的下载才会先比 ``sha256`` 再替换。
 
 资源与 web

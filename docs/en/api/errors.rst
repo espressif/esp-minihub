@@ -9,9 +9,8 @@ reports an HTTP error and both MCP sources, so a new error joins these tables by
 When the code starts returning something the guide cannot name — or keeps a row for
 something it no longer returns — the docs build stops instead of publishing a stale list.
 
-Open this page from the other end: you have a status, a body, or a ``code`` and want to
-know who can send it. To follow a symptom through the stack instead, use
-:doc:`../troubleshooting`.
+Look up an HTTP status, response body field, or MCP ``code`` to see which component
+returns it. For symptom-first diagnosis, see :doc:`../troubleshooting`.
 
 HTTP statuses
 -------------

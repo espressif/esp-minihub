@@ -116,6 +116,21 @@ static void local_chip(char *out, size_t n)
     out[i] = '\0';
 }
 
+static const char *local_board(void)
+{
+#ifdef CONFIG_MINIHUB_BOARD
+    if (CONFIG_MINIHUB_BOARD[0]) {
+        return CONFIG_MINIHUB_BOARD;
+    }
+#endif
+    return NULL;
+}
+
+static bool firmware_match(const mh_update_item_t *item, const char *chip)
+{
+    return mh_update_target_match(item, chip) && mh_update_board_match(item, local_board());
+}
+
 typedef struct {
     bool present;
     bool armed;
@@ -228,6 +243,8 @@ static esp_err_t index_url(minihub_update_kind_t kind, const char *base, char *o
 {
     const char *suffix = NULL;
     if (kind == MINIHUB_UPDATE_FIRMWARE) {
+        /* OTA application images: GET /api/firmware (role=ota).
+         * /api/v1/firmware is the website flasher list (plans / merged), not Hub OTA. */
         suffix = "/api/firmware";
     } else if (kind == MINIHUB_UPDATE_ASSET) {
         suffix = "/api/assets";
@@ -246,33 +263,11 @@ static esp_err_t fetch_index(minihub_update_kind_t kind, const char *base, mh_up
     if (err != ESP_OK) {
         return err;
     }
-    /* Firmware, asset index, and web index all carry mac=, chip=, and
-     * cur_version=. Build them in one buffer so the pointer handed to the
-     * HTTP client never aims at a shorter-lived local. */
-    char with_mac[MH_UPDATE_URL_MAX + 32];
-    const char *cur = url;
-    if (minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
-        cur = with_mac;
-    }
-    char *full = NULL;
-    {
-        char chip[32];
-        local_chip(chip, sizeof(chip));
-        int n = asprintf(&full, "%s%schip=%s", cur,
-                          strchr(cur, '?') ? "&" : "?", chip);
-        if (n < 0 || !full) {
-            return ESP_ERR_NO_MEM;
-        }
-    }
-    const char *ver = running_version();
-    if (ver && ver[0]) {
-        char *prev = full;
-        int n = asprintf(&full, "%s%scur_version=%s", prev,
-                          strchr(prev, '?') ? "&" : "?", ver);
-        free(prev);
-        if (n < 0 || !full) {
-            return ESP_ERR_NO_MEM;
-        }
+    /* mac=, chip=, board=, cur_version= — one heap URL so the HTTP client
+     * never aims at a shorter-lived local. */
+    char *full = minihub_net_url_with_device_queries(url, running_version());
+    if (!full) {
+        return ESP_ERR_NO_MEM;
     }
     char *body = NULL;
     size_t len = 0;
@@ -291,7 +286,7 @@ static const mh_update_item_t *best_firmware(const mh_update_index_t *idx, const
     const mh_update_item_t *best = NULL;
     for (size_t i = 0; i < idx->nitems; i++) {
         const mh_update_item_t *item = &idx->items[i];
-        if (!item->url || !item->url[0] || !mh_update_target_match(item, chip)) {
+        if (!item->url || !item->url[0] || !firmware_match(item, chip)) {
             continue;
         }
         if (!best || mh_update_version_cmp(item->version, best->version) > 0) {
@@ -536,32 +531,9 @@ static esp_err_t apply_files(minihub_update_kind_t kind, const char *base, const
         if (err != ESP_OK) {
             return err;
         }
-        /* Asset/web file downloads also carry mac=, chip=, and cur_version=
-         * in one buffer, so the verified download never sees a pointer to a
-         * shorter-lived local. */
-        char with_mac[MH_UPDATE_URL_MAX + 32];
-        const char *cur = url;
-        if (minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
-            cur = with_mac;
-        }
-        char *full = NULL;
-        {
-            const char *sep = strchr(cur, '?') ? "&" : "?";
-            int n = asprintf(&full, "%s%schip=%s",
-                              cur, sep, chip);
-            if (n < 0 || !full) {
-                return ESP_ERR_NO_MEM;
-            }
-        }
-        const char *ver = running_version();
-        if (ver && ver[0]) {
-            char *prev = full;
-            int n = asprintf(&full, "%s%scur_version=%s",
-                              prev, strchr(prev, '?') ? "&" : "?", ver);
-            free(prev);
-            if (n < 0 || !full) {
-                return ESP_ERR_NO_MEM;
-            }
+        char *full = minihub_net_url_with_device_queries(url, running_version());
+        if (!full) {
+            return ESP_ERR_NO_MEM;
         }
         err = mh_update_download_verified(full, dest, item->sha256, item->size);
         free(full);
@@ -801,7 +773,7 @@ static const mh_update_item_t *running_firmware(const mh_update_index_t *idx, co
         if (!item->url || !item->url[0] || !item->version) {
             continue;
         }
-        if (!mh_update_target_match(item, chip)) {
+        if (!firmware_match(item, chip)) {
             continue;
         }
         if (version_text_eq(item->version, cur)) {
@@ -845,7 +817,7 @@ static void cache_running_firmware_note(const mh_update_index_t *idx, const char
     if (cur[0] && idx) {
         for (size_t i = 0; i < idx->nitems; i++) {
             const mh_update_item_t *item = &idx->items[i];
-            if (!mh_update_target_match(item, chip) || !item->version) {
+            if (!firmware_match(item, chip) || !item->version) {
                 continue;
             }
             if (!version_text_eq(item->version, cur)) {

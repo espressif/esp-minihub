@@ -79,16 +79,16 @@ Core and services
     session and the optional API token are ``minihub_auth`` ; network credentials
     over SoftAP and the factory reset are ``minihub_provision`` ; Ethernet and
     Wi-Fi STA come up in ``minihub_net`` ; firmware update state and progress are
-    ``minihub_ota`` ; staging firmware on external media, the SHA-256 tail
-    trailer and the Vibe Mode hand-off are ``minihub_vibe`` (Host library plus a
-    nested ``subproject/`` that emits the retained ``app,factory`` image — not a
-    product under ``application/``) ; fetching and applying
+    ``minihub_ota`` ; staging firmware on external media and the Vibe Mode
+    hand-off are ``minihub_vibe`` (Host library plus a nested ``subproject/``
+    that emits the retained ``app,factory`` image — not a product under
+    ``application/``) ; fetching and applying
     firmware, asset and console packages from the deploy root is
     ``minihub_update`` , and the on-device MQTT broker that the site's devices
     connect to is ``minihub_mqtt_broker`` .
 
 Device model and UI
-    This group decides what a device looks like and when automation fires.
+    This group decides how a device is presented in the UI and when automation fires.
 
     The type catalog — CSV in, labels and widgets out, icons with it — is
     ``minihub_device_widget`` ; ``when`` / ``if`` / ``then`` evaluation is
@@ -167,10 +167,9 @@ Documentation
     warning. ``preview_docs.py`` serves the built HTML.
     ``gen_deploy_index.py`` writes the asset manifests.
 
-This guide is not the only entry point for module authors.
-``docs/module_sdk/`` is the other one: it holds the headers a module may include,
-the symbol allowlist and copies of the pack scripts, so a plugin can be written
-against that folder alone. ``python3 tools/minihub_plugin_mcp.py`` hands the same
+Module authors may rely on ``docs/module_sdk/`` alone: it holds the headers a
+module may include, the symbol allowlist, and copies of the pack scripts for
+out-of-tree builds. ``python3 tools/minihub_plugin_mcp.py`` hands the same
 scaffolding and validation to an IDE.
 
 Generated, do not hand-edit

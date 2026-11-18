@@ -8,6 +8,8 @@ idf_component_register(
     REQUIRES
         esp_partition
         app_update
+        esp_app_format
+        bootloader_support
         nvs_flash
         mbedtls
         vfs

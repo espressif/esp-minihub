@@ -11,16 +11,54 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "minihub_vibe.h"
 #include "nvs_flash.h"
+#include "sdkconfig.h"
 
 static const char *TAG = "vibe_mode";
 
 #define MAX_FAILURES 3
+
+static bool force_apply_pressed(void)
+{
+#if CONFIG_MINIHUB_VIBE_FORCE_GPIO < 0
+    return false;
+#else
+    const int gpio = CONFIG_MINIHUB_VIBE_FORCE_GPIO;
+
+    gpio_config_t io = {
+        .pin_bit_mask = 1ULL << gpio,
+        .mode = GPIO_MODE_INPUT,
+#if CONFIG_MINIHUB_VIBE_FORCE_ACTIVE_LOW
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+#else
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+#endif
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    if (gpio_config(&io) != ESP_OK) {
+        ESP_LOGW(TAG, "force GPIO %d config failed", gpio);
+        return false;
+    }
+    /* Brief settle so a held recovery button is readable after reset. */
+    vTaskDelay(pdMS_TO_TICKS(20));
+    int level = gpio_get_level(gpio);
+#if CONFIG_MINIHUB_VIBE_FORCE_ACTIVE_LOW
+    bool pressed = (level == 0);
+#else
+    bool pressed = (level != 0);
+#endif
+    ESP_LOGI(TAG, "force GPIO %d level=%d pressed=%d", gpio, level, pressed ? 1 : 0);
+    return pressed;
+#endif
+}
 
 void app_main(void)
 {
@@ -33,18 +71,29 @@ void app_main(void)
     }
 
     const bool pending = minihub_vibe_take_pending();
-    ESP_LOGI(TAG, "Vibe Mode start (pending=%d)", pending ? 1 : 0);
+    const bool force = force_apply_pressed();
+    ESP_LOGI(TAG, "Vibe Mode start (pending=%d force=%d)", pending ? 1 : 0, force ? 1 : 0);
 
     const char *result = "no media";
     bool copied = false;
     bool ok = false;
+
+    if (!pending && !force) {
+        /* Leftover firmware.bin on the media must not overwrite ota_0 unless
+         * the Host armed pending or the operator holds the force-apply button. */
+        ESP_LOGI(TAG, "not armed (pending=0, force=0); skipping copy");
+        result = "not armed";
+        ok = true;
+        goto handoff;
+    }
 
     minihub_vibe_device_t device = MINIHUB_VIBE_DEVICE_NONE;
     err = minihub_vibe_media_open(&device);
     if (err == ESP_OK) {
         struct stat st;
         if (stat(MINIHUB_VIBE_FIRMWARE_PATH, &st) == 0 && S_ISREG(st.st_mode)) {
-            err = minihub_vibe_apply(MINIHUB_VIBE_FIRMWARE_PATH, &copied);
+            /* Force-only recovery has no NVS vibe_sha; require the sidecar. */
+            err = minihub_vibe_apply(MINIHUB_VIBE_FIRMWARE_PATH, &copied, force && !pending);
             ok = (err == ESP_OK);
             if (!ok) {
                 ESP_LOGE(TAG, "copy failed: %s", esp_err_to_name(err));
@@ -65,6 +114,7 @@ void app_main(void)
 
     (void)minihub_vibe_media_close();
 
+handoff:
     if (ok) {
         minihub_vibe_clear_failures();
         (void)minihub_vibe_set_result(result);

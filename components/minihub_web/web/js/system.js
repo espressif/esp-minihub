@@ -179,19 +179,30 @@ function sysOtaRender(j) {
         bar.style.width = (prog != null && prog >= 0) ? (prog + '%') : (state === 1 ? '15%' : '0%');
     };
     if (fwRowProgressOn) {
-        /* Started from 更新固件 / 重新安装: mirror the progress into the version
-         * row and leave the custom-OTA card alone until the run finishes. */
+        /* Started from 更新固件 / 重新安装: keep progress on the version row.
+         * Do not clear the flag on idle — apply returns before the OTA task
+         * flips to upgrading, and clearing here used to paint the custom card
+         * instead. Only success / failure ends the row-owned run. */
         const row = document.getElementById('fw-upd-progress');
         if (row) {
             let txt = stateLabel;
-            if (state === 1 && prog != null && prog >= 0) txt += ' ' + prog + '%';
-            if (state === 3 && err) txt += ' · ' + err;
+            if (state === 0) {
+                txt = t('sys.state_upgrading');
+            }
+            if ((state === 1 || state === 4) && prog != null && prog >= 0) {
+                txt += ' ' + prog + '%';
+            }
+            if (j.bytes_written && (state === 1 || state === 4)) {
+                txt += ' · ' + j.bytes_written + ' B';
+            }
+            if (state === 3 && err) {
+                txt += ' · ' + err;
+            }
             row.textContent = txt;
-            row.hidden = (state === 0);
+            row.hidden = false;
         }
-        if (state !== 1) {
+        if (state === 2 || state === 3) {
             fwRowProgressOn = false;
-            paintCustom();
         }
     } else {
         paintCustom();
@@ -767,6 +778,11 @@ async function sysUpdateApply(kind, force) {
         toast(t('sys.applied_update', { name: name }));
         if (kind === 'firmware') {
             fwRowProgressOn = true;
+            const row = document.getElementById('fw-upd-progress');
+            if (row) {
+                row.hidden = false;
+                row.textContent = t('sys.state_upgrading');
+            }
             sysOtaPoll();
         } else {
             /* Re-probe so the cached hint state reflects what we just applied

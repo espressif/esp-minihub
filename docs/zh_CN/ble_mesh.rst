@@ -103,9 +103,10 @@ BLE Mesh 上做不到的：
 状态同步
 --------
 
-Hub 主动去取，设备不会自己报。 ``ble_mesh_adapter_poll()`` 直接返回、什么都不做，
-适配器轮询任务因此不取任何东西；client model 也没有订阅任何 group 地址，设备发到
-group 的 Status 收不到。状态只在四个时刻落到点上：
+Mesh 状态靠 Hub 下发 Get 拉取，节点不会主动推送。适配器轮询入口
+``ble_mesh_adapter_poll()`` 为空操作，通用 poll 路径因此取不到 Mesh 状态。若
+client model 未订阅 group 地址，节点发往该 group 的 Status 也到不了 Hub。状态
+只会在下列四个时刻写入点位：
 
 * model 绑定完成时：每个已绑定且 ``models[]`` 行声明了 ``get`` opcode 的模型各取
   一次，带 Sensor Server 的节点还要取 Sensor Descriptor。

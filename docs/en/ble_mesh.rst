@@ -112,10 +112,11 @@ Not available over BLE Mesh:
 State sync
 ----------
 
-The Hub asks; nodes do not report. ``ble_mesh_adapter_poll()`` returns without
-doing anything, so the adapter poll task fetches nothing, and no client model
-subscribes to a group address, so a Status message a node publishes to a group is
-never received. State reaches a point at four moments:
+Mesh state is pulled by Hub Get requests; nodes do not push it. The adapter poll
+entry ``ble_mesh_adapter_poll()`` is a no-op, so the generic poll path never
+fetches mesh state. If no client model is subscribed to a group address, Status
+messages published to that group never reach the Hub. State is written to a point
+only at these four moments:
 
 * When model binds finish: one Get per bound model whose ``models[]`` row
   declares a ``get`` opcode, plus a Sensor Descriptor Get for a node carrying a

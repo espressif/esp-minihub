@@ -1,5 +1,5 @@
 /* MiniHub web — startup */
-window.mhWebBuild = '2026-11-13-18:30:00';
+window.mhWebBuild = '2026-11-16-20:30:00';
 // Replaced by minify_web_assets.py from CONFIG_MINIHUB_WEB_VERSION (never edit by hand):
 window.mhWebVersion = 'dev';
 

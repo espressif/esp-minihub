@@ -5,13 +5,23 @@ menu "MiniHub"
 
     config MINIHUB_VERSION
         string "MiniHub Version"
-        default "0.1.0"
+        default "0.1.0-dev"
         help
             Single version for the device: reported by the firmware as
             firmware_version (OTA comparison), used by tools/deploy.sh as the
             Firmwares/<chip>/<version>/ folder name, and shown in the Web
             sidebar / system page as v<version>. This is not the git describe
             string; that is reported separately as the commit line.
+
+    config MINIHUB_BOARD
+        string "MiniHub board id (Store / OTA ?board=)"
+        default ""
+        help
+            Product board string sent on Store and OTA requests as ?board=.
+            Independent of esp_board_manager's CONFIG_ESP_BOARD_NAME (hardware
+            pinmux id). Products set this in configs/sdkconfig/feature/board.defaults
+            — e.g. ESP32-S31-Function-Coreboard-1 (minihub) or
+            ESP32-S31-Korvo-1 (minihub_lcd). Empty means the query is omitted.
 
     rsource "../../components/minihub_core/Kconfig.minihub"
     rsource "../../components/minihub_mcp_server/Kconfig.minihub"

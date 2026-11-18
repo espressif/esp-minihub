@@ -5,8 +5,8 @@ Vibe coding
 
 MiniHub can be worked on with an AI coding assistant: an OEM product under
 ``application/``, a Store plugin, or a Hub that is already running and answers
-REST on the LAN. The assistant is an optional accelerator, not a prerequisite —
-walk each step by hand once first, then let the agent repeat it. The sections
+REST on the LAN. The assistant is an optional accelerator, not a prerequisite;
+confirm the same flow by hand once, then let the agent repeat it. The sections
 below describe how to set that up.
 
 Where the agent reads its instructions

@@ -18,21 +18,22 @@ Hub 始终从 ``ota_0`` 运行。另一个应用分区是 ``vibe_mode`` （ ``ap
 
 1. URL、上传与部署服务器三条更新路径，都把裸 OTA ``.bin`` 下载到外部 LittleFS
    卷的 ``/Firmware/firmware.bin``。运行中的固件不写 flash。
-2. 设备把所用介质记入 NVS（ ``minihub/vibe_dev`` ），一次性置位
+2. 设备把所用介质记入 NVS（ ``minihub/vibe_dev`` ），对暂存文件计算哈希，在同目录
+   写入 ``firmware.bin.sha256`` ，把 SHA 存入 ``minihub/vibe_sha`` ，一次性置位
    ``minihub/vibe_pending`` ，然后选中 ``vibe_mode`` 。ESP-IDF 对
    ``app,factory`` 目标的处理是擦除 ``otadata`` ，所以下次启动进入 Vibe Mode。
-3. Vibe Mode 挂载该卷，计算暂存镜像的 SHA-256 与长度，与 ``ota_0`` 最后一个擦除
-   扇区中的 trailer 比较。两者一致说明镜像已装好，跳过搬运。
-4. 不一致时，Vibe Mode 先清掉 trailer，再用 ``esp_ota_begin()`` /
-   ``esp_ota_write()`` / ``esp_ota_end()`` 把镜像写入 ``ota_0`` ，最后写入
-   trailer。trailer 就是提交标记：写入前断电会留下空白 trailer，下次会重新搬运。
-5. Vibe Mode 重写 ``otadata`` 选中 ``ota_0`` 并重启。没有镜像或搬运失败时同样执行
-   这一步；否则引导加载程序每次都会再次选中 factory 应用。
-
-trailer 不紧跟在镜像后面。ESP-IDF 在最后一个段之后附加了自己的 SHA-256、校验和
-与对齐填充， ``esp_image_verify()`` 会校验这一区域。
-``OTA_WITH_SEQUENTIAL_WRITES`` 只擦除写入触及的扇区，所以每次搬运前都要显式
-擦除 trailer 扇区。
+3. 仅当 ``vibe_pending`` 置位，或 ``CONFIG_MINIHUB_VIBE_FORCE_GPIO`` 按键按下时
+   （ ``-1`` 表示不检查按键）才会搬运。写 flash 前读取 staged 镜像的
+   ``esp_app_desc`` 并与 ``ota_0`` 比对：``project_name`` 不一致则拒绝（例如
+   ``minihub`` 不得覆盖 ``minihub_lcd``；``ota_0`` 无有效描述符时不做该项检查）；
+   ``app_elf_sha256`` 相同则跳过搬运。需要搬运时重算文件 SHA，并与 NVS 中的期望
+   值比对（pending 路径缺 NVS 时回退 sidecar；仅按键强刷时只对照 sidecar），不匹配
+   则拒绝。
+4. 需要搬运时以 ``esp_ota_begin()`` / ``esp_ota_write()`` / ``esp_ota_end()``
+   写入 ``ota_0``。``esp_ota_end()`` 校验镜像。写入未完成即断电会留下无效槽，下次
+   启动重新搬运。
+5. Vibe Mode 重写 ``otadata`` 选中 ``ota_0`` 并重启。没有镜像、未武装或搬运失败时
+   同样执行这一步；否则引导加载程序每次都会再次选中 factory 应用。
 
 外部介质
 ------------
@@ -47,7 +48,7 @@ Vibe Mode 会依次探测两种设备。
 ``copy failed`` 、 ``no firmware`` 、 ``no media`` ）。搬运失败会在下次启动重试，
 最多三次；之后 Vibe Mode 停在自身运行，等待更换介质。
 
-新镜像必须能排在 trailer 扇区之前。过大的镜像在擦除 flash 之前就会被拒绝
+新镜像必须能放进 ``ota_0``。过大的镜像在擦除 flash 之前就会被拒绝
 （见 :doc:`production` ）。
 
 从 OTA 服务器拉取
@@ -69,8 +70,8 @@ Web UI 操作：
 Hub 只会拉取匹配当前芯片的固件，选出版本号高于 ``CONFIG_MINIHUB_VERSION`` 的最高
 一项。下载内容 **不做摘要校验**：部署索引里的 ``sha256`` 只被记录下来，用来判断
 「同一个版本号但重新构建过」要不要重新拉取。Vibe Mode 搬运时用 ``esp_ota_end()``
-校验镜像，并用自己算出的 SHA-256 与 trailer 比较，以便跳过未变化的镜像。真正按
-``sha256`` 校验的是控制台与资源文件的下载。部署索引的字段与版本判定逻辑见
+校验镜像；若 staged 与 ``ota_0`` 的 ``app_elf_sha256`` 相同则跳过搬运。控制台与
+资源文件的下载才会按 ``sha256`` 校验后替换。部署索引的字段与版本判定逻辑见
 :doc:`api/deploy_index`；这条路径不读取 ``/api/catalog`` 的 ``firmware_upgrade``
 字段（该字段只报告本芯片已发布的最高版本）。
 
@@ -95,9 +96,8 @@ Web UI 的 OTA 状态条已实时显示进度；REST 客户端可用 ``GET /api/
 * ``bytes_written`` — 已暂存到外部卷的字节数
 * ``source`` — ``none`` 、 ``url`` 、 ``upload`` 或 ``rainmaker``
 
-``2`` 表示镜像已暂存、交接 Vibe Mode 已开始；约 800 ms 后就重启，很容易错过。
-之后还会再重启一次，所以状态会在更新后的固件上回到 ``0`` 。查运行中版本请轮询
-``GET /api/system``。
+``2`` 表示镜像已暂存、交接 Vibe Mode 已开始。设备约 800 ms 后重启，客户端通常只在
+更新后的固件上看到 ``state`` 回到 ``0``。查运行中版本请轮询 ``GET /api/system``。
 
 URL OTA
 ------------

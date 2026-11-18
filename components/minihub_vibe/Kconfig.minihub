@@ -67,4 +67,22 @@ menu "Vibe Mode"
         int "Delay before rebooting into Vibe Mode"
         default 800
 
+    config MINIHUB_VIBE_FORCE_GPIO
+        int "GPIO to force-apply staged firmware (-1 = disabled)"
+        default -1
+        range -1 48
+        help
+            When this GPIO is pressed at Vibe Mode start, copy /Firmware/firmware.bin
+            even if minihub/vibe_pending is clear. Use this to recover when the Host
+            application cannot arm pending. Set to -1 to ignore the button entirely.
+            A matching expected SHA (NVS or firmware.bin.sha256 sidecar) is still
+            required before any copy.
+
+    config MINIHUB_VIBE_FORCE_ACTIVE_LOW
+        bool "Force-apply GPIO is active low"
+        default y
+        help
+            Active-low is typical for BOOT / recovery buttons (pressed = 0).
+            Ignored when MINIHUB_VIBE_FORCE_GPIO is -1.
+
 endmenu

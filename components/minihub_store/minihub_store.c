@@ -280,7 +280,6 @@ esp_err_t minihub_store_list_upgrades(cJSON **out)
 static esp_err_t http_download_file(const char *url, const char *path);
 static esp_err_t http_download_to_psram(const char *url, uint8_t **out, size_t *out_len, size_t max_len);
 static esp_err_t http_get_body(const char *url, char **out_body, size_t *out_len);
-static void append_chip_query(char *url, size_t len);
 static void store_base_url(char *out, size_t out_len);
 static esp_err_t store_abs_url(char *out, size_t out_len, const char *path);
 static esp_err_t write_file_atomic(const char *path, const char *data);
@@ -506,38 +505,14 @@ static cJSON *http_get_catalog_array(const char *base)
     }
     char url[MINIHUB_STORE_ABS_URL_MAX];
     snprintf(url, sizeof(url), "%s/api/catalog", base);
-    char with_mac[MINIHUB_STORE_ABS_URL_MAX + 64];
-    const char *get_url = url;
-    if (minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
-        get_url = with_mac;
-    }
-    /* Identify the device to the store server.
-       - chip: lets the server drop catalog entries aimed at another chip
-         (defense in depth; the device also filters locally per
-         CONFIG_IDF_TARGET).
-       - cur_version: lets the server flag a newer published firmware build
-         (firmware_upgrade.newer).
-       L3/native ABI (abi_version / abi_total_hash) is unsupported and is
-       never sent. */
-    char *full = NULL;
-    int n = asprintf(&full, "%s%schip=%s",
-                      get_url, strchr(get_url, '?') ? "&" : "?", CONFIG_IDF_TARGET);
-    if (n < 0 || !full) {
+    /* mac=, chip=, board=, cur_version=. L3 ABI query params are unsupported
+     * and are never sent. */
+    char *full = minihub_net_url_with_device_queries(url, store_running_version());
+    if (!full) {
         return NULL;
     }
-    const char *ver = store_running_version();
-    if (ver && ver[0]) {
-        char *prev = full;
-        n = asprintf(&full, "%s%scur_version=%s",
-                      prev, strchr(prev, '?') ? "&" : "?", ver);
-        free(prev);
-        if (n < 0 || !full) {
-            return NULL;
-        }
-    }
-    get_url = full;
     char *body = NULL;
-    esp_err_t err = http_get_body(get_url, &body, NULL);
+    esp_err_t err = http_get_body(full, &body, NULL);
     free(full);
     if (err != ESP_OK || !body) {
         ESP_LOGW(TAG, "catalog fetch failed from %s: %s", url, esp_err_to_name(err));
@@ -793,26 +768,13 @@ static esp_err_t http_get_body(const char *url, char **out_body, size_t *out_len
     return ESP_OK;
 }
 
-static void append_chip_query(char *url, size_t len)
-{
-    if (!url || !url[0] || len == 0) {
-        return;
-    }
-    size_t used = strnlen(url, len);
-    if (used >= len) {
-        return;
-    }
-    const char *sep = strchr(url, '?') ? "&" : "?";
-    snprintf(url + used, len - used, "%schip=%s", sep, CONFIG_IDF_TARGET);
-}
-
 static esp_err_t http_download_file(const char *url, const char *path)
 {
     char with_queries[MINIHUB_STORE_ABS_URL_MAX + 128];
     if (url) {
         snprintf(with_queries, sizeof(with_queries), "%s", url);
         (void)minihub_net_copy_url_with_mac(url, with_queries, sizeof(with_queries));
-        append_chip_query(with_queries, sizeof(with_queries));
+        minihub_net_append_chip_board_query(with_queries, sizeof(with_queries));
         url = with_queries;
     }
     esp_http_client_config_t cfg = {
@@ -1353,7 +1315,7 @@ static esp_err_t http_download_to_psram(const char *url, uint8_t **out, size_t *
     if (url) {
         snprintf(with_queries, sizeof(with_queries), "%s", url);
         (void)minihub_net_copy_url_with_mac(url, with_queries, sizeof(with_queries));
-        append_chip_query(with_queries, sizeof(with_queries));
+        minihub_net_append_chip_board_query(with_queries, sizeof(with_queries));
         url = with_queries;
     }
     esp_http_client_config_t cfg = {

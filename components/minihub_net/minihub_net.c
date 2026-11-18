@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "esp_check.h"
 #include "esp_event.h"
@@ -953,4 +954,115 @@ esp_err_t minihub_net_copy_url_with_mac(const char *url, char *out, size_t out_l
         return ESP_ERR_INVALID_SIZE;
     }
     return ESP_OK;
+}
+
+static void lowercase_copy(char *out, size_t out_len, const char *in)
+{
+    size_t i = 0;
+    if (!out || out_len == 0) {
+        return;
+    }
+    for (; in && in[i] && i + 1 < out_len; i++) {
+        char c = in[i];
+        if (c >= 'A' && c <= 'Z') {
+            c = (char)(c - 'A' + 'a');
+        }
+        out[i] = c;
+    }
+    out[i] = '\0';
+}
+
+static const char *board_name(void)
+{
+#ifdef CONFIG_MINIHUB_BOARD
+    if (CONFIG_MINIHUB_BOARD[0]) {
+        return CONFIG_MINIHUB_BOARD;
+    }
+#endif
+    return NULL;
+}
+
+void minihub_net_append_chip_board_query(char *url, size_t url_len)
+{
+    if (!url || !url[0] || url_len == 0) {
+        return;
+    }
+    char chip[32];
+    lowercase_copy(chip, sizeof(chip), CONFIG_IDF_TARGET);
+    size_t used = strnlen(url, url_len);
+    if (used >= url_len) {
+        return;
+    }
+    const char *sep = strchr(url, '?') ? "&" : "?";
+    int n = snprintf(url + used, url_len - used, "%schip=%s", sep, chip);
+    if (n < 0 || (size_t)n >= url_len - used) {
+        url[used] = '\0';
+        return;
+    }
+    const char *board = board_name();
+    if (!board) {
+        return;
+    }
+    used = strnlen(url, url_len);
+    if (used >= url_len) {
+        return;
+    }
+    sep = strchr(url, '?') ? "&" : "?";
+    n = snprintf(url + used, url_len - used, "%sboard=%s", sep, board);
+    if (n < 0 || (size_t)n >= url_len - used) {
+        url[used] = '\0';
+    }
+}
+
+static char *append_query(char *url, const char *key, const char *value)
+{
+    if (!url || !key || !key[0] || !value || !value[0]) {
+        return url;
+    }
+    char *next = NULL;
+    int n = asprintf(&next, "%s%s%s=%s", url, strchr(url, '?') ? "&" : "?", key, value);
+    free(url);
+    if (n < 0 || !next) {
+        return NULL;
+    }
+    return next;
+}
+
+char *minihub_net_url_with_device_queries(const char *url, const char *cur_version)
+{
+    if (!url) {
+        return NULL;
+    }
+    /* Start from a mac-augmented copy when the buffer fits; otherwise plain. */
+    char with_mac[768];
+    const char *base = url;
+    if (minihub_net_copy_url_with_mac(url, with_mac, sizeof(with_mac)) == ESP_OK) {
+        base = with_mac;
+    }
+    size_t base_len = strlen(base);
+    char *full = malloc(base_len + 1);
+    if (!full) {
+        return NULL;
+    }
+    memcpy(full, base, base_len + 1);
+    char chip[32];
+    lowercase_copy(chip, sizeof(chip), CONFIG_IDF_TARGET);
+    full = append_query(full, "chip", chip);
+    if (!full) {
+        return NULL;
+    }
+    const char *board = board_name();
+    if (board) {
+        full = append_query(full, "board", board);
+        if (!full) {
+            return NULL;
+        }
+    }
+    if (cur_version && cur_version[0]) {
+        full = append_query(full, "cur_version", cur_version);
+        if (!full) {
+            return NULL;
+        }
+    }
+    return full;
 }

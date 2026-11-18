@@ -7,8 +7,8 @@ The **runtime point model** lives in ``adapters.json`` and scenes. Rules have
 their own chapter (:doc:`rules`); device types, widgets and icons for the
 Overview page are in :doc:`type_catalog`.
 
-What the model looks like
--------------------------
+Runtime point model
+-------------------
 
 Core does not know what a lamp is. It works on **points**: a type is a name, and
 the parameters hang off the point as JSON, so a new device type needs no Core
@@ -30,9 +30,9 @@ change.
    :alt: State rises from the device through its adapter into props.params; the user reads it in the Overview page, rules and scenes, and commands take the same path back to the device
    :width: 100%
 
-   Red dots show state rising from the device into the point and on to the user; the
-   amber dashed path carries commands back down to the device. The Overview page,
-   rules and scenes all read the same ``props.params``.
+   Device state flows through the adapter into ``props.params`` and is read by the
+   Overview page, rules, and scenes. Commands take the same path back to the
+   device. The Overview page, rules, and scenes share one ``props.params``.
 
 The UI shows a parameter only when the type catalog has it **and** the live
 point carries it under ``props.params``.

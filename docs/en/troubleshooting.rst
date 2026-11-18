@@ -70,9 +70,9 @@ A rule does not fire
   (``CONFIG_MINIHUB_POINT_DEBOUNCE_MS``, default 1000 ms).
 * ``if`` conditions are checked against live points and never trigger anything: a rule
   whose ``when`` fires while an ``if`` fails simply does not run.
-* Time and ``once`` rules poll once per second but need a plausible clock — see
-  :doc:`time`. A Hub that never reached an NTP server fires no schedule, and it fails
-  silently: point-triggered rules still work.
+* Time and ``once`` rules poll once per second but need a system calendar year
+  ≥ 2020 — see :doc:`time`. A Hub that never reached an NTP server fires no
+  schedule, and it fails silently: point-triggered rules still work.
 * A reload was in progress: MCP answers ``HUB_NOT_READY``, and a queue of 16 action
   jobs drops what does not fit.
 * The document never loaded: ``GET /api/rules`` returns what is live; the engine logs

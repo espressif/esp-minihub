@@ -3,10 +3,9 @@ Networking
 
 :link_to_translation:`zh_CN:[中文]`
 
-Most Hub features need IP, so networking comes up early.
-``components/minihub_net`` builds the uplinks on top of ESP-IDF's ESP-NETIF, the
-Wi-Fi driver, and Ethernet on SoCs that have an EMAC. All three are IDF layers,
-documented upstream:
+``components/minihub_net`` builds the IP uplinks on top of ESP-IDF's ESP-NETIF,
+the Wi-Fi driver, and Ethernet on SoCs that have an EMAC. All three are IDF
+layers, documented upstream:
 
 * `ESP-IDF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/>`_
 * `ESP-NETIF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_netif.html>`_
@@ -35,8 +34,9 @@ Boot order
    :align: center
    :alt: MiniHub network bring-up: minihub_net_init → minihub_net_start_wifi → STA connect → default route → console on port 80
 
-`Interactive version <_static/net_boot/index.html>`_ — five steps in boot order;
-the cyan return line is the path taken when no credentials are stored yet.
+`Interactive version <_static/net_boot/index.html>`_ — the five stages of network
+bring-up after power-on. When no credentials are stored, the flow returns through
+the SoftAP provisioning branch.
 
 1. ``minihub_net_init()`` — netif/event loop; start Ethernet; **prepare** Wi-Fi handlers only (log: ``wifi STA deferred``).
 2. ``minihub_adapter_start_all()`` — radio mutex, then adapters in order

@@ -289,8 +289,12 @@ def split_local_verbs(idf_args: list[str]) -> tuple[list[str], list[str]]:
     return local, rest
 
 
-def run_merge_bin(out_name: str = "minihub_merged.bin") -> int:
-    """Merge partition images listed in build/flasher_args.json into one flashable bin."""
+def run_merge_bin(out_name: str | None = None) -> int:
+    """Merge partition images listed in build/flasher_args.json into one flashable bin.
+
+    Output is ``application/<app>/build/<app>_merged.bin`` so every product
+    (minihub, minihub_lcd, …) gets a name that ``gen_flash_binaries.py`` can find.
+    """
     args_path = BUILD_DIR / "flasher_args.json"
     if not args_path.is_file():
         print(
@@ -311,7 +315,7 @@ def run_merge_bin(out_name: str = "minihub_merged.bin") -> int:
     flash_size = settings.get("flash_size") or "16MB"
     chip = (data.get("extra_esptool_args") or {}).get("chip") or "esp32s31"
 
-    out_path = BUILD_DIR / out_name
+    out_path = BUILD_DIR / (out_name or f"{APP_NAME}_merged.bin")
     cmd: list[str] = [
         sys.executable,
         "-m",

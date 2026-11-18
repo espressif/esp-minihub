@@ -5,30 +5,22 @@
  */
 
 #include "minihub_vibe.h"
+#include "minihub_vibe_priv.h"
 
+#include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
+#include "esp_app_format.h"
 #include "esp_log.h"
 #include "esp_partition.h"
 #include "mbedtls/md.h"
 #include "nvs.h"
 
 static const char *TAG = "minihub_vibe";
-
-static uint32_t crc32_le(uint32_t crc, const uint8_t *data, size_t len)
-{
-    crc = ~crc;
-    for (size_t i = 0; i < len; ++i) {
-        crc ^= data[i];
-        for (int b = 0; b < 8; ++b) {
-            crc = (crc >> 1) ^ ((crc & 1u) ? 0xedb88320u : 0u);
-        }
-    }
-    return ~crc;
-}
 
 static esp_err_t nvs_open_rw(nvs_handle_t *out)
 {
@@ -179,6 +171,136 @@ bool minihub_vibe_take_pending(void)
     return pending;
 }
 
+static int hex_nibble(char c)
+{
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return 10 + (c - 'a');
+    }
+    if (c >= 'A' && c <= 'F') {
+        return 10 + (c - 'A');
+    }
+    return -1;
+}
+
+static esp_err_t sha256_from_hex(const char *hex, uint8_t out[MINIHUB_VIBE_SHA256_LEN])
+{
+    if (!hex || !out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    while (*hex && isspace((unsigned char)*hex)) {
+        ++hex;
+    }
+    for (size_t i = 0; i < MINIHUB_VIBE_SHA256_LEN; ++i) {
+        int hi = hex_nibble(hex[i * 2]);
+        int lo = hex_nibble(hex[i * 2 + 1]);
+        if (hi < 0 || lo < 0) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        out[i] = (uint8_t)((hi << 4) | lo);
+    }
+    return ESP_OK;
+}
+
+esp_err_t minihub_vibe_set_expected_sha(const uint8_t sha256[MINIHUB_VIBE_SHA256_LEN])
+{
+    if (!sha256) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open_rw(&handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = nvs_set_blob(handle, MINIHUB_VIBE_NVS_KEY_SHA, sha256, MINIHUB_VIBE_SHA256_LEN);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    return err;
+}
+
+esp_err_t minihub_vibe_clear_expected_sha(void)
+{
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open_rw(&handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = nvs_erase_key(handle, MINIHUB_VIBE_NVS_KEY_SHA);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        err = ESP_OK;
+    }
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    return err;
+}
+
+esp_err_t minihub_vibe_write_sha_sidecar(const uint8_t sha256[MINIHUB_VIBE_SHA256_LEN])
+{
+    if (!sha256) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    FILE *file = fopen(MINIHUB_VIBE_FIRMWARE_SHA_PATH, "wb");
+    if (!file) {
+        return ESP_FAIL;
+    }
+    char hex[(MINIHUB_VIBE_SHA256_LEN * 2) + 2];
+    for (size_t i = 0; i < MINIHUB_VIBE_SHA256_LEN; ++i) {
+        snprintf(&hex[i * 2], 3, "%02x", sha256[i]);
+    }
+    hex[MINIHUB_VIBE_SHA256_LEN * 2] = '\n';
+    hex[MINIHUB_VIBE_SHA256_LEN * 2 + 1] = '\0';
+    size_t n = fwrite(hex, 1, MINIHUB_VIBE_SHA256_LEN * 2 + 1, file);
+    int closed = fclose(file);
+    if (n != MINIHUB_VIBE_SHA256_LEN * 2 + 1 || closed != 0) {
+        (void)unlink(MINIHUB_VIBE_FIRMWARE_SHA_PATH);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t minihub_vibe_load_expected_sha_sidecar(uint8_t sha256[MINIHUB_VIBE_SHA256_LEN])
+{
+    if (!sha256) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    FILE *file = fopen(MINIHUB_VIBE_FIRMWARE_SHA_PATH, "rb");
+    if (!file) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    char hex[(MINIHUB_VIBE_SHA256_LEN * 2) + 8];
+    size_t n = fread(hex, 1, sizeof(hex) - 1, file);
+    fclose(file);
+    if (n < MINIHUB_VIBE_SHA256_LEN * 2) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    hex[n] = '\0';
+    return sha256_from_hex(hex, sha256);
+}
+
+esp_err_t minihub_vibe_load_expected_sha(uint8_t sha256[MINIHUB_VIBE_SHA256_LEN])
+{
+    if (!sha256) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(MINIHUB_VIBE_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_OK) {
+        size_t len = MINIHUB_VIBE_SHA256_LEN;
+        err = nvs_get_blob(handle, MINIHUB_VIBE_NVS_KEY_SHA, sha256, &len);
+        nvs_close(handle);
+        if (err == ESP_OK && len == MINIHUB_VIBE_SHA256_LEN) {
+            return ESP_OK;
+        }
+    }
+    return minihub_vibe_load_expected_sha_sidecar(sha256);
+}
+
 esp_err_t minihub_vibe_set_result(const char *message)
 {
     nvs_handle_t handle;
@@ -228,6 +350,59 @@ static esp_err_t sha256_begin(mbedtls_md_context_t *ctx)
     return ESP_OK;
 }
 
+esp_err_t minihub_vibe_app_desc_from_file(const char *firmware_path, esp_app_desc_t *out)
+{
+    if (!firmware_path || !out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    FILE *file = fopen(firmware_path, "rb");
+    if (!file) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    /* Bare OTA .bin: image header + first segment header, then esp_app_desc. */
+    const long off = (long)(sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t));
+    esp_err_t err = ESP_OK;
+    if (fseek(file, off, SEEK_SET) != 0 ||
+        fread(out, 1, sizeof(*out), file) != sizeof(*out)) {
+        err = ESP_FAIL;
+    }
+    fclose(file);
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (out->magic_word != ESP_APP_DESC_MAGIC_WORD) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return ESP_OK;
+}
+
+esp_err_t minihub_vibe_require_project_name(const char *firmware_path,
+                                            const char *expected_project)
+{
+    if (!firmware_path) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!expected_project || expected_project[0] == '\0') {
+        return ESP_OK;
+    }
+    esp_app_desc_t desc;
+    esp_err_t err = minihub_vibe_app_desc_from_file(firmware_path, &desc);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "no app_desc in %s: %s", firmware_path, esp_err_to_name(err));
+        return err;
+    }
+    if (desc.project_name[0] == '\0') {
+        ESP_LOGE(TAG, "no project_name in %s", firmware_path);
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (strncmp(desc.project_name, expected_project, sizeof(desc.project_name)) != 0) {
+        ESP_LOGE(TAG, "project_name mismatch: staged='%.*s' expected='%s'",
+                 (int)sizeof(desc.project_name), desc.project_name, expected_project);
+        return ESP_ERR_INVALID_VERSION;
+    }
+    return ESP_OK;
+}
+
 esp_err_t minihub_vibe_sha256_file(const char *path, uint8_t sha256[MINIHUB_VIBE_SHA256_LEN],
                                    size_t *image_size_out)
 {
@@ -246,7 +421,7 @@ esp_err_t minihub_vibe_sha256_file(const char *path, uint8_t sha256[MINIHUB_VIBE
         return err;
     }
 
-    uint8_t *buf = malloc(4096);
+    uint8_t *buf = malloc(64 * 1024);
     if (!buf) {
         fclose(file);
         mbedtls_md_free(&ctx);
@@ -255,7 +430,7 @@ esp_err_t minihub_vibe_sha256_file(const char *path, uint8_t sha256[MINIHUB_VIBE
 
     size_t total = 0;
     while (1) {
-        size_t n = fread(buf, 1, 4096, file);
+        size_t n = fread(buf, 1, 64 * 1024, file);
         if (n == 0) {
             if (ferror(file)) {
                 err = ESP_FAIL;
@@ -279,69 +454,6 @@ esp_err_t minihub_vibe_sha256_file(const char *path, uint8_t sha256[MINIHUB_VIBE
     fclose(file);
     mbedtls_md_free(&ctx);
     return err;
-}
-
-size_t minihub_vibe_trailer_offset(const esp_partition_t *part)
-{
-    if (!part || part->erase_size == 0 || part->size <= part->erase_size) {
-        return 0;
-    }
-    return (part->size / part->erase_size - 1) * part->erase_size;
-}
-
-esp_err_t minihub_vibe_trailer_read(const esp_partition_t *part, minihub_vibe_trailer_t *out)
-{
-    if (!part || !out) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    size_t off = minihub_vibe_trailer_offset(part);
-    if (off == 0) {
-        return ESP_ERR_NOT_FOUND;
-    }
-    esp_err_t err = esp_partition_read(part, off, out, sizeof(*out));
-    if (err != ESP_OK) {
-        return err;
-    }
-    if (out->magic != MINIHUB_VIBE_TRAILER_MAGIC) {
-        return ESP_ERR_NOT_FOUND;
-    }
-    uint32_t expected = out->crc32;
-    if (crc32_le(0, (const uint8_t *)out, offsetof(minihub_vibe_trailer_t, crc32)) != expected) {
-        ESP_LOGW(TAG, "trailer CRC mismatch on %s", part->label);
-        return ESP_ERR_NOT_FOUND;
-    }
-    return ESP_OK;
-}
-
-esp_err_t minihub_vibe_trailer_erase(const esp_partition_t *part)
-{
-    if (!part) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    size_t off = minihub_vibe_trailer_offset(part);
-    if (off == 0) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    return esp_partition_erase_range(part, off, part->erase_size);
-}
-
-esp_err_t minihub_vibe_trailer_write(const esp_partition_t *part, size_t image_size,
-                                     const uint8_t sha256[MINIHUB_VIBE_SHA256_LEN])
-{
-    if (!part || !sha256) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    esp_err_t err = minihub_vibe_trailer_erase(part);
-    if (err != ESP_OK) {
-        return err;
-    }
-    minihub_vibe_trailer_t trailer = {
-        .magic = MINIHUB_VIBE_TRAILER_MAGIC,
-        .image_size = (uint32_t)image_size,
-    };
-    memcpy(trailer.sha256, sha256, MINIHUB_VIBE_SHA256_LEN);
-    trailer.crc32 = crc32_le(0, (const uint8_t *)&trailer, offsetof(minihub_vibe_trailer_t, crc32));
-    return esp_partition_write(part, minihub_vibe_trailer_offset(part), &trailer, sizeof(trailer));
 }
 
 #define MINIHUB_VIBE_NVS_KEY_FAILURES "vibe_fail"

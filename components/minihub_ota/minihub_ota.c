@@ -645,28 +645,14 @@ esp_err_t minihub_ota_start_url(const char *url)
     snprintf(s_pending_url, sizeof(s_pending_url), "%s", url);
     unlock();
 
-    /* mac= identifies the device; cur_version= tells the deploy server which
-     * firmware this device is updating from. Send both, as /api/firmware does. */
-    const char *ver = ota_running_version();
-    size_t cap = strlen(url) + 32 + (ver ? strlen(ver) : 0) + 16;
-    char *url_copy = malloc(cap);
+    /* mac=, chip=, board=, cur_version= — same set as /api/firmware. */
+    char *url_copy = minihub_net_url_with_device_queries(url, ota_running_version());
     if (!url_copy) {
         lock();
         s_state = MINIHUB_OTA_FAILED;
         set_error("no mem");
         unlock();
         return ESP_ERR_NO_MEM;
-    }
-    if (minihub_net_copy_url_with_mac(url, url_copy, cap) != ESP_OK) {
-        snprintf(url_copy, cap, "%s", url); /* no MAC available: plain URL */
-    }
-    if (ver && ver[0]) {
-        const char *sep = strchr(url_copy, '?') ? "&" : "?";
-        size_t used = strlen(url_copy);
-        int n = snprintf(url_copy + used, cap - used, "%scur_version=%s", sep, ver);
-        if (n < 0 || (size_t)n >= cap - used) {
-            url_copy[used] = '\0'; /* out of room: drop the cur_version query */
-        }
     }
 
     BaseType_t ok = minihub_task_create_psram(url_ota_task, "minihub_ota", 8192, url_copy, 5, NULL);

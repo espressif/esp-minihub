@@ -76,13 +76,13 @@ Core 与服务
     ``minihub_hub`` ；控制台会话与可选的 API token 在 ``minihub_auth`` ；收网络凭据
     （ SoftAP ）与恢复出厂在 ``minihub_provision`` ；Ethernet 与 Wi-Fi STA 的拉起在
     ``minihub_net`` ；固件升级的状态与进度在 ``minihub_ota`` ；把固件暂存到外部介质、
-    维护 SHA-256 尾部 trailer、交接 Vibe Mode 在 ``minihub_vibe`` （Host 库，外加嵌套的
+    交接 Vibe Mode 在 ``minihub_vibe`` （Host 库，外加嵌套的
     ``subproject/`` 产出保留的 ``app,factory`` 镜像 —— 不是 ``application/`` 下的产品），从部署根拉取并应用
     固件、资源与控制台包在 ``minihub_update`` ；站点里的 MQTT 设备连的那个内置
     broker 在 ``minihub_mqtt_broker`` 。
 
 设备模型与 UI
-    这一组决定设备长什么样、自动化什么时候触发。
+    这一组组件决定设备在 UI 中的呈现方式，以及自动化的触发时机。
 
     类型目录（ CSV 进、文案与控件出，图标也一并给出）是 ``minihub_device_widget`` ；
     ``when`` / ``if`` / ``then`` 的求值在 ``minihub_rules`` ，一次调用召回一个场景的在
@@ -149,10 +149,9 @@ Core 与服务
     ``preview_docs.py`` 把构建出的 HTML 提供服务。
     ``gen_deploy_index.py`` 写资源清单。
 
-本指南不是插件作者唯一的入口。另一个入口是 ``docs/module_sdk/``：模块可以
-include 的头文件、符号白名单、以及打包脚本的副本都在里面，所以一个插件完全可以
-只对着这个目录写。 ``python3 tools/minihub_plugin_mcp.py`` 把同样的脚手架与校验
-交给 IDE。
+插件作者也可单独依赖 ``docs/module_sdk/``：其中含模块可 include 的头文件、符号
+白名单，以及打包脚本副本，足以支撑树外编写。``python3 tools/minihub_plugin_mcp.py``
+向 IDE 提供同一套脚手架与校验。
 
 生成物，不要手改
 ----------------

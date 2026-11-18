@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
@@ -47,6 +48,8 @@ esp_err_t minihub_vibe_stage_begin(size_t expected_size)
     /* A truncated or interrupted previous download must never be handed to
      * Vibe Mode as if it were a complete image. */
     (void)unlink(MINIHUB_VIBE_FIRMWARE_PATH);
+    (void)unlink(MINIHUB_VIBE_FIRMWARE_SHA_PATH);
+    (void)minihub_vibe_clear_expected_sha();
     s_file = fopen(MINIHUB_VIBE_FIRMWARE_PATH, "wb");
     if (!s_file) {
         return ESP_FAIL;
@@ -82,8 +85,43 @@ esp_err_t minihub_vibe_stage_finish(void)
     s_stage_begun = false;
     if (err != ESP_OK) {
         (void)unlink(MINIHUB_VIBE_FIRMWARE_PATH);
+        (void)unlink(MINIHUB_VIBE_FIRMWARE_SHA_PATH);
         return err;
     }
+
+    /* Catch cross-product images before reboot into Vibe Mode. */
+    const esp_app_desc_t *running = esp_app_get_description();
+    err = minihub_vibe_require_project_name(
+        MINIHUB_VIBE_FIRMWARE_PATH,
+        (running && running->project_name[0]) ? running->project_name : NULL);
+    if (err != ESP_OK) {
+        (void)unlink(MINIHUB_VIBE_FIRMWARE_PATH);
+        (void)unlink(MINIHUB_VIBE_FIRMWARE_SHA_PATH);
+        return err;
+    }
+
+    uint8_t sha256[MINIHUB_VIBE_SHA256_LEN];
+    size_t image_size = 0;
+    err = minihub_vibe_sha256_file(MINIHUB_VIBE_FIRMWARE_PATH, sha256, &image_size);
+    if (err != ESP_OK || image_size == 0) {
+        ESP_LOGE(TAG, "hash staged image: %s", esp_err_to_name(err));
+        (void)unlink(MINIHUB_VIBE_FIRMWARE_PATH);
+        return (err == ESP_OK) ? ESP_ERR_INVALID_SIZE : err;
+    }
+    err = minihub_vibe_write_sha_sidecar(sha256);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "write SHA sidecar: %s", esp_err_to_name(err));
+        (void)unlink(MINIHUB_VIBE_FIRMWARE_PATH);
+        return err;
+    }
+    err = minihub_vibe_set_expected_sha(sha256);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "store expected SHA: %s", esp_err_to_name(err));
+        (void)unlink(MINIHUB_VIBE_FIRMWARE_PATH);
+        (void)unlink(MINIHUB_VIBE_FIRMWARE_SHA_PATH);
+        return err;
+    }
+
     err = minihub_vibe_set_pending(true);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "could not arm Vibe Mode: %s", esp_err_to_name(err));
@@ -99,6 +137,8 @@ void minihub_vibe_stage_abort(void)
     }
     s_stage_begun = false;
     (void)unlink(MINIHUB_VIBE_FIRMWARE_PATH);
+    (void)unlink(MINIHUB_VIBE_FIRMWARE_SHA_PATH);
+    (void)minihub_vibe_clear_expected_sha();
     (void)minihub_vibe_set_pending(false);
 }
 

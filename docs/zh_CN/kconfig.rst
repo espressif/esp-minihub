@@ -3,9 +3,9 @@ Kconfig 选项
 
 :link_to_translation:`en:[English]`
 
-MiniHub 的每一个构建选项都在这里，文档构建时直接从 Kconfig 片段里生成，而不是靠人
-维护一份清单。 ``idf.py menuconfig`` 显示的就是同样的文字；本页额外给出每个符号被
-哪些文件读取，好让你看得出把它打开到底会不会改变什么。
+MiniHub 的每一个构建选项都在这里，文档构建时直接从 Kconfig 片段生成，而非手工维护
+清单。``idf.py menuconfig`` 显示相同文案；下文另列各符号的引用位置，便于判断使能后
+是否影响行为。
 
 权威来源是 ``cmake/minihub_bundle/Kconfig.projbuild`` 里的 ``rsource`` 列表：构建挂载
 的正是这一份。磁盘上有片段却没被 ``rsource``、``rsource`` 指向的文件已删除、某个符号

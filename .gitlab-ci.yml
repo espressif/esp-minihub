@@ -167,6 +167,8 @@ build:app_lcd:
   # onto application/minihub.
   # Cap ninja -j: Brookesia/Boost C++ units OOM the runner when unbounded
   # (cc1plus Killed). build_firmware.py forwards -j to idf.py.
+  # Same as build:app: `build merge` so artifacts include <app>_merged.bin
+  # (website / flash packages expect it alongside bootloader and partitions).
   extends:
     - .idf_env
     - .clone_plugins
@@ -178,7 +180,7 @@ build:app_lcd:
   script:
     - git submodule update --init --depth 1
     - export MINIHUB_PLUGIN_DIRS=$MINIHUB_PLUGIN_DIRS:$CI_PROJECT_DIR/examples/plugins
-    - ./tools/build_firmware.py --app "$MINIHUB_APP" -j 4 build
+    - ./tools/build_firmware.py --app "$MINIHUB_APP" -j 4 build merge
   artifacts:
     when: on_success
     expire_in: 14 days
@@ -186,6 +188,10 @@ build:app_lcd:
     paths:
       - application/$MINIHUB_APP/build/*.bin
       - application/$MINIHUB_APP/build/*.elf
+      - application/$MINIHUB_APP/build/bootloader/bootloader.bin
+      - application/$MINIHUB_APP/build/bootloader/bootloader.elf
+      - application/$MINIHUB_APP/build/partition_table/*.bin
+      - application/$MINIHUB_APP/build/flasher_args.json
       - application/$MINIHUB_APP/dependencies.lock
       - application/$MINIHUB_APP/sdkconfig
       - application/$MINIHUB_APP/components/gen_bmgr_codes/board_manager.defaults

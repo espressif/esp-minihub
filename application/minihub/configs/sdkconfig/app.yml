@@ -4,6 +4,7 @@ board: esp32_s31_function_coreboard_1
 features:
   - common
   - memory
+  - board
   - partitions_16m
   - eth
   - wifi_sta

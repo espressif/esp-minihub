@@ -11,7 +11,7 @@ stay as the code spells them. Keep every number in the table true to the code it
 names:
 
 * ``/api/update/{hints,notes,check,apply}`` — minihub_web.c route registration
-* ``minihub_vibe_stage_finish`` / the SHA-256 tail trailer /
+* ``minihub_vibe_stage_finish`` / ``app_elf_sha256`` skip /
   ``esp_ota_begin`` / ``esp_ota_end`` — components/minihub_vibe/
 * the 800 ms delay before ``esp_restart()`` — minihub_vibe_stage.c (``minihub_vibe_enter``)
 * the pending-verify confirmation — ``esp_ota_mark_app_valid_cancel_rollback()``
@@ -68,13 +68,13 @@ UPDATE_STAGES = [
      "The body carries only type / force; the Host takes the deploy URL from config "
      "and appends mac= and cur_version="),
     ("minihub_vibe_stage_finish", "暂存到介质", "/vibe/Firmware/firmware.bin",
-     "下载流写进外部 LittleFS 卷，运行中的固件不写 flash",
-     "The download stream goes to an external LittleFS volume; the running firmware "
-     "writes no flash"),
-    ("esp_ota_end", "校验并搬运", "SHA-256 + header + checksum",
-     "Vibe Mode 比对分区尾部 trailer 的 SHA，不同才用 esp_ota_begin/write/end 写入 ota_0",
-     "Vibe Mode compares the SHA in the tail trailer and only copies into ota_0 with "
-     "esp_ota_begin/write/end when it differs"),
+     "下载流写进外部 LittleFS 卷并写入 SHA sidecar / NVS；运行中的固件不写 flash",
+     "The download stream goes to an external LittleFS volume with a SHA sidecar "
+     "and NVS entry; the running firmware writes no flash"),
+    ("esp_ota_end", "校验并搬运", "pending|force + SHA + app_elf_sha256",
+     "仅 pending 或强刷按键时搬运；比较 app_elf_sha256 与期望文件 SHA，不一致则写入 ota_0",
+     "Copy only when pending or the force GPIO is held; compare app_elf_sha256 "
+     "and the expected file SHA, then write ota_0 when they differ"),
     ("set_boot_partition", "回切并重启", "800 ms → restart",
      "选中 app,factory 后 800 ms 进 Vibe Mode；搬运完重写 otadata 选中 ota_0 再重启",
      "Selecting app,factory enters Vibe Mode after 800 ms; the copy rewrites otadata "

@@ -17,6 +17,7 @@ board: esp32_s31_korvo1
 sdkconfig_features:
 - common
 - memory
+- board
 - partitions_16m
 - wifi_sta
 - lcd

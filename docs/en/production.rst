@@ -37,8 +37,9 @@ From the repository root:
    # Build then merge a single file (successful build also packs .mhub)
    ./tools/build_firmware.py -app minihub build merge
 
-``build merge`` writes ``application/minihub/build/minihub_merged.bin`` for jig
-flashing. A successful ``build`` is required first.
+``build merge`` writes ``application/<app>/build/<app>_merged.bin`` (for this
+product: ``minihub_merged.bin``) for jig flashing. A successful ``build`` is
+required first. The same naming is used for ``minihub_lcd`` and other products.
 
 Partitions (generic minihub, 16 MB)
 ------------------------------------

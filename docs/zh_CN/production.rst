@@ -35,8 +35,9 @@
    # 先编固件，再合成单文件（成功 build 后也会自动 pack .mhub）
    ./tools/build_firmware.py -app minihub build merge
 
-``build merge`` 在 ``application/minihub/build/minihub_merged.bin`` 生成合并镜像，
-供工装烧录。须先成功 ``build``。
+``build merge`` 在 ``application/<app>/build/<app>_merged.bin`` 生成合并镜像
+（本产品即 ``minihub_merged.bin``），供工装烧录；``minihub_lcd`` 等同理。须先成功
+``build``。
 
 分区（通用 minihub，16 MB）
 ---------------------------

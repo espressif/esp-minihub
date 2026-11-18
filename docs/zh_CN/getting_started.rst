@@ -82,7 +82,7 @@ IDF 构建。
 1. ``MiniHub starting...``
 2. ``storage mounted at /data`` （随后 ``modstore`` 挂到 ``/store`` ）
 3. ``uplinks prepared: wifi=… eth=… (wifi STA deferred)`` — 以太网已起，STA 尚未连接
-4. ``HTTP server on port 80`` — Web 在射频栈之前就会起来
+4. ``HTTP server on port 80`` — Web 在射频栈之前已监听
 5. 射频适配器 start（Zigbee / BLE Mesh 等，视编译选项）
 6. ``eth got IP`` 或 ``wifi got IP`` （后者在 ``minihub_net_start_wifi()`` 之后）
 7. ``MiniHub ready (net=… prov=… web_ui=… lcd_ui=… eth=… wifi=…)``

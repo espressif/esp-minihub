@@ -11,20 +11,19 @@ Runtime
 -------
 
 The engine is QuickJS-NG, the community fork of Bellard's QuickJS, and this
-firmware pins the ``espressif/quickjs-ng`` component at 0.14.0. Syntax follows
-that build: ``class``, ``async``/``await``, ``Proxy`` and optional chaining all
-work. Read the ``quickjs-ng`` documentation for the exact boundary rather than
-trusting a version typed here. MiniHub adds the four timer globals and one
-``host`` object, and nothing else, so a JS module is neither a browser page
-nor a Node process.
+firmware pins the ``espressif/quickjs-ng`` component at 0.14.0. Syntax and
+capability limits follow the ``quickjs-ng`` docs and the linked build:
+``class``, ``async``/``await``, ``Proxy`` and optional chaining all work.
+MiniHub adds four global timers and one ``host`` object, and no other runtime
+plugins, so a JS module is neither a browser page nor a Node process.
 
-The differences that bite a JavaScript developer:
+Differences from browser and Node runtimes:
 
 * One file, no module system. The Host runs each ``main.js`` inside its own
   function (``minihub_js.c``), so a top-level ``function`` or ``var`` belongs to
   that module and does not replace the same name in another module. ``import``
   and ``require`` still resolve to nothing, and there is no file-read Host API
-  either — one file really has to be one file.
+  either — each module is a single ``main.js``.
 * No ``console`` and no ``print``. Logging goes to ``host.log.info`` /
   ``host.log.warn`` / ``host.log.error``.
 * No ``fetch``, no ``XMLHttpRequest``, no file system. Outbound HTTP is
