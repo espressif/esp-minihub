@@ -144,6 +144,10 @@ let otaTimer = null;
  * 重新安装): its progress is painted there instead of the custom-OTA card, so
  * the two entry points never overwrite each other's status. */
 let fwRowProgressOn = false;
+/* Last attempted upgrade, remembered so a post-format re-attempt can re-issue it. */
+let sysOtaLastFile = null;
+let sysOtaLastUrl = '';
+let otaFormatTarget = '';
 
 function sysOtaRender(j) {
     const state = j.state | 0;
@@ -156,7 +160,8 @@ function sysOtaRender(j) {
         0: 'sys.state_idle',
         1: 'sys.state_upgrading',
         2: 'sys.state_success',
-        3: 'sys.failed'
+        3: 'sys.failed',
+        4: 'sys.state_needs_format'
     };
     const stateLabel = stateKeys[state] ? t(stateKeys[state]) : state;
     let line = t('sys.ota_status_line', {
@@ -174,30 +179,135 @@ function sysOtaRender(j) {
         bar.style.width = (prog != null && prog >= 0) ? (prog + '%') : (state === 1 ? '15%' : '0%');
     };
     if (fwRowProgressOn) {
-        /* Started from 更新固件 / 重新安装: mirror the progress into the version
-         * row and leave the custom-OTA card alone until the run finishes. */
+        /* Started from 更新固件 / 重新安装: keep progress on the version row.
+         * Do not clear the flag on idle — apply returns before the OTA task
+         * flips to upgrading, and clearing here used to paint the custom card
+         * instead. Only success / failure ends the row-owned run. */
         const row = document.getElementById('fw-upd-progress');
         if (row) {
             let txt = stateLabel;
-            if (state === 1 && prog != null && prog >= 0) txt += ' ' + prog + '%';
-            if (state === 3 && err) txt += ' · ' + err;
+            if (state === 0) {
+                txt = t('sys.state_upgrading');
+            }
+            if ((state === 1 || state === 4) && prog != null && prog >= 0) {
+                txt += ' ' + prog + '%';
+            }
+            if (j.bytes_written && (state === 1 || state === 4)) {
+                txt += ' · ' + j.bytes_written + ' B';
+            }
+            if (state === 3 && err) {
+                txt += ' · ' + err;
+            }
             row.textContent = txt;
-            row.hidden = (state === 0);
+            row.hidden = false;
         }
-        if (state !== 1) {
+        if (state === 2 || state === 3) {
             fwRowProgressOn = false;
-            paintCustom();
         }
     } else {
         paintCustom();
     }
-    if (state === 1) {
+    if (state === 1 || state === 4) {
         if (!otaTimer) otaTimer = setInterval(sysOtaPoll, ONE_SECOND_MS);
     } else if (otaTimer) {
         clearInterval(otaTimer);
         otaTimer = null;
     }
+    const sd = document.getElementById('sys-ota-sel-sd');
+    const usb = document.getElementById('sys-ota-sel-usb');
+    const chosen = Array.isArray(j.ota_targets) ? j.ota_targets : [];
+    if (sd && document.activeElement !== sd) sd.checked = chosen.includes('sdmmc');
+    if (usb && document.activeElement !== usb) usb.checked = chosen.includes('usb');
+    if (sd && !sd.__otaTargetBound) {
+        sd.__otaTargetBound = usb.__otaTargetBound = true;
+        const onChange = async () => {
+            if (!sd.checked && !usb.checked) {
+                if (document.activeElement === sd) sd.checked = true;
+                else usb.checked = true;
+                toast(t('sys.ota_target_empty'));
+                return;
+            }
+            const sel = [];
+            if (sd.checked) sel.push('sdmmc');
+            if (usb.checked) sel.push('usb');
+            try {
+                const r = await fetch('/api/ota/targets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targets: sel })
+                });
+                if (!r.ok) {
+                    toast(t('sys.network_error'));
+                    return;
+                }
+                const d = await r.json();
+                const labels = (d.targets || []).map((x) => t(x === 'usb' ? 'sys.target_usb' : 'sys.target_sd'));
+                toast(t('sys.ota_target_saved', { target: labels.join(' / ') }));
+            } catch (e) {
+                toast(t('sys.network_error'));
+            }
+        };
+        sd.addEventListener('change', onChange);
+        usb.addEventListener('change', onChange);
+    }
+    const targetEl = document.getElementById('sys-ota-target');
+    if (targetEl) {
+        targetEl.textContent = t('sys.ota_target_hint');
+    }
+    sysOtaShowFormatIfNeeded(j);
     if (state === 2) toast(t('sys.ota_success_reboot'));
+}
+
+function sysOtaShowFormatIfNeeded(j) {
+    const modal = document.getElementById('ota-format-modal');
+    if (!modal) return;
+    if ((j.state | 0) === 4 && j.needs_format) {
+        if (modal.hasAttribute('hidden')) {
+            otaFormatTarget = j.needs_format;
+            const medium = j.needs_format === 'usb' ? t('sys.target_usb') : t('sys.target_sd');
+            const msg = document.getElementById('ota-format-msg');
+            if (msg) msg.textContent = t('sys.format_msg', { medium: medium });
+            modal.removeAttribute('hidden');
+        }
+    } else if (!modal.hasAttribute('hidden')) {
+        modal.setAttribute('hidden', '');
+    }
+}
+
+function otaFormatCancel() {
+    const modal = document.getElementById('ota-format-modal');
+    if (modal) modal.setAttribute('hidden', '');
+    fetch('/api/ota/abort', { method: 'POST' }).catch(() => {});
+    sysOtaPoll();
+}
+
+async function otaFormatOk() {
+    const modal = document.getElementById('ota-format-modal');
+    if (modal) modal.setAttribute('hidden', '');
+    const target = otaFormatTarget || 'sdmmc';
+    try {
+        const r = await fetch('/api/ota/format', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target: target })
+        });
+        if (!r.ok) {
+            toast(t('sys.format_failed'));
+            sysOtaPoll();
+            return;
+        }
+        toast(t('sys.ota_formatting', { medium: target === 'usb' ? t('sys.target_usb') : t('sys.target_sd') }));
+        /* Upload must be re-sent from the browser. URL jobs (web or Store update)
+         * are resumed inside /api/ota/format via the pending URL — do not POST
+         * /api/ota again or a second job races the resume. */
+        if (sysOtaLastFile) {
+            await sysOtaUploadFile(sysOtaLastFile);
+        }
+        sysOtaPoll();
+    } catch (e) {
+        toast(t('sys.network_error'));
+        sysOtaPoll();
+    }
 }
 async function sysOtaPoll() {
     try {
@@ -212,6 +322,8 @@ async function sysOtaStartUrl() {
         toast(t('sys.enter_firmware_url'));
         return;
     }
+    sysOtaLastUrl = url;
+    sysOtaLastFile = null;
     toast(t('sys.starting_url_update'));
     try {
         const r = await fetch('/api/ota', {
@@ -245,6 +357,11 @@ async function sysOtaUpload() {
         toast(t('sys.choose_bin_file'));
         return;
     }
+    sysOtaLastFile = f;
+    sysOtaLastUrl = '';
+    await sysOtaUploadFile(f);
+}
+async function sysOtaUploadFile(f) {
     toast(t('sys.uploading_file', { name: f.name }));
     try {
         const r = await fetch('/api/ota/upload', {
@@ -661,6 +778,11 @@ async function sysUpdateApply(kind, force) {
         toast(t('sys.applied_update', { name: name }));
         if (kind === 'firmware') {
             fwRowProgressOn = true;
+            const row = document.getElementById('fw-upd-progress');
+            if (row) {
+                row.hidden = false;
+                row.textContent = t('sys.state_upgrading');
+            }
             sysOtaPoll();
         } else {
             /* Re-probe so the cached hint state reflects what we just applied

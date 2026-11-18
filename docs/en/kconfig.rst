@@ -3,10 +3,9 @@ Kconfig Options
 
 :link_to_translation:`zh_CN:[中文]`
 
-Every MiniHub build option in one place, generated at docs build time from the Kconfig
-fragments themselves — not from a list someone keeps by hand. ``idf.py menuconfig`` shows
-the same text; this page adds which file reads each symbol, so you can see whether
-turning it on changes anything at all.
+Every MiniHub build option in one place, generated at docs build time from the same
+Kconfig fragments as ``menuconfig``. Each entry notes which source file reads the
+symbol, so enabling it can be checked against real call sites.
 
 The authority is the ``rsource`` list in ``cmake/minihub_bundle/Kconfig.projbuild``: that
 is exactly what the build mounts. A fragment that exists on disk but is not rsourced, a
@@ -61,50 +60,85 @@ Core and memory
 
 .. minihub-kconfig:: Core
 
-.. minihub-kconfig:: Hub
-
-.. minihub-kconfig:: JS plugins
-
-.. minihub-kconfig:: Modules
-
-Radios and adapters
--------------------
+Networking and provisioning
+---------------------------
 
 .. minihub-kconfig:: Networking
 
 .. minihub-kconfig:: Provisioning
 
+Plugins
+-------
+
+Store install path, native module loader, and QuickJS under ``Plugins`` in
+``menuconfig``.
+
+.. minihub-kconfig:: Store
+
+.. minihub-kconfig:: Modules
+
+.. minihub-kconfig:: JS plugins
+
+Builtin Adapters
+----------------
+
+Host-linked protocol stacks under ``Builtin Adapters`` in ``menuconfig``
+(Store ``.mhub`` packages are under Plugins). Includes the MQTT broker
+(on-device listener; the loopback ``MINIHUB_MQTT_ADAPTER`` is invisible and
+follows the broker) and RTSP camera (external IP cameras — not Hub board
+peripherals). Wi-Fi / Ethernet uplink options live under Networking, not here.
+
+.. minihub-kconfig:: BLE Mesh
+
 .. minihub-kconfig:: Matter
+
+.. minihub-kconfig:: MQTT broker
+
+.. minihub-kconfig:: Modbus
+
+.. minihub-kconfig:: RTSP camera
 
 .. minihub-kconfig:: Thread
 
 .. minihub-kconfig:: Zigbee
 
-.. minihub-kconfig:: BLE Mesh
+UI
+--
 
-.. minihub-kconfig:: Modbus
+LCD and Web consoles under ``UI`` in ``menuconfig``.
 
-.. minihub-kconfig:: MQTT adapter
-
-Console, Store and access
--------------------------
+.. minihub-kconfig:: LCD UI
 
 .. minihub-kconfig:: Web UI
 
-.. minihub-kconfig:: Auth
+Auth is nested under Web UI (same httpd login / Bearer path).
 
-.. minihub-kconfig:: Store
+.. minihub-kconfig:: Auth
 
 .. minihub-kconfig:: MCP
 
+Cloud
+-----
+
+Vendor cloud bridges under ``Cloud`` in ``menuconfig``.
+
 .. minihub-kconfig:: RainMaker
+
+Firmware update
+---------------
+
+Host upgrade policy and the factory recovery image are siblings under
+``Firmware update`` in ``menuconfig`` (OTA stages or writes the image; Vibe Mode
+applies a staged image from external media).
+
+.. minihub-kconfig:: OTA
+
+.. minihub-kconfig:: Vibe Mode
 
 Peripherals
 -----------
 
-.. minihub-kconfig:: LCD UI
-
-.. minihub-kconfig:: RTSP camera
+On-board Hub hardware under ``Peripherals`` in ``menuconfig``.
 
 .. minihub-kconfig:: USB MSC
 

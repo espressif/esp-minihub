@@ -3,8 +3,8 @@
 
 :link_to_translation:`en:[English]`
 
-本页集中列出 Host 不会突破的各项容量上限。每一行都标注它在代码里的位置（``Defined at``
-一栏），也就是要改这个值得动哪个文件、哪个符号。
+本文汇总 Host 的各项容量上限。每行 ``Defined at`` 列给出代码中的定义位置；修改上限
+须编辑对应文件中的符号。
 
 .. minihub-limits:: core
 

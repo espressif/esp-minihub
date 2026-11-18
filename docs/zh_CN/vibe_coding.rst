@@ -3,9 +3,9 @@ Vibe coding
 
 :link_to_translation:`en:[English]`
 
-MiniHub 可以用 AI 编程助手来开发：``application/`` 下的 OEM 产品、商店插件，
-或一台已经跑起来、在局域网上用 REST 应答的 Hub。助手只是可选的加速器，不是前提：
-先把同样的步骤亲手走一遍，再交给 agent 重复。下面各节说明怎么搭起来。
+MiniHub 可用 AI 编程助手开发：``application/`` 下的 OEM 产品、商店插件，或一台
+已在局域网以 REST 应答的 Hub。助手是可选加速器，不是前提；建议先手工确认同一流程
+可复现，再交由 agent 重复。下文说明如何配置。
 
 让 agent 从哪里读说明
 ---------------------

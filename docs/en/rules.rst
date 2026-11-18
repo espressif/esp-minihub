@@ -12,12 +12,8 @@ internet is down. The rules live in ``rules.json`` and are evaluated by
    :align: center
    :alt: MiniHub rules evaluation: point.updated → when → if → then → actions
 
-`Interactive version <_static/rules/index.html>`_ — the cards tour the stages on
-their own (hover pauses); each card carries one constraint.
-
-Scenes look similar but are a separate document in ``scenes.json``. They are
-fired by REST and are never a ``then`` type: a scene is a list of commands a
-person invokes; a rule invokes itself.
+`Interactive version <_static/rules/index.html>`_ — rule evaluation in the same
+order as the static figure; each stage lists one constraint (hover pauses).
 
 Implementation: ``components/minihub_rules/minihub_rules.c``. Persistence and
 REST: ``GET /api/rules``, ``POST /api/rules/import`` (:doc:`api/host_rest`).
@@ -84,10 +80,9 @@ Document shape
        resolution). The rule is then latched as done until the rules are
        reloaded.
 
-A time rule needs a plausible clock, not a finished SNTP sync: any system time
-whose year is 2020 or later is accepted, so a LAN-only hub with a manually set
-time still runs its schedules. Where the clock comes from and what an unsynced one
-changes: :doc:`time`.
+A time rule needs a system calendar year ≥ 2020, not a finished SNTP sync, so a
+LAN-only hub with a manually set time still runs its schedules. Where the clock
+comes from and what an unsynced one changes: :doc:`time`.
 
 A time rule created before the hub timezone setting existed stored its ``at``
 as UTC computed from the *browser* timezone at edit time. After a hub timezone

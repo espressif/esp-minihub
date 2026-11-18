@@ -30,8 +30,8 @@
 内置设备类型与参数
 ------------------
 
-权威源码：``components/minihub_device_widget/model/*.csv``。本页直接从这些 CSV
-渲染设备类型、参数与 UI 元素。
+权威源码为 ``components/minihub_device_widget/model/*.csv``。内置设备类型、参数与
+UI 元素由文档构建自上述 CSV 生成（见下文表格）。
 
 * :download:`devices.csv <../_static/catalog/model/devices.csv>`
 * :download:`parameters.csv <../_static/catalog/model/parameters.csv>`
@@ -192,7 +192,7 @@ reload；只传一份时 PUT 仍然成功，但回 ``rebuilt: false`` 并带一�
   磁盘上的东西一点没动。
 * **扁平化** 同样全有或全无：设备行里引用了一个在 ``parameters.csv`` 没有条目的
   参数，整次扁平化就中止。
-* 真正会跳行的是读扁平表那一步：字段看着错位、或 style JSON 里没有可用的
+* 真正会跳行的是读扁平表那一步：字段错位、或 style JSON 里没有可用
   ``widget`` 的行被丢弃，并在日志里计数。若一行都不剩，整个文件被判为不可用。
 * **被判不可用的扁平文件仍会被重写。** reload 会先继续用旧表对外服务，随后用
   固件内嵌的注册表重新写出 ``/data/config/devices.csv`` —— 所以手改这个文件的人，

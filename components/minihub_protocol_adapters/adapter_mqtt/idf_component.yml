@@ -1,7 +1,0 @@
-## MQTT client is pulled only when CONFIG_MINIHUB_MQTT_ADAPTER=y
-## (Component Manager $CONFIG has no CONFIG_ prefix).
-dependencies:
-  espressif/mqtt:
-    version: "1.1.0"
-    rules:
-      - if: "$CONFIG{MINIHUB_MQTT_ADAPTER} == True"

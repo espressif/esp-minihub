@@ -3,10 +3,9 @@ Networking
 
 :link_to_translation:`zh_CN:[中文]`
 
-Most Hub features need IP, so networking comes up early.
-``components/minihub_net`` builds the uplinks on top of ESP-IDF's ESP-NETIF, the
-Wi-Fi driver, and Ethernet on SoCs that have an EMAC. All three are IDF layers,
-documented upstream:
+``components/minihub_net`` builds the IP uplinks on top of ESP-IDF's ESP-NETIF,
+the Wi-Fi driver, and Ethernet on SoCs that have an EMAC. All three are IDF
+layers, documented upstream:
 
 * `ESP-IDF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/>`_
 * `ESP-NETIF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_netif.html>`_
@@ -35,8 +34,9 @@ Boot order
    :align: center
    :alt: MiniHub network bring-up: minihub_net_init → minihub_net_start_wifi → STA connect → default route → console on port 80
 
-`Interactive version <_static/net_boot/index.html>`_ — five steps in boot order;
-the cyan return line is the path taken when no credentials are stored yet.
+`Interactive version <_static/net_boot/index.html>`_ — the five stages of network
+bring-up after power-on. When no credentials are stored, the flow returns through
+the SoftAP provisioning branch.
 
 1. ``minihub_net_init()`` — netif/event loop; start Ethernet; **prepare** Wi-Fi handlers only (log: ``wifi STA deferred``).
 2. ``minihub_adapter_start_all()`` — radio mutex, then adapters in order
@@ -87,10 +87,10 @@ MQTT broker
 broker on the Hub, so the MQTT devices at a site connect to the Hub instead of a
 separate always-on machine. It is a transport service only: it registers no
 points. Turning it on also starts the Hub's own MQTT client on ``127.0.0.1`` —
-``components/minihub_protocol_adapters/adapter_mqtt``, registered under the same
-``mqtt_broker`` name — because that client is what carries ``host.mqtt`` for JS
-plugins. There is no external-broker mode: with the broker off, no client is
-created.
+built in the same ``minihub_mqtt_broker`` component (``mqtt_adapter.c``),
+registered under the same ``mqtt_broker`` name — because that client is what
+carries ``host.mqtt`` for JS plugins. There is no external-broker mode: with
+the broker off, no client is created.
 
 The firmware carries the broker whenever ``CONFIG_MINIHUB_MQTT_BROKER`` is on,
 which is the default. Whether it listens is decided at run time by

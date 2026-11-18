@@ -751,7 +751,9 @@ GET /api/ota · POST /api/ota · POST /api/ota/upload
 
 GET returns OTA job status. POST body: ``url`` (required, HTTPS ``.bin``); **HTTP 200**
 ``{"result":"started"}``; **409** if already running. upload is a raw ``.bin`` with
-``Content-Length``; not on MCP ``hub.api`` whitelist. Operator chapter: :doc:`../ota`.
+``Content-Length``; not on MCP ``hub.api`` whitelist. A successful job stages the
+image on external LittleFS media and hands off to Vibe Mode, which copies it into
+``ota_0``; the device restarts twice. Operator chapter: :doc:`../ota`.
 Factory partitions: :doc:`../production`.
 
 Protocol-stack REST (Kconfig-gated)

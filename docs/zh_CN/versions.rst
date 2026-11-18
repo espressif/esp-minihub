@@ -55,7 +55,7 @@
 没有汇总式的 changelog。每个发布出去的固件自带
 ``Firmwares/<chip>/<version>/release_notes.txt`` （ ``tools/publish_firmware.py``
 把文件写在固件旁边），Hub 会在升级界面和 ``GET /api/update/notes`` 里显示被给出的那一份
-（ :doc:`ota` ）。需要 changelog 的产品要自己按版本把这些文件拼起来 —— 除此之外没有
+（ :doc:`ota` ）。需要 changelog 的产品须自行按版本汇总这些文件 —— 除此之外没有
 别处记录两次构建之间改了什么。
 
 钉住的工具链

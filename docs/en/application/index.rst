@@ -3,9 +3,10 @@ Application Products
 
 :link_to_translation:`zh_CN:[中文]`
 
-Each folder under ``application/`` is one ESP-IDF firmware **product**, and the
-chapters below are those products. Read this page before
-:doc:`../host_customization`, which copies a product to make an OEM SKU.
+Each folder under ``application/`` is one flashable ESP-IDF firmware **product**,
+and the chapters below are those products. OEM work typically copies a product
+folder, then customizes board, partitions, and factory JSON
+(:doc:`../host_customization`).
 
 .. toctree::
    :maxdepth: 1

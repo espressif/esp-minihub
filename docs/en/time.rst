@@ -27,8 +27,8 @@ internal server, or drop it in a product that syncs another way.
 There is no real-time clock behind it. Every boot starts from the epoch and has
 to sync again; nothing carries the previous time across a reboot or an OTA.
 
-What an unsynced clock looks like
----------------------------------
+Behavior with an unsynced clock
+-------------------------------
 
 * Log lines and the history store keep whatever time the device had at that
   moment. History rows written before the sync land keep their early timestamps
@@ -38,13 +38,11 @@ What an unsynced clock looks like
 * Nothing else in the Hub reads a wrong clock destructively: point values, the
   Store and the radios are time-independent.
 
-Scheduled and ``once`` rules are the part that waits for a plausible clock. The
-engine compares its own ``gmtime`` against the year 2020 and skips the whole time
-pass below that (:file:`components/minihub_rules/minihub_rules.c`). It deliberately
-does **not** wait for SNTP to report *completed*: on a network with no reachable
-NTP server the status stays unset forever, and requiring it once left every time
-rule dead. A clock you set yourself — from a product hook or a plugin — is enough,
-as long as the year is real.
+Scheduled and ``once`` rules follow calendar time (system year ≥ 2020), not the
+SNTP *completed* flag; below that year the engine skips the whole time pass
+(:file:`components/minihub_rules/minihub_rules.c`). With no reachable NTP server
+the flag may stay unset, so it is not used as the gate. Setting the system time
+to a valid year from a product hook or plugin is enough.
 
 Timezone
 --------

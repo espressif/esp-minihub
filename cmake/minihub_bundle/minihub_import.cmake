@@ -218,6 +218,34 @@ function(minihub_register_kconfig)
         idf_build_set_property(
             COMPILE_OPTIONS "-Wno-error=format;-Wno-error=unused-result" APPEND)
     endif()
+
+    # Host image lives in ota_0; app,factory is the Vibe Mode maintenance
+    # binary. IDF's default app_check_size compares the Host .bin against every
+    # app partition and warns that vibe_mode (1 MiB) is too small — noise.
+    # Replace that check with an ota_0-only one (same helper IDF uses for TEE).
+    function(__idf_build_setup_post_build_validation)
+        partition_table_get_partition_info(factory_offset
+            "--partition-type app --partition-subtype factory" "offset")
+        partition_table_get_partition_info(test_offset
+            "--partition-type app --partition-subtype test" "offset")
+        if(CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK AND (factory_offset OR test_offset))
+            fail_at_build_time(check_table_contents "\
+            ERROR: Anti-rollback option is enabled. Partition table should \
+            consist of two ota app without factory or test partitions.")
+            add_dependencies(app check_table_contents)
+        endif()
+
+        if(CONFIG_APP_BUILD_TYPE_APP_2NDBOOT)
+            idf_build_get_property(build_dir BUILD_DIR)
+            idf_build_get_property(project_bin PROJECT_BIN)
+            partition_table_add_check_size_target(app_check_size
+                DEPENDS gen_project_binary
+                BINARY_PATH "${build_dir}/${project_bin}"
+                PARTITION_TYPE app
+                PARTITION_SUBTYPE ota_0)
+            add_dependencies(app app_check_size)
+        endif()
+    endfunction()
 endfunction()
 
 # CONFIG_* and BUILD_COMPONENTS exist only after project().

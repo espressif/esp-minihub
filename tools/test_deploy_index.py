@@ -37,7 +37,58 @@ def _get(url: str) -> tuple[int, bytes]:
         return exc.code, exc.read()
 
 
+def _test_version_cmp() -> None:
+    """Device and store_server share the same precedence rules."""
+    cmp = store_server.version_cmp
+    assert cmp("0.1.0", "0.1.0") == 0
+    assert cmp("v0.1.0", "0.1.0") == 0
+    assert cmp("0.1.0", "0.1.0-dev") > 0
+    assert cmp("0.1.0", "0.1.0-pre") > 0
+    assert cmp("0.1.0-pre", "0.1.0-beta") > 0
+    assert cmp("0.1.0-beta", "0.1.0-dev") > 0
+    assert cmp("0.1.0-pre", "0.1.0-pre1") < 0
+    assert cmp("0.1.0-pre1", "0.1.0-pre2") < 0
+    assert cmp("0.1.0-beta", "0.1.0-beta1") < 0
+    assert cmp("0.1.0-dev", "0.1.0-dev1") < 0
+    assert cmp("0.1.1", "0.1.0-dev") > 0
+    assert cmp("0.1.0-dev", "0.1.0") < 0
+    # Running 0.1.0-dev must see published 0.1.0 as newer.
+    with TemporaryDirectory() as tmp:
+        deploy = Path(tmp)
+        fw = deploy / "Firmwares" / "esp32s31" / "0.1.0"
+        fw.mkdir(parents=True)
+        (fw / "minihub.bin").write_bytes(b"fw")
+        (fw / "boards.txt").write_text("ESP32-S31-Function-Coreboard-1\n", encoding="utf-8")
+        up = store_server.build_firmware_upgrade(deploy, "esp32s31", "0.1.0-dev")
+        assert up["newer"] is True
+        assert up["version"] == "0.1.0"
+        up2 = store_server.build_firmware_upgrade(deploy, "esp32s31", "0.1.0")
+        assert up2["newer"] is False
+        # board= with matching boards.txt
+        up3 = store_server.build_firmware_upgrade(
+            deploy, "esp32s31", "0.1.0-dev", board="ESP32-S31-Function-Coreboard-1"
+        )
+        assert up3["newer"] is True
+        # Korvo-1 must not see a Function-Coreboard-only package
+        up4 = store_server.build_firmware_upgrade(
+            deploy, "esp32s31", "0.1.0-dev", board="ESP32-S31-Korvo-1"
+        )
+        assert up4["available"] is False
+        assert up4["newer"] is False
+        # Legacy folder without boards.txt: chip-wide only when board omitted
+        legacy = deploy / "Firmwares" / "esp32s31" / "0.0.9"
+        legacy.mkdir(parents=True)
+        (legacy / "minihub.bin").write_bytes(b"old")
+        assert store_server.build_firmware_upgrade(
+            deploy, "esp32s31", "0.0.8", board="ESP32-S31-Korvo-1"
+        )["available"] is False
+        # Without board=, legacy 0.0.9 is visible but 0.1.0 still wins
+        up5 = store_server.build_firmware_upgrade(deploy, "esp32s31", "0.0.8")
+        assert up5["version"] == "0.1.0"
+
+
 def main() -> int:
+    _test_version_cmp()
     with TemporaryDirectory() as tmp:
         deploy = Path(tmp)
         assert store_paths.store_buckets(["esp32s31"]) == ["esp32s31"]

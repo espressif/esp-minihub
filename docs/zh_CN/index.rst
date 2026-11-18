@@ -7,15 +7,15 @@ MiniHub 编程指南
    :align: center
    :alt: MiniHub —— 把多种协议设备聚成一台 Hub 的 Host 固件
 
-MiniHub 是跑在 ESP32-S31 上的物联网中枢 Host 固件。一份固件就把 Web 控制台、REST
-API、WebSocket 事件、本机规则引擎和 :doc:`radios` 里列出的适配器都装下了，所以
-产品不必在中枢之外再放一台控制器或网关。
+MiniHub 是跑在 ESP32-S31 上的物联网中枢 Host 固件。一份固件集成 Web 控制台、REST
+API、WebSocket 事件、本机规则引擎以及 :doc:`radios` 中所列适配器；产品无需在中枢
+之外另配控制器或网关。
 
 厂商云与 OEM 代码不编进固件。它们在运行时以商店模块装进来，或者作为
 ``application/`` 下的独立产品构建。
 
 自动化面向的是 :ref:`点位（point） <point>`，不是协议。一台设备就是一条点，所以设备换了射频，
-规则照样有效。
+规则仍然有效。
 
 从哪里入手
 ----------

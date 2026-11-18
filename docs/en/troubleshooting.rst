@@ -70,9 +70,9 @@ A rule does not fire
   (``CONFIG_MINIHUB_POINT_DEBOUNCE_MS``, default 1000 ms).
 * ``if`` conditions are checked against live points and never trigger anything: a rule
   whose ``when`` fires while an ``if`` fails simply does not run.
-* Time and ``once`` rules poll once per second but need a plausible clock — see
-  :doc:`time`. A Hub that never reached an NTP server fires no schedule, and it fails
-  silently: point-triggered rules still work.
+* Time and ``once`` rules poll once per second but need a system calendar year
+  ≥ 2020 — see :doc:`time`. A Hub that never reached an NTP server fires no
+  schedule, and it fails silently: point-triggered rules still work.
 * A reload was in progress: MCP answers ``HUB_NOT_READY``, and a queue of 16 action
   jobs drops what does not fit.
 * The document never loaded: ``GET /api/rules`` returns what is live; the engine logs
@@ -108,13 +108,14 @@ Store refresh or install is stuck
 An update failed or the Hub came back on the old version
 --------------------------------------------------------
 
-* The image is written to the free slot and validated before the boot partition moves:
-  a checksum or size failure leaves the running version untouched (5 MiB slots by
-  default — a Matter build can outgrow them).
-* After the switch the Hub is unreachable for a few seconds: it reboots 800 ms after the
-  last write, then the bootloader confirms the new firmware.
-* It booted and rolled back → the new firmware did not survive its own start-up; read the
-  serial log of that first boot, because the console is the old one again.
+* The image is staged on external LittleFS media, then Vibe Mode copies it into ``ota_0``.
+  A checksum, SHA or size failure is reported during that copy; recovery is Vibe Mode
+  copying the staged image again. If the app no longer fits the slot, grow ``ota_0`` in
+  the product `partitions.csv <https://gitlab.espressif.cn/ae_group/minihub/esp-minihub/-/blob/master/application/minihub/partitions.csv>`__.
+* The Hub is unreachable for a few seconds: it enters Vibe Mode 800 ms after staging,
+  then restarts again after the copy, and the bootloader confirms the new firmware.
+* The device stays in Vibe Mode → ``ota_0`` is not a valid image. Keep the media inserted
+  and reboot so Vibe Mode retries, or read ``minihub/vibe_result`` and the serial log.
 * The Web console did not change after a firmware update: firmware OTA never replaces
   ``/data/web/``; the console is a separate package (:doc:`web_console`).
 

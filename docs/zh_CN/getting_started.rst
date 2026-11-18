@@ -82,7 +82,7 @@ IDF 构建。
 1. ``MiniHub starting...``
 2. ``storage mounted at /data`` （随后 ``modstore`` 挂到 ``/store`` ）
 3. ``uplinks prepared: wifi=… eth=… (wifi STA deferred)`` — 以太网已起，STA 尚未连接
-4. ``HTTP server on port 80`` — Web 在射频栈之前就会起来
+4. ``HTTP server on port 80`` — Web 在射频栈之前已监听
 5. 射频适配器 start（Zigbee / BLE Mesh 等，视编译选项）
 6. ``eth got IP`` 或 ``wifi got IP`` （后者在 ``minihub_net_start_wifi()`` 之后）
 7. ``MiniHub ready (net=… prov=… web_ui=… lcd_ui=… eth=… wifi=…)``
@@ -135,7 +135,7 @@ IDF 构建。
    指向你自己的仓库；见 :doc:`plugins/develop_json` 或
    :doc:`plugins/develop_js` ）
 2. ``python3 tools/pack_store_module.py pack ID``
-3. 本机运行 ``python3 tools/store_server.py`` （Hub 通过局域网拉包，不是在设备上跑）
+3. 本机运行 ``python3 tools/store_server.py`` （Hub 通过局域网拉包，不在设备上运行）
 4. 打开 Web UI（ ``http://HUB/`` ）并进入 ``商店``
 5. 在商店中将 自定义商店 URL 设为该服务，刷新目录后在商店 UI 中
    安装 ``ID`` （JSON 用 ``pack`` 作为类型）

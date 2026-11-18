@@ -52,20 +52,31 @@ _ATTR_RE = re.compile(
 
 def _fragment_paths() -> list[Path]:
     if "fragments" not in _CACHE:
-        text = _read(PROJBUILD)
-        out = []
-        for rel in re.findall(r'rsource\s+"([^"]+)"', text):
-            path = (PROJBUILD.parent / rel).resolve()
-            if not path.is_file():
-                raise ExtensionError(f"minihub-kconfig: rsource target missing: {path}")
-            out.append(path)
-        mounted = set(out)
+        # Follow rsource from the bundle root and nested fragments (e.g. Auth
+        # under Web UI). Order is depth-first discovery order.
+        out: list[Path] = []
+        seen: set[Path] = set()
+        stack = [PROJBUILD]
+        while stack:
+            cur = stack.pop()
+            text = _read(cur)
+            for rel in re.findall(r'rsource\s+"([^"]+)"', text):
+                path = (cur.parent / rel).resolve()
+                if not path.is_file():
+                    raise ExtensionError(
+                        f"minihub-kconfig: rsource target missing: {path} "
+                        f"(from {cur.relative_to(ROOT)})")
+                if path in seen:
+                    continue
+                seen.add(path)
+                out.append(path)
+                stack.append(path)
         on_disk = {p.resolve() for p in (ROOT / "components").rglob("Kconfig.minihub")}
-        strays = sorted(str(p.relative_to(ROOT)) for p in on_disk - mounted)
+        strays = sorted(str(p.relative_to(ROOT)) for p in on_disk - seen)
         if strays:
             raise ExtensionError(
-                "minihub-kconfig: these fragments exist but are not rsourced from "
-                f"Kconfig.projbuild, so the build never sees them: {strays}")
+                "minihub-kconfig: these fragments exist but are not reached by "
+                f"rsource from Kconfig.projbuild: {strays}")
         _CACHE["fragments"] = out
     return _CACHE["fragments"]  # type: ignore[return-value]
 

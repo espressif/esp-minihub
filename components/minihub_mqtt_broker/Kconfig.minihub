@@ -22,4 +22,11 @@ menu "MQTT broker"
             "mosq_broker.h: No such file or directory". Turning the option off
             needs no second pass, and a fresh build directory resolves in one.
 
+    # Invisible: always on with the broker. Compiles the loopback client that
+    # carries host.mqtt; runtime still follows adapters.mqtt_broker.enabled.
+    config MINIHUB_MQTT_ADAPTER
+        bool
+        depends on MINIHUB_MQTT_BROKER
+        default y
+
 endmenu

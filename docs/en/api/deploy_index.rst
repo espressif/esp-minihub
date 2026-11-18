@@ -6,11 +6,12 @@ Deploy Index
 The PC deploy root (``MINIHUB_PLUGINS_DEPLOY_DIR``, default
 ``~/workspace/minihub_store``) holds plugins, firmware, assets, and the
 web console. ``python3 tools/store_server.py --deploy ROOT`` serves that
-tree on port 8080 (override with ``--port``). This page documents that
-contract. ``https://minihub.espressif.com`` — the compiled-in default for
-``MINIHUB_STORE_URL`` — is a second implementation of the same endpoints, so a
-download URL read from a response is used as it stands: a store may address the
-package by version, unlike the folder it was imported from.
+tree on port 8080 (override with ``--port``). ``store_server.py`` and the public
+portal implement the same HTTP layout for plugins, firmware, assets, and web
+bundles under the deploy root. ``https://minihub.espressif.com`` — the compiled-in
+default for ``MINIHUB_STORE_URL`` — is a second implementation of the same
+endpoints, so a download URL read from a response is used as it stands: a store
+may address the package by version, unlike the folder it was imported from.
 
 Plugins
 -------
@@ -86,7 +87,7 @@ Device query parameters
 -----------------------
 
 Every device request — ``/api/catalog``, ``/api/firmware``, ``/api/assets``,
-``/api/web`` and each ``/files/…`` download — carries the same three query
+``/api/web`` and each ``/files/…`` download — carries the same query
 parameters:
 
 * ``mac`` — lowercase, colon-separated. Used only for the server-side
@@ -95,10 +96,16 @@ parameters:
 * ``chip`` — the device's lowercase ``CONFIG_IDF_TARGET``. The server drops
   entries whose ``targets`` name another chip; a request without ``chip`` is
   not filtered.
+* ``board`` — the product's ``CONFIG_MINIHUB_BOARD`` (for example
+  ``ESP32-S31-Function-Coreboard-1``). Optional. When present, firmware is
+  offered only if that version folder's ``boards.txt`` lists the board (or
+  ``*`` / ``ALL``). A version without ``boards.txt`` is chip-wide only for
+  requests that omit ``board``. Independent of esp_board_manager's hardware
+  board id.
 * ``cur_version`` — the firmware version the device currently runs. Optional.
 
-The server filters by ``chip`` and the device filters the result again locally
-as defense in depth.
+The server filters by ``chip`` and ``board``; the device filters the result
+again locally as defense in depth.
 
 Fetch protocol (``/api/catalog``)
 ---------------------------------
@@ -108,11 +115,11 @@ with zero matches ``status`` is ``no_plugin_for_version`` and ``plugins`` is
 empty.
 
 ``firmware_upgrade.version`` is the highest MiniHub firmware directory name
-for that chip. ``available`` is true when that directory contains a ``.bin``.
-``firmware_url`` points at the file. When ``cur_version`` is supplied,
-``newer`` is true if a published version is greater than it. The device does
-not read this field when it installs firmware; that decision is
-``GET /api/firmware`` below.
+for that chip that matches ``board`` (when sent). ``available`` is true when
+that directory contains a ``.bin``. ``firmware_url`` points at the file. When
+``cur_version`` is supplied, ``newer`` is true if a published version is
+greater than it. The device does not read this field when it installs
+firmware; that decision is ``GET /api/firmware`` below.
 
 Request examples
 ----------------
@@ -122,7 +129,7 @@ can reach it (override the address with ``--host``).
 
 .. code-block:: bash
 
-   curl -s "http://127.0.0.1:8080/api/catalog?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
+   curl -s "http://127.0.0.1:8080/api/catalog?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&board=ESP32-S31-Function-Coreboard-1&cur_version=0.1.0"
 
 HTTP 200. Matching plugins, plus the highest published firmware version:
 
@@ -163,15 +170,19 @@ One folder per chip and version. The folder has no JSON file:
 
    ROOT/Firmwares/esp32s31/0.1.0/minihub-esp32s31-0.1.0.bin
    ROOT/Firmwares/esp32s31/0.1.0/release_notes.txt
+   ROOT/Firmwares/esp32s31/0.1.0/boards.txt
    ROOT/Firmwares/esp32s31/0.1.0/bootloader.bin
    ROOT/Firmwares/esp32s31/0.1.0/partition-table.bin
    ROOT/Firmwares/esp32s31/0.1.0/merged.bin
    ROOT/Firmwares/esp32s31/0.1.0/minihub.elf
    ROOT/Firmwares/esp32s31/0.1.0/flash_command.txt
 
-``python3 tools/publish_firmware.py`` copies the application ``.bin`` and the
-note. ``python3 tools/gen_flash_binaries.py`` adds the rest of the flash set
-to that same folder. Chip directory names are lowercase.
+``boards.txt`` lists ``CONFIG_MINIHUB_BOARD`` ids (one per line), or ``*`` /
+``ALL``. Devices that send ``board=`` only see versions that list them.
+``python3 tools/publish_firmware.py --board …`` copies the application
+``.bin``, the note, and ``boards.txt``. ``python3 tools/gen_flash_binaries.py``
+adds the rest of the flash set to that same folder. Chip directory names are
+lowercase.
 
 ``GET /api/firmware`` returns a JSON array listing each application image the
 requested ``chip`` can run (the device filters the array again by ``targets``):
@@ -207,20 +218,21 @@ requested ``chip`` can run (the device filters the array again by ``targets``):
 
 On the device, ``minihub_update_check()`` and ``minihub_update_apply()``:
 
-1. Request the array above with ``mac``, ``chip``, and ``cur_version``.
+1. Request the array above with ``mac``, ``chip``, ``board``, and ``cur_version``.
 2. Keep the highest version whose ``targets`` match the local chip name
    (case-insensitive). A leading ``v`` on a version is ignored in the compare.
 3. Download when that version is higher than ``CONFIG_MINIHUB_VERSION`` (or
    the application description version when that option is empty). The same
    version is downloaded again when its ``size`` or ``sha256`` differs from
    the last download record.
-4. ``minihub_ota_start_url()`` opens ``url`` and attaches ``mac`` and
-   ``cur_version``. The firmware stream is **not** compared against ``sha256``:
+4. ``minihub_ota_start_url()`` opens ``url`` and attaches ``mac``, ``chip``,
+   ``board``, and ``cur_version``. The firmware stream is **not** compared against ``sha256``:
    the digest is only metadata used in step 3, so a re-published build under the
-   same version number is re-fetched. What validates the image is
-   ``esp_ota_end()``, which checks the header and sequence checksum after the
-   last write. The image goes to the inactive OTA slot and the device reboots;
-   see :doc:`../ota`.
+   same version number is re-fetched. The stream is staged on external LittleFS
+   media, and Vibe Mode copies it into ``ota_0``. ``esp_ota_end()`` checks the
+   header and sequence checksum at the end of that copy; matching
+   ``app_elf_sha256`` lets Vibe Mode skip an unchanged image. See
+   :doc:`../ota`.
 
    Only the asset and web downloads verify ``sha256`` before replacing a file.
 

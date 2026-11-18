@@ -158,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
             ("0x2000", "bootloader/bootloader.bin"),
             ("0x8000", "partition_table/partition-table.bin"),
             ("0x20000", f"{app}.bin"),
+            ("0x30000", "vibe_mode/vibe_mode.bin"),
         ]
     copied: list[str] = []
     for off, rel in sorted(pairs, key=lambda kv: int(kv[0], 0)):

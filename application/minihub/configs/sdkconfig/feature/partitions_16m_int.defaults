@@ -1,0 +1,7 @@
+# 16MB flash + internal dual-slot A/B (partitions_int.csv)
+# Pair this with CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE=n (menuconfig: Firmware update → OTA).
+# The firmware upgrade then writes straight to ota_1 and reboots into it instead
+# of staging to SD/USB and applying via Vibe Mode.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_int.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions_int.csv"

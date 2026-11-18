@@ -26,14 +26,14 @@ Host 与插件
 --------
 
 先按能力和约束选定一层，再打开该层实现章。打包、目录与安装各层共用，见
-:doc:`pack_and_catalog`；想从空目录走到设备跑起来，见 :doc:`first_plugin`。
+:doc:`pack_and_catalog`；从空目录做到设备上可运行，见 :doc:`first_plugin`。
 每一层在 ``.agent/skills/`` 下还有一个给 AI 助手用的项目 skill，按层级命名，清单见
 :doc:`../vibe_coding`。
 
 按你会写什么来选：
 
 * **JSON** —— 只有配置，完全不写代码：用 JSON 包给 Host 已有的适配器补默认参数。
-* **JS** —— 在嵌入式 **QuickJS-NG** 引擎上跑 JavaScript。适合熟悉 JS 的开发者：
+* **JS** —— 在嵌入式 **QuickJS-NG** 引擎中运行 JavaScript。适合熟悉 JS 的开发者：
   不需要交叉编译、不产出 ``.so``，单个模块出错也不会带走 Host。但它不是浏览器，
   动手前先读 :doc:`develop_js` 里的运行环境。
 

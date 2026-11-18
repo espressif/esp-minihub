@@ -56,7 +56,7 @@ MiniHub → Web UI）设成仓库相对路径或绝对路径即可，留空则�
 只有 ``GET /`` 会检查会话 Cookie；``GET /login`` 保持公开，以便显示登录表单。
 整棵 ``/web/`` 静态资源 （HTML、JS、CSS、i18n JSON）和 ``/img/`` 图标都是
 **无需会话** 就能取的 —— 它们不含凭证与设备数据，而且若加以限制，会话在页面
-加载途中过期时，就会把登录页塞进 ``<script>`` / ``<link>`` 里，造成语法错误与
+加载途中过期时，就会把登录页插入 ``<script>`` / ``<link>`` 请求的响应中，造成语法错误与
 半截响应。真正把关的是 ``/api/`` 那批接口。
 
 Kconfig 与登录
@@ -68,7 +68,7 @@ Kconfig 与登录
   ``/login`` 为 ``admin`` 设密码（NVS ``minihub/web_pw``）。Cookie ``mh_sess``：
   **空闲 5 分钟** 即过期，而只有文档级导航 （打开 ``GET /``、刷新页面）才会
   重置这段空闲：``minihub_auth_check`` 是只读的，控制台后台的 ``fetch`` 轮询
-  **不算** 活动，所以自动刷新的页签照样会掉线；另有 **登录后最长 8 小时**
+  **不算** 活动，因此自动刷新的页签仍会掉线；另有 **登录后最长 8 小时**
   绝对上限，两者都不延长。过期后 API 返回 401，控制台跳转 ``/login``，
   避免缓存页继续删插件 / 控设备。关掉后无 Cookie、也无 Bearer。
 * ``CONFIG_MINIHUB_WEB_LOGIN_AUTH_TOKEN`` — 可选 ``Authorization: Bearer`` 给脚本。
@@ -113,7 +113,7 @@ Kconfig 与登录
       ./tools/build_firmware.py -app minihub build
       ./tools/build_firmware.py -app minihub -p PORT storage-flash
 
-``app-flash`` 会保留现有 ``/data``。**现场 OTA** 只写 ``ota_0`` / ``ota_1``，
+``app-flash`` 会保留现有 ``/data``。**现场 OTA** 只写 ``ota_0`` ，
 **不会** 更新 ``/data/web/``。实验室 ``app-flash`` 或现场 OTA 之后，
 设备仍提供旧 HTML，直到 ``storage-flash`` 或整机 ``flash``。合并镜像见
 :doc:`production`。OTA 见 :doc:`ota`。
@@ -153,10 +153,10 @@ Web 控制台也可在界面里更新：配置好自定义插件服务器后，�
 .. warning::
 
    每次 PUT 只替换 **一个文件** 。这个路由不知道 ``index.html`` 和 ``JS/app.js`` 属于
-   同一次构建，所以推一半会留下一台由两代产物拼起来的控制台—— 通常表现为页面能打开、
-   随后在浏览器控制台里报错，因为 HTML 和 JS 已经对不上了。要么把你改过的文件全推一遍，
-   要么重烧 storage 分区（ ``storage-flash``）回到镜像自带的那版控制台： ``app-flash`` 只写
-   应用分区， ``/data/web`` 原样留着；恢复出厂则把整个 storage 分区擦掉，这些文件也一起没。
+   同一次构建，因此只上传部分文件会留下混用两代产物的控制台—— 通常表现为页面能打开、
+   随后在浏览器控制台报错，因为 HTML 与 JS 已不一致。请把改过的文件全部上传，
+   或重烧 storage 分区（ ``storage-flash``）恢复镜像自带的控制台： ``app-flash`` 只写
+   应用分区， ``/data/web`` 保持原样；恢复出厂会擦除整个 storage 分区，这些文件一并清除。
 
 语言目录
 --------

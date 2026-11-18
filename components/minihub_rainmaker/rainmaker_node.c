@@ -171,7 +171,8 @@ static esp_err_t minihub_rmaker_ota_cb(esp_rmaker_ota_handle_t handle, esp_rmake
     }
     if (!minihub_ota_rainmaker_try_begin(expected)) {
         if (minihub_ota_get_source() != MINIHUB_OTA_SRC_RAINMAKER) {
-            (void)esp_rmaker_ota_report_status(handle, OTA_STATUS_REJECTED, "OTA busy");
+            (void)esp_rmaker_ota_report_status(handle, OTA_STATUS_REJECTED,
+                                               "cloud OTA unavailable with a single app slot; use URL or upload OTA");
             return ESP_FAIL;
         }
     }

@@ -24,6 +24,7 @@
  * generic pass-through consults it so a speaker's volume becomes a slider and
  * its play/mute buttons become push buttons instead of free-text fields. */
 #include "minihub_device_widget.h"
+#include "minihub_rainmaker.h"
 
 #include "esp_netif.h"
 #include "esp_timer.h"

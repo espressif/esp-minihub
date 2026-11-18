@@ -3,9 +3,9 @@ Fixed Limits
 
 :link_to_translation:`zh_CN:[中文]`
 
-This page collects every capacity the Host refuses to exceed. Each row names the
-location of its value in the code (the ``Defined at`` column), that is, which file
-and symbol you edit to change it.
+The Host enforces fixed upper bounds on registry size, buffers, task stacks, and
+similar resources. Each table row names the limit and the defining symbol or
+Kconfig option (the ``Defined at`` column).
 
 .. minihub-limits:: core
 
@@ -55,8 +55,8 @@ What to watch when changing
   reload stack follow this rule.
 * The documentation table also lists these values; when you change a constant in the
   code, update the document as well, or the docs build fails.
-* Most of these constants live in the shared Core components, so a change affects
-  every product built from that Core. Prefer a product-level Kconfig override over
+* These constants are defined in shared Core components; changing one applies to
+  every product that links that Core. Prefer a product-level Kconfig override over
   editing Core source.
 
 Risks

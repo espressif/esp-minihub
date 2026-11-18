@@ -123,8 +123,8 @@ Replace at build (factory / lab)
       ./tools/build_firmware.py -app minihub build
       ./tools/build_firmware.py -app minihub -p PORT storage-flash
 
-``app-flash`` keeps the existing ``/data``. **Field OTA** writes ``ota_0`` /
-``ota_1`` only; it does **not** update ``/data/web/``. After a lab
+``app-flash`` keeps the existing ``/data``. **Field OTA** writes ``ota_0``
+only; it does **not** update ``/data/web/``. After a lab
 ``app-flash`` or field OTA, the device still serves the old HTML until
 ``storage-flash`` or a full factory ``flash``. Merge image: :doc:`production`.
 OTA: :doc:`ota`.

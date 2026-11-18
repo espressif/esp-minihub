@@ -22,6 +22,10 @@
       "zh": "确认",
       "en": "OK"
     },
+    "common_saved": {
+      "zh": "已保存",
+      "en": "Saved"
+    },
     "common_delete": {
       "zh": "删除",
       "en": "Delete"
@@ -382,6 +386,50 @@
       "zh": "上次失败: %s",
       "en": "Last failure: %s"
     },
+    "sys_ota_target_label": {
+      "zh": "固件保存位置",
+      "en": "Firmware save target"
+    },
+    "sys_ota_target_hint": {
+      "zh": "固件保存在已选存储。可同时选 SD 和 USB，SD 在前。未插入或不是 LittleFS 时升级失败。",
+      "en": "Firmware is saved only to the selected storage. SD and USB may both be selected; SD is tried first. Missing or non-LittleFS media fails the upgrade."
+    },
+    "sys_target_sd": {
+      "zh": "SD",
+      "en": "SD"
+    },
+    "sys_target_usb": {
+      "zh": "USB",
+      "en": "USB"
+    },
+    "sys_ota_target_empty": {
+      "zh": "请选择一项",
+      "en": "Select at least one"
+    },
+    "sys_ota_needs_format": {
+      "zh": "存储未就绪",
+      "en": "Storage not ready"
+    },
+    "sys_format_title": {
+      "zh": "存储未就绪",
+      "en": "Storage not ready"
+    },
+    "sys_format_msg_fmt": {
+      "zh": "%s 不是 LittleFS，无法保存固件。清空会删除该存储全部数据。继续？",
+      "en": "%s is not LittleFS, so firmware cannot be saved. Clearing deletes ALL data on that storage. Continue?"
+    },
+    "sys_format_ok": {
+      "zh": "清空并继续",
+      "en": "Clear and continue"
+    },
+    "sys_ota_formatting_fmt": {
+      "zh": "正在清空 %s...",
+      "en": "Clearing %s..."
+    },
+    "sys_format_failed": {
+      "zh": "清空失败",
+      "en": "Clear failed"
+    },
     "sys_tz_now_placeholder": {
       "zh": "当前时间 —",
       "en": "Local time —"
@@ -691,6 +739,14 @@
       "zh": "密码",
       "en": "Password"
     },
+    "wifi_pass_show": {
+      "zh": "显示",
+      "en": "Show"
+    },
+    "wifi_pass_hide": {
+      "zh": "隐藏",
+      "en": "Hide"
+    },
     "wifi_open_network": {
       "zh": "开放网络（无密码）",
       "en": "Open network"
@@ -728,8 +784,8 @@
       "en": "Save network"
     },
     "wifi_save_ok": {
-      "zh": "已保存，正在连接",
-      "en": "Saved, connecting"
+      "zh": "已保存",
+      "en": "Saved"
     },
     "wifi_save_fail": {
       "zh": "保存失败",

@@ -37,22 +37,34 @@ From the repository root:
    # Build then merge a single file (successful build also packs .mhub)
    ./tools/build_firmware.py -app minihub build merge
 
-``build merge`` writes ``application/minihub/build/minihub_merged.bin`` for jig
-flashing. A successful ``build`` is required first.
+``build merge`` writes ``application/<app>/build/<app>_merged.bin`` (for this
+product: ``minihub_merged.bin``) for jig flashing. A successful ``build`` is
+required first. The same naming is used for ``minihub_lcd`` and other products.
 
 Partitions (generic minihub, 16 MB)
 ------------------------------------
 
-``application/minihub/partitions.csv`` is a starting point, not a spec for every
-SKU. Plan your own table in :doc:`host_customization`.
+The generic Host table is a starting point, not a spec for every SKU. Plan your
+own table in :doc:`host_customization`. **Sizes and offsets** live only in the
+CSV — open the file rather than copying numbers from this page:
 
-The current generic table includes:
+* External-storage OTA (default):
+  `application/minihub/partitions.csv <https://gitlab.espressif.cn/ae_group/minihub/esp-minihub/-/blob/master/application/minihub/partitions.csv>`__
+  (``minihub_lcd`` uses the same map under
+  `application/minihub_lcd/partitions.csv <https://gitlab.espressif.cn/ae_group/minihub/esp-minihub/-/blob/master/application/minihub_lcd/partitions.csv>`__)
+* Internal dual-slot A/B (when ``CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE`` is off):
+  `application/minihub/partitions_int.csv <https://gitlab.espressif.cn/ae_group/minihub/esp-minihub/-/blob/master/application/minihub/partitions_int.csv>`__
 
-* ``nvs`` — Wi-Fi creds, Store URL, auth, OTA metadata
-* ``otadata`` / ``phy_init`` — OTA state and RF calibration
-* ``ota_0`` / ``ota_1`` — dual app slots (5 MiB each)
+Roles in the generic external table:
+
+* ``nvs`` — Wi-Fi creds, Store URL, auth, OTA metadata, Vibe Mode hand-off state
+* ``otadata`` / ``phy_init`` — boot selection and RF calibration
+* ``ota_0`` — running app slot (external layout has only this; internal layout
+  also has ``ota_1``)
+* ``vibe_mode`` — ``app,factory`` maintenance image. With external-storage OTA it
+  copies a staged image from LittleFS media into ``ota_0``; details in :doc:`ota`.
 * ``fctry`` — RainMaker claim / factory NVS; Zigbee stack NVRAM shares this
-  partition (40 KiB). Changing the partition table requires a full flash.
+  partition. Changing the partition table requires a full flash.
 * ``storage`` — LittleFS ``/data`` (``adapters.json``, rules, scenes; Host Web
   console under ``/data/web/``). Replacing Web files: :doc:`web_console`.
 * ``modstore`` — LittleFS ``/store`` (installed ``.mhub``, factory preinstall
@@ -65,8 +77,11 @@ config on end devices; the coordinator Host does not use it. OEMs that need
 Zigbee mfg production data must add their own FAT partition or use the Zigbee
 secur / descriptor APIs.
 
-Matter builds need large app slots. If the linker says the app does not fit,
-grow ``ota_0`` / ``ota_1`` — do not shrink ``modstore`` first.
+Matter builds need a large app slot. If the linker says the app does not fit,
+grow ``ota_0`` and move ``vibe_mode`` and every later partition accordingly —
+do not shrink ``modstore`` first. A changed table requires a full flash; the
+Host ``vibe_mode`` CMake target (``components/minihub_vibe/subproject``) rebuilds
+the factory image at the new offset on the next ``idf.py build``.
 
 Factory Store preinstall
 ------------------------
@@ -223,10 +238,12 @@ analysis instead:
 OTA in the field
 ----------------
 
-Dual-slot OTA (``ota_0`` / ``ota_1``) writes the inactive slot, then reboots.
-Confirmation happens in ESP-IDF start-up, just before ``app_main``: an image that
-does not boot at all falls back to the previous slot, while one that reaches
-``app_main`` is kept even if it misbehaves afterwards. Details: :doc:`ota`.
+A field update stages the image on external LittleFS media, then Vibe Mode
+(``app,factory``) copies it into ``ota_0``. There is one running slot, so there
+is no inactive slot to fall back to; recovery is Vibe Mode copying the staged
+image again. Confirmation happens in ESP-IDF start-up, just before ``app_main``.
+An image that reaches ``app_main`` is kept even if it misbehaves afterwards.
+Details: :doc:`ota`.
 
 Store vs Host
 -------------

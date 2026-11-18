@@ -9,8 +9,9 @@ LCD. `application/minihub` keeps the Ethernet-oriented recipe. This product is
 fixed to LCD and never needs `./tools/apply_sdkconfig_variant.sh`.
 
 Reference board: `esp32_s31_korvo1` (800x480 RGB + GT1151 touch).
-Partition table: `partitions.csv` — the same 16 MB dual-OTA layout as
-`application/minihub/partitions.csv`.
+Partition table: `partitions.csv` — the same 16 MB layout as
+`application/minihub/partitions.csv` (single `ota_0` plus a `vibe_mode`
+factory image for external-storage OTA).
 
 ## Build
 

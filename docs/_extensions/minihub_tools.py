@@ -50,7 +50,7 @@ PUBLISHED_PURPOSE = {
 # One row per group, in the order the page shows them. The value is the group title as
 # it appears on the page.
 GROUPS = {
-    "Build a product": ["build_firmware.py", "sync_host_manifest.py",
+    "Build a product": ["build_firmware.py", "build_vibe_mode.py", "sync_host_manifest.py",
                         "compose_sdkconfig.py", "apply_sdkconfig_variant.sh",
                         "apply_component_patches.sh", "gen_flash_binaries.py"],
     "Pack and publish": ["new_store_module.py", "pack_store_module.py",

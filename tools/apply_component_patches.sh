@@ -33,7 +33,15 @@ patch_apply_root() {
       echo "$ROOT"
     fi
   else
-    # Resolve relative to MiniHub (supports ../esp-rainmaker)
+    # Rainmaker (and other Component Manager deps) live under each product's
+    # managed_components/. Older patches hard-code application/minihub/...;
+    # remap that prefix onto the app currently being built (MINIHUB_APP_DIR).
+    if [[ "$rel" == application/minihub/* ]]; then
+      rel="$APP_DIR/${rel#application/minihub/}"
+      # Strip the MiniHub root prefix if APP_DIR was absolute.
+      rel="${rel#"$ROOT"/}"
+    fi
+    # Resolve relative to MiniHub (supports ../esp-matter)
     (cd "$ROOT" && cd "$rel" && pwd)
   fi
 }
@@ -50,9 +58,16 @@ patch_marker() {
     echo "$m"
     return
   fi
+  # Match the distinctive phrase only — log level (LOGI/LOGW) may differ in a
+  # previously hand-edited managed_components tree without changing the patch.
   m="$(grep -E '^\+.*Deferring Challenge Response init' "$1" | head -1 | sed 's/^+//' || true)"
   if [[ -n "$m" ]]; then
-    echo "$m"
+    echo "Deferring Challenge Response init until self claiming completes"
+    return
+  fi
+  m="$(grep -E '^\+.*Client certificate not provisioned yet' "$1" | head -1 | sed 's/^+//' || true)"
+  if [[ -n "$m" ]]; then
+    echo "Client certificate not provisioned yet; waiting for claim"
     return
   fi
   m="$(grep -E '^\+.*Peer not found for CHIPoBLE write' "$1" | head -1 | sed 's/^+//' || true)"

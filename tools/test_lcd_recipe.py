@@ -241,7 +241,7 @@ LCD_PARTITIONS = ROOT / "application" / APP_LCD / "partitions.csv"
 
 
 class LcdPartitionTest(unittest.TestCase):
-    """application/minihub_lcd/partitions.csv is one 8 MiB OTA slot."""
+    """application/minihub_lcd/partitions.csv: vibe_mode factory + large ota_0."""
 
     @staticmethod
     def rows():
@@ -270,8 +270,9 @@ class LcdPartitionTest(unittest.TestCase):
             cursor = start + length
             if _type == "app":
                 slots.append(length)
-        self.assertEqual(slots, [0x800000])
-        self.assertEqual(cursor, 0xF00000)
+        # vibe_mode (factory, 1 MiB) + ota_0 (~9.375 MiB); flash ends at 16 MiB.
+        self.assertEqual(slots, [0x100000, 0x960000])
+        self.assertEqual(cursor, 0x1000000)
 
 
 IMPORT_CMAKE = ROOT / "cmake" / "minihub_bundle" / "minihub_import.cmake"
@@ -309,14 +310,20 @@ class FallbackCadenceTest(unittest.TestCase):
         self.assertNotIn('int "LCD UI data refresh interval (ms)"', src)
 
 
-STORE_C = ROOT / "components" / "minihub_store" / "minihub_store.c"
+STORE = ROOT / "components" / "minihub_store"
+STORE_C = STORE / "minihub_store.c"
+STORE_KCONFIG = STORE / "Kconfig.minihub"
 
 
 class StorageQuotaTest(unittest.TestCase):
     def test_quota_symbol_exists_once(self):
-        kconfig = (LCD / "Kconfig.minihub").read_text(encoding="utf-8")
+        # Lives under Store, not LCD — Host and LCD share the same install gate.
+        kconfig = STORE_KCONFIG.read_text(encoding="utf-8")
         self.assertIn("config MINIHUB_STORAGE_MIN_FREE_BYTES", kconfig)
         self.assertEqual(1, kconfig.count("config MINIHUB_STORAGE_MIN_FREE_BYTES"))
+        self.assertNotIn(
+            "config MINIHUB_STORAGE_MIN_FREE_BYTES",
+            (LCD / "Kconfig.minihub").read_text(encoding="utf-8"))
 
     def test_quota_value_is_in_the_recipe(self):
         self.assertEqual(

@@ -647,7 +647,8 @@ class StoreActionsTest(unittest.TestCase):
         modal on the store screen — /system/confirm_modal is invisible there."""
         c = load_contract()
         self.assertIn("confirm_screens", c["enums"])
-        self.assertEqual(["rules", "scenes", "store", "system"], sorted(c["enums"]["confirm_screens"]))
+        self.assertEqual(["overview", "rules", "scenes", "store", "system"],
+                         sorted(c["enums"]["confirm_screens"]))
         for key in ("CONFIRM_MODAL", "CONFIRM_TITLE", "CONFIRM_MSG"):
             self.assertIn(key, c["view_patterns"], f"contract is missing pattern {key}")
             self.assertEqual(["confirm_screens"], c["view_patterns"][key]["args"])

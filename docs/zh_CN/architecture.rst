@@ -3,8 +3,8 @@
 
 :link_to_translation:`en:[English]`
 
-设备上跑着什么、哪一层允许依赖哪一层、从上电到第一次点位更新之间发生了什么。
-如果要跟着一次控制走完整条回路，读 :doc:`data_flow`。
+设备上运行着什么、哪一层允许依赖哪一层、从上电到第一次点位更新之间发生了什么。
+一次控制动作的端到端回路见 :doc:`data_flow`。
 
 分层
 --------
@@ -15,7 +15,7 @@
 
 命令从控制台、REST 或 MCP 进来，Host Core 把它落到一条点上，适配器或商店模块去说
 协议，产生的 ``point.updated`` 沿同一条路回到 UI、规则引擎与 MCP 客户端。同一带里的
-目录名，都相对带标题右半边那个前缀。
+目录名，均相对于该层标题行所示前缀。
 
 有两条边是朝上的。 ``minihub_net`` 自己定义了 ``minihub_web_refresh_geo_async()`` 、
 ``minihub_lcd_request_refresh()`` 与 ``minihub_rainmaker_notify_got_ip()`` 三个 weak
@@ -33,7 +33,7 @@ Hub 最终会说上话的云有两种，两者的差别就在「说」的代码�
 
 * **厂商云是装进来的。** MIoT 之类以一个商店模块的形态到来：要么是被合并进
   ``adapters.json`` 的 JSON 包，要么是自己登录、订阅、上报的 JS 模块。它在一台已经
-  跑着的 Hub 上安装、升级、卸载 —— 厂商专有的代码因此不链进 Host：把模块卸载，
+  运行中的 Hub 上安装、升级、卸载 —— 厂商专有的代码因此不链进 Host：把模块卸载，
   这条路就没了。
 * **RainMaker 是编译进来的。** ``components/minihub_rainmaker`` 由
   ``CONFIG_MINIHUB_RAINMAKER`` （缺省关）决定，开了就把 ESP-IDF 那座桥链进镜像，
@@ -48,8 +48,8 @@ Thread）、站点自己跑的 MQTT broker 与部署服务器 —— 它们同�
 
 IP 上行：``minihub_net`` —— 见 :doc:`networking`。
 
-`交互版 <_static/architecture/index.html>`_ —— 各层自上而下自动导览（悬停暂停）；
-悬停一层看它的约束，点击一个方块即可单独留下它，并读出它被禁止做什么。
+`交互版 <_static/architecture/index.html>`_ —— 自外向内展示各层及依赖约束（悬停可暂停）；
+可选中单层查看该层禁止的依赖。
 
 .. only:: not hide_l3
 
@@ -164,7 +164,7 @@ NVS 保存 Wi-Fi 凭据、商店 URL 覆盖、Web 密码与 API token。OTA 状�
 3. ``minihub_config_init()`` — 挂载 ``/data`` 与 ``/store`` 的就是这一步
 4. 适配器注册表初始化 + 静态适配器注册；随后模块加载器初始化、
    ``minihub_module_load_all()``、包初始化与合并
-5. ``minihub_adapter_load_all()`` — 网络起来之前先把 manifest 读完
+5. ``minihub_adapter_load_all()`` — 在网络就绪前读完 manifest
 6. ``minihub_net_init()`` — 启动以太网；Wi-Fi **仅准备** （延迟 STA）
 7. 按构建执行 ``minihub_thread_init()``，加载规则与场景
 8. ``minihub_web_start(80)`` — 射频 start 期间 UI 仍可访问
@@ -182,10 +182,12 @@ Hub 软重载
 
 ``POST /api/hub/reload`` 同步执行 ``minihub_hub_reload()``；MCP ``hub.reload``、
 商店安装、``adapters.json`` 写入都走 ``minihub_hub_reload_async()``，在
-``hub_reload`` 任务上跑，并有一把 60 秒的锁让第二次重载排队等待。
+``hub_reload`` 任务中运行；互斥锁保证同一时刻只有一次重载，后到的请求最多等待
+60 秒。
 ``minihub_hub_reload()`` 的实际步骤：
 
-1. 先 ``minihub_js_unload_all()`` — JS 回调必须在地基被拆掉之前停止碰点位
+1. 先 ``minihub_js_unload_all()`` — 须先停掉 JS 回调，再停适配器、重读配置，
+   以免回调继续访问点位
 2. 适配器生命周期锁（60 秒；拿不到就 ``ESP_ERR_TIMEOUT`` 中止本次重载）
 3. ``minihub_config_reload()`` — 从 Flash 重读 JSON（出错即中止）
 4. ``minihub_pack_reload()`` — 合并 JSON 包到 adapters 视图
@@ -195,9 +197,9 @@ Hub 软重载
 8. ``minihub_js_unload_all()`` + ``minihub_js_reload()`` （重跑 ``setup(host)``），
    随后 ``minihub_module_load_deferred()`` 补 Hybrid 包
 9. ``minihub_rules_reload()`` + ``minihub_scenes_reload()``，最后在事件总线发
-   ``hub.reloaded`` — 控制台就是靠它重取数据，而不是相信那次 HTTP 应答。
+   ``hub.reloaded`` — 控制台据此重新拉取数据，而不依赖该次 HTTP 应答本身。
 
-同一把生命周期锁也保证重载期间不会跑 ``adapter_poll``。
+同一把生命周期锁也保证重载期间不会执行 ``adapter_poll``。
 
 .. only:: not hide_l3
 

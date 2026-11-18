@@ -11,17 +11,17 @@ JS 模块在 Hub 上运行 **QuickJS** 脚本。Host 在适配器启动后及软
 --------
 
 引擎是 QuickJS-NG，也就是 Bellard 那份 QuickJS 的社区分支；本固件把
-``espressif/quickjs-ng`` 组件固定在 0.14.0。语法跟着该构建走，所以 ``class``、
-``async`` / ``await``、 ``Proxy``、可选链都能用。要确认边界就去查 ``quickjs-ng``
-的文档，别信这里写的版本号。MiniHub 只多加了四个定时器全局和一个 ``host`` 对象，
-其余什么都没有，所以 JS 模块既不是浏览器页面，也不是 Node 进程。
+``espressif/quickjs-ng`` 组件固定在 0.14.0。语法与能力边界以 ``quickjs-ng`` 组件
+文档及实际链入版本为准；``class``、``async`` / ``await``、 ``Proxy``、可选链均可
+使用。MiniHub 另提供四个全局定时器和一个 ``host`` 对象，无其它运行插件，因此
+JS 模块既不是浏览器页面，也不是 Node 进程。
 
-真正会绊住 JavaScript 开发者的几点：
+与浏览器 / Node 环境的主要差异：
 
 * 只有一个文件，没有模块系统。Host 把每个 ``main.js`` 放进各自的函数里执行
   （见 ``minihub_js.c`` ），顶层的 ``function`` 和 ``var`` 只属于这个模块，不会盖掉
   另一个模块里的同名函数。``import`` 和 ``require`` 仍然什么都解析不到；也没有
-  读文件的 Host 接口 —— 一个文件就得真的写完一个文件。
+  读文件的 Host 接口 —— 每个模块只有一份 ``main.js``。
 * 没有 ``console``，也没有 ``print``。打日志用 ``host.log.info`` /
   ``host.log.warn`` / ``host.log.error``。
 * 没有 ``fetch``、没有 ``XMLHttpRequest``、没有文件系统。出网走
@@ -137,7 +137,7 @@ Host 每次加载调用 ``setup(host)``。``host`` 对象提供：
    }
 
 示例里的 ``sensor`` 是省略 ``type`` 时加载器填进去的默认值（见 ``minihub_js.c`` ），
-而它 **不是** 类型目录里的 ``device_id`` ：点照样登记、照样进规则和 REST，
+而它 **不是** 类型目录里的 ``device_id`` ：点仍会登记、仍可进入规则和 REST ，
 但控制台画不出控件卡片，走的是「类型未登记」的退化渲染 —— 参数名在参数表里有条目的照条目画，
 其余画成一行只读文本（:doc:`../type_catalog` ）。要卡片就写真实的 ``device_id``
 （ ``light`` / ``switch`` / ``sensor_contact`` 等）。

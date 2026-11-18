@@ -6,7 +6,7 @@
  * host.mqtt — per-plugin MQTT subscriptions and raw message delivery for L2
  * dynamic device discovery.
  *
- * The broker is a separate esp-mqtt client (see adapter_mqtt) connected to the
+ * The loopback esp-mqtt client (see minihub_mqtt_broker/mqtt_adapter.c) connects to the
  * Hub's own loopback listener. Every L2 plugin that uses host.mqtt is an
  * "owner" (0..MINIHUB_MQTT_OWNERS_MAX-1). A plugin subscribes through
  * `host.mqtt.client(id)` and drains only the messages that matched *its* own

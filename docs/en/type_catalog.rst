@@ -39,8 +39,9 @@ a particular unit, not a type, so they live on top-level ``props``
 Built-in device types and parameters
 ------------------------------------
 
-Source of truth: ``components/minihub_device_widget/model/*.csv``. This page
-renders the device types, parameters and UI elements from those CSVs.
+Source of truth: ``components/minihub_device_widget/model/*.csv``. The tables
+below list device types, parameters, and UI elements exported from those files at
+docs build time.
 
 * :download:`devices.csv <../_static/catalog/model/devices.csv>`
 * :download:`parameters.csv <../_static/catalog/model/parameters.csv>`

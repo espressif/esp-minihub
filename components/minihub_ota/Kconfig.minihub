@@ -1,0 +1,19 @@
+menu "OTA"
+
+    config MINIHUB_OTA_EXTERNAL_STORAGE
+        bool "Stage firmware to external storage (SD card / USB drive)"
+        default y
+        help
+            When enabled (default), firmware upgrades are staged to a LittleFS
+            volume on an SD card or USB drive and applied by Vibe Mode (the
+            factory recovery image). The operator chooses which medium — SD card,
+            USB drive, or both with failover — in the web console or LCD System
+            screen.
+
+            When disabled, upgrades use the internal dual-slot A/B layout
+            (ota_0 / ota_1): the image is written straight to the inactive slot
+            and the device reboots into it. This needs a partition table that
+            defines ota_1 (see application/minihub/partitions_int.csv). Pick this
+            when operators do not want to depend on an SD card or USB stick.
+
+endmenu

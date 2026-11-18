@@ -7,21 +7,21 @@ End-to-end data flow
    :local:
    :depth: 2
 
-This page follows one control action all the way around the loop: a tap sends a
-command down through an adapter to the device; the device reports its new state
-back, the value lands on the point and reaches the event bus as ``point.updated``;
-the bus redraws the screen and fires rules at the same time; and a rule action
-starts the next round. When a command fails to reach the device, the attempt is
-still on the bus as ``command.invoked``, but no ``point.updated`` follows and the
-loop stops at the caller. Four subsystems take part:
-``minihub_device_widget`` (the catalog), Store modules, ``minihub_rules``, and
-the Web API. Each hands the value on without knowing who will pick it up next.
+A control action from the Web console, REST, or MCP forms a full loop: a command
+goes down through an adapter to the device; the device reports its new state, the
+value lands on the point and reaches the event bus as ``point.updated``; the bus
+updates the UI and fires rules; a rule action can start the next round. When a
+command fails to reach the device, the attempt is still on the bus as
+``command.invoked``, but no ``point.updated`` follows and the loop stops at the
+caller. Four subsystems take part: ``minihub_device_widget`` (the catalog), Store
+modules, ``minihub_rules``, and the Web API. Each hands the value on without
+knowing who will pick it up next.
 
 .. image:: ../_static/data_flow/data_flow.svg
    :align: center
    :alt: MiniHub end-to-end data flow: control → device → point update → event bus → screen/rules → Store modules
 
-`Interactive version <_static/data_flow/index.html>`_ — the cards tour the loop on their own (hover pauses); each card carries one constraint.
+`Interactive version <_static/data_flow/index.html>`_ — the same loop stages as the figure; each stage notes one design constraint (hover pauses).
 
 For the static picture (which part may depend on which), read
 :doc:`architecture`. For field definitions, read :doc:`data_model` and
@@ -45,7 +45,7 @@ event bus, and it is unrelated to the plugin-author IDE MCP under ``tools/``.
 One control round trip
 ----------------------
 
-The stages below walk the same loop one hop at a time.
+The stages below follow the same loop one hop at a time.
 
 1. Control
 ^^^^^^^^^^
@@ -133,8 +133,8 @@ The stages below walk the same loop one hop at a time.
      closes here and the user sees the new value. ``device_widgets.js``
      supplies the catalog intersection and the per-parameter controls of the
      detail view. The socket table holds 8 clients; a 9th connection is not
-     refused, it simply never receives a broadcast, so it appears live and goes
-     stale. A dropped socket reconnects with backoff (2 s, ×1.5, capped at 15 s)
+     refused, it simply never receives a broadcast: the socket stays open while
+     events stop. A dropped socket reconnects with backoff (2 s, ×1.5, capped at 15 s)
      and re-fetches, and a 3 s poll covers the gap while it is down.
    * **The rules engine** (``minihub_rules``) evaluates ``when`` / ``if`` /
      ``then`` per event — the debounce and no-op suppression above therefore

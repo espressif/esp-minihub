@@ -107,8 +107,8 @@ Decide these yourself; none of them is a switch you can turn on later:
 * **Secure boot, flash encryption and NVS encryption are off**, and the public
   ``minihub`` sdkconfig sets no eFuse, serial-number or signing policy
   (:doc:`production`). Enabling them changes the provisioning flow for signing keys
-  and, with the wrong key, permanently bricks a unit — run it on your own build
-  first, following the ESP-IDF security guide for this chip.
+  and, with the wrong key, permanently bricks a unit — validate on your own
+  build first, following the ESP-IDF security guide for this chip.
 * **No debug lock policy.** Whether USB serial and JTAG stay open is yours to decide
   with eFuses; the guide sets nothing.
 * **No hardware key storage, attestation, or rotation** — credentials are on the

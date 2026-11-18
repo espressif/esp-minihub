@@ -35,22 +35,33 @@
    # 先编固件，再合成单文件（成功 build 后也会自动 pack .mhub）
    ./tools/build_firmware.py -app minihub build merge
 
-``build merge`` 在 ``application/minihub/build/minihub_merged.bin`` 生成合并镜像，
-供工装烧录。须先成功 ``build``。
+``build merge`` 在 ``application/<app>/build/<app>_merged.bin`` 生成合并镜像
+（本产品即 ``minihub_merged.bin``），供工装烧录；``minihub_lcd`` 等同理。须先成功
+``build``。
 
 分区（通用 minihub，16 MB）
 ---------------------------
 
-通用 Host 的 ``application/minihub/partitions.csv`` 是起点，不是所有 SKU 的规格。
-产品自行规划见 :doc:`host_customization`。
+偏移与大小以产品 CSV 为准（不在本章写死）：
+
+* 外部存储 OTA（默认）：
+  `application/minihub/partitions.csv <https://gitlab.espressif.cn/ae_group/minihub/esp-minihub/-/blob/master/application/minihub/partitions.csv>`__
+  （LCD 同表：
+  `application/minihub_lcd/partitions.csv <https://gitlab.espressif.cn/ae_group/minihub/esp-minihub/-/blob/master/application/minihub_lcd/partitions.csv>`__）
+* 内部双槽 A/B（关闭 ``CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE``）：
+  `application/minihub/partitions_int.csv <https://gitlab.espressif.cn/ae_group/minihub/esp-minihub/-/blob/master/application/minihub/partitions_int.csv>`__
+
+这些文件是起点，不是所有 SKU 的规格。产品自行规划见
+:doc:`host_customization`。
 
 当前表大致包括：
 
-* ``nvs`` — Wi-Fi 凭据、商店 URL、鉴权、OTA 元数据
-* ``otadata`` / ``phy_init`` — OTA 状态与射频校准
-* ``ota_0`` / ``ota_1`` — 双 app 槽（各 5 MiB）
-* ``fctry`` — RainMaker claim / 工厂 NVS；Zigbee 栈 NVRAM 共用此分区（40 KiB）。
-  改分区表须整片烧录。
+* ``nvs`` — Wi-Fi 凭据、商店 URL、鉴权、OTA 元数据、Vibe Mode 交接状态
+* ``otadata`` / ``phy_init`` — 启动选择与射频校准
+* ``ota_0`` — 运行 app 槽（外部布局仅此一个；内部布局另有 ``ota_1``）
+* ``vibe_mode`` — ``app,factory`` 维护镜像。外部存储 OTA 时把 LittleFS 介质上的暂存镜像
+  搬运到 ``ota_0`` ；见 :doc:`ota`。
+* ``fctry`` — RainMaker claim / 工厂 NVS；Zigbee 栈 NVRAM 共用此分区。改分区表须整片烧录。
 * ``storage`` — LittleFS ``/data`` （ ``adapters.json``、规则、场景；Host Web
   控制台在 ``/data/web/`` ）。替换 Web 见 :doc:`web_console`。
 * ``modstore`` — LittleFS ``/store`` （已装 ``.mhub``、工厂 preinstall 覆盖）。
@@ -61,8 +72,10 @@
 需要 Zigbee 出厂数据的 OEM 须自行增加 FAT 分区，或使用 Zigbee 的 secur /
 descriptor API。
 
-Matter 构建需要大 app 槽。链接报装不下时放大 ``ota_0`` / ``ota_1``，不要先缩小
-``modstore``。
+Matter 构建需要大 app 槽。链接报装不下时放大 ``ota_0`` ，并相应后移 ``vibe_mode``
+与其后的所有分区，不要先缩小 ``modstore`` 。改过分区表须整片烧录；Host 的
+``vibe_mode`` CMake target（``components/minihub_vibe/subproject``）会在下次
+``idf.py build`` 时按新偏移重建 factory 镜像。
 
 工厂预装商店
 --------------
@@ -207,9 +220,11 @@ SBOM 与依赖 CVE
 现场 OTA
 --------
 
-双槽 OTA（ ``ota_0`` / ``ota_1`` ）写入空闲槽后重启。确认动作发生在 ESP-IDF 的
-启动流程里、``app_main`` 之前：完全起不来的镜像会退回上一槽，而只要跑到了
-``app_main`` 就会被保留，即使之后行为不对也不会自动回退。详见 :doc:`ota`。
+现场升级先把镜像暂存到外部 LittleFS 介质，再由 Vibe Mode
+（ ``app,factory`` ）搬运到 ``ota_0`` 。只有一个运行槽，没有可回退的空闲槽；
+恢复靠 Vibe Mode 重新搬运暂存的镜像。确认动作发生在 ESP-IDF 的启动流程里、
+``app_main`` 之前。只要跑到了 ``app_main`` ，镜像就会被保留，即使之后行为不对
+也不会自动回退。详见 :doc:`ota`。
 
 商店与 Host
 -------------

@@ -30,7 +30,7 @@ LANES = [
     ("Core and services", "核心与服务", [
         "minihub_core", "minihub_config", "minihub_hub", "minihub_auth",
         "minihub_adapter", "minihub_provision", "minihub_net", "minihub_ota",
-        "minihub_update", "minihub_mqtt_broker",
+        "minihub_vibe", "minihub_update", "minihub_mqtt_broker",
     ]),
     ("Device model and UI", "设备模型与界面", [
         "minihub_device_widget", "minihub_rules", "minihub_scenes",

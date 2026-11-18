@@ -1,0 +1,42 @@
+# Vibe Mode shares the Host partition table byte for byte. The Host CMake
+# glue appends a generated fragment that points PARTITION_TABLE_*_FILENAME at
+# the product's partitions.csv (minihub or minihub_lcd).
+CONFIG_IDF_TARGET="esp32s31"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_OFFSET=0x8000
+CONFIG_PARTITION_TABLE_MD5=y
+
+# Match the Host's rollback setting so esp_ota_set_boot_partition(ota_0) writes
+# the same ota_state the Host bootloader expects, and minihub_ota_init() can
+# confirm the app on the first boot.
+CONFIG_BOOTLOADER_APP_ROLLBACK=y
+
+# One bootloader, one PSRAM controller, two app images. The Host is linked
+# XIP-from-PSRAM (its text and rodata live at 0x50xxxxxx and are moved there
+# from flash on startup). A factory image built without PSRAM leaves the
+# controller in a state the Host cannot re-initialise after esp_restart():
+# esp_psram_init() then reports "PSRAM chip is not connected", and even the
+# early-log strings and the panic handler live in the unmapped PSRAM window,
+# so the first exception escalates to a CPU lockup. Keep the memory layout of
+# both app images identical; do not "fix" this by disabling Host PSRAM/XIP.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y
+CONFIG_SPIRAM_BOOT_HW_INIT=y
+CONFIG_SPIRAM_BOOT_INIT=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=0
+
+# Matching the XIP switch is not enough: the Host runs PSRAM at 250 MHz because
+# configs/sdkconfig/feature/eth.defaults needs MPLL@500 MHz to derive the
+# 125 MHz EMAC RGMII Tx clock (200 MHz would lock MPLL at 400 MHz). Vibe Mode
+# hands off to the Host with a software reset, so it must leave the PSRAM/MSPI
+# clock tree in exactly the same state. Keep every hardware-facing PSRAM option
+# identical to the Host; do not leave these at the IDF defaults.
+CONFIG_SPIRAM_SPEED_250M=y
+# CONFIG_SPIRAM_PRE_CONFIGURE_MEMORY_PROTECTION is not set
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=24576
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+
+CONFIG_LITTLEFS_MALLOC_STRATEGY_DEFAULT=y
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192

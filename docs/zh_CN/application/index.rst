@@ -4,8 +4,8 @@ application 产品
 :link_to_translation:`en:[English]`
 
 ``application/`` 下每个子目录是一份可烧录的 ESP-IDF **产品**，下方每一章对应
-一个产品。建议先读本页，再看 :doc:`../host_customization` （如何复制产品、
-交付 OEM SKU）。
+一个产品。OEM 通常先复制产品目录，再改板级、分区与出厂 JSON，见
+:doc:`../host_customization`。
 
 .. toctree::
    :maxdepth: 1

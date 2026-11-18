@@ -3,9 +3,8 @@
 
 :link_to_translation:`en:[English]`
 
-Hub 多数功能都要先有 IP，所以网络很早起来。``components/minihub_net`` 基于
-ESP-IDF 的 ESP-NETIF、Wi-Fi 驱动，以及带 EMAC 的 SoC 上的以太网，搭出 IP 上行。
-三者都是 IDF 层，上游文档如下：
+``components/minihub_net`` 在 ESP-IDF 的 ESP-NETIF、Wi-Fi 驱动，以及带 EMAC 的
+SoC 上的以太网之上建立 IP 上行。这三层都是 IDF，上游文档如下：
 
 * `ESP-IDF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/>`_
 * `ESP-NETIF <https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_netif.html>`_
@@ -32,7 +31,7 @@ Kconfig
    :align: center
    :alt: MiniHub 网络启动：先起以太网 → 轮到 Wi-Fi 适配器 → 连 STA → 选默认路由 → 控制台上线
 
-`交互版 <_static/net_boot/index.html>`_ —— 按开机顺序走五站，青色回程线是没有凭据时走的那条配网路。
+`交互版 <_static/net_boot/index.html>`_ —— 对应上电后的五段网络启动顺序；尚未保存凭据时，流程经 SoftAP 配网分支返回。
 
 1. ``minihub_net_init()`` — netif/事件循环；启动以太网；Wi-Fi **仅注册处理** （日志含 ``wifi STA deferred``）。
 2. ``minihub_adapter_start_all()`` — 射频互斥后按 Wi-Fi → Zigbee 或 Thread →
@@ -63,7 +62,7 @@ Wi-Fi SSID/PSK 保存在 NVS （命名空间 ``minihub_wifi``），由
 控制台，用 ``POST /api/net/wifi`` 配 Wi-Fi。这里刻意 **不** 调
 ``minihub_provision_start()``：ESP-IDF 的配网管理器自己要在 80 端口起页面，而 80
 是控制台的端口。Wi-Fi 配网没有蓝牙这条路 —— BLE 传输已移除，配网不需要
-``CONFIG_BT_ENABLED``，也不需要额外的配对工具，浏览器就够了。
+``CONFIG_BT_ENABLED``，也不需要额外的配对工具，使用浏览器即可。
 
 管理器入口留给把控制台挪到别的端口的产品。``CONFIG_MINIHUB_WIFI_PROVISIONING=n``
 连那个开放热点也不开，此时无凭据的设备只留一行
@@ -72,11 +71,11 @@ Wi-Fi SSID/PSK 保存在 NVS （命名空间 ``minihub_wifi``），由
 MQTT broker
 -----------
 
-``components/minihub_mqtt_broker`` 在 Hub 上跑一个
+``components/minihub_mqtt_broker`` 在 Hub 上运行一个
 `mosquitto <https://components.espressif.com/components/espressif/mosquitto>`_
 broker，站点里的 MQTT 设备因此连 Hub 本身，不再需要一台常开的机器。它只做传输：
 不注册任何点位。打开它的同时，Hub 也会在 ``127.0.0.1`` 上起一个自己的 MQTT 客户端
-—— ``components/minihub_protocol_adapters/adapter_mqtt`` ，登记在同一个
+—— 与 broker 同属 ``minihub_mqtt_broker`` （``mqtt_adapter.c``），登记在同一个
 ``mqtt_broker`` 名字下 —— 因为 JS 插件用的 ``host.mqtt`` 就挂在这个客户端上。
 没有连外部 broker 的模式：broker 不启动，客户端也就不会被创建。
 

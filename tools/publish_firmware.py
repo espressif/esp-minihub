@@ -53,6 +53,7 @@ def publish_firmware(
     note: str,
     deploy: Path,
     name: str | None = None,
+    boards: list[str] | None = None,
 ) -> Path:
     if not blob.is_file():
         raise FileNotFoundError(f"missing firmware bin {blob}")
@@ -74,6 +75,11 @@ def publish_firmware(
     if text and not text.endswith("\n"):
         text += "\n"
     (dest_dir / "release_notes.txt").write_text(text, encoding="utf-8")
+    if boards:
+        cleaned = [b.strip() for b in boards if b and b.strip()]
+        if cleaned:
+            body = "\n".join(cleaned) + "\n"
+            (dest_dir / "boards.txt").write_text(body, encoding="utf-8")
     return dest
 
 
@@ -96,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--name", default=None, help="destination bin file name (default: source name)")
     parser.add_argument(
+        "--board",
+        action="append",
+        default=[],
+        help="CONFIG_MINIHUB_BOARD id allowed for this package (repeatable). "
+        "Written as boards.txt; omit to leave a chip-wide legacy folder "
+        "(devices that send board= will not see it).",
+    )
+    parser.add_argument(
         "--deploy",
         type=Path,
         default=None,
@@ -114,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         note=text,
         deploy=deploy,
         name=args.name,
+        boards=args.board or None,
     )
     print(f"publish_firmware: {dest}")
     return 0

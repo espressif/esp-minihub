@@ -11,7 +11,7 @@
 内置适配器覆盖 Wi-Fi STA、Zigbee、BLE Mesh、Matter、作为边界路由的 Thread、
 MQTT 与 Modbus。规则存在设备上，
 也在设备上求值（ :doc:`rules` ）；Web 控制台、REST API 与 WebSocket 事件流同样是
-设备自己提供的，所以外网断了，局域网里照样能控。
+设备自己提供的，因此外网中断时，局域网内仍可控制。
 
 固件里没有的协议或云能力，事后还能补进来，因为商店模块是运行时安装的，不必
 重新编译（ :doc:`plugins/overview` ）。控制台和你自己的集成走的是同一套 REST、

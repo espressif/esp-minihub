@@ -30,6 +30,17 @@ const char *minihub_usb_msc_mount_path(void)
 void minihub_usb_msc_io_lock(void) {}
 void minihub_usb_msc_io_unlock(void) {}
 
+esp_err_t minihub_usb_msc_acquire_blockdev(esp_blockdev_handle_t *out)
+{
+    (void)out;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+void minihub_usb_msc_release_blockdev(bool remount_fat)
+{
+    (void)remount_fat;
+}
+
 #else
 
 #include <stdio.h>
@@ -74,6 +85,7 @@ static SemaphoreHandle_t s_io_lock;
 static msc_host_device_handle_t s_msc_device;
 static msc_host_vfs_handle_t s_vfs;
 static bool s_mounted;
+static bool s_bdl_lent;
 static char s_mount_path[16] = CONFIG_MINIHUB_USB_MSC_MOUNT_PATH;
 
 static void msc_event_cb(const msc_host_event_t *event, void *arg)
@@ -147,8 +159,15 @@ static esp_err_t mount_device(uint8_t addr)
         vTaskDelay(pdMS_TO_TICKS(500));
     }
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "msc_host_vfs_register(%s): %s", mount_path, esp_err_to_name(err));
-        (void)msc_host_uninstall_device(msc);
+        /* Keep the MSC device: a non-FAT stick is still usable as a raw
+         * blockdev for Vibe/OTA LittleFS staging (interactive format). */
+        ESP_LOGW(TAG, "msc_host_vfs_register(%s): %s (keeping device for blockdev)",
+                 mount_path, esp_err_to_name(err));
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        s_msc_device = msc;
+        s_vfs = NULL;
+        s_mounted = false;
+        xSemaphoreGive(s_lock);
         return err;
     }
 
@@ -179,15 +198,18 @@ static esp_err_t mount_device(uint8_t addr)
 static void unmount_device(msc_host_device_handle_t handle)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    if (!s_mounted || (handle && handle != s_msc_device)) {
+    /* Also clear a kept-but-unmounted device (FAT mount failed, held for OTA). */
+    if (!s_msc_device || (handle && handle != s_msc_device)) {
         xSemaphoreGive(s_lock);
         return;
     }
     msc_host_vfs_handle_t vfs = s_vfs;
     msc_host_device_handle_t msc = s_msc_device;
+    bool was_mounted = s_mounted;
     s_vfs = NULL;
     s_msc_device = NULL;
     s_mounted = false;
+    s_bdl_lent = false;
     xSemaphoreGive(s_lock);
 
     if (vfs) {
@@ -196,7 +218,7 @@ static void unmount_device(msc_host_device_handle_t handle)
     if (msc) {
         (void)msc_host_uninstall_device(msc);
     }
-    ESP_LOGI(TAG, "MSC unmounted (%s)", s_mount_path);
+    ESP_LOGI(TAG, "MSC %s (%s)", was_mounted ? "unmounted" : "released", s_mount_path);
 }
 
 static void msc_app_task(void *arg)
@@ -296,6 +318,127 @@ void minihub_usb_msc_io_unlock(void)
 {
     if (s_io_lock) {
         xSemaphoreGiveRecursive(s_io_lock);
+    }
+}
+
+static esp_err_t try_remount_fat(void)
+{
+    msc_host_device_handle_t msc = NULL;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (s_mounted || !s_msc_device || s_bdl_lent) {
+        xSemaphoreGive(s_lock);
+        return ESP_ERR_INVALID_STATE;
+    }
+    msc = s_msc_device;
+    xSemaphoreGive(s_lock);
+
+    const esp_vfs_fat_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 4,
+        .allocation_unit_size = 4096,
+    };
+    (void)esp_vfs_fat_unregister_path(s_mount_path);
+    msc_host_vfs_handle_t vfs = NULL;
+    esp_err_t err = msc_host_vfs_register(msc, s_mount_path, &mount_config, &vfs);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "remount FAT at %s: %s", s_mount_path, esp_err_to_name(err));
+        return err;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_vfs = vfs;
+    s_mounted = true;
+    xSemaphoreGive(s_lock);
+    ESP_LOGI(TAG, "MSC remounted at %s", s_mount_path);
+    return ESP_OK;
+}
+
+esp_err_t minihub_usb_msc_acquire_blockdev(esp_blockdev_handle_t *out)
+{
+    if (!out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *out = NULL;
+    if (!s_app_queue || !s_lock) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (s_bdl_lent) {
+        xSemaphoreGive(s_lock);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    /* Drop FAT so the blockdev is exclusive for LittleFS probe/format. */
+    msc_host_vfs_handle_t vfs = NULL;
+    if (s_mounted && s_vfs) {
+        vfs = s_vfs;
+        s_vfs = NULL;
+        s_mounted = false;
+    }
+    msc_host_device_handle_t msc = s_msc_device;
+    xSemaphoreGive(s_lock);
+
+    if (vfs) {
+        (void)msc_host_vfs_unregister(vfs);
+        ESP_LOGI(TAG, "unmounted FAT at %s for OTA blockdev borrow", s_mount_path);
+    }
+
+    if (!msc) {
+        /* Stick not present (or still enumerating). Drain a short window of
+         * CONNECT events; msc_app_task also reads this queue, so the common
+         * case is s_msc_device already set from boot. */
+        app_message_t msg;
+        TickType_t wait = pdMS_TO_TICKS(3000);
+        while (xQueueReceive(s_app_queue, &msg, wait) == pdTRUE) {
+            wait = 0;
+            if (msg.id == APP_DEVICE_CONNECTED) {
+                (void)mount_device(msg.data.new_dev_address);
+                break;
+            }
+            if (msg.id == APP_DEVICE_DISCONNECTED) {
+                unmount_device(msg.data.device_handle);
+            }
+        }
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        msc = s_msc_device;
+        vfs = NULL;
+        if (s_mounted && s_vfs) {
+            vfs = s_vfs;
+            s_vfs = NULL;
+            s_mounted = false;
+        }
+        xSemaphoreGive(s_lock);
+        if (vfs) {
+            (void)msc_host_vfs_unregister(vfs);
+        }
+        if (!msc) {
+            ESP_LOGW(TAG, "no U-disk for OTA borrow (not plugged, or USB enum failed)");
+            return ESP_ERR_NOT_FOUND;
+        }
+    }
+
+    esp_err_t err = msc_host_get_blockdev(msc, out);
+    if (err != ESP_OK) {
+        (void)try_remount_fat();
+        return err;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_bdl_lent = true;
+    xSemaphoreGive(s_lock);
+    return ESP_OK;
+}
+
+void minihub_usb_msc_release_blockdev(bool remount_fat)
+{
+    if (!s_lock) {
+        return;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bool was_lent = s_bdl_lent;
+    s_bdl_lent = false;
+    xSemaphoreGive(s_lock);
+    if (was_lent && remount_fat) {
+        (void)try_remount_fat();
     }
 }
 

@@ -21,18 +21,3 @@ menu "LCD UI"
             redraws is fixed at 100 ms in the firmware.
 
 endmenu
-
-menu "Storage"
-
-    config MINIHUB_STORAGE_MIN_FREE_BYTES
-        int "Minimum free bytes that must remain on the storage partition"
-        default 262144
-        range 0 4194304
-        help
-            Refuses a Store install that would leave less than this much room in
-            the LittleFS partition. The partition also holds the editable JSON UI
-            and device runtime state, so an install that succeeds here can still
-            take the space those need next. Counts the whole partition, not one
-            directory: /data/ui is already inside the used figure.
-
-endmenu

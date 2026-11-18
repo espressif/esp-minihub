@@ -1,0 +1,3 @@
+# Subproject does not import minihub_bundle; mount the shared Kconfig here so
+# CONFIG_MINIHUB_VIBE_* exists when media/state helpers compile.
+rsource "../../Kconfig.minihub"

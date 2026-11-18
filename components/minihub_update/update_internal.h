@@ -26,6 +26,8 @@ typedef struct {
     char *release_note;
     char **targets;
     size_t ntargets;
+    char **boards;
+    size_t nboards;
     size_t size;
 } mh_update_item_t;
 
@@ -46,6 +48,8 @@ esp_err_t mh_update_download_verified(const char *url, const char *dest,
                                       const char *expect_sha, size_t expect_size);
 esp_err_t mh_update_sha256_file(const char *path, char hex[65], size_t *size_out);
 bool mh_update_target_match(const mh_update_item_t *item, const char *chip);
+/** True when item has no boards list, or lists board / * / ALL. */
+bool mh_update_board_match(const mh_update_item_t *item, const char *board);
 int mh_update_version_cmp(const char *a, const char *b);
 esp_err_t mh_update_join_url(char *out, size_t out_len, const char *origin,
                              const char *index_base, const char *rel);

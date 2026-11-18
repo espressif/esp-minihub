@@ -27,7 +27,7 @@
 
    * - 路径
      - 里面是什么
-     - 什么时候打开它
+     - 何时打开
    * - ``application/``
      - 产品：板级、分区表、sdkconfig 配方、出厂 JSON、 ``app_main``。目录名
        就是产品名。
@@ -75,12 +75,14 @@ Core 与服务
     ``/data/config/*.json`` 的读写在 ``minihub_config`` ；热重载那套顺序在
     ``minihub_hub`` ；控制台会话与可选的 API token 在 ``minihub_auth`` ；收网络凭据
     （ SoftAP ）与恢复出厂在 ``minihub_provision`` ；Ethernet 与 Wi-Fi STA 的拉起在
-    ``minihub_net`` ；固件升级的状态与进度在 ``minihub_ota`` ，从部署根拉取并应用
+    ``minihub_net`` ；固件升级的状态与进度在 ``minihub_ota`` ；把固件暂存到外部介质、
+    交接 Vibe Mode 在 ``minihub_vibe`` （Host 库，外加嵌套的
+    ``subproject/`` 产出保留的 ``app,factory`` 镜像 —— 不是 ``application/`` 下的产品），从部署根拉取并应用
     固件、资源与控制台包在 ``minihub_update`` ；站点里的 MQTT 设备连的那个内置
     broker 在 ``minihub_mqtt_broker`` 。
 
 设备模型与 UI
-    这一组决定设备长什么样、自动化什么时候触发。
+    这一组组件决定设备在 UI 中的呈现方式，以及自动化的触发时机。
 
     类型目录（ CSV 进、文案与控件出，图标也一并给出）是 ``minihub_device_widget`` ；
     ``when`` / ``if`` / ``then`` 的求值在 ``minihub_rules`` ，一次调用召回一个场景的在
@@ -99,13 +101,14 @@ Core 与服务
     ``minihub_ble_mesh`` 、 ``minihub_matter`` 、 ``minihub_thread`` ——
     给模块用的通用 NimBLE GATT 客户端在 ``minihub_ble_gatt`` 。
 
-    自带的七个适配器在 ``components/minihub_protocol_adapters/`` 下： ``adapter_wifi`` 、
+    射频/设备适配器在 ``components/minihub_protocol_adapters/`` 下：
     ``adapter_zigbee`` 、 ``adapter_ble_mesh`` 、 ``adapter_matter`` 、
-    ``adapter_thread`` 、 ``adapter_mqtt`` 、 ``adapter_modbus`` 。登记设备点的有四个 ——
-    Zigbee 、 BLE Mesh 、 Matter 、 Modbus ； Wi-Fi STA 只做上行， Thread 只做
-    OpenThread Border Router ， MQTT 是 Hub 内置 broker 的客户端，这三者都不拥有
-    设备，也就不登记点位（见 :doc:`radios` ）。
-    每个适配器都是独立组件，产品要去掉哪个就去掉哪个。
+    ``adapter_thread`` 、 ``adapter_modbus`` 。登记设备点的有四个 —— Zigbee 、
+    BLE Mesh 、 Matter 、 Modbus ； Thread 只做 OpenThread Border Router，不登记
+    设备点（见 :doc:`radios` ）。网络上行（Wi-Fi STA / SoftAP / 以太网）在
+    ``minihub_net`` （含薄层 ``wifi`` adapter 登记）。承载 ``host.mqtt`` 的 MQTT
+    loopback 客户端与板载 broker 同在 ``minihub_mqtt_broker`` 。各射频适配器仍是
+    独立组件，产品要去掉哪个就去掉哪个。
 
 可选硬件
     只有板子要它们时才编进来：带屏板的本机 UI 是 ``minihub_lcd``
@@ -146,10 +149,9 @@ Core 与服务
     ``preview_docs.py`` 把构建出的 HTML 提供服务。
     ``gen_deploy_index.py`` 写资源清单。
 
-本指南不是插件作者唯一的入口。另一个入口是 ``docs/module_sdk/``：模块可以
-include 的头文件、符号白名单、以及打包脚本的副本都在里面，所以一个插件完全可以
-只对着这个目录写。 ``python3 tools/minihub_plugin_mcp.py`` 把同样的脚手架与校验
-交给 IDE。
+插件作者也可单独依赖 ``docs/module_sdk/``：其中含模块可 include 的头文件、符号
+白名单，以及打包脚本副本，足以支撑树外编写。``python3 tools/minihub_plugin_mcp.py``
+向 IDE 提供同一套脚手架与校验。
 
 生成物，不要手改
 ----------------

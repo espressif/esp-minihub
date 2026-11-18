@@ -21,7 +21,7 @@ Ethernet.
 ``minihub_adapter_start_all()`` starts Wi-Fi first, then 802.15.4, then BLE Mesh;
 adapters that hold no radio (Modbus, for example) start last. The Wi-Fi group
 wins: when ``adapters.json`` asks for Wi-Fi or BLE Mesh together with
-Zigbee/Thread, the 802.15.4 adapter is the loser:
+Zigbee/Thread, firmware skips the 802.15.4 adapter:
 
 * it is not initialized
 * it is not started

@@ -9,4 +9,17 @@ menu "Store"
         depends on MINIHUB_STORE
         default "https://minihub.espressif.com"
 
+    config MINIHUB_STORAGE_MIN_FREE_BYTES
+        int "Minimum free bytes that must remain on the storage partition"
+        depends on MINIHUB_STORE
+        default 262144
+        range 0 4194304
+        help
+            Refuses a Store install that would leave less than this much free on
+            the LittleFS ``storage`` partition (``/data``). That partition also
+            holds editable UI JSON and device runtime state, so an install that
+            fills it can still break the next UI write. Counts the whole
+            partition, not one directory: ``/data/ui`` is already in the used
+            figure. Default 256 KiB.
+
 endmenu

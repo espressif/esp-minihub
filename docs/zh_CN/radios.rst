@@ -12,12 +12,12 @@ Thread 不是设备适配器。它只做 OpenThread Border Router，所以 Matte
 
 稀缺的是 2.4 GHz 射频。Wi-Fi 与 BLE Mesh 在同一颗射频上共存；IEEE 802.15.4
 （Zigbee **或** Thread）与这两者都不共存，Zigbee 与 Thread 也彼此排斥。所以一个
-产品要么跑 Wi-Fi / BLE Mesh 这一组，要么只跑一个 802.15.4 栈 —— 做 Zigbee 或
+产品要么使用 Wi-Fi / BLE Mesh 这一组，要么只启用一个 802.15.4 栈 —— 做 Zigbee 或
 Thread 的 Hub，IP 上行就得走以太网。
 
 ``minihub_adapter_start_all()`` 按 Wi-Fi、802.15.4、BLE Mesh 的顺序 start；不占
 射频的适配器（如 Modbus）排在最后。Wi-Fi 一组优先： ``adapters.json`` 同时要求
-Wi-Fi 或 BLE Mesh 与 Zigbee/Thread 时，输的是 802.15.4 那个适配器：
+Wi-Fi 或 BLE Mesh 与 Zigbee/Thread 时，固件跳过 802.15.4 适配器：
 
 * 不会被 init
 * 不会 start
@@ -100,7 +100,7 @@ Wi-Fi STA 是 Host 适配器（ ``adapters.wifi`` ）。以太网由 ``minihub_n
 不要做 ``thread_ota`` 插件。
 
 关联（``props.owner``）与 OTA 就绪块（``props.ota``）都是 **插件侧约定**: Host
-代码不写这两个键，也不会替插件去拉厂商目录。什么时候算「有固件可升」由插件自己
+代码不写这两个键，也不会替插件去拉厂商目录。何时算「有固件可升」由插件自行
 判断（用它自己的 ``adapters.json`` 配置项、NVS 状态或定时抓取）。插件用
 ``MINIHUB_PLUGIN_DIRS`` 打包，
 **不要** 写进公开 Host ``store_preinstall``。

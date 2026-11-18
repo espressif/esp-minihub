@@ -4,8 +4,8 @@ Layers and principles
 :link_to_translation:`zh_CN:[中文]`
 
 What runs on a Hub, which part is allowed to depend on which, and what happens
-between power-on and the first device update. To follow one control action
-around the loop instead, read :doc:`data_flow`.
+between power-on and the first device update. The end-to-end control loop is
+in :doc:`data_flow`.
 
 Layering
 --------
@@ -59,9 +59,9 @@ into Core.
 
 IP uplink: ``minihub_net`` -- see :doc:`networking`.
 
-`Interactive version <_static/architecture/index.html>`_ -- the bands tour top
-to bottom on their own (hover pauses); hover a band for its constraint, click a
-block to isolate it and read what it forbids.
+`Interactive version <_static/architecture/index.html>`_ -- the same layering as
+the static figure. Each band lists dependency rules; each block lists what it
+must not call (hover pauses).
 
 .. only:: not hide_l3
 
@@ -172,8 +172,9 @@ Default writable root: ``/data`` (LittleFS on generic ``minihub`` product).
    /data/tmp/           scratch (module loader)
 
 NVS holds Wi-Fi credentials, Store URL overrides, the web password and API token.
-OTA state (boot slot, self-test pending) lives in the ``otadata`` partition, not
-NVS. Neither holds the full ``adapters.json`` — that lives on LittleFS.
+Boot selection (``ota_0`` versus the ``app,factory`` Vibe Mode image) and
+self-test state live in the ``otadata`` partition, not NVS. Neither holds the
+full ``adapters.json`` — that lives on LittleFS.
 
 Boot sequence (``application/minihub``)
 ---------------------------------------
@@ -205,11 +206,12 @@ Hub soft reload
 
 ``POST /api/hub/reload`` calls ``minihub_hub_reload()`` synchronously; MCP
 ``hub.reload``, a Store install and an ``adapters.json`` write all go through
-``minihub_hub_reload_async()`` on the ``hub_reload`` task, guarded so a second
-reload waits up to 60 s. The steps, in ``minihub_hub_reload()`` order:
+``minihub_hub_reload_async()`` on the ``hub_reload`` task. A mutex serializes
+reloads so a second request waits up to 60 s. The steps, in
+``minihub_hub_reload()`` order:
 
-1. ``minihub_js_unload_all()`` first — JS handlers must stop touching points
-   before anything below them is torn down
+1. ``minihub_js_unload_all()`` first — stop JS handlers before adapters stop and
+   config is re-read, so callbacks cannot keep touching points
 2. Adapter lifecycle lock (60 s; ``ESP_ERR_TIMEOUT`` aborts the reload)
 3. ``minihub_config_reload()`` — re-read JSON from flash (aborts on error)
 4. ``minihub_pack_reload()`` — merge JSON packs into the adapters view

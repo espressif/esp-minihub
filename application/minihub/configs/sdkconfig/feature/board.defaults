@@ -1,0 +1,3 @@
+# Store / OTA ?board= for this product (CONFIG_MINIHUB_BOARD).
+# Not the same string as esp_board_manager CONFIG_ESP_BOARD_NAME.
+CONFIG_MINIHUB_BOARD="ESP32-S31-Function-Coreboard-1"

@@ -1,0 +1,21 @@
+idf_component_register(
+    SRCS
+        "minihub_vibe_media.c"
+        "minihub_vibe_state.c"
+        "minihub_vibe_stage.c"
+        "minihub_vibe_apply.c"
+    INCLUDE_DIRS "include"
+    REQUIRES
+        esp_partition
+        app_update
+        esp_app_format
+        bootloader_support
+        nvs_flash
+        mbedtls
+        vfs
+        sdmmc
+        esp_blockdev
+        joltwallet__littlefs
+        espressif__usb_host_msc
+        minihub_usb_msc
+)

@@ -1,0 +1,88 @@
+menu "Vibe Mode"
+
+    config MINIHUB_VIBE_SDMMC
+        bool "Vibe Mode: probe SDMMC for /Firmware"
+        default y if IDF_TARGET_ESP32S31
+        help
+            Mount a LittleFS volume on an SDMMC card. The card must already hold
+            a LittleFS filesystem; Vibe Mode never reformats it by default.
+
+    config MINIHUB_VIBE_SD_BUS_WIDTH
+        int "Vibe Mode: SDMMC bus width"
+        depends on MINIHUB_VIBE_SDMMC
+        default 1
+        range 1 4
+
+    config MINIHUB_VIBE_SD_PIN_CLK
+        int "SDMMC CLK GPIO (-1 = use the SoC default)"
+        depends on MINIHUB_VIBE_SDMMC
+        default -1
+
+    config MINIHUB_VIBE_SD_PIN_CMD
+        int "SDMMC CMD GPIO (-1 = use the SoC default)"
+        depends on MINIHUB_VIBE_SDMMC
+        default -1
+
+    config MINIHUB_VIBE_SD_PIN_D0
+        int "SDMMC D0 GPIO (-1 = use the SoC default)"
+        depends on MINIHUB_VIBE_SDMMC
+        default -1
+
+    config MINIHUB_VIBE_SD_PIN_D1
+        int "SDMMC D1 GPIO (-1 = use the SoC default)"
+        depends on MINIHUB_VIBE_SDMMC && MINIHUB_VIBE_SD_BUS_WIDTH = 4
+        default -1
+
+    config MINIHUB_VIBE_SD_PIN_D2
+        int "SDMMC D2 GPIO (-1 = use the SoC default)"
+        depends on MINIHUB_VIBE_SDMMC && MINIHUB_VIBE_SD_BUS_WIDTH = 4
+        default -1
+
+    config MINIHUB_VIBE_SD_PIN_D3
+        int "SDMMC D3 GPIO (-1 = use the SoC default)"
+        depends on MINIHUB_VIBE_SDMMC && MINIHUB_VIBE_SD_BUS_WIDTH = 4
+        default -1
+
+    config MINIHUB_VIBE_USB
+        bool "Vibe Mode: probe USB Host MSC for /Firmware"
+        default y if IDF_TARGET_ESP32S31
+        help
+            Mount a LittleFS volume on a USB mass-storage device. The component
+            uses msc_host_get_blockdev() directly, so the stick is NOT mounted
+            as FAT and is not readable as a normal drive on a PC.
+
+    config MINIHUB_VIBE_USB_WAIT_MS
+        int "Vibe Mode: milliseconds to wait for USB device insertion"
+        depends on MINIHUB_VIBE_USB
+        default 3000
+
+    config MINIHUB_VIBE_FORMAT_ON_FAIL
+        bool "Format an unmountable external volume as LittleFS"
+        default n
+        help
+            Keep off in production: formatting destroys whatever the PC put on
+            the card or stick. Enable only for lab bring-up.
+
+    config MINIHUB_VIBE_ENTER_REBOOT_DELAY_MS
+        int "Delay before rebooting into Vibe Mode"
+        default 800
+
+    config MINIHUB_VIBE_FORCE_GPIO
+        int "GPIO to force-apply staged firmware (-1 = disabled)"
+        default -1
+        range -1 48
+        help
+            When this GPIO is pressed at Vibe Mode start, copy /Firmware/firmware.bin
+            even if minihub/vibe_pending is clear. Use this to recover when the Host
+            application cannot arm pending. Set to -1 to ignore the button entirely.
+            A matching expected SHA (NVS or firmware.bin.sha256 sidecar) is still
+            required before any copy.
+
+    config MINIHUB_VIBE_FORCE_ACTIVE_LOW
+        bool "Force-apply GPIO is active low"
+        default y
+        help
+            Active-low is typical for BOOT / recovery buttons (pressed = 0).
+            Ignored when MINIHUB_VIBE_FORCE_GPIO is -1.
+
+endmenu

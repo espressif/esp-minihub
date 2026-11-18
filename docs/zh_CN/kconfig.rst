@@ -3,9 +3,9 @@ Kconfig 选项
 
 :link_to_translation:`en:[English]`
 
-MiniHub 的每一个构建选项都在这里，文档构建时直接从 Kconfig 片段里生成，而不是靠人
-维护一份清单。 ``idf.py menuconfig`` 显示的就是同样的文字；本页额外给出每个符号被
-哪些文件读取，好让你看得出把它打开到底会不会改变什么。
+MiniHub 的每一个构建选项都在这里，文档构建时直接从 Kconfig 片段生成，而非手工维护
+清单。``idf.py menuconfig`` 显示相同文案；下文另列各符号的引用位置，便于判断使能后
+是否影响行为。
 
 权威来源是 ``cmake/minihub_bundle/Kconfig.projbuild`` 里的 ``rsource`` 列表：构建挂载
 的正是这一份。磁盘上有片段却没被 ``rsource``、``rsource`` 指向的文件已删除、某个符号
@@ -52,50 +52,82 @@ MiniHub 的每一个构建选项都在这里，文档构建时直接从 Kconfig 
 
 .. minihub-kconfig:: Core
 
-.. minihub-kconfig:: Hub
-
-.. minihub-kconfig:: JS plugins
-
-.. minihub-kconfig:: Modules
-
-射频与适配器
-------------
+组网与配网
+----------
 
 .. minihub-kconfig:: Networking
 
 .. minihub-kconfig:: Provisioning
 
+插件
+----
+
+商店安装、原生模块加载与 QuickJS，在 ``menuconfig`` 的 ``Plugins`` 下。
+
+.. minihub-kconfig:: Store
+
+.. minihub-kconfig:: Modules
+
+.. minihub-kconfig:: JS plugins
+
+内置适配器
+----------
+
+Host 链进固件的协议栈，在 ``menuconfig`` 的 ``Builtin Adapters`` 下（Store 的
+``.mhub`` 在 Plugins）。含 MQTT broker（板载监听；loopback 的
+``MINIHUB_MQTT_ADAPTER`` 不可见，随 broker 打开）与 RTSP 摄像头（外接 IP 相机，
+不是板载外设）。Wi-Fi / 以太网上行在 Networking，不在这里。
+
+.. minihub-kconfig:: BLE Mesh
+
 .. minihub-kconfig:: Matter
+
+.. minihub-kconfig:: MQTT broker
+
+.. minihub-kconfig:: Modbus
+
+.. minihub-kconfig:: RTSP camera
 
 .. minihub-kconfig:: Thread
 
 .. minihub-kconfig:: Zigbee
 
-.. minihub-kconfig:: BLE Mesh
+界面
+----
 
-.. minihub-kconfig:: Modbus
+LCD 与 Web 控制台，在 ``menuconfig`` 的 ``UI`` 下。
 
-.. minihub-kconfig:: MQTT adapter
-
-控制台、商店与访问
-------------------
+.. minihub-kconfig:: LCD UI
 
 .. minihub-kconfig:: Web UI
 
-.. minihub-kconfig:: Auth
+Auth 挂在 Web UI 下（同一套 httpd 登录 / Bearer）。
 
-.. minihub-kconfig:: Store
+.. minihub-kconfig:: Auth
 
 .. minihub-kconfig:: MCP
 
+云
+--
+
+厂商云桥接，在 ``menuconfig`` 的 ``Cloud`` 下。
+
 .. minihub-kconfig:: RainMaker
+
+固件升级
+--------
+
+Host 升级策略与 factory 恢复镜像在 ``menuconfig`` 的 ``Firmware update`` 下并列
+（OTA 负责暂存或写入；Vibe Mode 把外部介质上的暂存镜像落到 ``ota_0``）。
+
+.. minihub-kconfig:: OTA
+
+.. minihub-kconfig:: Vibe Mode
 
 外设
 ----
 
-.. minihub-kconfig:: LCD UI
-
-.. minihub-kconfig:: RTSP camera
+板载硬件，在 ``menuconfig`` 的 ``Peripherals`` 下。
 
 .. minihub-kconfig:: USB MSC
 
