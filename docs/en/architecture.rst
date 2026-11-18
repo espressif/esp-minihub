@@ -172,8 +172,9 @@ Default writable root: ``/data`` (LittleFS on generic ``minihub`` product).
    /data/tmp/           scratch (module loader)
 
 NVS holds Wi-Fi credentials, Store URL overrides, the web password and API token.
-OTA state (boot slot, self-test pending) lives in the ``otadata`` partition, not
-NVS. Neither holds the full ``adapters.json`` — that lives on LittleFS.
+Boot selection (``ota_0`` versus the ``app,factory`` Vibe Mode image) and
+self-test state live in the ``otadata`` partition, not NVS. Neither holds the
+full ``adapters.json`` — that lives on LittleFS.
 
 Boot sequence (``application/minihub``)
 ---------------------------------------

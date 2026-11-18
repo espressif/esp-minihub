@@ -11,8 +11,9 @@ stay as the code spells them. Keep every number in the table true to the code it
 names:
 
 * ``/api/update/{hints,notes,check,apply}`` — minihub_web.c route registration
-* ``esp_ota_begin`` / ``esp_ota_end`` / ``esp_ota_set_boot_partition``
-  and the 800 ms delay before ``esp_restart()`` — minihub_ota.c
+* ``minihub_vibe_stage_finish`` / the SHA-256 tail trailer /
+  ``esp_ota_begin`` / ``esp_ota_end`` — components/minihub_vibe/
+* the 800 ms delay before ``esp_restart()`` — minihub_vibe_stage.c (``minihub_vibe_enter``)
 * the pending-verify confirmation — ``esp_ota_mark_app_valid_cancel_rollback()``
 """
 
@@ -31,29 +32,29 @@ SVG_BASE = "update_flow"
 TXT = {
     "zh": {
         "title": "MiniHub 固件更新",
-        "lead": "一次更新六步：读提示 → 后台重探 → 交 URL → 写空闲槽 → 校验 → 换槽重启并确认",
-        "return": ("青虚线 = 校验或确认没过去：bootloader 回滚到另一张镜像槽，"
-                   "下一轮重新读提示"),
-        "legend": ("箭头向右 = 更新的前进方向；青虚线向左 = 回滚，回到另一张镜像槽",),
+        "lead": "一次更新六步：读提示 → 后台重探 → 交 URL → 暂存到外部介质 → Vibe Mode 校验并搬运 → 回切 ota_0 重启",
+        "return": ("青虚线 = 校验或搬运没过去：Vibe Mode 保留 factory 启动选择，"
+                   "下一轮重新搬运暂存的镜像"),
+        "legend": ("箭头向右 = 更新的前进方向；青虚线向左 = 重试，回到 Vibe Mode",),
         "page_lead_end": "。卡片自动逐站导览，悬停暂停。",
         "offline": "本页不请求外部资源，离线可读。",
     },
     "en": {
         "title": "MiniHub firmware update",
         "lead": ("Six steps per update: read the hints → re-probe off-task → hand over "
-                 "the URL → write the free slot → verify → switch slot, restart, confirm"),
-        "return": ("Cyan dashed = the verify or the confirmation did not pass: the "
-                   "bootloader rolls back to the other image slot and the next round "
-                   "reads the hints again"),
+                 "the URL → stage on external media → Vibe Mode verifies and copies → "
+                 "select ota_0 and restart"),
+        "return": ("Cyan dashed = the verify or the copy did not pass: Vibe Mode keeps "
+                   "the factory boot selection and retries the staged image"),
         "legend": ("Arrows right = the direction an update moves; cyan dashed left = "
-                   "rollback, back to the other image slot",),
+                   "retry, back to Vibe Mode",),
         "page_lead_end": ". The cards tour themselves and hover pauses the tour.",
         "offline": "This page fetches no external resource and works offline.",
     },
 }
 
 UPDATE_STAGES = [
-    # (code, label zh, actor, note zh, note en)
+    # (code, label zh, actor en, note zh, note en)
     ("cached probe", "读更新提示", "GET /api/update/hints",
      "控制台读 Hub 缓存的探测结果：固件、控制台、资源各有没有新版",
      "The console reads the Hub's cached probe: firmware, console and assets each "
@@ -66,18 +67,18 @@ UPDATE_STAGES = [
      "body 只带 type / force；Host 用配置里的部署 URL，补 mac= 与 cur_version=",
      "The body carries only type / force; the Host takes the deploy URL from config "
      "and appends mac= and cur_version="),
-    ("esp_ota_begin", "写空闲槽", "write OTA firmware",
-     "正在跑的那张槽保持不动，另一张（ota_0 / ota_1）接收新镜像",
-     "The running slot stays untouched; the other one (ota_0 / ota_1) receives the "
-     "new image"),
-    ("esp_ota_end", "校验镜像", "header + checksum",
-     "校验不过直接丢弃，启动槽不改写，设备继续跑原版本",
-     "A failed check discards the image, the boot slot is not rewritten and the "
-     "device keeps running the old version"),
-    ("set_boot_partition", "换槽重启", "800 ms → restart",
-     "切完启动槽等 800 ms 再 esp_restart()；新镜像起来后取消回滚标记",
-     "After switching the boot slot it waits 800 ms, then calls esp_restart(); the "
-     "new image clears the rollback marker once it is up"),
+    ("minihub_vibe_stage_finish", "暂存到介质", "/vibe/Firmware/firmware.bin",
+     "下载流写进外部 LittleFS 卷，运行中的固件不写 flash",
+     "The download stream goes to an external LittleFS volume; the running firmware "
+     "writes no flash"),
+    ("esp_ota_end", "校验并搬运", "SHA-256 + header + checksum",
+     "Vibe Mode 比对分区尾部 trailer 的 SHA，不同才用 esp_ota_begin/write/end 写入 ota_0",
+     "Vibe Mode compares the SHA in the tail trailer and only copies into ota_0 with "
+     "esp_ota_begin/write/end when it differs"),
+    ("set_boot_partition", "回切并重启", "800 ms → restart",
+     "选中 app,factory 后 800 ms 进 Vibe Mode；搬运完重写 otadata 选中 ota_0 再重启",
+     "Selecting app,factory enters Vibe Mode after 800 ms; the copy rewrites otadata "
+     "to select ota_0 and restarts"),
 ]
 
 

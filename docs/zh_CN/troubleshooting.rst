@@ -93,10 +93,14 @@
 升级失败，或 Hub 又回到旧版本
 -----------------------------
 
-* 镜像先写进空闲槽并校验，才动启动槽：校验和或尺寸不过，运行中的版本不会被碰（槽默认
-  5 MiB —— Matter 构建可能放不下）。
-* 切完之后有几秒连不上：最后一次写入后 800 毫秒重启，之后由 bootloader 确认新固件。
-* 起来了又回滚 → 新固件没活过自己这次启动；请读那次首启的串口日志，因为控制台已经是旧的。
+* 镜像先暂存到外部 LittleFS 介质，再由 Vibe Mode 搬运到 ``ota_0`` ：校验和或尺寸不过
+  会在搬运时报错，而重启后的恢复路径是 Vibe Mode 重新搬运。若 app 已装不进该槽，到产品
+  `partitions.csv <https://gitlab.espressif.cn/ae_group/minihub/esp-minihub/-/blob/master/application/minihub/partitions.csv>`__
+  放大 ``ota_0`` 。
+* 暂存完成后有几秒连不上：800 毫秒后进 Vibe Mode，搬运完再重启一次，由 bootloader
+  确认新固件。
+* 升级后仍停在 Vibe Mode → ``ota_0`` 不是有效镜像；保留介质并重启，让 Vibe Mode 重试，
+  或读串口日志看 ``minihub/vibe_result`` 记录的结果。
 * 固件升级后控制台没变：固件 OTA 从不替换 ``/data/web/`` ，控制台是单独的包
   （ :doc:`web_console` ）。
 

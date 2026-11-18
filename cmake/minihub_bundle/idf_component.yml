@@ -33,6 +33,8 @@ dependencies:
     path: ../../components/minihub_auth
   minihub_ota:
     path: ../../components/minihub_ota
+  minihub_vibe:
+    path: ../../components/minihub_vibe
   minihub_update:
     path: ../../components/minihub_update
   minihub_provision:

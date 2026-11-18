@@ -35,6 +35,7 @@ Examples:
   ./tools/build_firmware.py -p /dev/cu.usbserial-10 -app minihub_lcd flash monitor
   ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
+  ./tools/build_firmware.py vibe
   ./tools/build_firmware.py module my_native
   ./tools/build_firmware.py modules
   ./tools/build_firmware.py pack my_native
@@ -170,6 +171,7 @@ Examples:
   ./tools/build_firmware.py -p /dev/cu.usbserial-10 -app minihub_lcd flash monitor
   ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
+  ./tools/build_firmware.py vibe
   ./tools/build_firmware.py module my_native
   ./tools/build_firmware.py modules
   ./tools/build_firmware.py pack my_native
@@ -1065,6 +1067,12 @@ def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True
     shell_parts.append(patch_cmd)
     shell_parts.append(idf_cmd)
 
+    # vibe_mode.bin is built by the Host CMake target ``vibe_mode``
+    # (components/minihub_vibe/project_include.cmake), same pattern as
+    # bootloader — no pre-mkdir of Host build/ and no post-copy register step.
+    if needs_esp32s31_set_target():
+        scrub_non_cmake_host_build()
+
     script = "\n".join(shell_parts) + "\n"
     rc = subprocess.run(["bash", "-c", script], cwd=str(APP_DIR)).returncode
     if pack_after:
@@ -1076,6 +1084,19 @@ def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True
         print()
         rc = run_lint([])
     return rc
+
+
+def scrub_non_cmake_host_build() -> None:
+    """Remove a Host build/ that is not an IDF CMake tree.
+
+    ``idf.py set-target`` depends on ``fullclean``, which exits 1 when build/
+    exists but has no CMakeCache.txt (refuses to delete unknown contents).
+    """
+    build = APP_DIR / "build"
+    if not build.is_dir() or (build / "CMakeCache.txt").is_file():
+        return
+    print(f"Removing non-CMake {build} before idf.py set-target")
+    shutil.rmtree(build)
 
 
 def _store_verb_args(raw: list[str]) -> tuple[Path | None, list[str]]:
@@ -1460,7 +1481,21 @@ def run_lint(raw: list[str]) -> int:
 
 
 def main() -> None:
-    app, stacks, idf_args = parse_argv(sys.argv[1:])
+    # Vibe Mode factory image (components/minihub_vibe/subproject). Accept both
+    #   ./tools/build_firmware.py vibe ...
+    #   ./tools/build_firmware.py -app minihub_lcd vibe ...
+    # before parse_argv() would treat "vibe" as an idf.py argument.
+    raw = sys.argv[1:]
+    if "vibe" in raw:
+        vibe_i = raw.index("vibe")
+        # Keep -app / --app ahead of vibe for build_vibe_mode.py; drop the
+        # "vibe" token itself (the script has no such flag).
+        vibe_argv = raw[:vibe_i] + raw[vibe_i + 1 :]
+        raise SystemExit(subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "build_vibe_mode.py"), *vibe_argv],
+            cwd=str(ROOT),
+        ).returncode)
+    app, stacks, idf_args = parse_argv(raw)
     set_app(app)
     os.environ["MINIHUB_APP"] = APP_NAME
     if idf_args and idf_args[0] == "__pack__":

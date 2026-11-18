@@ -217,10 +217,11 @@ On the device, ``minihub_update_check()`` and ``minihub_update_apply()``:
 4. ``minihub_ota_start_url()`` opens ``url`` and attaches ``mac`` and
    ``cur_version``. The firmware stream is **not** compared against ``sha256``:
    the digest is only metadata used in step 3, so a re-published build under the
-   same version number is re-fetched. What validates the image is
-   ``esp_ota_end()``, which checks the header and sequence checksum after the
-   last write. The image goes to the inactive OTA slot and the device reboots;
-   see :doc:`../ota`.
+   same version number is re-fetched. The stream is staged on external LittleFS
+   media, and Vibe Mode copies it into ``ota_0``. ``esp_ota_end()`` checks the
+   header and sequence checksum at the end of that copy; a SHA-256 trailer in
+   the last erase sector lets Vibe Mode skip an unchanged image. See
+   :doc:`../ota`.
 
    Only the asset and web downloads verify ``sha256`` before replacing a file.
 

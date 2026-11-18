@@ -1,0 +1,17 @@
+# Name,Type,SubType,Offset,Size,Flags
+# ESP32-S31 / 16MB flash — INTERNAL dual-slot A/B (ota_0 + ota_1) + retained
+# Vibe Mode factory image (1 MiB). Used when MINIHUB_OTA_EXTERNAL_STORAGE
+# is disabled: firmware upgrades write straight to the inactive ota slot and the
+# device reboots into it. Low addresses match partitions.csv (128 KiB nvs);
+# storage / modstore are smaller than the external layout to make room for the
+# second app slot — adjust to your product's needs, keeping the total within
+# 16MB (0x1000000).
+nvs,data,nvs,0x9000,0x20000,
+otadata,data,ota,0x29000,0x2000,
+phy_init,data,phy,0x2B000,0x1000,
+ota_0,app,ota_0,0x30000,0x600000,
+ota_1,app,ota_1,0x630000,0x600000,
+vibe_mode,app,factory,0xC30000,0x100000,
+fctry,data,nvs,0xD30000,0xA000,
+storage,data,littlefs,0xD3A000,0x206000,
+modstore,data,littlefs,0xF40000,0xC0000,

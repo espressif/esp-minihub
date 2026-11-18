@@ -7,6 +7,7 @@
 #include "minihub_ota.h"
 #include "minihub_net.h"
 #include "minihub_task.h"
+#include "minihub_vibe.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,9 +36,18 @@ static int s_progress = -1;
 static size_t s_bytes;
 static size_t s_expected;
 
-static esp_ota_handle_t s_ota_handle;
-static const esp_partition_t *s_update_part;
-static bool s_ota_begun;
+static bool s_stage_begun;
+/* Device that needs formatting when s_state == MINIHUB_OTA_NEEDS_FORMAT. */
+static minihub_vibe_device_t s_format_dev = MINIHUB_VIBE_DEVICE_NONE;
+/* Original URL kept across NEEDS_FORMAT so /api/ota/format can resume without
+ * the web console having to re-POST (covers Store update-initiated OTA too). */
+static char s_pending_url[512];
+
+#ifndef CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+/* Internal A/B path: write the image straight to the inactive OTA slot. */
+static esp_ota_handle_t s_ota_handle = 0;
+static const esp_partition_t *s_ota_part = NULL;
+#endif
 
 static void lock(void)
 {
@@ -87,6 +97,107 @@ const char *minihub_ota_source_str(minihub_ota_source_t src)
     }
 }
 
+const char *minihub_ota_target_str(void)
+{
+    return minihub_vibe_device_str(minihub_vibe_get_device());
+}
+
+uint8_t minihub_ota_target_mask(void)
+{
+    uint8_t mask = MINIHUB_VIBE_DEV_MASK_ALL;
+    (void)minihub_vibe_mask_from_nvs(&mask);
+    return mask & minihub_vibe_mask_effective();
+}
+
+esp_err_t minihub_ota_set_targets(const char *const *targets, size_t n)
+{
+    if (!targets || n == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    uint8_t mask = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if (strcmp(targets[i], MINIHUB_VIBE_DEVICE_SDMMC) == 0) {
+            mask |= MINIHUB_VIBE_DEV_SDMMC_BIT;
+        } else if (strcmp(targets[i], MINIHUB_VIBE_DEVICE_USB) == 0) {
+            mask |= MINIHUB_VIBE_DEV_USB_BIT;
+        } else {
+            return ESP_ERR_INVALID_ARG;
+        }
+    }
+    if (mask == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return minihub_vibe_mask_to_nvs(mask);
+}
+
+esp_err_t minihub_ota_set_target(const char *target)
+{
+    const char *arr[1] = { target };
+    return minihub_ota_set_targets(arr, 1);
+}
+
+const char *minihub_ota_get_format_target(void)
+{
+    if (s_state != MINIHUB_OTA_NEEDS_FORMAT) {
+        return "";
+    }
+    return minihub_vibe_device_str(s_format_dev);
+}
+
+esp_err_t minihub_ota_format_target(const char *target)
+{
+    minihub_vibe_device_t dev = MINIHUB_VIBE_DEVICE_NONE;
+    if (strcmp(target, MINIHUB_VIBE_DEVICE_SDMMC) == 0) {
+        dev = MINIHUB_VIBE_DEVICE_SDMMC_ID;
+    } else if (strcmp(target, MINIHUB_VIBE_DEVICE_USB) == 0) {
+        dev = MINIHUB_VIBE_DEVICE_USB_ID;
+    } else {
+        return ESP_ERR_INVALID_ARG;
+    }
+    esp_err_t err = minihub_vibe_media_format(dev);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    /* Clear NEEDS_FORMAT so the web modal does not reappear and re-format. */
+    char resume[sizeof(s_pending_url)];
+    lock();
+    s_state = MINIHUB_OTA_IDLE;
+    s_format_dev = MINIHUB_VIBE_DEVICE_NONE;
+    set_error(NULL);
+    memcpy(resume, s_pending_url, sizeof(resume));
+    s_pending_url[0] = '\0';
+    unlock();
+
+    if (resume[0]) {
+        ESP_LOGI(TAG, "format done; resuming URL OTA");
+        err = minihub_ota_start_url(resume);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "resume after format: %s", esp_err_to_name(err));
+        }
+        /* Format itself succeeded; resume failure is reported via OTA state. */
+        return ESP_OK;
+    }
+    return ESP_OK;
+}
+
+/* Forward declaration: defined later as the shared staging-abort helper. */
+static void writer_abort_locked(const char *err);
+
+void minihub_ota_abort(void)
+{
+    lock();
+    if (s_state == MINIHUB_OTA_IN_PROGRESS) {
+        writer_abort_locked("aborted");
+    } else {
+        s_state = MINIHUB_OTA_IDLE;
+        set_error(NULL);
+    }
+    s_format_dev = MINIHUB_VIBE_DEVICE_NONE;
+    s_pending_url[0] = '\0';
+    unlock();
+}
+
 esp_err_t minihub_ota_init(void)
 {
     if (!s_lock) {
@@ -100,7 +211,7 @@ esp_err_t minihub_ota_init(void)
     s_progress = -1;
     s_bytes = 0;
     s_expected = 0;
-    s_ota_begun = false;
+    s_stage_begun = false;
     set_error(NULL);
 
     const esp_partition_t *running = esp_ota_get_running_partition();
@@ -150,49 +261,79 @@ bool minihub_ota_is_busy(void)
 
 static esp_err_t writer_begin_locked(minihub_ota_source_t src, size_t expected)
 {
-    /* Allow continue when start_url already reserved the slot (not yet ota_begin). */
+    /* Allow continue when start_url already reserved the job (not yet staged). */
     if (s_state == MINIHUB_OTA_IN_PROGRESS) {
-        if (!(s_source == src && !s_ota_begun)) {
+        if (!(s_source == src && !s_stage_begun)) {
             return ESP_ERR_INVALID_STATE;
         }
     }
-    s_update_part = esp_ota_get_next_update_partition(NULL);
-    if (!s_update_part) {
-        set_error("no OTA partition");
+    s_format_dev = MINIHUB_VIBE_DEVICE_NONE;
+    esp_err_t err;
+#ifdef CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+    err = minihub_vibe_stage_begin(expected);
+    if (err != ESP_OK) {
+        minihub_vibe_device_t nf = minihub_vibe_media_needs_format();
+        if (nf != MINIHUB_VIBE_DEVICE_NONE) {
+            s_format_dev = nf;
+            s_state = MINIHUB_OTA_NEEDS_FORMAT;
+            s_source = src;
+            set_error(minihub_vibe_device_str(nf));
+            /* Keep s_pending_url so format_target can resume a URL job. */
+            return err;
+        }
+        /* Distinguish "stick not present" from "present but not LittleFS"
+         * (the latter sets NEEDS_FORMAT above). */
+        set_error(err == ESP_ERR_NOT_FOUND ? "no USB/SD medium present"
+                                           : "no external firmware volume");
+        s_state = MINIHUB_OTA_FAILED;
+        s_source = src;
+        s_pending_url[0] = '\0';
+        return err;
+    }
+#else
+    s_ota_part = esp_ota_get_next_update_partition(NULL);
+    if (!s_ota_part) {
+        set_error("no OTA slot available");
         s_state = MINIHUB_OTA_FAILED;
         s_source = src;
         return ESP_ERR_NOT_FOUND;
     }
-    esp_err_t err = esp_ota_begin(s_update_part, OTA_WITH_SEQUENTIAL_WRITES, &s_ota_handle);
+    err = esp_ota_begin(s_ota_part, expected ? expected : OTA_SIZE_UNKNOWN, &s_ota_handle);
     if (err != ESP_OK) {
-        set_error("ota_begin failed");
+        set_error("internal OTA begin failed");
         s_state = MINIHUB_OTA_FAILED;
         s_source = src;
         return err;
     }
-    s_ota_begun = true;
+#endif
+    s_stage_begun = true;
     s_source = src;
     s_state = MINIHUB_OTA_IN_PROGRESS;
     s_bytes = 0;
     s_expected = expected;
     s_progress = expected > 0 ? 0 : -1;
     set_error(NULL);
-    ESP_LOGI(TAG, "OTA begin src=%s part=%s size=%u",
-             minihub_ota_source_str(src), s_update_part->label, (unsigned)s_update_part->size);
+    ESP_LOGI(TAG, "OTA stage begin src=%s size=%u",
+             minihub_ota_source_str(src), (unsigned)expected);
     return ESP_OK;
 }
 
 static esp_err_t writer_write_locked(const void *data, size_t len)
 {
-    if (!s_ota_begun || s_state != MINIHUB_OTA_IN_PROGRESS) {
+    if (!s_stage_begun || s_state != MINIHUB_OTA_IN_PROGRESS) {
         return ESP_ERR_INVALID_STATE;
     }
     if (len == 0) {
         return ESP_OK;
     }
-    esp_err_t err = esp_ota_write(s_ota_handle, data, len);
+    esp_err_t err;
+#ifdef CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+    err = minihub_vibe_stage_write(data, len);
+#else
+    err = esp_ota_write(s_ota_handle, data, len);
+#endif
     if (err != ESP_OK) {
-        set_error("ota_write failed");
+        set_error("firmware staging failed");
         return err;
     }
     s_bytes += len;
@@ -202,9 +343,14 @@ static esp_err_t writer_write_locked(const void *data, size_t len)
 
 static void writer_abort_locked(const char *err)
 {
-    if (s_ota_begun) {
-        (void)esp_ota_abort(s_ota_handle);
-        s_ota_begun = false;
+    if (s_stage_begun) {
+#ifdef CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+        minihub_vibe_stage_abort();
+#else
+        esp_ota_abort(s_ota_handle);
+        s_ota_handle = 0;
+#endif
+        s_stage_begun = false;
     }
     s_state = MINIHUB_OTA_FAILED;
     set_error(err ? err : "aborted");
@@ -212,43 +358,53 @@ static void writer_abort_locked(const char *err)
 
 static esp_err_t writer_finish_locked(void)
 {
-    if (!s_ota_begun) {
+    if (!s_stage_begun) {
         return ESP_ERR_INVALID_STATE;
     }
-    esp_err_t err = esp_ota_end(s_ota_handle);
-    s_ota_begun = false;
-    if (err != ESP_OK) {
-        set_error("ota_end failed");
-        s_state = MINIHUB_OTA_FAILED;
-        return err;
+    esp_err_t err;
+#ifdef CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+    err = minihub_vibe_stage_finish();
+#else
+    err = esp_ota_end(s_ota_handle);
+    s_ota_handle = 0;
+    if (err == ESP_OK) {
+        err = esp_ota_set_boot_partition(s_ota_part);
     }
-    err = esp_ota_set_boot_partition(s_update_part);
+    s_ota_part = NULL;
+#endif
+    s_stage_begun = false;
     if (err != ESP_OK) {
-        set_error("set_boot_partition failed");
+        set_error("firmware staging failed");
         s_state = MINIHUB_OTA_FAILED;
         return err;
     }
     s_progress = 100;
     s_state = MINIHUB_OTA_SUCCESS;
+    s_pending_url[0] = '\0';
     set_error(NULL);
     return ESP_OK;
 }
 
-static void reboot_task(void *arg)
-{
-    (void)arg;
-    ESP_LOGI(TAG, "OTA success, rebooting...");
-    vTaskDelay(pdMS_TO_TICKS(800));
-    esp_restart();
-}
-
 static void schedule_reboot(void)
 {
-    if (minihub_task_create_psram(reboot_task, "ota_reboot", 2048, NULL, 5, NULL) != pdPASS) {
-        ESP_LOGW(TAG, "reboot task failed, restarting inline");
-        vTaskDelay(pdMS_TO_TICKS(200));
-        esp_restart();
+#ifdef CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
+    /* Selecting app,factory erases otadata, so the bootloader starts Vibe Mode.
+     * The staged image, not this app, is what Vibe Mode copies into ota_0. */
+    esp_err_t err = minihub_vibe_enter();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "enter Vibe Mode: %s", esp_err_to_name(err));
+        (void)minihub_vibe_set_pending(false);
+        lock();
+        s_state = MINIHUB_OTA_FAILED;
+        set_error("cannot enter Vibe Mode");
+        unlock();
     }
+#else
+    /* Internal A/B: the image is already in the inactive slot and otadata has
+     * been pointed at it. A plain restart boots the updated application. */
+    ESP_LOGI(TAG, "internal A/B: rebooting into updated slot");
+    esp_restart();
+#endif
 }
 
 esp_err_t minihub_ota_upload_begin(size_t expected_size)
@@ -263,7 +419,7 @@ esp_err_t minihub_ota_upload_write(const void *data, size_t len)
 {
     lock();
     esp_err_t err = writer_write_locked(data, len);
-    if (err != ESP_OK && s_ota_begun) {
+    if (err != ESP_OK && s_stage_begun) {
         writer_abort_locked("ota_write failed");
     }
     unlock();
@@ -295,19 +451,12 @@ void minihub_ota_upload_abort(const char *err)
 
 bool minihub_ota_rainmaker_try_begin(size_t expected_size)
 {
-    lock();
-    if (s_state == MINIHUB_OTA_IN_PROGRESS) {
-        unlock();
-        return false;
-    }
-    s_source = MINIHUB_OTA_SRC_RAINMAKER;
-    s_state = MINIHUB_OTA_IN_PROGRESS;
-    s_bytes = 0;
-    s_expected = expected_size;
-    s_progress = expected_size > 0 ? 0 : -1;
-    set_error(NULL);
-    unlock();
-    return true;
+    (void)expected_size;
+    /* esp_rmaker_ota_default_cb() writes esp_ota_get_next_update_partition(),
+     * which under the single-slot ota_0 layout resolves to the running app.
+     * Reject the job up front instead of letting it fail after erasing flash.
+     * URL and upload OTA stage to external media for Vibe Mode instead. */
+    return false;
 }
 
 void minihub_ota_rainmaker_set_progress(int progress_0_100, size_t bytes_written)
@@ -487,11 +636,13 @@ esp_err_t minihub_ota_start_url(const char *url)
     /* Reserve before task create to close the race with upload / RainMaker. */
     s_state = MINIHUB_OTA_IN_PROGRESS;
     s_source = MINIHUB_OTA_SRC_URL;
-    s_ota_begun = false;
+    s_stage_begun = false;
     s_bytes = 0;
     s_expected = 0;
     s_progress = -1;
     set_error(NULL);
+    /* Stash the caller URL (not the mac-augmented copy) for format resume. */
+    snprintf(s_pending_url, sizeof(s_pending_url), "%s", url);
     unlock();
 
     /* mac= identifies the device; cur_version= tells the deploy server which

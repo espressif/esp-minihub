@@ -113,7 +113,7 @@ Kconfig 与登录
       ./tools/build_firmware.py -app minihub build
       ./tools/build_firmware.py -app minihub -p PORT storage-flash
 
-``app-flash`` 会保留现有 ``/data``。**现场 OTA** 只写 ``ota_0`` / ``ota_1``，
+``app-flash`` 会保留现有 ``/data``。**现场 OTA** 只写 ``ota_0`` ，
 **不会** 更新 ``/data/web/``。实验室 ``app-flash`` 或现场 OTA 之后，
 设备仍提供旧 HTML，直到 ``storage-flash`` 或整机 ``flash``。合并镜像见
 :doc:`production`。OTA 见 :doc:`ota`。

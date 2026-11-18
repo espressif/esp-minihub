@@ -3589,6 +3589,19 @@ static esp_err_t send_conflict(httpd_req_t *req, const char *msg)
     return httpd_resp_send(req, msg ? msg : "busy", HTTPD_RESP_USE_STRLEN);
 }
 
+static cJSON *ota_targets_json(void)
+{
+    uint8_t mask = minihub_ota_target_mask();
+    cJSON *arr = cJSON_CreateArray();
+    if (mask & 0x1u) {
+        cJSON_AddItemToArray(arr, cJSON_CreateString("sdmmc"));
+    }
+    if (mask & 0x2u) {
+        cJSON_AddItemToArray(arr, cJSON_CreateString("usb"));
+    }
+    return arr;
+}
+
 static esp_err_t handle_api_ota_status(httpd_req_t *req)
 {
     esp_err_t err = api_auth(req);
@@ -3601,6 +3614,9 @@ static esp_err_t handle_api_ota_status(httpd_req_t *req)
     cJSON_AddNumberToObject(resp, "progress", (double)minihub_ota_get_progress());
     cJSON_AddNumberToObject(resp, "bytes_written", (double)minihub_ota_get_bytes_written());
     cJSON_AddStringToObject(resp, "source", minihub_ota_source_str(minihub_ota_get_source()));
+    cJSON_AddStringToObject(resp, "ota_target", minihub_ota_target_str());
+    cJSON_AddItemToObject(resp, "ota_targets", ota_targets_json());
+    cJSON_AddStringToObject(resp, "needs_format", minihub_ota_get_format_target());
     err = send_json(req, resp);
     cJSON_Delete(resp);
     return err;
@@ -3641,6 +3657,147 @@ static esp_err_t handle_api_ota_start(httpd_req_t *req)
 
     cJSON *resp = cJSON_CreateObject();
     cJSON_AddStringToObject(resp, "result", "started");
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_ota_target(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char buf[128];
+    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (received <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    buf[received] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+    const cJSON *target = cJSON_GetObjectItem(root, "target");
+    if (!cJSON_IsString(target)) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing target");
+    }
+    err = minihub_ota_set_target(target->valuestring);
+    cJSON_Delete(root);
+    if (err == ESP_ERR_INVALID_ARG) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid target");
+    }
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+    }
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddStringToObject(resp, "target", minihub_ota_target_str());
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_ota_targets(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    char buf[256];
+    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (received <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    buf[received] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+    const cJSON *targets = cJSON_GetObjectItem(root, "targets");
+    if (!cJSON_IsArray(targets) || cJSON_GetArraySize(targets) == 0) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing targets");
+    }
+    size_t n = (size_t)cJSON_GetArraySize(targets);
+    if (n > 8) {
+        n = 8;
+    }
+    const char *list[8];
+    for (size_t i = 0; i < n; ++i) {
+        const cJSON *item = cJSON_GetArrayItem(targets, i);
+        if (!cJSON_IsString(item)) {
+            cJSON_Delete(root);
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid targets");
+        }
+        list[i] = item->valuestring;
+    }
+    err = minihub_ota_set_targets(list, n);
+    cJSON_Delete(root);
+    if (err == ESP_ERR_INVALID_ARG) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid target");
+    }
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+    }
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddItemToObject(resp, "targets", ota_targets_json());
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_ota_format(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (minihub_ota_is_busy()) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "ota busy");
+    }
+    char buf[128];
+    int received = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (received <= 0) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "empty body");
+    }
+    buf[received] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid json");
+    }
+    const cJSON *target = cJSON_GetObjectItem(root, "target");
+    if (!cJSON_IsString(target)) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing target");
+    }
+    err = minihub_ota_format_target(target->valuestring);
+    cJSON_Delete(root);
+    if (err == ESP_ERR_INVALID_ARG) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid target");
+    }
+    if (err != ESP_OK) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+    }
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
+    cJSON_AddStringToObject(resp, "target", target->valuestring);
+    err = send_json(req, resp);
+    cJSON_Delete(resp);
+    return err;
+}
+
+static esp_err_t handle_api_ota_abort(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    minihub_ota_abort();
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "result", "ok");
     err = send_json(req, resp);
     cJSON_Delete(resp);
     return err;
@@ -5971,6 +6128,10 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
                                  .handler = handle_api_update_apply };
     httpd_uri_t ota_status = { .uri = "/api/ota", .method = HTTP_GET, .handler = handle_api_ota_status };
     httpd_uri_t ota_start = { .uri = "/api/ota", .method = HTTP_POST, .handler = handle_api_ota_start };
+    httpd_uri_t ota_target = { .uri = "/api/ota/target", .method = HTTP_POST, .handler = handle_api_ota_target };
+    httpd_uri_t ota_targets = { .uri = "/api/ota/targets", .method = HTTP_POST, .handler = handle_api_ota_targets };
+    httpd_uri_t ota_format = { .uri = "/api/ota/format", .method = HTTP_POST, .handler = handle_api_ota_format };
+    httpd_uri_t ota_abort = { .uri = "/api/ota/abort", .method = HTTP_POST, .handler = handle_api_ota_abort };
     httpd_uri_t ota_upload = { .uri = "/api/ota/upload", .method = HTTP_POST, .handler = handle_api_ota_upload };
 #if CONFIG_MINIHUB_ZIGBEE_SDK
     httpd_uri_t zb_permit = { .uri = "/api/zigbee/permit_join", .method = HTTP_POST, .handler = handle_api_zigbee_permit };
@@ -6070,6 +6231,10 @@ esp_err_t minihub_web_attach(void *httpd, const minihub_web_attach_config_t *cfg
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &update_apply), TAG, "/api/update/apply");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_status), TAG, "/api/ota");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_start), TAG, "/api/ota POST");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_target), TAG, "/api/ota/target POST");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_targets), TAG, "/api/ota/targets POST");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_format), TAG, "/api/ota/format POST");
+    ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_abort), TAG, "/api/ota/abort POST");
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &ota_upload), TAG, "/api/ota/upload");
 #if CONFIG_MINIHUB_ZIGBEE_SDK
     ESP_RETURN_ON_ERROR(minihub_web_add_uri(server, &zb_permit), TAG, "/api/zigbee/permit_join");

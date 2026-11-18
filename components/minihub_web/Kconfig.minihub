@@ -50,4 +50,7 @@ menu "Web UI"
             web-only fix bumps this without touching the firmware.
             Defaults to MINIHUB_VERSION (defined in the MiniHub menu).
 
+    # Login / Bearer live with the console they protect (same httpd).
+    rsource "../minihub_auth/Kconfig.minihub"
+
 endmenu

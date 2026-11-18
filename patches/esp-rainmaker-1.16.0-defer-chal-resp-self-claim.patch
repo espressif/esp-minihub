@@ -8,6 +8,8 @@ RMAKER_EVENT_CLAIM_SUCCESSFUL.
 
 Component: espressif/esp-rainmaker v1.16.0 (commit afda50d)
 File: components/esp_rainmaker/src/core/esp_rmaker_core.c
+# Remapped by apply_component_patches.sh onto $MINIHUB_APP_DIR/... when the
+# build product is not application/minihub (e.g. minihub_lcd).
 Apply-Root: application/minihub/managed_components/espressif__esp_rainmaker
 
 Apply: ./tools/apply_component_patches.sh
@@ -16,7 +18,7 @@ Apply: ./tools/apply_component_patches.sh
 +++ b/src/core/esp_rmaker_core.c
 @@ -952,23 +952,22 @@ static esp_err_t esp_rmaker_init(const esp_rmaker_config_t *config, bool use_cla
  #endif
- 
+
  #ifdef CONFIG_ESP_RMAKER_ENABLE_CHALLENGE_RESPONSE
 -    /* Check if claiming is needed - challenge response is incompatible with self claiming only */
 +    /* Challenge Response signing needs a claimed key. With Self Claim, defer
@@ -31,7 +33,7 @@ Apply: ./tools/apply_component_patches.sh
 -        ESP_LOGE(TAG, "Self claiming is needed because device certificates are not found or device is not claimed yet.");
 -        return ESP_FAIL;
 -    }
-+        ESP_LOGW(TAG, "Deferring Challenge Response init until self claiming completes");
++        ESP_LOGI(TAG, "Deferring Challenge Response init until self claiming completes");
 +    } else
  #endif /* CONFIG_ESP_RMAKER_SELF_CLAIM */
 -

@@ -31,3 +31,33 @@ project(minihub_lcd)
 if(CONFIG_MINIHUB_RAINMAKER)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-u,esp_sha")
 endif()
+
+# IDF flashes the project app into the partition reported by
+# --partition-boot-default (tools/cmake/flash_targets.cmake). With an
+# app,factory row that is the factory slot, but in this layout the factory slot
+# holds the retained Vibe Mode image (components/minihub_vibe/subproject) and
+# the Host application must live in ota_0. Relocate the app image entry here;
+# the vibe_mode CMake target (project_include.cmake) builds the factory bin.
+partition_table_get_partition_info(MINIHUB_OTA0_OFFSET
+  "--partition-type app --partition-subtype ota_0" "offset")
+partition_table_get_partition_info(MINIHUB_FACTORY_OFFSET
+  "--partition-type app --partition-subtype factory" "offset")
+
+foreach(_target flash app-flash)
+  if(TARGET ${_target})
+    foreach(_prop FLASH_FILE FLASH_ENTRY IMAGES)
+      get_property(_values TARGET ${_target} PROPERTY ${_prop})
+      if(_values)
+        string(REPLACE "${MINIHUB_FACTORY_OFFSET}" "${MINIHUB_OTA0_OFFSET}"
+               _values "${_values}")
+        set_property(TARGET ${_target} PROPERTY ${_prop} "${_values}")
+      endif()
+    endforeach()
+  endif()
+endforeach()
+
+if(TARGET vibe_mode)
+  add_dependencies(flash vibe_mode)
+  esptool_py_flash_target_image(flash vibe_mode "${MINIHUB_FACTORY_OFFSET}"
+                                "${CMAKE_BINARY_DIR}/vibe_mode/vibe_mode.bin")
+endif()

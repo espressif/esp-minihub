@@ -705,7 +705,8 @@ GET /api/ota · POST /api/ota · POST /api/ota/upload
 
 GET 返回 OTA 任务状态。POST 请求体 url（必填，HTTPS 固件 .bin URL），成功 **HTTP 200**
 ``{"result":"started"}``；进行中再次请求 **409**。upload 为带 ``Content-Length`` 的原始
-``.bin``，不在 MCP ``hub.api`` 白名单。运维章节见 :doc:`../ota`。工厂分区见
+``.bin``，不在 MCP ``hub.api`` 白名单。任务成功后，镜像暂存到外部 LittleFS 介质并交接
+Vibe Mode，由它搬运到 ``ota_0`` ，设备会重启两次。运维章节见 :doc:`../ota`。工厂分区见
 :doc:`../production`。
 
 协议栈 REST（Kconfig 门控）

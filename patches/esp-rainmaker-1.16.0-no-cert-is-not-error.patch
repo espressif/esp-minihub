@@ -1,0 +1,30 @@
+From: MiniHub Contributors
+Subject: esp-rainmaker: first boot without a client certificate is not an error
+
+With CONFIG_ESP_RMAKER_SELF_CLAIM=y the certificate is provisioned only after
+the node gets IP connectivity and claiming succeeds. Upstream logs this expected
+pre-claim state at ERROR level ("Failed to get client cert") on every MQTT
+connection attempt. Report it at INFO instead; control flow is unchanged.
+
+Component: espressif/esp-rainmaker v1.16.0 (commit afda50d)
+File: components/esp_rainmaker/src/core/esp_rmaker_client_data.c
+# Remapped by apply_component_patches.sh onto $MINIHUB_APP_DIR/... when the
+# build product is not application/minihub (e.g. minihub_lcd).
+Apply-Root: application/minihub/managed_components/espressif__esp_rainmaker
+
+Apply: ./tools/apply_component_patches.sh
+---
+--- a/src/core/esp_rmaker_client_data.c
++++ b/src/core/esp_rmaker_client_data.c
+@@ -217,8 +217,10 @@
+     mqtt_conn_params->client_key_len = esp_rmaker_get_client_key_len();
+ #endif
+ 
+     if ((mqtt_conn_params->client_cert = esp_rmaker_get_client_cert()) == NULL) {
+-        ESP_LOGE(TAG, "Failed to get client cert");
++        /* Self Claim provisions the certificate only after IP connectivity.
++         * A missing certificate on first boot is expected, not an error. */
++        ESP_LOGI(TAG, "Client certificate not provisioned yet; waiting for claim");
+         goto init_err;
+     }
+     mqtt_conn_params->client_cert_len = esp_rmaker_get_client_cert_len();

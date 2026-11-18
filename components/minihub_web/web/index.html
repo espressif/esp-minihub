@@ -89,6 +89,14 @@
         <div style="height:8px;background:var(--bg2);border-radius:4px;margin:8px 0;overflow:hidden">
           <div id="sys-ota-bar" style="height:100%;width:0%;background:var(--accent);transition:width .2s"></div>
         </div>
+        <div class="sys-ota-target-row">
+          <label data-i18n="sys.ota_target_label">升级写入位置</label>
+          <div class="sys-ota-target-opts" style="display:flex;gap:16px;align-items:center">
+            <label class="sys-ota-chk"><input type="checkbox" id="sys-ota-sel-sd" value="sdmmc" /> <span data-i18n="sys.target_sd">SD 卡</span></label>
+            <label class="sys-ota-chk"><input type="checkbox" id="sys-ota-sel-usb" value="usb" /> <span data-i18n="sys.target_usb">U 盘</span></label>
+          </div>
+        </div>
+        <div id="sys-ota-target" class="modal-hint"></div>
         <label data-i18n="mdl.ota_custom_url">自定义 URL</label>
         <input id="sys-ota-url" placeholder="http://192.168.x.x/minihub.bin" />
         <div class="modal-actions" style="margin-top:8px">
@@ -253,5 +261,15 @@
 <script src="/web/js/overview.js"></script>
 <script src="/web/js/device_widgets.js"></script>
 <script src="/web/js/boot.js"></script>
+<div class="modal-overlay" id="ota-format-modal" hidden onclick="if(event.target===this)otaFormatCancel()">
+  <div class="modal" role="dialog" aria-labelledby="ota-format-title">
+    <h3 id="ota-format-title" data-i18n="sys.format_title">介质需要格式化</h3>
+    <div class="modal-hint" id="ota-format-msg"></div>
+    <div class="modal-actions" style="justify-content:flex-end;margin-top:14px">
+      <button class="btn-sm" type="button" onclick="otaFormatCancel()" data-i18n="sys.format_cancel">取消</button>
+      <button class="btn-sm on" type="button" id="ota-format-ok" onclick="otaFormatOk()" data-i18n="sys.format_ok">格式化并继续</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
