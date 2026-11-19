@@ -1314,6 +1314,19 @@ esp_err_t rainmaker_bridge_sync_all(void)
     }
     free(points);
 
+    /* add_point() early-returns for points already mapped, so their RainMaker
+     * params keep the create-time defaults until the next point update. Re-report
+     * every mapped point's current live state so the RainMaker app shows real
+     * values right after (re)connect / first sync instead of stale defaults. The
+     * report path is suppressed from cloud writes (s_updating_from_cloud) and does
+     * not touch node-config reporting, so this is safe to run here. */
+    for (size_t i = 0; i < s_entry_count; i++) {
+        uint16_t idx = minihub_point_index_of(s_entries[i].point_id);
+        if (idx != UINT16_MAX) {
+            rainmaker_bridge_on_point_updated(idx);
+        }
+    }
+
     s_suppress_config_report = false;
     (void)esp_rmaker_report_node_details();
     return ESP_OK;

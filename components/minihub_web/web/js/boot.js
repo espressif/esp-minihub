@@ -117,6 +117,16 @@ function toggleSecret(btn) {
     document.addEventListener('visibilitychange', function () {
         if (!document.hidden) {
             checkSessionThrottled();
+            /* Returning to a backgrounded tab: the poll/WS stream kept `pts`
+             * current but skipped renderOverview while the tab was hidden, so the
+             * overview DOM can be stale. Repaint it now (and refresh if the cache
+             * is older than 2s). Guarded so it is a no-op before the UI boots. */
+            if (typeof view !== 'undefined' && view === 'overview' && typeof renderOverview === 'function') {
+                renderOverview();
+                if (typeof pts !== 'undefined' && (!pts.length || (typeof lastPtsAt !== 'undefined' && Date.now() - lastPtsAt > 2000)) && typeof loadPoints === 'function') {
+                    loadPoints();
+                }
+            }
         }
     });
     window.addEventListener('pageshow', checkSessionThrottled);
