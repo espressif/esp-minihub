@@ -367,12 +367,10 @@ function sectionHeader(ad, count) {
         return '<div class="section-h radio-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     if (ad === 'ble_mesh') {
-        const bmPermit = !!radioProv.ble_mesh_permit_provision;
-        const bmProv = !!radioProv.ble_mesh_provisioning;
-        const bmOn = bmPermit || bmProv;
+        const bmOn = !!(radioProv.ble_mesh_permit_provision || radioProv.ble_mesh_provisioning);
         const zbBusy = !!radioProv.zigbee_permit_join;
         const st = bmOn ? '<span class="mod-acct">' + t('ov.provisioning') + '</span>' : (zbBusy ? '<span class="mod-acct off">' + t('ov.zigbee_joining') + '</span>' : '');
-        const acts = showActs ? (bmPermit ? '<button class="btn-sm" type="button" onclick="stopBleMeshProvision()">' + t('ov.stop_provisioning') + '</button>' : (bmProv ? '<button class="btn-sm on" type="button" disabled>' + t('ov.provisioning') + '</button>' : (zbBusy ? '<button class="btn-sm on" type="button" disabled title="' + t('ov.zigbee_joining') + '">' + t('ov.allow_provisioning') + '</button>' : '<button class="btn-sm on" type="button" onclick="permitBleMeshProvision()">' + t('ov.allow_provisioning') + '</button>'))) : '';
+        const acts = showActs ? (bmOn ? '<button class="btn-sm" type="button" onclick="stopBleMeshProvision()">' + t('ov.stop_provisioning') + '</button>' : (zbBusy ? '<button class="btn-sm on" type="button" disabled title="' + t('ov.zigbee_joining') + '">' + t('ov.allow_provisioning') + '</button>' : '<button class="btn-sm on" type="button" onclick="permitBleMeshProvision()">' + t('ov.allow_provisioning') + '</button>')) : '';
         return '<div class="section-h radio-section-h"><span>' + esc(adapterLabel(ad)) + '</span>' + verTag + st + '<span>' + count + '</span>' + upg + (acts ? '<span class="section-actions">' + acts + '</span>' : '') + '</div>';
     }
     return '<div class="section-h">' + esc(adapterLabel(ad)) + verTag + '<span>' + count + '</span>' + upg + '</div>';
@@ -2863,6 +2861,21 @@ async function permitZigbeeJoin() {
         toast(t('ov.network_error'));
     }
 }
+let bleMeshPermitOp = 0;
+let bleMeshPermitAwait = false;
+let bleMeshPermitClosing = false;
+function showBleMeshProvOn() {
+    radioProv.ble_mesh_permit_provision = true;
+    radioProv.ble_mesh_provisioning = true;
+    radioProv.busy = true;
+    if (view === 'overview') renderOverview();
+}
+function clearBleMeshProvOn() {
+    radioProv.ble_mesh_permit_provision = false;
+    radioProv.ble_mesh_provisioning = false;
+    radioProv.busy = false;
+    if (view === 'overview') renderOverview();
+}
 async function permitBleMeshProvision() {
     if (radioProv.ble_mesh_permit_provision || radioProv.ble_mesh_provisioning) {
         toast(t('ov.ble_mesh_prov_already_on'));
@@ -2872,7 +2885,10 @@ async function permitBleMeshProvision() {
         toast(t('ov.zigbee_busy_later'));
         return;
     }
-    toast(t('ov.opening_prov'));
+    const op = ++bleMeshPermitOp;
+    bleMeshPermitAwait = true;
+    showBleMeshProvOn();
+    toast(t('ov.ble_mesh_prov_started'));
     try {
         const r = await fetch('/api/ble_mesh/permit_provision', {
             method: 'POST',
@@ -2884,17 +2900,18 @@ async function permitBleMeshProvision() {
             })
         });
         const j = await r.json().catch(() => ({}));
+        if (op !== bleMeshPermitOp) return;
+        bleMeshPermitAwait = false;
         if (r.ok && j.result === 'ok') {
-            radioProv.ble_mesh_permit_provision = true;
-            radioProv.ble_mesh_provisioning = true;
-            radioProv.busy = true;
-            if (view === 'overview') renderOverview();
-            toast(t('ov.ble_mesh_prov_started'));
             loadPoints();
         } else {
+            clearBleMeshProvOn();
             toast(t('ov.open_failed') + (j.error ? ': ' + j.error : (j.result ? ': ' + j.result : '')));
         }
     } catch (e) {
+        if (op !== bleMeshPermitOp) return;
+        bleMeshPermitAwait = false;
+        clearBleMeshProvOn();
         toast(t('ov.network_error'));
     }
 }
@@ -2906,6 +2923,15 @@ async function refreshRadioProv() {
         const rp = await fetch('/api/radio/provision');
         if (!rp.ok) return;
         const j = await rp.json();
+        if (bleMeshPermitClosing) {
+            j.ble_mesh_permit_provision = false;
+            j.ble_mesh_provisioning = false;
+            j.busy = false;
+        } else if (bleMeshPermitAwait && !j.ble_mesh_permit_provision) {
+            j.ble_mesh_permit_provision = true;
+            j.ble_mesh_provisioning = true;
+            j.busy = true;
+        }
         const changed = (!!radioProv.busy !== !!j.busy) || (!!radioProv.zigbee_permit_join !== !!j.zigbee_permit_join) || (!!radioProv.ble_mesh_provisioning !== !!j.ble_mesh_provisioning) || (!!radioProv.ble_mesh_permit_provision !== !!j.ble_mesh_permit_provision);
         radioProv = j;
         if (view === 'overview' && changed) renderOverview();
@@ -2937,6 +2963,10 @@ async function stopZigbeeJoin() {
     }
 }
 async function stopBleMeshProvision() {
+    bleMeshPermitOp++;
+    bleMeshPermitAwait = false;
+    bleMeshPermitClosing = true;
+    clearBleMeshProvOn();
     toast(t('ov.closing_prov'));
     try {
         const r = await fetch('/api/ble_mesh/permit_provision', {
@@ -2953,10 +2983,15 @@ async function stopBleMeshProvision() {
             await refreshRadioProv();
             toast(t('ov.ble_mesh_prov_stopped'));
         } else {
+            bleMeshPermitClosing = false;
+            await refreshRadioProv();
             toast(t('ov.close_failed') + (j.error ? ': ' + j.error : ''));
         }
     } catch (e) {
+        bleMeshPermitClosing = false;
         toast(t('ov.network_error'));
+    } finally {
+        bleMeshPermitClosing = false;
     }
 }(function() {
     const q = document.getElementById('q');

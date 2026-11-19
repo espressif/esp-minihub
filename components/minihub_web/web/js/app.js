@@ -432,11 +432,13 @@ function adapterRoomChipsHtml(adapterPts) {
     });
     return h + '</div>';
 }
+let toastHideTimer = null;
 function toast(m) {
-    const t = document.getElementById('toast');
-    t.textContent = m;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2200)
+    const el = document.getElementById('toast');
+    el.textContent = m;
+    el.classList.add('show');
+    if (toastHideTimer) clearTimeout(toastHideTimer);
+    toastHideTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
 
 function esc(s) {

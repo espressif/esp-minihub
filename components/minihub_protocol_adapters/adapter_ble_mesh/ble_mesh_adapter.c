@@ -772,18 +772,16 @@ static void ble_mesh_register_mapped_points(void)
         n = 2;
     }
 #endif
-
-    if (minihub_ble_mesh_running()) {
-        ESP_LOGI(TAG, "ble_mesh adapter started (%u devices)", (unsigned)n);
-    } else {
-        ESP_LOGW(TAG, "ble_mesh adapter up but stack not running (%u mapped devices)", (unsigned)n);
-    }
 }
 
 static esp_err_t ble_mesh_adapter_start(void)
 {
     minihub_ble_mesh_set_callbacks(on_bm_device, on_bm_attr, NULL);
 
+    /* Register before the stack's boot Get. Otherwise a fast Status is applied
+     * to a point that does not exist yet, and the following register writes the
+     * map default ("off" / 100) over the real state. */
+    ble_mesh_register_mapped_points();
 #if CONFIG_MINIHUB_BLE_MESH_SDK
     /* Host (main) sequences Zigbee-before-BLE when both are enabled; start here immediately. */
     minihub_heap_log();
@@ -792,11 +790,14 @@ static esp_err_t ble_mesh_adapter_start(void)
     if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
         ESP_LOGW(TAG, "Host stack start: %s", esp_err_to_name(err));
     }
-    ble_mesh_register_mapped_points();
 #else
     ESP_LOGI(TAG, "simulation mode (CONFIG_MINIHUB_BLE_MESH_SDK=n)");
-    ble_mesh_register_mapped_points();
 #endif
+    if (minihub_ble_mesh_running()) {
+        ESP_LOGI(TAG, "ble_mesh adapter started");
+    } else {
+        ESP_LOGW(TAG, "ble_mesh adapter up but stack not running");
+    }
 
     (void)s_config;
     return ESP_OK;
