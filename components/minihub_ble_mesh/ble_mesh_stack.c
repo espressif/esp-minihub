@@ -28,6 +28,9 @@ static minihub_ble_mesh_device_cb_t s_on_device;
 static minihub_ble_mesh_attr_cb_t s_on_attr;
 static ble_mesh_stack_ready_cb_t s_on_ready;
 static void *s_cb_ctx;
+/** Join-window deadline (ms since boot). 0 = closed. Checked in
+ *  ESP_BLE_MESH_PROVISIONER_RECV_UNPROV_ADV_PKT_EVT. Closing the window must
+ *  not call prov_disable — that stops the mesh scanner and drops BLE RX. */
 static int64_t s_permit_until_ms;
 static bool s_running;
 #if CONFIG_MINIHUB_BLE_MESH_SDK
@@ -94,6 +97,8 @@ extern int bt_mesh_scan_enable(void);
 #define PROV_BUSY_WATCHDOG_US (45 * 1000000ULL)
 /** Cap "busy → extend permit" so a stuck busy cannot hold the window forever. */
 #define PERMIT_BUSY_EXTEND_MAX 1
+/** Keep the Mesh subnet up after restore Gets so Status replies can land. */
+#define MESH_READBACK_HOLD_US (10 * 1000000LL)
 
 typedef struct {
     uint8_t uuid[16];
@@ -704,6 +709,9 @@ static esp_err_t send_model_pub_set_at(node_info_t *node, size_t idx)
     return ESP_OK;
 }
 
+static esp_err_t mesh_hold_network(int64_t hold_us);
+static void cfg_finished_release(void);
+
 static void configure_status_reporting(node_info_t *node)
 {
     const minihub_bm_report_t *rep = minihub_bm_report();
@@ -732,7 +740,8 @@ static void advance_status_reporting(node_info_t *node)
         return;
     }
     ESP_LOGI(TAG, "publication finished on 0x%04x (%u server model(s))",
-             (unsigned)s_bind_job_count, node->unicast);
+             node->unicast, (unsigned)s_bind_job_count);
+    cfg_finished_release();
 }
 
 static void snapshot_bind_jobs(node_info_t *node)
@@ -758,6 +767,12 @@ static void read_back_bound_state(node_info_t *node, const minihub_bm_bound_mode
                                   size_t bind_count)
 {
     if (!node || !binds || bind_count == 0) {
+        return;
+    }
+    /* Boot restore used to fire Gets after idle prov_disable — NetIdx gone,
+     * every Get failed with EADDRNOTAVAIL. Hold the subnet first. */
+    if (mesh_hold_network(MESH_READBACK_HOLD_US) != ESP_OK) {
+        ESP_LOGW(TAG, "state read-back: Mesh network not ready for 0x%04x", node->unicast);
         return;
     }
     size_t sent = 0;
@@ -807,7 +822,8 @@ static void read_back_bound_state(node_info_t *node, const minihub_bm_bound_mode
 
 static void finish_model_binds(node_info_t *node)
 {
-    s_cfg_pending_unicast = 0;
+    /* Keep s_cfg_pending_unicast until Publication finishes (or is skipped) so
+     * permit/idle cannot drop NetIdx mid-config. */
     snapshot_bind_jobs(node);
     ESP_LOGI(TAG, "model binds complete on 0x%04x (%u jobs) caps=0x%02x",
              node->unicast, (unsigned)node->bind_count, node->caps);
@@ -828,6 +844,10 @@ static void finish_model_binds(node_info_t *node)
         (void)send_sensor_descriptor_get(node);
     }
     configure_status_reporting(node);
+    const minihub_bm_report_t *rep = minihub_bm_report();
+    if (!rep->enabled || s_bind_job_count == 0) {
+        cfg_finished_release();
+    }
 }
 
 static void schedule_cfg_timer(int action, int64_t delay_us);
@@ -920,23 +940,23 @@ static void coex_mesh_set(uint32_t bit)
 static void coex_idle_timer_cb(void *arg)
 {
     (void)arg;
-    /* Never demote BLE while joining / mid PB-GATT — STANDBY starves the ACL
-     * and provisioner close_link then surfaces as HCI 0x16. */
-    if (s_prov_busy || ble_mesh_stack_permit_provision_active()) {
+    /* CONFIG only while a link or post-prov config holds the ACL. Holding it
+     * for the whole join window starves Wi-Fi: index.html send returns
+     * EAGAIN and the stop-provision request never lands. An open window that
+     * is just listening stays at TRAFFIC. */
+    if (s_prov_busy || s_cfg_pending_unicast != 0) {
         coex_mesh_set(ESP_COEX_BLE_ST_MESH_CONFIG);
         return;
     }
-    /* After Mesh TX window: drop provisioner so Zigbee can use the RF. */
-    if (s_prov_scan_on) {
-        esp_err_t err = esp_ble_mesh_provisioner_prov_disable(s_prov_bearers);
-        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-            ESP_LOGW(TAG, "idle prov disable: %s", esp_err_to_name(err));
-        }
-        /* s_prov_scan_on cleared in PROV_DISABLE_COMP */
+    if (ble_mesh_stack_permit_provision_active()) {
+        coex_mesh_set(ESP_COEX_BLE_ST_MESH_TRAFFIC);
+        return;
     }
-#if CONFIG_ESP_COEX_SW_COEXIST_ENABLE
+    /* Bearers stay enabled. prov_disable stops the scanner, so a Get Status
+     * and later publications never update the point. STANDBY lets Wi-Fi run
+     * while mesh RX continues. Zigbee still calls yield_rf() when it needs
+     * the radio. */
     coex_mesh_set(ESP_COEX_BLE_ST_MESH_STANDBY);
-#endif
 }
 
 static void coex_mesh_standby(void)
@@ -1000,9 +1020,11 @@ static void net_gate_signal(int err_code)
 }
 
 /**
- * Enable/disable provisioner network.
- * Full disable clears VALID_PROV (OnOff then fails with EADDRNOTAVAIL).
- * Idle path keeps it disabled so Zigbee can TX; Mesh TX re-enables briefly.
+ * Enable/disable provisioner bearers.
+ * Disable stops BLE scan (mesh RX goes silent) and can clear VALID_PROV
+ * (client TX then fails with EADDRNOTAVAIL). Idle / yield / stack stop use
+ * this so Zigbee can take the RF. The join window does not: it is
+ * s_permit_until_ms, checked when an unprovisioned beacon arrives.
  */
 static esp_err_t prov_network_set(bool enable)
 {
@@ -1075,6 +1097,41 @@ static esp_err_t mesh_prepare_tx(void)
     }
     coex_mesh_traffic();
     return ESP_OK;
+}
+
+/**
+ * Like mesh_prepare_tx(), but keep CONFIG for hold_us so Status replies to
+ * restore Gets are not lost in a coex gap. Bearers are not disabled afterwards.
+ */
+static esp_err_t mesh_hold_network(int64_t hold_us)
+{
+    esp_err_t err = prov_network_set(true);
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (!s_local_models_bound) {
+        err = bind_local_client_models();
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    coex_mesh_config();
+    if (s_coex_idle_timer) {
+        esp_timer_stop(s_coex_idle_timer);
+        (void)esp_timer_start_once(s_coex_idle_timer, hold_us);
+    }
+    return ESP_OK;
+}
+
+/** Clear config-pending and schedule idle Mesh release when the join window is idle. */
+static void cfg_finished_release(void)
+{
+    s_cfg_pending_unicast = 0;
+    if (s_prov_busy) {
+        return;
+    }
+    /* Listening or idle. CONFIG is only for an open link / in-progress config. */
+    coex_mesh_traffic();
 }
 
 /*
@@ -1298,6 +1355,26 @@ static void prov_busy_arm(void)
     (void)esp_timer_start_once(s_prov_busy_timer, PROV_BUSY_WATCHDOG_US);
 }
 
+/**
+ * Join window is closed. Bearers stay enabled so mesh scan / BLE RX continues.
+ * Unprovisioned beacons are ignored while the permit flag is clear.
+ */
+static void permit_window_closed(const char *why)
+{
+    if (s_cfg_pending_unicast != 0) {
+        ESP_LOGI(TAG,
+                 "permit provision window closed (%s) — Mesh stays up for cfg 0x%04x",
+                 why ? why : "?", (unsigned)s_cfg_pending_unicast);
+        return;
+    }
+    if (s_coex_idle_timer) {
+        esp_timer_stop(s_coex_idle_timer);
+    }
+    /* Drop coex priority only. prov_disable would stop the scanner. */
+    coex_mesh_standby();
+    ESP_LOGI(TAG, "permit provision window closed (%s)", why ? why : "?");
+}
+
 static void permit_timer_cb(void *arg)
 {
     (void)arg;
@@ -1316,12 +1393,7 @@ static void permit_timer_cb(void *arg)
     }
     s_permit_busy_extends = 0;
     s_permit_until_ms = 0;
-    /* Close join window and free RF unless a Mesh TX window is still open. */
-    if (s_coex_idle_timer) {
-        esp_timer_stop(s_coex_idle_timer);
-    }
-    (void)prov_network_set(false);
-    ESP_LOGI(TAG, "permit provision window closed");
+    permit_window_closed("timeout");
 }
 
 static void prov_queue_forget_uuid(const uint8_t uuid[16])
@@ -1492,6 +1564,8 @@ static void recv_unprov_adv_pkt(uint8_t dev_uuid[16], uint8_t addr[BD_ADDR_LEN],
                                 uint8_t adv_type, esp_ble_mesh_prov_bearer_t bearer)
 {
     (void)adv_type;
+    /* Join on/off is the permit flag. prov_disable is not used here: it stops
+     * BLE scan, so mesh PDUs stop arriving along with unprov beacons. */
     if (!ble_mesh_stack_permit_provision_active()) {
         return;
     }
@@ -1594,6 +1668,14 @@ static void provisioning_cb(esp_ble_mesh_prov_cb_event_t event, esp_ble_mesh_pro
     case ESP_BLE_MESH_PROVISIONER_PROV_LINK_OPEN_EVT: {
         bool gatt_open =
             (param->provisioner_prov_link_open.bearer == ESP_BLE_MESH_PROV_GATT);
+        /* A link we did not start (window already closed, busy cleared) must
+         * not raise s_prov_busy. That flag is what the page reads as
+         * "正在入网", and with the permit flag already 0 the stop button is
+         * hidden until LINK_CLOSE or the 45 s watchdog. */
+        if (!s_prov_busy && !ble_mesh_stack_permit_provision_active()) {
+            ESP_LOGW(TAG, "prov link open ignored — join window closed");
+            break;
+        }
         s_prov_busy = true;
         prov_busy_arm();
         coex_mesh_config();
@@ -1886,6 +1968,7 @@ static void config_client_cb(esp_ble_mesh_cfg_client_cb_event_t event,
                          " — reporting left partly configured",
                          node->unicast, (unsigned)(s_pub_model_idx + 1),
                          (unsigned)s_bind_job_count);
+                cfg_finished_release();
                 break;
             }
             s_pub_retries++;
@@ -1898,10 +1981,10 @@ static void config_client_cb(esp_ble_mesh_cfg_client_cb_event_t event,
                      "config timeout exhausted op=0x%04" PRIx32
                      " addr=0x%04x — purge incomplete node (re-permit to retry)",
                      opcode, node->unicast);
-            s_cfg_pending_unicast = 0;
             (void)esp_ble_mesh_provisioner_delete_node_with_addr(node->unicast);
             memset(node, 0, sizeof(*node));
             node->unicast = ESP_BLE_MESH_ADDR_UNASSIGNED;
+            cfg_finished_release();
             break;
         }
         s_cfg_timeout_retries++;
@@ -2205,15 +2288,19 @@ esp_err_t ble_mesh_stack_start(void)
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "initial local model bind: %s", esp_err_to_name(err));
     }
-    /* Free RF for Zigbee until Mesh TX / permit_provision. */
-    (void)prov_network_set(false);
 
     s_mesh_inited = true;
     s_running = true;
+    /* Points are already registered. Read-back Gets run now; leaving the
+     * bearers up is what lets the Status (and later publications) land.
+     * A read-back holds CONFIG briefly, then the idle timer drops to STANDBY. */
     if (s_on_ready) {
         s_on_ready(s_cb_ctx);
     }
-    ESP_LOGI(TAG, "BLE Mesh Provisioner ready (idle; TX/permit re-enables network)");
+    if (!s_coex_idle_timer || !esp_timer_is_active(s_coex_idle_timer)) {
+        coex_mesh_standby();
+    }
+    ESP_LOGI(TAG, "BLE Mesh Provisioner ready");
     return ESP_OK;
 }
 
@@ -2263,11 +2350,7 @@ esp_err_t ble_mesh_stack_permit_provision(int seconds)
         if (s_prov_busy) {
             prov_busy_abort("manual close");
         }
-        if (s_coex_idle_timer) {
-            esp_timer_stop(s_coex_idle_timer);
-        }
-        (void)prov_network_set(false);
-        ESP_LOGI(TAG, "permit provision window closed (manual)");
+        permit_window_closed("manual");
         return ESP_OK;
     }
 
@@ -2288,11 +2371,15 @@ esp_err_t ble_mesh_stack_permit_provision(int seconds)
         return ESP_ERR_NO_MEM;
     }
 
+    /* Bearers may be idle-off. Enable so unprov beacons reach the callback.
+     * Whether a beacon starts provisioning is still the permit flag.
+     * TRAFFIC, not CONFIG: the window may sit for 120 s with no link, and
+     * CONFIG for that long blocks the web server. */
     esp_err_t err = prov_network_set(true);
     if (err != ESP_OK) {
         return err;
     }
-    coex_mesh_config();
+    coex_mesh_traffic();
 
     s_permit_until_ms = esp_timer_get_time() / 1000 + (int64_t)seconds * 1000;
     s_permit_busy_extends = 0;

@@ -1392,10 +1392,11 @@ static esp_err_t handle_api_system(httpd_req_t *req)
         cJSON *wifi = iface_status_json(MINIHUB_NET_IF_WIFI);
         if (wifi) {
             char ssid[33] = {0};
-            bool has_password = false;
-            if (minihub_net_get_wifi_sta(ssid, sizeof(ssid), &has_password) == ESP_OK) {
+            char password[65] = {0};
+            if (minihub_net_get_wifi_credentials(ssid, sizeof(ssid), password, sizeof(password)) == ESP_OK) {
                 cJSON_AddStringToObject(wifi, "ssid", ssid);
-                cJSON_AddBoolToObject(wifi, "has_password", has_password);
+                cJSON_AddStringToObject(wifi, "password", password);
+                cJSON_AddBoolToObject(wifi, "has_password", password[0] != '\0');
             }
         }
         cJSON_AddItemToObject(net, "wifi", wifi);

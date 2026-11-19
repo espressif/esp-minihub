@@ -508,8 +508,9 @@ Hub runtime summary for Web UI and ops scripts.
      ``uptime_s``, ``chip`` (``chip_cores`` / ``chip_revision``, ``flash_size``),
      ``ram`` (``internal_free`` / ``internal_total`` / ``psram_free`` /
      ``psram_total``), ``storage`` and ``modstore`` usage, ``local_ip``,
-     ``web_base``, ``net`` (``eth`` / ``wifi``, the latter with ``ssid`` and
-     ``has_password``), ``timezone`` (``id``, ``offset_min``, ``zones``), and
+     ``web_base``, ``net`` (``eth`` / ``wifi``, the latter with ``ssid``,
+     ``password``, and ``has_password``), ``timezone`` (``id``, ``offset_min``,
+     ``zones``), and
      ``display_name`` (sidebar label shared by Web and LCD; empty means the UI
      default).
 

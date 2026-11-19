@@ -476,7 +476,7 @@ GET /api/system
      ``uptime_s``、``chip`` （``chip_cores`` / ``chip_revision``、``flash_size``）、
      ``ram`` （``internal_free`` / ``internal_total`` / ``psram_free`` /
      ``psram_total``）、``storage`` 与 ``modstore`` 占用、``local_ip``、
-     ``web_base``、``net`` （``eth`` / ``wifi``，后者带 ``ssid`` 与
+     ``web_base``、``net`` （``eth`` / ``wifi``，后者带 ``ssid``、``password`` 与
      ``has_password``）、``timezone`` （``id``、``offset_min``、``zones``），以及
      ``display_name`` （Web 与 LCD 共用的侧栏显示名；空字符串表示用界面默认文案）。
 
