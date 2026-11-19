@@ -128,13 +128,7 @@ function sysFillNet() {
     const passEl = document.getElementById('sys-wifi-pass');
     if (sysIface === 'wifi' && ssidEl) ssidEl.value = st.ssid || '';
     if (passEl && sysIface === 'wifi') {
-        passEl.value = '';
-        passEl.type = 'password';
-        const eye = passEl.parentElement && passEl.parentElement.querySelector('.secret-toggle');
-        if (eye) {
-            eye.textContent = t('sys.show');
-            eye.setAttribute('aria-label', t('sys.show_password'));
-        }
+        passEl.value = st.password || '';
     }
     sysToggleDhcp();
 }
@@ -705,7 +699,6 @@ async function sysApplyWifi() {
         });
         const j = await r.json().catch(() => ({}));
         if ((r.ok && j.result === 'ok') || !ssid) {
-            document.getElementById('sys-wifi-pass').value = '';
             if (ssid) {
                 toast(t('sys.saved_reconnecting'));
                 /* GOT_IP is often 3–5 s after reconnect; one early refresh stays blank. */

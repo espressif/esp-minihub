@@ -42,7 +42,7 @@
             <input id="sys-wifi-ssid" maxlength="32" autocomplete="off" placeholder="热点名称" data-i18n-ph="mdl.net_ssid_ph" />
             <label for="sys-wifi-pass" data-i18n="mdl.net_password">密码</label>
             <div class="secret-field">
-              <input id="sys-wifi-pass" type="password" maxlength="64" autocomplete="new-password" placeholder="留空则沿用已保存密码" data-i18n-ph="mdl.net_pass_ph" />
+              <input id="sys-wifi-pass" type="password" maxlength="64" autocomplete="new-password" placeholder="密码" data-i18n-ph="mdl.net_pass_ph" />
               <button type="button" class="secret-toggle" aria-label="显示密码" data-i18n-aria="mdl.aria_show_password" onclick="toggleSecret(this)" data-i18n="mdl.show">显示</button>
             </div>
             <label class="sys-check" for="sys-wifi-open">
@@ -52,7 +52,7 @@
             <div class="modal-actions" style="margin-top:8px;justify-content:flex-start">
               <button class="btn-sm on" type="button" onclick="sysApplyWifi()" data-i18n="mdl.net_save_wifi">保存 Wi-Fi</button>
             </div>
-            <div class="sys-hint" data-i18n="mdl.net_wifi_hint">写入本机 NVS 并重连。页面只显示 SSID，不回显密码。改到别的网络后，请用新地址打开控制台。</div>
+            <div class="sys-hint" data-i18n="mdl.net_wifi_hint">写入本机 NVS 并重连。密码框显示已保存的口令。改到别的网络后，请用新地址打开控制台。留空 SSID 会断开 Wi-Fi 并保持关闭。</div>
           </div>
           <div class="modal-actions" style="margin-top:14px;justify-content:flex-start">
             <button class="btn-sm on" type="button" onclick="sysApplyNet()" data-i18n="mdl.apply">应用</button>
