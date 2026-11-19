@@ -1,5 +1,12 @@
 {
   "version": 1,
+  "report": {
+    "group": "0xC001",
+    "period_s": 30,
+    "retransmit_count": 2,
+    "retransmit_ms": 200,
+    "ttl": 3
+  },
   "models": [
     { "id": "0x1000", "cap": "onoff",     "client": "0x1001", "get": "0x8201", "alias": "gen_onoff_srv" },
     { "id": "0x1002", "cap": "level",     "client": "0x1003", "get": "0x8205", "alias": "gen_level_srv" },

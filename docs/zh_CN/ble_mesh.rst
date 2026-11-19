@@ -103,10 +103,14 @@ BLE Mesh 上做不到的：
 状态同步
 --------
 
-Mesh 状态靠 Hub 下发 Get 拉取，节点不会主动推送。适配器轮询入口
-``ble_mesh_adapter_poll()`` 为空操作，通用 poll 路径因此取不到 Mesh 状态。若
-client model 未订阅 group 地址，节点发往该 group 的 Status 也到不了 Hub。状态
-只会在下列四个时刻写入点位：
+出厂的 ``ble_mesh_map.json`` 带有 ``report`` 块。绑定完成后，每个本地 client model
+会订阅该 group，节点上每个被绑定的 Server model 都会收到一条 Config Model
+Publication Set。于是发布的 Status 与 Get 的回复走同一套解码：generic 与 light
+回调以 publish 事件为门（ ``ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT`` 、
+``ESP_BLE_MESH_LIGHT_CLIENT_PUBLISH_EVT`` ），sensor 回调不看事件、只按 opcode
+分派。墙面开关或插座发布 OnOff Status 时，Hub 点位不必再发一次 Get 就会更新。
+
+Get 路径（绑定完成、Set 回复、Hub 重启时的读回；无 ``report`` 时状态同步也只靠它）：
 
 * model 绑定完成时：每个已绑定且 ``models[]`` 行声明了 ``get`` opcode 的模型各取
   一次，带 Sensor Server 的节点还要取 Sensor Descriptor。
@@ -116,39 +120,32 @@ client model 未订阅 group 地址，节点发往该 group 的 Status 也到不
 * Hub 重启时：按 NVS 里随设备保存的 ``(model, elem)`` 绑定列表再 Get 一遍（已存过的
   Sensor Server 只发 Sensor Get，不再 Descriptor）。
 
-映射表标为可读的参数，背后都有一条 Get。Get 回答之前，参数显示的是映射表里的
-``init`` 值，不是节点回报的值。在这份绑定列表出现之前配过网的设备仍能控制，但会停在
-``init``，直到有命令或重新配网。
+``ble_mesh_adapter_poll()`` 直接返回：适配器轮询任务不会去取 Mesh 状态。映射表
+标为可读的参数背后都有一条 Get。在 Get 或发布的 Status 到来之前，参数显示的是映射表
+里的 ``init`` 值。在绑定列表出现之前配过网的设备仍能控制，但会停在 ``init``，直到有
+命令或重新配网。``report`` 首次启用时已经在网上的节点，需要重新配网（或补一条
+Publication Set）才会向 Hub 的 group 发布。
 
-所以设备自己变了状态（有人手按墙面开关、传感器数值漂移），控制台里的值就一直是旧的，
-直到 Hub 下一次 Get —— 实际就是下一条命令、Hub 重启（且已存绑定列表），或重新配网。
-只靠 Get 对电池供电节点是双重代价：它得醒着接收 Get，而发布路径本可以省下的 Mesh
-带宽全花在了请求上。
-
-蓝牙 SIG 定义了另一半。Server model 可以发布自己的 Status 消息，Sensor Server 还能
-周期性发布 Sensor Value，或在 property 模式变化时发布；要收到这些，接收侧的
-client model 必须订阅同一个 group 并绑定同一个 app key。
-
-映射表用一个 ``report`` 块把它打开：
+默认 ``report`` 块：
 
 .. code-block:: json
 
    "report": { "group": "0xC001", "period_s": 30, "retransmit_count": 2,
                "retransmit_ms": 200, "ttl": 3 }
 
-有这个块时，每个本地 client model 在 app key 绑定之后随即订阅 ``group`` ，节点上每个
-被绑定的 Server model 都会收到一条 Config Model Publication Set，发布地址就是那个
-group。于是发布的 Status 与 Get 的回复走同一套解码：generic 与 light 回调以 publish
-事件为门（ ``ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT`` 、
-``ESP_BLE_MESH_LIGHT_CLIENT_PUBLISH_EVT`` ），sensor 回调不看事件、只按 opcode 分派。
+去掉该块，或用一份不含它的 overlay：Hub 不向节点写 Publication，本地 client
+model 也不订阅状态 group；状态同步只靠上面的 Get 路径。
 
-没有这个块就什么都不写给节点，上报默认是关闭的 —— 打开它会给每次配网加上配置流量，
-并改变射频上运行的内容。 ``period_s`` 必须能被 Model Publication Period 那个字节精确
-表示：63 秒以内按 1 秒步进，之后按 10 秒、再按 10 分钟步进；编码不出的周期会被记日志
-并拒绝，而不是就近取整。 ``group`` 必须是 group 地址：被射频栈的
-``ESP_BLE_MESH_ADDR_IS_GROUP`` 拒绝的值会让上报保持关闭，只留一行日志。
-``ttl`` 取 0-127，或 255 表示沿用节点自己的默认值。节点拒绝这个周期时，Hub 会不带
-周期再配一次，该节点此后只在状态变化时发布。
+字段取值：
+
+* ``period_s`` —— 必须能被 Model Publication Period 那个字节精确编码。63 秒以内按
+  1 秒步进，之后按 10 秒、再按 10 分钟步进。编码不出的值只记日志并拒绝，不会就近
+  取整。
+* ``group`` —— 必须是 group 地址。``ESP_BLE_MESH_ADDR_IS_GROUP`` 拒绝的值会让上报
+  保持关闭，只留一行日志。
+* ``ttl`` —— 取 0–127；255 表示沿用节点自己的默认值。
+
+节点拒绝该周期时，Hub 会不带周期再配一次，该节点此后只在状态变化时发布。
 
 REST 接口
 ---------

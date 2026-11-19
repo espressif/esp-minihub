@@ -112,11 +112,17 @@ Not available over BLE Mesh:
 State sync
 ----------
 
-Mesh state is pulled by Hub Get requests; nodes do not push it. The adapter poll
-entry ``ble_mesh_adapter_poll()`` is a no-op, so the generic poll path never
-fetches mesh state. If no client model is subscribed to a group address, Status
-messages published to that group never reach the Hub. State is written to a point
-only at these four moments:
+The shipped ``ble_mesh_map.json`` includes a ``report`` block. After binds finish,
+each local client model subscribes to that group, and every Server model bound on
+a node gets a Config Model Publication Set naming it. A published Status then
+lands in the same decode as a Get reply: the generic and light callbacks gate on
+the publish event (``ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT``,
+``ESP_BLE_MESH_LIGHT_CLIENT_PUBLISH_EVT``) and the sensor callback dispatches on
+the opcode alone. A wall switch or socket that publishes OnOff Status therefore
+updates the Hub point without another Get.
+
+Get path (bind complete, Set reply, Hub reboot; also the only state sync when
+``report`` is absent):
 
 * When model binds finish: one Get per bound model whose ``models[]`` row
   declares a ``get`` opcode, plus a Sensor Descriptor Get for a node carrying a
@@ -128,47 +134,38 @@ only at these four moments:
   device in NVS (a Sensor Server already listed in that store gets a Sensor Get,
   not another Descriptor).
 
-Every parameter the map marks readable has a Get behind it. Until a Get answers,
-a parameter shows the ``init`` value from the map, not a value the node reported.
-Devices provisioned before this bind list existed keep working for control but
-stay on ``init`` until they are commanded or re-provisioned.
+``ble_mesh_adapter_poll()`` returns without doing anything: the adapter poll
+task does not fetch Mesh state. Every parameter the map marks readable has a
+Get behind it. Until a Get or a published Status answers, a parameter shows the
+``init`` value from the map. Devices provisioned before the bind list existed keep
+working for control but stay on ``init`` until they are commanded or
+re-provisioned. Nodes already on the network when ``report`` is first enabled
+need a re-provision (or a fresh Publication Set) before they publish to the Hub
+group.
 
-A node whose state changes by itself, a wall switch pressed or a sensor value
-drifting, therefore stays stale in the console until the Hub next Gets, which in
-practice means the next command, a Hub reboot (when binds are stored), or a
-re-provision. A Get-only design costs a battery node twice: it must stay awake
-to receive the Get, and the Mesh bandwidth the publication path would have saved
-goes into requests instead.
-
-The Bluetooth SIG defines the other half of this. A Server model can publish its
-own Status message, and a Sensor Server can publish Sensor Value messages
-periodically or when a property pattern changes; the client model meant to receive
-them must be subscribed to the same group and bound to the same app key.
-
-The map turns that on with a ``report`` block:
+Default report block:
 
 .. code-block:: json
 
    "report": { "group": "0xC001", "period_s": 30, "retransmit_count": 2,
                "retransmit_ms": 200, "ttl": 3 }
 
-With the block present, each local client model subscribes to ``group`` right
-after the app key is bound to it, and every Server model bound to a node gets a
-Config Model Publication Set naming that group. A published Status then lands in
-the same decode as a Get reply: the generic and light callbacks gate on the
-publish event (``ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT``,
-``ESP_BLE_MESH_LIGHT_CLIENT_PUBLISH_EVT``) and the sensor callback dispatches on
-the opcode alone.
+Without the block, or with an overlay that omits it, the Hub writes no
+Publication to any node and no local client model subscribes to a status
+group. State sync then uses only the Get path above.
 
-Without the block, nothing is written to any node. Reporting is opt-in because
-enabling it adds configuration traffic to every provisioning and changes what the
-radio carries. ``period_s`` has to survive the Model Publication Period octet
-exactly -- one-second steps up to 63 s, then tens of seconds, then tens of
-minutes -- and a period with no exact encoding is logged and refused rather than
-rounded to a nearby one. ``group`` must be a group address: a value the stack's
-``ESP_BLE_MESH_ADDR_IS_GROUP`` rejects leaves reporting off, with one log line.
-``ttl`` is 0-127, or 255 to keep the node's default. A node that refuses the
-period is configured again without one, and then publishes only on state change.
+Field values:
+
+* ``period_s`` — must encode exactly in the Model Publication Period octet.
+  One-second steps up to 63 s, then tens of seconds, then tens of minutes. A
+  value with no exact encoding is logged and refused; it is not rounded.
+* ``group`` — must be a group address. A value that
+  ``ESP_BLE_MESH_ADDR_IS_GROUP`` rejects leaves reporting off, with one log
+  line.
+* ``ttl`` — 0–127, or 255 to keep the node's own default.
+
+A node that refuses the period is configured again without one, and then
+publishes only on state change.
 
 REST endpoints
 --------------

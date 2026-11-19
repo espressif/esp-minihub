@@ -37,13 +37,19 @@ static void test_pub_period_encoding_is_exact(void)
     CHECK(!minihub_bm_encode_pub_period(0, NULL));
 }
 
-static void test_shipped_map_stays_get_only(void)
+static void test_shipped_map_enables_report(void)
 {
-    /* Without a `report` block the Hub writes no publication to any node. */
+    /* The embedded map turns publication on so a wall-switch / socket status
+     * change reaches the Hub without another Get. */
     const minihub_bm_report_t *r = minihub_bm_report();
     CHECK(r != NULL);
-    CHECK(!r->enabled);
-    CHECK(r->group == 0);
+    CHECK(r->enabled);
+    CHECK(r->group == 0xC001);
+    CHECK(r->period_s == 30);
+    CHECK(r->period_octet == 0x83);
+    CHECK(r->ttl == 3);
+    CHECK(r->retransmit_count == 2);
+    CHECK(r->retransmit_ms == 200);
 }
 
 /* The harness points MINIHUB_BM_MAP_DATA_PATH at its own build tree. */
@@ -59,12 +65,15 @@ static bool write_report_overlay(const char *json)
 }
 
 /* A node drops a Publication Set whose TTL is neither 0x00-0x7F nor 0xFF, and it
- * drops it without a Status — so the map has to refuse that TTL up front. */
+ * drops it without a Status — so the map has to refuse that TTL up front. An
+ * invalid overlay does not clear the embedded report: reload keeps the shipped
+ * values when the overlay's report block is refused. */
 static void test_report_block_rejects_what_a_node_would_drop(void)
 {
     CHECK(write_report_overlay("{\"report\":{\"group\":\"0xC001\",\"period_s\":30,\"ttl\":200}}"));
     CHECK(minihub_bm_map_reload() == ESP_OK);
-    CHECK(!minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->ttl == 3);
 
     CHECK(write_report_overlay("{\"report\":{\"group\":\"0xC001\",\"period_s\":30,\"ttl\":127}}"));
     CHECK(minihub_bm_map_reload() == ESP_OK);
@@ -79,19 +88,23 @@ static void test_report_block_rejects_what_a_node_would_drop(void)
 
     CHECK(write_report_overlay("{\"report\":{\"group\":\"0xC001\",\"period_s\":64}}"));
     CHECK(minihub_bm_map_reload() == ESP_OK);
-    CHECK(!minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->period_s == 30);
 
     CHECK(write_report_overlay("{\"report\":{\"group\":\"0xC001\",\"retransmit_count\":8}}"));
     CHECK(minihub_bm_map_reload() == ESP_OK);
-    CHECK(!minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->retransmit_count == 2);
 
     CHECK(write_report_overlay("{\"report\":{\"period_s\":30}}"));
     CHECK(minihub_bm_map_reload() == ESP_OK);
-    CHECK(!minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->group == 0xC001);
 
     remove(MINIHUB_BM_MAP_DATA_PATH);
     CHECK(minihub_bm_map_reload() == ESP_OK);
-    CHECK(!minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->enabled);
+    CHECK(minihub_bm_report()->group == 0xC001);
 }
 
 static void test_model_cap_ctl_also_implies_lightness(void)
@@ -542,7 +555,7 @@ int main(void)
 {
     RUN(test_map_init_loads_embedded_table);
     RUN(test_pub_period_encoding_is_exact);
-    RUN(test_shipped_map_stays_get_only);
+    RUN(test_shipped_map_enables_report);
     RUN(test_report_block_rejects_what_a_node_would_drop);
     RUN(test_model_cap_ctl_also_implies_lightness);
     RUN(test_model_cap_unknown_model_returns_false);
