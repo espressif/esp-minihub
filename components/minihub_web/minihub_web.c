@@ -53,7 +53,9 @@
 #include "minihub_thread.h"
 #endif
 #include "minihub_map.h"
+#if CONFIG_MINIHUB_LOCAL_MAP
 #include "minihub_map_tiles.h"
+#endif
 #include "minihub_paths.h"
 #if CONFIG_MINIHUB_ZIGBEE_SDK
 #include "minihub_zigbee.h"
@@ -1268,6 +1270,11 @@ static esp_err_t handle_api_info(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "api_version", MINIHUB_CORE_API_VERSION);
     cJSON_AddBoolToObject(root, "auth_required", minihub_auth_enabled());
     cJSON_AddBoolToObject(root, "password_set", minihub_auth_password_set());
+#if CONFIG_MINIHUB_LOCAL_MAP
+    cJSON_AddBoolToObject(root, "map_enabled", true);
+#else
+    cJSON_AddBoolToObject(root, "map_enabled", false);
+#endif
     cJSON_AddNumberToObject(root, "uptime_ms", (double)uptime_ms);
     cJSON_AddNumberToObject(root, "uptime_s", (double)(uptime_ms / 1000));
     esp_err_t err = send_json(req, root);
@@ -1773,6 +1780,18 @@ static esp_err_t handle_api_adapters(httpd_req_t *req)
     return err;
 }
 
+bool minihub_web_sta_has_ip(void)
+{
+    return minihub_net_has_ip();
+}
+
+bool minihub_web_get_sta_ip(char *buf, size_t len)
+{
+    return minihub_net_get_ip(buf, len);
+}
+
+#if CONFIG_MINIHUB_LOCAL_MAP
+
 #define GEO_CACHE_TTL_US (3600LL * 1000000LL)
 #define GEO_RETRY_BACKOFF_US (60LL * 1000000LL)
 #define GEO_API_URL "http://ip-api.com/json/?fields=status,country,regionName,city,lat,lon,query"
@@ -1800,16 +1819,6 @@ static void local_ip_str(char *buf, size_t len)
     if (!minihub_net_get_ip(buf, len)) {
         buf[0] = '\0';
     }
-}
-
-bool minihub_web_sta_has_ip(void)
-{
-    return minihub_net_has_ip();
-}
-
-bool minihub_web_get_sta_ip(char *buf, size_t len)
-{
-    return minihub_net_get_ip(buf, len);
 }
 
 static esp_err_t fetch_ip_geo(geo_cache_t *out)
@@ -2463,6 +2472,81 @@ static esp_err_t handle_api_location(httpd_req_t *req)
     cJSON_Delete(root);
     return err;
 }
+
+#else /* !CONFIG_MINIHUB_LOCAL_MAP */
+
+esp_err_t minihub_web_refresh_geo_async(void)
+{
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_web_peek_geo(minihub_geo_t *out)
+{
+    if (!out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    memset(out, 0, sizeof(*out));
+    return ESP_ERR_NOT_FOUND;
+}
+
+esp_err_t minihub_web_get_geo(minihub_geo_t *out)
+{
+    return minihub_web_peek_geo(out);
+}
+
+bool minihub_web_map_snapshot_stale(double lat, double lon)
+{
+    (void)lat;
+    (void)lon;
+    return false;
+}
+
+bool minihub_web_map_snapshot_should_fetch(double lat, double lon)
+{
+    (void)lat;
+    (void)lon;
+    return false;
+}
+
+esp_err_t minihub_web_fetch_map_snapshot(double lat, double lon, int width_px, int height_px)
+{
+    (void)lat;
+    (void)lon;
+    (void)width_px;
+    (void)height_px;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t minihub_web_fetch_map_snapshot_async(double lat, double lon, int width_px, int height_px,
+                                                 minihub_map_snapshot_done_cb_t cb, void *user_ctx)
+{
+    (void)lat;
+    (void)lon;
+    (void)width_px;
+    (void)height_px;
+    if (cb) {
+        cb(ESP_ERR_NOT_SUPPORTED, user_ctx);
+    }
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+static esp_err_t handle_api_location(httpd_req_t *req)
+{
+    esp_err_t err = api_auth(req);
+    if (err != ESP_OK) {
+        return err;
+    }
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    }
+    cJSON_AddBoolToObject(root, "ok", false);
+    err = send_json(req, root);
+    cJSON_Delete(root);
+    return err;
+}
+
+#endif /* CONFIG_MINIHUB_LOCAL_MAP */
 
 static cJSON *point_to_json(const minihub_point_t *p)
 {

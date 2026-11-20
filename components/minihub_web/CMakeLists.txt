@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: 2026 MiniHub Contributors
 # SPDX-License-Identifier: Apache-2.0
 
-set(_SRCS "minihub_web.c" "minihub_web_ws.c" "minihub_map_tiles.c")
+set(_SRCS "minihub_web.c" "minihub_web_ws.c")
+if(CONFIG_MINIHUB_LOCAL_MAP)
+    list(APPEND _SRCS "minihub_map_tiles.c")
+endif()
 if(CONFIG_MINIHUB_WEB_UI)
     list(APPEND _SRCS "web_ui.c")
 endif()

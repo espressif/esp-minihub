@@ -498,6 +498,7 @@ function mhHttpErrorKey(detail, status) {
 function switchView(v) {
 
     if (v === 'devices') v = 'overview';
+    if (v === 'map' && window.minihubLocalMap === false) v = 'overview';
     view = v;
     document.querySelectorAll('.view').forEach(el => el.hidden = true);
     const viewEl = document.getElementById('view-' + v);

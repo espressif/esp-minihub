@@ -154,6 +154,19 @@ document.querySelectorAll('#store-tabs .chip').forEach(c => {
     };
 });
 window.addEventListener('hashchange', applyLoginHash);
+/* MINIHUB_LOCAL_MAP off: the map stack is not in the firmware. Hide the entry. */
+function applyFeatureFlags() {
+    fetch('/api/').then(function (r) { return r.ok ? r.json() : null; }).then(function (info) {
+        if (!info) return;
+        window.minihubLocalMap = !!info.map_enabled;
+        var mapNav = document.getElementById('nav-map');
+        if (mapNav) mapNav.style.display = info.map_enabled ? '' : 'none';
+        if (!info.map_enabled && typeof view !== 'undefined' && view === 'map' && typeof switchView === 'function') {
+            switchView('overview');
+        }
+    }).catch(function () {});
+}
+applyFeatureFlags();
 /* A failed first hop (hub reload, reboot) used to leave the stats at "-" until
  * the 30 s adapters tick. Retry the chain, and say so in the footer — the 1 s
  * loadPoints run overwrites that line as soon as the Hub answers again. */
