@@ -78,8 +78,18 @@ Directory layout
      "type": "module",
      "runtime": "js",
      "adapter": "demo_js",
-     "targets": ["ALL"]
+     "targets": ["any"],
+     "requires": []
    }
+
+``requires`` lists capabilities this module needs, chosen from ``Zigbee``,
+``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``, and ``Modbus``.
+``[]`` means it needs none. The catalog request sends ``caps=`` for the
+capabilities this Hub has enabled. The store hides the module from the
+available list while any listed capability is missing. An already installed
+module is not started on the next boot and is labelled as not supported by
+this firmware. ``targets`` uses ``any`` for every chip; ``ALL`` is accepted
+and stored as ``any``.
 
 A JS manifest carries no ``abi_version`` — that belongs to a native package.
 ``ui`` and ``capabilities`` are read from ``meta.json`` when one is packaged, and

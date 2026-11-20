@@ -708,6 +708,7 @@
   "store.disabled": "Disabled",
   "store.enable": "Enable",
   "store.enabled": "Enabled",
+  "store.firmware_unsupported": "Not supported by this firmware",
   "store.install": "Install",
   "store.installed": "Installed",
   "store.kind_config_module": "Config module",

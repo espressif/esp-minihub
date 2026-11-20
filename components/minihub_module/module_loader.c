@@ -47,6 +47,9 @@ typedef struct {
     /** Hybrid package entry: 0=none, 1=native (+ JS companion), 2=js (+ native companion) */
     uint8_t hybrid_entry;
     bool auth_cap; /**< module.json capabilities contains "auth" */
+    /** module.json requires[]. Canonical capability tokens, not adapter ids. */
+    char requires_tok[8][32];
+    uint8_t requires_n;
 } module_slot_t;
 
 static esp_err_t reload_ui_from_file(module_slot_t *slot);
@@ -97,6 +100,7 @@ static minihub_module_host_api_t s_host_api;
 
 static module_slot_t *find_module_by_adapter(const char *adapter_name);
 static bool module_binary_installed(const module_slot_t *slot);
+static bool slot_requires_met(const module_slot_t *slot);
 
 static void clear_modules(void)
 {
@@ -690,6 +694,22 @@ static esp_err_t parse_manifest(const char *path, module_slot_t *slot)
     }
     if (cJSON_IsBool(enabled)) {
         info->enabled = cJSON_IsTrue(enabled);
+    }
+    slot->requires_n = 0;
+    const cJSON *requires = cJSON_GetObjectItem(root, "requires");
+    if (cJSON_IsArray(requires)) {
+        const cJSON *req = NULL;
+        cJSON_ArrayForEach(req, requires) {
+            if (!cJSON_IsString(req) || !req->valuestring || req->valuestring[0] == '\0') {
+                continue;
+            }
+            if (slot->requires_n >= (uint8_t)(sizeof(slot->requires_tok) / sizeof(slot->requires_tok[0]))) {
+                break;
+            }
+            strncpy(slot->requires_tok[slot->requires_n], req->valuestring,
+                    sizeof(slot->requires_tok[0]) - 1);
+            slot->requires_n++;
+        }
     }
     if (cJSON_IsNumber(abi)) {
         info->abi_version = (uint32_t)abi->valuedouble;
@@ -1296,6 +1316,7 @@ cJSON *minihub_module_list_json(void)
         cJSON_AddNumberToObject(item, "abi_version", info->abi_version);
         cJSON_AddBoolToObject(item, "enabled", info->enabled);
         cJSON_AddBoolToObject(item, "loaded", info->loaded);
+        cJSON_AddBoolToObject(item, "firmware_supported", slot_requires_met(&s_modules[i]));
         {
             load_guard_state_t gst = load_guard_read(&s_modules[i]);
             cJSON_AddStringToObject(item, "load_guard", load_guard_state_str(gst));
@@ -1418,6 +1439,94 @@ bool minihub_module_overview_adapter_visible(const char *adapter_name)
         return false;
     }
     return adapter_config_enabled(adapter_name);
+}
+
+static const struct {
+    const char *token;
+    const char *adapter;
+} k_capabilities[] = {
+    {"Zigbee", "zigbee"},
+    {"BLE_mesh", "ble_mesh"},
+    {"Thread_Matter", "thread"},
+    {"Matter", "matter"},
+    {"MQTT_Broker", "mqtt_broker"},
+    {"Modbus", "modbus"},
+};
+
+bool minihub_module_capability_on(const char *token)
+{
+    if (!token || token[0] == '\0') {
+        return false;
+    }
+    const char *adapter = NULL;
+    for (size_t i = 0; i < sizeof(k_capabilities) / sizeof(k_capabilities[0]); i++) {
+        if (strcmp(token, k_capabilities[i].token) == 0) {
+            adapter = k_capabilities[i].adapter;
+            break;
+        }
+    }
+    if (!adapter) {
+        return false;
+    }
+    /* Recursive: hub reload already holds this lock while it decides which
+     * plugins to start. A timeout means we cannot prove the capability is on. */
+    if (minihub_adapter_lifecycle_lock(1000) != ESP_OK) {
+        return false;
+    }
+    bool on = minihub_module_overview_adapter_visible(adapter);
+    minihub_adapter_lifecycle_unlock();
+    return on;
+}
+
+bool minihub_module_requires_met(const cJSON *requires_json)
+{
+    if (!cJSON_IsArray(requires_json)) {
+        return true;
+    }
+    const cJSON *req = NULL;
+    cJSON_ArrayForEach(req, requires_json) {
+        if (!cJSON_IsString(req) || !req->valuestring || req->valuestring[0] == '\0') {
+            continue;
+        }
+        if (!minihub_module_capability_on(req->valuestring)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void minihub_module_format_caps(char *out, size_t out_len)
+{
+    if (!out || out_len == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (minihub_adapter_lifecycle_lock(1000) != ESP_OK) {
+        return;
+    }
+    size_t used = 0;
+    for (size_t i = 0; i < sizeof(k_capabilities) / sizeof(k_capabilities[0]); i++) {
+        if (!minihub_module_overview_adapter_visible(k_capabilities[i].adapter)) {
+            continue;
+        }
+        int n = snprintf(out + used, out_len - used, "%s%s", used ? "," : "", k_capabilities[i].token);
+        if (n < 0 || (size_t)n >= out_len - used) {
+            out[used] = '\0';
+            break;
+        }
+        used += (size_t)n;
+    }
+    minihub_adapter_lifecycle_unlock();
+}
+
+static bool slot_requires_met(const module_slot_t *slot)
+{
+    for (uint8_t i = 0; i < slot->requires_n; i++) {
+        if (!minihub_module_capability_on(slot->requires_tok[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool minihub_module_adapter_has_auth(const char *adapter_name)
@@ -1976,6 +2085,10 @@ esp_err_t minihub_module_load_all(const cJSON *adapters_root)
             ESP_LOGI(TAG, "skip '%s' (disabled)", slot->info.id);
             continue;
         }
+        if (!slot_requires_met(slot)) {
+            ESP_LOGI(TAG, "skip '%s' (required capability is off)", slot->info.id);
+            continue;
+        }
         if (slot->info.loaded) {
             ESP_LOGI(TAG, "skip '%s' (already loaded)", slot->info.id);
             continue;
@@ -2031,6 +2144,10 @@ esp_err_t minihub_module_load_deferred(const cJSON *adapters_root)
     for (size_t i = 0; i < s_module_count; i++) {
         module_slot_t *slot = &s_modules[i];
         if (slot->hybrid_entry != 2 || !slot->info.enabled || slot->info.loaded) {
+            continue;
+        }
+        if (!slot_requires_met(slot)) {
+            ESP_LOGI(TAG, "skip deferred '%s' (required capability is off)", slot->info.id);
             continue;
         }
         esp_err_t err = validate_module_info(&slot->info);

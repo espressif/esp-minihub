@@ -74,8 +74,15 @@ JS 模块既不是浏览器页面，也不是 Node 进程。
      "type": "module",
      "runtime": "js",
      "adapter": "demo_js",
-     "targets": ["ALL"]
+     "targets": ["any"],
+     "requires": []
    }
+
+``requires`` 列出这个模块需要的能力，取自 ``Zigbee`` 、 ``BLE_mesh`` 、 ``Thread_Matter`` 、
+``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` 。 ``[]`` 表示不需要。目录请求带 ``caps=`` ，
+内容是这台 Hub 当前已启用的能力。列出的任一项不具备时，Hub 商店不把该模块放进可安装列表。
+已经安装的模块下次上电不启动，商店里标为当前固件不支持。 ``targets`` 用 ``any`` 表示任意芯片；
+写 ``ALL`` 也会按 ``any`` 保存。
 
 JS manifest 不带 ``abi_version`` —— 那属于原生包。``ui`` 与 ``capabilities``
 随包里有 ``meta.json`` 时从它读，没有则回落到 ``module.json`` 里的同名字段。

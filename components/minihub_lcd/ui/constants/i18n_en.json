@@ -34,6 +34,7 @@
       "state_offline": "Offline",
       "state_enabled": "Enabled",
       "state_disabled": "Disabled",
+      "store_firmware_unsupported": "Not supported by this firmware",
       "state_activated_off": "Disabled",
       "store_install": "Install",
       "store_installed": "Installed",

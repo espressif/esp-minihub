@@ -37,12 +37,15 @@ PC 部署根（``MINIHUB_PLUGINS_DEPLOY_DIR``，默认 ``~/workspace/minihub_sto
 
    {
      "type": "module", "id": "foo", "name": "Foo", "version": "1.0.0",
-     "targets": ["ALL"], "url": "/files/Stores/Common/foo/foo.mhub",
+     "targets": ["any"], "url": "/files/Stores/Common/foo/foo.mhub",
      "size": 1234, "sha256": "0123abcd..."
    }
 
-决定一个插件能否安装的是：``targets`` （``?chip=`` ），服务端过滤一次、设备本地
-再过滤一次。服务端的 ``abi`` 校验只在请求同时带上 ``abi_version`` 与
+决定一个插件能否安装的是：``targets`` （ ``?chip=`` ），服务端过滤一次、设备本地
+再过滤一次。目录请求还带 ``caps=`` ，即这台 Hub 当前已启用的能力。服务端会拿掉
+``requires`` 未被这些能力覆盖的插件。 ``requires`` 为空或省略时仍列出。已经安装、
+但对应能力后来被关掉的插件仍留在已安装列表，下次上电不启动，商店状态为当前固件不支持。
+服务端的 ``abi`` 校验只在请求同时带上 ``abi_version`` 与
 ``abi_total_hash`` 时才执行，而 Hub 不发这两个参数；JS 与纯配置条目不带
 ``abi`` 块，始终视为兼容。Hub 上真正生效的是本地两步：安装前校验包引用的
 Host 符号，加载前校验 ``abi_version`` / ``core_api_min`` / ``core_api_max``。
@@ -58,12 +61,16 @@ catalog 条目字段
 * ``version`` —— 来自 module.json 的模块版本；缺省 ``1.0.0``。
 * ``vendor`` —— 来自 module.json 的厂商字符串；缺省为空。
 * ``description`` —— module.json 的 ``description``。
-* ``adapter`` —— Host 会创建/启用的 ``adapters.json`` 键；取自 ``adapter``、
-  ``inject.adapter`` 或首个 ``requires`` 项。
+* ``adapter`` —— Host 会创建/启用的 ``adapters.json`` 键；取自 ``adapter`` 或
+  ``inject.adapter``。两者都没有时，用 ``requires`` 的第一项。
+* ``requires`` —— 这个插件需要的能力，取自 ``Zigbee`` 、 ``BLE_mesh`` 、
+  ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` 。空列表表示不需要。
+  列出的能力必须已编进固件且处于启用状态，否则商店不把它放进可安装列表。已经安装的插件
+  仍留在已安装列表，并标为当前固件不支持。
 * ``url`` —— 下载路径。本地部署树用 ``/files/Stores/<bucket>/<id>/<id>.mhub``，
   商店也可以把它按版本编址。
-* ``targets`` —— 芯片目录名列表（如 ``["esp32s31"]`` 或 ``["ALL"]`` ），即
-  ``?chip=`` 的过滤依据。
+* ``targets`` —— 芯片目录名列表（如 ``["esp32s31"]`` 或 ``["any"]`` ），即
+  ``?chip=`` 的过滤依据。``ALL`` 和 ``*`` 与 ``any`` 是同一个通配。
 * ``runtime`` —— ``"pack"`` （纯配置 JSON）或 ``"js"`` （JS）。``"hybrid"`` 与
   ``"native"`` 描述的是原生模块，二者都不发布。
 * ``config_only`` —— 仅纯配置 JSON 包为 ``true``。

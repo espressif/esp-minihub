@@ -34,6 +34,7 @@
       "state_offline": "离线",
       "state_enabled": "已启用",
       "state_disabled": "未启用",
+      "store_firmware_unsupported": "当前固件不支持",
       "state_activated_off": "已停用",
       "store_install": "安装",
       "store_installed": "已安装",

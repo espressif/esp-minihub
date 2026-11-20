@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "minihub_config.h"
+#include "minihub_module.h"
 #include "minihub_paths.h"
 #include "esp_attr.h"
 #include "esp_log.h"
@@ -175,6 +176,8 @@ cJSON *minihub_pack_list_json(void)
         cJSON_AddStringToObject(item, "version", s_packs[i].version[0] ? s_packs[i].version : "0.0.0");
         cJSON_AddStringToObject(item, "inject_adapter", s_packs[i].inject_adapter);
         cJSON_AddBoolToObject(item, "enabled", s_packs[i].enabled);
+        cJSON_AddBoolToObject(item, "firmware_supported",
+                              minihub_module_requires_met(cJSON_GetObjectItem(s_packs[i].raw, "requires")));
         cJSON_AddItemToArray(arr, item);
     }
     return arr;
@@ -432,6 +435,10 @@ esp_err_t minihub_pack_merge_into_adapters(cJSON *adapters_root)
     for (size_t i = 0; i < s_pack_count; i++) {
         const pack_entry_t *pack = &s_packs[i];
         if (!pack->enabled || pack->inject_adapter[0] == '\0' || !pack->raw) {
+            continue;
+        }
+        if (!minihub_module_requires_met(cJSON_GetObjectItem(pack->raw, "requires"))) {
+            ESP_LOGI(TAG, "skip pack '%s': required capability is off", pack->id);
             continue;
         }
 

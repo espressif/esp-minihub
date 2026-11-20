@@ -32,6 +32,7 @@ stages:
   - build
   - pack
   - deploy
+  - release
 
 variables:
   IDF_CI_IMAGE: "espressif/idf:release-v6.2"
@@ -163,7 +164,7 @@ build:app:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
 
-build:app_release:
+release:app_release:
   # Same Host matrix as build:app, with --release (Warning logs via
   # configs/sdkconfig/feature/release.defaults + sdkconfig rewrite).
   # Keeps the default build:app at INFO for lab/debug; this job guards the
@@ -172,7 +173,7 @@ build:app_release:
     - .idf_env
     - .clone_plugins
     - .app_matrix
-  stage: build
+  stage: release
   needs: []
   variables:
     MINIHUB_SKIP_MHUB: "0"
@@ -243,12 +244,12 @@ build:app_lcd:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
 
-build:app_lcd_release:
+release:app_lcd_release:
   # minihub_lcd with --release. Same -j 4 cap as build:app_lcd (Brookesia OOM).
   extends:
     - .idf_env
     - .clone_plugins
-  stage: build
+  stage: release
   needs: []
   variables:
     MINIHUB_APP: minihub_lcd

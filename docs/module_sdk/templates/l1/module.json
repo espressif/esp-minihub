@@ -3,6 +3,7 @@
   "name": "PLACEHOLDER_NAME",
   "version": "0.1.0",
   "targets": ["esp32s31"],
+  "requires": ["MQTT_Broker"],
   "enabled": true,
   "type": "pack",
   "runtime": "pack",

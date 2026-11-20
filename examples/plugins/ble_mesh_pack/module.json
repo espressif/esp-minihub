@@ -3,6 +3,7 @@
   "name": "BLE Mesh L1 defaults (demo)",
   "version": "0.1.0",
   "targets": ["esp32s31"],
+  "requires": ["BLE_mesh"],
   "enabled": true,
   "type": "pack",
   "runtime": "pack",

@@ -3,8 +3,9 @@
   "name": "Meter plug JS (L2 demo)",
   "version": "0.1.0",
   "targets": [
-    "ALL"
+    "any"
   ],
+  "requires": [],
   "enabled": true,
   "type": "module",
   "runtime": "js",

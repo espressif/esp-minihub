@@ -3,6 +3,7 @@
   "name": "PLACEHOLDER_NAME",
   "version": "0.1.0",
   "targets": ["esp32s31"],
+  "requires": [],
   "type": "module",
   "runtime": "native",
   "adapter": "PLACEHOLDER_ID",
