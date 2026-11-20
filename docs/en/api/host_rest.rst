@@ -590,17 +590,21 @@ GET /api/location
 
    ``GET /api/location``
 
-Approximate location from the public IP, served from a cache. ``?refresh=1``
-starts a background refresh; the response is still the cached value.
+Approximate location from the public IP, served from a cache. Geolocation
+and the map are built only when ``CONFIG_MINIHUB_LOCAL_MAP`` is on
+(default off). With it off the handler returns ``ok: false`` and does not
+contact a geolocation or map service. ``?refresh=1`` starts a background
+refresh when the option is on; the response is still the cached value.
 
 .. container:: mh-api-block mh-api-returns
 
    **Returns**
 
-   * **HTTP 200** — ``ok`` (false until the first lookup succeeds) and, when
-     known, ``lat``, ``lon``, ``city``, ``region``, ``country``, ``address``,
-     ``map_provider`` (``amap`` or ``osm``), ``public_ip``; ``local_ip`` is
-     always included when the Hub has one.
+   * **HTTP 200** — ``ok`` is false until the first lookup succeeds, and false
+     when ``CONFIG_MINIHUB_LOCAL_MAP`` is off. When ``ok`` is true the body
+     also has ``lat``, ``lon``, ``city``, ``region``, ``country``, ``address``,
+     ``map_provider`` (``amap`` or ``osm``), and ``public_ip``. ``local_ip``
+     is included when the option is on and the Hub has an address.
 
 POST /api/net/config
 --------------------

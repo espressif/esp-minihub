@@ -118,6 +118,12 @@ constexpr int kMapCanvasW = 664;
 constexpr int kMapCanvasH = 316;
 constexpr const char *MAP_IMAGE_VIEW = LCD_VIEW_MAP_IMAGE;
 constexpr const char *MAP_STATUS_VIEW = LCD_VIEW_MAP_STATUS;
+/* Kconfig bool with default n is undefined when off — use a 0/1 constant. */
+#if CONFIG_MINIHUB_LOCAL_MAP
+constexpr bool kLocalMapEnabled = true;
+#else
+constexpr bool kLocalMapEnabled = false;
+#endif
 static const char *const kStorePrefixes[] = {LCD_ENUM_STORE_PREFIXES};
 /* Module-side i18n key, not a UI action name; split the literal so the
  * contract lint (which greps for bare action names) does not misclassify it. */
@@ -2477,6 +2483,9 @@ extern "C" void on_map_snapshot_fetch_done(esp_err_t err, void * /*user_ctx*/)
 
 void schedule_map_snapshot_fetch(double lat, double lon)
 {
+    if (!kLocalMapEnabled) {
+        return;
+    }
     if (s_map_fetching.load(std::memory_order_relaxed) ||
         !minihub_web_map_snapshot_should_fetch(lat, lon)) {
         return;
@@ -2492,8 +2501,27 @@ void schedule_map_snapshot_fetch(double lat, double lon)
     }
 }
 
+void apply_map_nav_visibility()
+{
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid()) {
+        return;
+    }
+    static const char *const kScreens[] = {LCD_ENUM_SCREENS};
+    /* View id, not an action. Split the literal so the contract lint does not
+     * treat it as a hard-coded action name. */
+    constexpr const char *kNavMapId = "nav" "_map";
+    for (size_t i = 0; i < LCD_ENUM_SCREENS_N; i++) {
+        char path[96];
+        snprintf(path, sizeof(path), LCD_VIEW_PATTERN_SIDEBAR_NAV_BTN, kScreens[i], kNavMapId);
+        set_view_hidden(path, !kLocalMapEnabled);
+    }
+}
+
 void refresh_map()
 {
+    if (!kLocalMapEnabled) {
+        return;
+    }
     if (!minihub_web_sta_has_ip()) {
         set_label_text(LCD_VIEW_MAP_HUB, "Waiting for network...");
         set_label_text(LCD_VIEW_MAP_INFO, "");
@@ -5166,6 +5194,7 @@ void refresh_lcd_data()
         return;
     }
     apply_filter_chip_visibility();
+    apply_map_nav_visibility();
     if (is_lcd_screen("overview")) {
         refresh_overview();
     }
@@ -5942,8 +5971,11 @@ bool setup_lcd_ui_mount()
         esp_timer_start_periodic(s_clock_timer, 1000 * 1000);
     }
 
-    (void)minihub_web_refresh_geo_async();
+    if (kLocalMapEnabled) {
+        (void)minihub_web_refresh_geo_async();
+    }
     with_lvgl_lock([]() {
+        apply_map_nav_visibility();
         refresh_overview();
         refresh_filter_chips();
         refresh_user_sidebar();

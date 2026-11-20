@@ -5,7 +5,7 @@
 Unified MiniHub radio-stack firmware build.
 
 Usage:
-  ./tools/build_firmware.py [-app NAME] [stacks...] [--] [idf.py args...]
+  ./tools/build_firmware.py [-app NAME] [stacks...] [--release] [--] [idf.py args...]
   ./tools/build_firmware.py module [all|<id> ...]
   ./tools/build_firmware.py modules
   ./tools/build_firmware.py pack [all|<id> ...]
@@ -30,8 +30,15 @@ Stacks (lowercase, optional):
   thread when those Kconfig options are already =y. Pass a stack name to
   force-enable it when it is not explicitly disabled in sdkconfig.
 
+Flags:
+  --release   Production log recipe (Warning). Loads
+              configs/sdkconfig/feature/release.defaults and rewrites the
+              saved application sdkconfig (Kconfig select alone does not).
+              Same effect as adding `release` to app.yml features.
+
 Examples:
   ./tools/build_firmware.py -app minihub build
+  ./tools/build_firmware.py -app minihub_lcd --release build
   ./tools/build_firmware.py -p /dev/cu.usbserial-10 -app minihub_lcd flash monitor
   ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
@@ -151,7 +158,7 @@ def resolve_app(cli_app: str | None) -> str:
 def usage(code: int = 0) -> None:
     print(
         """Usage:
-  ./tools/build_firmware.py [-app NAME] [stacks...] [--] [idf.py args...]
+  ./tools/build_firmware.py [-app NAME] [stacks...] [--release] [--] [idf.py args...]
   ./tools/build_firmware.py module [all|<id> ...]
   ./tools/build_firmware.py modules
   ./tools/build_firmware.py pack [all|<id> ...]
@@ -165,9 +172,11 @@ Stacks (optional): ble_mesh | zigbee | matter | thread
   default if omitted: zigbee ble_mesh; then reconcile with product sdkconfig
   (drop disabled; add matter/thread when already =y).
 thread and zigbee may both be linked; adapters.json decides which runs.
+--release: Warning-level logs (feature/release.defaults + rewrite sdkconfig).
 
 Examples:
   ./tools/build_firmware.py -app minihub build
+  ./tools/build_firmware.py -app minihub_lcd --release build
   ./tools/build_firmware.py -p /dev/cu.usbserial-10 -app minihub_lcd flash monitor
   ./tools/build_firmware.py build flash monitor
   ./tools/build_firmware.py build merge
@@ -181,13 +190,14 @@ Examples:
     raise SystemExit(code)
 
 
-def parse_argv(argv: list[str]) -> tuple[str, list[str], list[str]]:
-    """Return (app, stacks, idf_args)."""
+def parse_argv(argv: list[str]) -> tuple[str, list[str], list[str], bool]:
+    """Return (app, stacks, idf_args, release)."""
     if argv and argv[0] in {"-h", "--help", "help"}:
         usage(0)
 
     stacks: list[str] = []
     idf_args: list[str] = []
+    release = False
     # `seen_sep` marks the pass-through region: the first unrecognised argument
     # (typically idf.py's -p PORT) starts it. `-app` must still be parsed there,
     # otherwise `-p PORT -app NAME ...` silently falls back to the default app
@@ -230,6 +240,10 @@ def parse_argv(argv: list[str]) -> tuple[str, list[str], list[str]]:
             cli_app = a.split("=", 1)[1]
             i += 1
             continue
+        if a in {"--release", "-release"}:
+            release = True
+            i += 1
+            continue
         if a == "--":
             explicit_sep = True
             seen_sep = True
@@ -240,7 +254,7 @@ def parse_argv(argv: list[str]) -> tuple[str, list[str], list[str]]:
             rest = argv[i + 1 :]
             # `modules` compiles every native plugin .so (no ids). `pack` only wraps.
             if a in {"lint", "clang-tidy"}:
-                return app, [], ["__lint__", *rest]
+                return app, [], ["__lint__", *rest], release
             if a == "modules":
                 if rest:
                     print(
@@ -249,9 +263,9 @@ def parse_argv(argv: list[str]) -> tuple[str, list[str], list[str]]:
                         file=sys.stderr,
                     )
                     usage(2)
-                return app, [], ["__module__"]
+                return app, [], ["__module__"], release
             verb = "__pack__" if a == "pack" else "__module__"
-            return app, [], [verb, *rest]
+            return app, [], [verb, *rest], release
         if not seen_sep and a in STACKS:
             if a not in stacks:
                 stacks.append(a)
@@ -273,7 +287,7 @@ def parse_argv(argv: list[str]) -> tuple[str, list[str], list[str]]:
         stacks = list(DEFAULT_STACKS)
     else:
         app = resolve_app(cli_app)
-    return app, stacks, idf_args
+    return app, stacks, idf_args, release
 
 
 def split_local_verbs(idf_args: list[str]) -> tuple[list[str], list[str]]:
@@ -637,21 +651,11 @@ def _rainmaker_default_assignments(text: str) -> list[tuple[str, str]]:
     return out
 
 
-def sync_rainmaker_defaults_in_sdkconfig() -> None:
-    """Copy rainmaker.defaults into the product sdkconfig.
-
-    SDKCONFIG_DEFAULTS does not replace a choice already saved in sdkconfig.
-    RainMaker's Kconfig default is assisted claim, so a product sdkconfig
-    created before this fragment was on the recipe keeps
-    CONFIG_ESP_RMAKER_SELF_CLAIM unset. Rewrite the saved lines from the
-    fragment whenever RainMaker is part of the build.
-    """
-    if not rainmaker_build_enabled():
-        return
-    sources = rainmaker_defaults_files()
+def _apply_defaults_fragment_to_sdkconfig(sources: list[Path]) -> bool:
+    """Rewrite product sdkconfig lines from defaults fragments. Return True if changed."""
     dest = APP_DIR / "sdkconfig"
     if not sources or not dest.is_file():
-        return
+        return False
     text = dest.read_text(encoding="utf-8", errors="replace")
     changed = False
     for src in sources:
@@ -671,6 +675,51 @@ def sync_rainmaker_defaults_in_sdkconfig() -> None:
             + ", ".join(src.relative_to(ROOT).as_posix() for src in sources),
             flush=True,
         )
+    return changed
+
+
+def sync_rainmaker_defaults_in_sdkconfig() -> None:
+    """Copy rainmaker.defaults into the product sdkconfig.
+
+    SDKCONFIG_DEFAULTS does not replace a choice already saved in sdkconfig.
+    RainMaker's Kconfig default is assisted claim, so a product sdkconfig
+    created before this fragment was on the recipe keeps
+    CONFIG_ESP_RMAKER_SELF_CLAIM unset. Rewrite the saved lines from the
+    fragment whenever RainMaker is part of the build.
+    """
+    if not rainmaker_build_enabled():
+        return
+    _apply_defaults_fragment_to_sdkconfig(rainmaker_defaults_files())
+
+
+def release_defaults_files() -> list[Path]:
+    """Shared then product release.defaults layers that exist on disk."""
+    out: list[Path] = []
+    for rel in feature_layers(ROOT, APP_NAME, "release"):
+        path = ROOT / rel
+        if path.is_file():
+            out.append(path)
+    return out
+
+
+def release_build_enabled(cli_release: bool = False) -> bool:
+    """True when --release was passed or app.yml lists the release feature."""
+    if cli_release:
+        return True
+    features, _board = app_feature_list(ROOT, APP_NAME)
+    return "release" in features
+
+
+def sync_release_defaults_in_sdkconfig(*, cli_release: bool = False) -> None:
+    """Copy release.defaults into the product sdkconfig when release is on.
+
+    Same reason as RainMaker: SDKCONFIG_DEFAULTS cannot flip a choice already
+    saved as LOG_DEFAULT_LEVEL_INFO. Rewrite from the fragment so Warning
+    actually sticks.
+    """
+    if not release_build_enabled(cli_release):
+        return
+    _apply_defaults_fragment_to_sdkconfig(release_defaults_files())
 
 
 def sdkconfig_has(option_y: str) -> bool:
@@ -774,7 +823,7 @@ def ensure_zigbee_stack(stacks: list[str]) -> list[str]:
     return out
 
 
-def sdkconfig_defaults(stacks: list[str]) -> str:
+def sdkconfig_defaults(stacks: list[str], *, release: bool = False) -> str:
     # Do not list board_manager.defaults here. esp_board_manager 0.5+ injects it.
     features, _board = app_feature_list(ROOT, APP_NAME)
     if rainmaker_build_enabled() and "rainmaker" not in features:
@@ -792,6 +841,8 @@ def sdkconfig_defaults(stacks: list[str]) -> str:
     # After matter_memory: radio coexist reserve (24576) must not be overwritten.
     if "zigbee" in stacks or "ble_mesh" in stacks or "thread" in stacks:
         features.append("radio_coexist_memory")
+    if release_build_enabled(release) and "release" not in features:
+        features.append("release")
     features.append("stacks.gen")
     paths = append_local_overrides(ROOT, APP_NAME, expand_features(ROOT, APP_NAME, features))
     return ";".join(_sdkconfig_path_for_app(p) for p in paths)
@@ -960,7 +1011,13 @@ def shell_bmgr_codegen() -> list[str]:
     ]
 
 
-def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True) -> int:
+def run_build(
+    stacks: list[str],
+    idf_args: list[str],
+    *,
+    pack_after: bool = True,
+    release: bool = False,
+) -> int:
     local_verbs, idf_args = split_local_verbs(idf_args)
     # --lint: run clang-tidy over first-party sources after a successful build.
     do_lint = "--lint" in idf_args or os.environ.get("MINIHUB_LINT") in {"1", "true", "yes"}
@@ -983,7 +1040,9 @@ def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True
     sync_stack_symbols_in_sdkconfig(stacks)
     sync_radio_memory_in_sdkconfig(stacks)
     sync_rainmaker_defaults_in_sdkconfig()
-    defaults = sdkconfig_defaults(stacks)
+    sync_release_defaults_in_sdkconfig(cli_release=release)
+    use_release = release_build_enabled(release)
+    defaults = sdkconfig_defaults(stacks, release=release)
     idf_path = Path(os.environ.get("IDF_PATH", str(ROOT / "esp-idf")))
     espbaud = os.environ.get("ESPBAUD", "2000000")
     use_matter = "matter" in stacks
@@ -994,6 +1053,7 @@ def run_build(stacks: list[str], idf_args: list[str], *, pack_after: bool = True
     print(f"MINIHUB_APP={APP_NAME}")
     print(f"MINIHUB_BUILD_MATTER={1 if use_matter else 0}")
     print(f"MINIHUB_BUILD_RAINMAKER={1 if use_rainmaker else 0}")
+    print(f"MINIHUB_RELEASE={1 if use_release else 0}")
     print(f"SDKCONFIG_DEFAULTS={defaults}")
     print(f"ESPBAUD={espbaud}")
     print(f"idf.py --preview {' '.join(idf_args)}")
@@ -1499,7 +1559,7 @@ def main() -> None:
             [sys.executable, str(ROOT / "tools" / "build_vibe_mode.py"), *vibe_argv],
             cwd=str(ROOT),
         ).returncode)
-    app, stacks, idf_args = parse_argv(raw)
+    app, stacks, idf_args, release = parse_argv(raw)
     set_app(app)
     os.environ["MINIHUB_APP"] = APP_NAME
     if idf_args and idf_args[0] == "__pack__":
@@ -1508,7 +1568,7 @@ def main() -> None:
         raise SystemExit(run_module_compile(idf_args[1:]))
     if idf_args and idf_args[0] == "__lint__":
         raise SystemExit(run_lint(idf_args[1:]))
-    raise SystemExit(run_build(stacks, idf_args))
+    raise SystemExit(run_build(stacks, idf_args, release=release))
 
 
 if __name__ == "__main__":

@@ -150,6 +150,9 @@ not a tuning knob:
 
 * ``MINIHUB_VERSION`` and ``MINIHUB_WEB_VERSION`` — the two release lines. See
   :doc:`versions`.
+* ``MINIHUB_LOCAL_MAP`` — default off. On, the firmware includes geolocation
+  and the map, and the Web and LCD consoles show it. Off, neither console
+  offers a map and ``GET /api/location`` returns ``ok: false``.
 * ``MINIHUB_NET_WIFI_STA`` / ``MINIHUB_NET_ETH`` — the transport. ``MINIHUB_LCD_UI``
   ``depends on !MINIHUB_NET_ETH`` because EMAC and the RGB LCD share pin groups on this
   board. ``MINIHUB_NET_WIFI_SOFTAP`` is for a product that drives Wi-Fi itself while

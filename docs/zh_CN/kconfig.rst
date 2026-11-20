@@ -137,6 +137,9 @@ Host 升级策略与 factory 恢复镜像在 ``menuconfig`` 的 ``Firmware updat
 多数符号可以留在缺省值。下面这几个是产品决策，而不是调优旋钮：
 
 * ``MINIHUB_VERSION`` 与 ``MINIHUB_WEB_VERSION``——两条发布线，见 :doc:`versions`。
+* ``MINIHUB_LOCAL_MAP`` —— 缺省关闭。打开后固件包含定位和地图功能，
+  Web 与 LCD 控制台显示地图。关闭时两边都没有地图，``GET /api/location`` 返回
+  ``ok: false``。
 * ``MINIHUB_NET_WIFI_STA`` / ``MINIHUB_NET_ETH``——传输方式。``MINIHUB_LCD_UI``
   ``depends on !MINIHUB_NET_ETH``，因为这块板上 EMAC 与 RGB LCD 共用引脚组。
   ``MINIHUB_NET_WIFI_SOFTAP`` 是给「自己在 ``MINIHUB_NET_WIFI_STA`` 之外驱动 Wi-Fi」的
