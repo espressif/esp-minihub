@@ -11,13 +11,50 @@
     "scene_slots": 16
   },
   "enums": {
-    "screens": ["overview", "map", "store", "system", "rules", "scenes"],
-    "store_prefixes": ["pack", "mod"],
-    "store_row_prefixes": ["avail", "pack", "mod"],
-    "nav_ids": ["nav_overview", "nav_map", "nav_rules", "nav_scenes", "nav_store", "nav_system"],
-    "store_tabs": ["tab_available", "tab_installed"],
-    "filters": ["filter_all", "filter_auth", "filter_matter"],
-    "confirm_screens": ["overview", "rules", "scenes", "store", "system"],
+    "screens": [
+      "overview",
+      "map",
+      "store",
+      "system",
+      "config",
+      "rules",
+      "scenes"
+    ],
+    "store_prefixes": [
+      "pack",
+      "mod"
+    ],
+    "store_row_prefixes": [
+      "avail",
+      "pack",
+      "mod"
+    ],
+    "nav_ids": [
+      "nav_overview",
+      "nav_map",
+      "nav_rules",
+      "nav_scenes",
+      "nav_store",
+      "nav_system",
+      "nav_config"
+    ],
+    "store_tabs": [
+      "tab_available",
+      "tab_installed"
+    ],
+    "filters": [
+      "filter_all",
+      "filter_auth",
+      "filter_matter"
+    ],
+    "confirm_screens": [
+      "config",
+      "overview",
+      "rules",
+      "scenes",
+      "store",
+      "system"
+    ],
     "name_screens": [
       "overview"
     ],
@@ -59,7 +96,7 @@
     "STORE_INST_EMPTY": "/store/store_main/inst_empty",
     "SYSTEM_MAIN": "/system/system_main",
     "SYSTEM_FW": "/system/system_main/sys_grid/sys_card_fw/sys_fw_val",
-    "SYSTEM_WIFI": "/system/system_main/sys_grid/sys_card_wifi/sys_wifi_val",
+    "SYSTEM_WIFI": "/config/config_main/sys_grid/sys_card_wifi/sys_wifi_val",
     "SYSTEM_OTA": "/system/system_main/sys_grid/sys_card_ota/sys_ota_val",
     "SYSTEM_OTA_STATUS": "/system/system_main/sys_grid/sys_card_ota/sys_ota_status",
     "SYSTEM_OTA_SEL_SD": "/system/system_main/sys_grid/sys_card_ota/sys_ota_target_row/sys_ota_sel_sd/sys_ota_sel_sd_lbl",
@@ -105,17 +142,26 @@
     "MATTER_ADD_BTN": "/overview/overview_main/overview_toolbar/matter_bar/matter_add_btn",
     "RENAME_HINT": "/overview/name_modal/name_card/name_hint",
     "RENAME_TITLE": "/overview/name_modal/name_card/name_title",
-    "SYSTEM_WIFI_CFG": "/system/system_main/sys_grid/sys_card_wifi",
-    "SYSTEM_WIFI_SSID": "/system/system_main/sys_grid/sys_card_wifi/wifi_ssid_input",
-    "SYSTEM_WIFI_PASS": "/system/system_main/sys_grid/sys_card_wifi/wifi_pass_row/wifi_pass_input",
-    "SYSTEM_WIFI_PASS_SHOW": "/system/system_main/sys_grid/sys_card_wifi/wifi_pass_row/wifi_pass_show_btn/wifi_pass_show_btn_lbl",
-    "SYSTEM_WIFI_OPEN": "/system/system_main/sys_grid/sys_card_wifi/wifi_btn_row/wifi_open_btn/wifi_open_btn_lbl",
-    "SYSTEM_WIFI_SAVE": "/system/system_main/sys_grid/sys_card_wifi/wifi_btn_row/wifi_save_btn",
-    "SYSTEM_NET_MODE": "/system/system_main/sys_grid/sys_card_wifi/net_mode_btn/net_mode_btn_lbl",
-    "SYSTEM_NET_IP": "/system/system_main/sys_grid/sys_card_wifi/net_ip_input",
-    "SYSTEM_NET_MASK": "/system/system_main/sys_grid/sys_card_wifi/net_mask_input",
-    "SYSTEM_NET_DNS": "/system/system_main/sys_grid/sys_card_wifi/net_dns_input",
-    "SYSTEM_NET_SAVE": "/system/system_main/sys_grid/sys_card_wifi/net_save_btn"
+    "SYSTEM_WIFI_CFG": "/config/config_main/sys_grid/sys_card_wifi",
+    "SYSTEM_WIFI_SSID": "/config/config_main/sys_grid/sys_card_wifi/wifi_ssid_input",
+    "SYSTEM_WIFI_PASS": "/config/config_main/sys_grid/sys_card_wifi/wifi_pass_row/wifi_pass_input",
+    "SYSTEM_WIFI_PASS_SHOW": "/config/config_main/sys_grid/sys_card_wifi/wifi_pass_row/wifi_pass_show_btn/wifi_pass_show_btn_lbl",
+    "SYSTEM_WIFI_OPEN": "/config/config_main/sys_grid/sys_card_wifi/wifi_btn_row/wifi_open_btn/wifi_open_btn_lbl",
+    "SYSTEM_WIFI_SAVE": "/config/config_main/sys_grid/sys_card_wifi/wifi_btn_row/wifi_save_btn",
+    "SYSTEM_NET_MODE": "/config/config_main/sys_grid/sys_card_wifi/net_mode_btn/net_mode_btn_lbl",
+    "SYSTEM_NET_IP": "/config/config_main/sys_grid/sys_card_wifi/net_ip_input",
+    "SYSTEM_NET_MASK": "/config/config_main/sys_grid/sys_card_wifi/net_mask_input",
+    "SYSTEM_NET_DNS": "/config/config_main/sys_grid/sys_card_wifi/net_dns_input",
+    "SYSTEM_NET_SAVE": "/config/config_main/sys_grid/sys_card_wifi/net_save_btn",
+    "SYSTEM_ADAPTER_WIFI": "/config/config_main/sys_grid/sys_card_adapters/sys_adapter_rows/adapter_btn_wifi/adapter_lbl_wifi",
+    "SYSTEM_ADAPTER_MQTT_BROKER": "/config/config_main/sys_grid/sys_card_adapters/sys_adapter_rows/adapter_btn_mqtt_broker/adapter_lbl_mqtt_broker",
+    "SYSTEM_ADAPTER_THREAD": "/config/config_main/sys_grid/sys_card_adapters/sys_adapter_rows/adapter_btn_thread/adapter_lbl_thread",
+    "SYSTEM_ADAPTER_MATTER": "/config/config_main/sys_grid/sys_card_adapters/sys_adapter_rows/adapter_btn_matter/adapter_lbl_matter",
+    "SYSTEM_ADAPTER_ZIGBEE": "/config/config_main/sys_grid/sys_card_adapters/sys_adapter_rows/adapter_btn_zigbee/adapter_lbl_zigbee",
+    "SYSTEM_ADAPTER_BLE_MESH": "/config/config_main/sys_grid/sys_card_adapters/sys_adapter_rows/adapter_btn_ble_mesh/adapter_lbl_ble_mesh",
+    "SYSTEM_ADAPTER_MODBUS": "/config/config_main/sys_grid/sys_card_adapters/sys_adapter_rows/adapter_btn_modbus/adapter_lbl_modbus",
+    "CONFIG_MAIN": "/config/config_main",
+    "SYSTEM_ADAPTERS_SAVE": "/config/config_main/sys_grid/sys_card_adapters/sys_adapters_save_btn/sys_adapters_save_lbl"
   },
   "view_patterns": {
     "FILTER_CHIP": {
@@ -171,7 +217,10 @@
     },
     "STORE_AVAIL_INSTALL_BTN": {
       "format": "/store/store_main/avail_section/avail_row_%d/avail_install_%d",
-      "args": ["store_avail_rows", "store_avail_rows"]
+      "args": [
+        "store_avail_rows",
+        "store_avail_rows"
+      ]
     },
     "STORE_AVAIL_ROW": {
       "format": "/store/store_main/avail_section/avail_row_%d",
@@ -219,11 +268,16 @@
     },
     "CONFIRM_CANCEL_BTN": {
       "format": "/%s/confirm_modal/confirm_card/confirm_btn_row/confirm_cancel",
-      "args": ["confirm_screens"]
+      "args": [
+        "confirm_screens"
+      ]
     },
     "SIDEBAR_NAV_BTN": {
       "format": "/%s/sidebar/%s",
-      "args": ["screens", "nav_ids"]
+      "args": [
+        "screens",
+        "nav_ids"
+      ]
     },
     "CONFIRM_MSG": {
       "format": "/%s/confirm_modal/confirm_card/confirm_msg",
@@ -387,6 +441,13 @@
     "SYSTEM_OTA_TARGET_USB": "system_ota_target_usb",
     "SYSTEM_CHECK_UPDATE": "system_check_update",
     "SYSTEM_DO_OTA": "system_do_ota",
+    "SYSTEM_ADAPTER_WIFI": "system_adapter_wifi",
+    "SYSTEM_ADAPTER_MQTT_BROKER": "system_adapter_mqtt_broker",
+    "SYSTEM_ADAPTER_THREAD": "system_adapter_thread",
+    "SYSTEM_ADAPTER_MATTER": "system_adapter_matter",
+    "SYSTEM_ADAPTER_ZIGBEE": "system_adapter_zigbee",
+    "SYSTEM_ADAPTER_BLE_MESH": "system_adapter_ble_mesh",
+    "SYSTEM_ADAPTER_MODBUS": "system_adapter_modbus",
     "FILTER_ALL": "filter_all",
     "FILTER_AUTH": "filter_auth",
     "FILTER_MATTER": "filter_matter",
@@ -418,24 +479,47 @@
     "NET_MASK_CHANGED": "net_mask_changed",
     "NET_DNS_CHANGED": "net_dns_changed",
     "NET_MODE_TOGGLE": "net_mode_toggle",
-    "NET_SAVE": "net_save"
+    "NET_SAVE": "net_save",
+    "NAV_OVERVIEW_FROM_CONFIG": "nav_overview_from_config",
+    "NAV_MAP_FROM_CONFIG": "nav_map_from_config",
+    "NAV_STORE_FROM_CONFIG": "nav_store_from_config",
+    "NAV_SYSTEM_FROM_CONFIG": "nav_system_from_config",
+    "NAV_CONFIG_FROM_OVERVIEW": "nav_config_from_overview",
+    "NAV_CONFIG_FROM_MAP": "nav_config_from_map",
+    "NAV_CONFIG_FROM_STORE": "nav_config_from_store",
+    "NAV_CONFIG_FROM_SYSTEM": "nav_config_from_system",
+    "NAV_CONFIG_FROM_RULES": "nav_config_from_rules",
+    "NAV_CONFIG_FROM_SCENES": "nav_config_from_scenes",
+    "NAV_RULES_FROM_CONFIG": "nav_rules_from_config",
+    "NAV_SCENES_FROM_CONFIG": "nav_scenes_from_config",
+    "USER_TAP_CONFIG": "user_tap_config",
+    "SYSTEM_ADAPTERS_SAVE": "system_adapters_save"
   },
   "action_patterns": {
     "STORE_INSTALL_AVAIL": {
       "format": "store_install_avail_%d",
-      "args": ["store_avail_rows"]
+      "args": [
+        "store_avail_rows"
+      ]
     },
     "STORE_ROW_TAP": {
       "format": "store_row_tap_%s_%d",
-      "args": ["store_row_prefixes", "store_row_slots"]
+      "args": [
+        "store_row_prefixes",
+        "store_row_slots"
+      ]
     },
     "CONFIRM_OK": {
       "format": "confirm_%s_ok",
-      "args": ["confirm_screens"]
+      "args": [
+        "confirm_screens"
+      ]
     },
     "CONFIRM_CANCEL": {
       "format": "confirm_%s_cancel",
-      "args": ["confirm_screens"]
+      "args": [
+        "confirm_screens"
+      ]
     },
     "NAME_CHANGED": {
       "format": "name_%s_changed",
@@ -522,7 +606,42 @@
       ]
     }
   },
-  "binding_keys": ["card.meta", "card.name", "card.state", "card.then", "card.type", "card.value", "chip.bg", "chip.border", "chip.text", "form.devices", "form.index", "form.name", "form.when_time", "lang.options", "lang.selected", "net.dns", "net.ip", "net.netmask", "rename.text", "store_tab.bg", "store_tab.border", "store_tab.text", "tz.options", "tz.selected", "wifi.pass_masked", "wifi.password", "wifi.ssid"],
+  "binding_keys": [
+    "adapters.color_0",
+    "adapters.color_1",
+    "adapters.color_2",
+    "adapters.color_3",
+    "adapters.color_4",
+    "adapters.color_5",
+    "adapters.color_6",
+    "card.meta",
+    "card.name",
+    "card.state",
+    "card.then",
+    "card.type",
+    "card.value",
+    "chip.bg",
+    "chip.border",
+    "chip.text",
+    "form.devices",
+    "form.index",
+    "form.name",
+    "form.when_time",
+    "lang.options",
+    "lang.selected",
+    "net.dns",
+    "net.ip",
+    "net.netmask",
+    "rename.text",
+    "store_tab.bg",
+    "store_tab.border",
+    "store_tab.text",
+    "tz.options",
+    "tz.selected",
+    "wifi.pass_masked",
+    "wifi.password",
+    "wifi.ssid"
+  ],
   "templates": {
     "DEVICE_CARD": {
       "template_id": "device_card",

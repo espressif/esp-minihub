@@ -79,6 +79,13 @@ body.i18n-pending{visibility:hidden}
 #sys-relnotes .sys-note-label:first-child{margin-top:0}
 .sys-note{font-size:.75rem;color:var(--dim);white-space:pre-wrap;word-break:break-word;line-height:1.45}
 
+.adapters-cfg{max-width:720px}.adapters-cfg input[type=checkbox]{width:auto;padding:0;accent-color:var(--accent)}
+#sys-adapters-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin:12px 0}
+.adapter-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card2);cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text)}
+.adapter-row:hover{border-color:var(--accent2)}.adapter-row.unsupported,.adapter-row.blocked{opacity:.55;cursor:not-allowed}
+.adapter-badge{margin-left:auto;background:var(--bg2);border:1px solid var(--border);border-radius:999px;padding:1px 7px;font-size:.66rem;font-weight:400;color:var(--warn)}
+@media (max-width:720px){#sys-adapters-list{grid-template-columns:1fr}}
+
 .store-cfg{margin-bottom:10px;padding:10px;border:1px solid var(--line);border-radius:10px}
 .store-cfg-row{display:flex;gap:8px;align-items:center}
 .store-cfg-row .store-search{flex:1}

@@ -203,6 +203,8 @@ void refresh_map();
 void refresh_system_tz();
 void refresh_system_lang();
 void refresh_system_wifi();
+void refresh_system_adapters();
+void refresh_config();
 
 std::atomic<bool> s_map_fetching{false};
 
@@ -1075,10 +1077,9 @@ void pin_screen_shell_layout()
             }
             pin_shell_geometry(shell, screen_w, screen_h);
         }
-        /* The system screen stays mounted, so its scroll offset survives a
-         * trip to another page. Opening 系统 should show the title, not the
-         * Wi-Fi card the caret used to scroll into view. */
-        if (is_lcd_screen("system")) {
+        /* Long pages stay mounted, so their scroll offset survives a trip to
+         * another page. Opening 系统/配置 should show the title first. */
+        if (is_lcd_screen("system") || is_lcd_screen("config")) {
             scroll_tree_top(scr);
         }
     });
@@ -3896,17 +3897,9 @@ void refresh_system()
     refresh_system_lang();
     ESP_LOGD(TAG, "system screen refreshed (ip=%s)", ip);
 
-    /* Wi-Fi link state. The SSID lives in the net component, which the LCD
-     * cannot include (its headers pull in esp_netif.h), so the LCD shows the
-     * link state next to the address card. */
-    {
-        set_label_text(LCD_VIEW_SYSTEM_WIFI,
-                       minihub_web_sta_has_ip() ? lcd_tr(LCD_STR_SYS_CONNECTED) : lcd_tr(LCD_STR_SYS_DISCONNECTED));
-    }
     /* Firmware update: local OTA state. Cloud version check stays in the Web
      * console (it needs the account); this card also exposes Check/Upgrade. */
     refresh_ota_status();
-    refresh_system_wifi();
 
 }
 
@@ -4028,6 +4021,211 @@ static void handle_net_mode_toggle()
     set_view_hidden(LCD_VIEW_SYSTEM_NET_MASK, !s_net_static);
     set_view_hidden(LCD_VIEW_SYSTEM_NET_DNS, !s_net_static);
     request_display_refresh();
+}
+
+namespace {
+
+struct AdapterUiEntry {
+    const char *key;
+    const char *view;
+    const char *label_key;
+};
+
+constexpr AdapterUiEntry kAdapterUi[] = {
+    {"wifi", LCD_VIEW_SYSTEM_ADAPTER_WIFI, LCD_STR_SYS_ADAPTER_WIFI},
+    {"mqtt_broker", LCD_VIEW_SYSTEM_ADAPTER_MQTT_BROKER, LCD_STR_SYS_ADAPTER_MQTT_BROKER},
+    {"thread", LCD_VIEW_SYSTEM_ADAPTER_THREAD, LCD_STR_SYS_ADAPTER_THREAD},
+    {"matter", LCD_VIEW_SYSTEM_ADAPTER_MATTER, LCD_STR_SYS_ADAPTER_MATTER},
+    {"zigbee", LCD_VIEW_SYSTEM_ADAPTER_ZIGBEE, LCD_STR_SYS_ADAPTER_ZIGBEE},
+    {"ble_mesh", LCD_VIEW_SYSTEM_ADAPTER_BLE_MESH, LCD_STR_SYS_ADAPTER_BLE_MESH},
+    {"modbus", LCD_VIEW_SYSTEM_ADAPTER_MODBUS, LCD_STR_SYS_ADAPTER_MODBUS},
+};
+constexpr size_t kAdapterUiCount = sizeof(kAdapterUi) / sizeof(kAdapterUi[0]);
+
+/* The form is a draft: ticking a row changes only these flags. Nothing is
+ * written to adapters.json until the Save button is pressed. */
+bool s_adapter_draft[kAdapterUiCount] = {};
+bool s_adapter_draft_ready = false;
+
+const char *const kAdapterRadio154[] = {"zigbee", "thread"};
+const char *const kAdapterRadioGroup[] = {"wifi", "ble_mesh"};
+
+bool adapter_name_in(const char *const *list, size_t count, const char *name)
+{
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(list[i], name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool adapter_slot_is_on(const cJSON *slot)
+{
+    if (!cJSON_IsObject(slot)) {
+        return false;
+    }
+    const cJSON *enabled = cJSON_GetObjectItem(slot, "enabled");
+    return !cJSON_IsBool(enabled) || cJSON_IsTrue(enabled);
+}
+
+bool draft_any_in(const char *const *list, size_t count, size_t skip_index)
+{
+    for (size_t i = 0; i < kAdapterUiCount; i++) {
+        if (i != skip_index && s_adapter_draft[i] &&
+            adapter_name_in(list, count, kAdapterUi[i].key)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Short reason shown inline on a row that cannot be turned on right now. */
+const char *adapter_draft_conflict(const char *key, size_t index)
+{
+    const bool is154 = adapter_name_in(kAdapterRadio154, 2, key);
+    const bool is_group = adapter_name_in(kAdapterRadioGroup, 2, key);
+    const bool other154 = draft_any_in(kAdapterRadio154, 2, index);
+    const bool other_group = draft_any_in(kAdapterRadioGroup, 2, index);
+    if (is154 && other154) {
+        return lcd_tr(LCD_STR_SYS_ADAPTERS_CONFLICT_WITH_154);
+    }
+    if ((is154 && other_group) || (is_group && other154)) {
+        return lcd_tr(LCD_STR_SYS_ADAPTERS_CONFLICT_WITH_GROUP);
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+void refresh_system_adapters()
+{
+    cJSON *cfg = minihub_config_get_adapters();
+    const cJSON *adapters = cfg ? cJSON_GetObjectItem(cfg, "adapters") : nullptr;
+    if (!s_adapter_draft_ready) {
+        for (size_t i = 0; i < kAdapterUiCount; i++) {
+            const cJSON *slot = cJSON_IsObject(adapters)
+                                    ? cJSON_GetObjectItem(adapters, kAdapterUi[i].key)
+                                    : nullptr;
+            /* An absent slot means the adapter runs (firmware default). */
+            s_adapter_draft[i] = slot ? adapter_slot_is_on(slot) : true;
+        }
+        s_adapter_draft_ready = true;
+    }
+    for (size_t i = 0; i < kAdapterUiCount; i++) {
+        const auto &entry = kAdapterUi[i];
+        const bool supported = minihub_module_adapter_supported(entry.key);
+        const bool on = s_adapter_draft[i];
+        const char *why = !supported ? lcd_tr(LCD_STR_SYS_ADAPTERS_UNSUPPORTED)
+                                     : (on ? nullptr : adapter_draft_conflict(entry.key, i));
+        char label[160];
+        if (why) {
+            snprintf(label, sizeof(label), "[%s] %s · %s", on ? "*" : " ",
+                     lcd_tr(entry.label_key), why);
+        } else {
+            snprintf(label, sizeof(label), "[%s] %s", on ? "*" : " ",
+                     lcd_tr(entry.label_key));
+        }
+        set_label_text(entry.view, label);
+        char binding[32];
+        snprintf(binding, sizeof(binding), "adapters.color_%zu", i);
+        auto view = s_lcd.runtime->find_view(s_lcd.document_id, entry.view);
+        if (view.valid()) {
+            (void)view.set_binding_value(binding, why ? "#5c6b85" : "#eef2ff");
+        }
+    }
+}
+
+void refresh_config()
+{
+    /* Wi-Fi link state. The SSID lives in the net component, which the LCD
+     * cannot include (its headers pull in esp_netif.h). */
+    set_label_text(LCD_VIEW_SYSTEM_WIFI,
+                   minihub_web_sta_has_ip() ? lcd_tr(LCD_STR_SYS_CONNECTED)
+                                            : lcd_tr(LCD_STR_SYS_DISCONNECTED));
+    refresh_system_wifi();
+    refresh_system_adapters();
+}
+
+namespace {
+
+void handle_adapter_toggle(const AdapterUiEntry &entry, size_t index)
+{
+    if (!minihub_module_adapter_supported(entry.key)) {
+        return;
+    }
+    if (!s_adapter_draft[index] && adapter_draft_conflict(entry.key, index)) {
+        return;
+    }
+    s_adapter_draft[index] = !s_adapter_draft[index];
+    refresh_system_adapters();
+    request_display_refresh();
+}
+
+void handle_adapters_save()
+{
+    cJSON *cfg = minihub_config_get_adapters();
+    if (!cfg) {
+        return;
+    }
+    cJSON *adapters = cJSON_GetObjectItem(cfg, "adapters");
+    if (!cJSON_IsObject(adapters)) {
+        adapters = cJSON_AddObjectToObject(cfg, "adapters");
+        if (!adapters) {
+            return;
+        }
+    }
+    bool changed = false;
+    for (size_t i = 0; i < kAdapterUiCount; i++) {
+        cJSON *slot = cJSON_GetObjectItem(adapters, kAdapterUi[i].key);
+        if (!cJSON_IsObject(slot)) {
+            slot = cJSON_AddObjectToObject(adapters, kAdapterUi[i].key);
+        }
+        if (!slot) {
+            continue;
+        }
+        if (adapter_slot_is_on(slot) != s_adapter_draft[i]) {
+            cJSON *enabled = cJSON_GetObjectItem(slot, "enabled");
+            if (cJSON_IsBool(enabled)) {
+                cJSON_SetBoolValue(enabled, s_adapter_draft[i]);
+            } else {
+                cJSON_AddBoolToObject(slot, "enabled", s_adapter_draft[i]);
+            }
+            changed = true;
+        }
+    }
+    if (changed) {
+        const esp_err_t err = minihub_config_save_adapters(cfg);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "adapter save failed: %s", esp_err_to_name(err));
+            return;
+        }
+        (void)minihub_hub_reload_async();
+    }
+    s_adapter_draft_ready = false;
+    show_alert(lcd_tr(LCD_STR_SYS_ADAPTERS_TITLE), lcd_tr(LCD_STR_SYS_ADAPTERS_SAVED));
+    refresh_system_adapters();
+    request_display_refresh();
+}
+
+template <size_t I>
+void adapter_toggle_wrapped()
+{
+    handle_adapter_toggle(kAdapterUi[I], I);
+}
+
+}  // namespace
+
+void wire_system_adapters()
+{
+    wire_action(LCD_ACTION_SYSTEM_ADAPTER_WIFI, adapter_toggle_wrapped<0>);
+    wire_action(LCD_ACTION_SYSTEM_ADAPTER_MQTT_BROKER, adapter_toggle_wrapped<1>);
+    wire_action(LCD_ACTION_SYSTEM_ADAPTER_THREAD, adapter_toggle_wrapped<2>);
+    wire_action(LCD_ACTION_SYSTEM_ADAPTER_MATTER, adapter_toggle_wrapped<3>);
+    wire_action(LCD_ACTION_SYSTEM_ADAPTER_ZIGBEE, adapter_toggle_wrapped<4>);
+    wire_action(LCD_ACTION_SYSTEM_ADAPTER_BLE_MESH, adapter_toggle_wrapped<5>);
+    wire_action(LCD_ACTION_SYSTEM_ADAPTER_MODBUS, adapter_toggle_wrapped<6>);
+    wire_action(LCD_ACTION_SYSTEM_ADAPTERS_SAVE, handle_adapters_save);
 }
 
 static void handle_wifi_save()
@@ -4979,6 +5177,8 @@ void refresh_lcd_data()
         refresh_store();
     } else if (is_lcd_screen("system")) {
         refresh_system();
+    } else if (is_lcd_screen("config")) {
+        refresh_config();
     } else if (is_lcd_screen("rules")) {
         refresh_rules();
     } else if (is_lcd_screen("scenes")) {
@@ -5054,6 +5254,18 @@ void wire_navigation()
         LCD_ACTION_NAV_STORE_FROM_SCENES,
         LCD_ACTION_NAV_SYSTEM_FROM_SCENES,
         LCD_ACTION_NAV_RULES_FROM_SCENES,
+        LCD_ACTION_NAV_CONFIG_FROM_OVERVIEW,
+        LCD_ACTION_NAV_CONFIG_FROM_MAP,
+        LCD_ACTION_NAV_CONFIG_FROM_STORE,
+        LCD_ACTION_NAV_CONFIG_FROM_SYSTEM,
+        LCD_ACTION_NAV_CONFIG_FROM_RULES,
+        LCD_ACTION_NAV_CONFIG_FROM_SCENES,
+        LCD_ACTION_NAV_OVERVIEW_FROM_CONFIG,
+        LCD_ACTION_NAV_MAP_FROM_CONFIG,
+        LCD_ACTION_NAV_STORE_FROM_CONFIG,
+        LCD_ACTION_NAV_SYSTEM_FROM_CONFIG,
+        LCD_ACTION_NAV_RULES_FROM_CONFIG,
+        LCD_ACTION_NAV_SCENES_FROM_CONFIG,
     };
     for (const char *action : actions) {
         s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
@@ -5118,6 +5330,7 @@ void wire_user_action()
         LCD_ACTION_USER_TAP_MAP,
         LCD_ACTION_USER_TAP_STORE,
         LCD_ACTION_USER_TAP_SYSTEM,
+        LCD_ACTION_USER_TAP_CONFIG,
         LCD_ACTION_USER_TAP_RULES,
         LCD_ACTION_USER_TAP_SCENES,
     };
@@ -5687,6 +5900,7 @@ bool setup_lcd_ui_mount()
     wire_store_rows();
     wire_system_tz();
     wire_system_lang();
+    wire_system_adapters();
     wire_overview_filters();
     module_auth_lcd::login_overlay_init();
     module_auth_lcd::wire_overview_auth_actions(

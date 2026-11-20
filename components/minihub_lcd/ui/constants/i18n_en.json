@@ -237,7 +237,24 @@
       "form_when_time_hint": "Local: 08:30 or 2026-11-11 08:30",
       "form_when_time_tip": "Local time: daily 08:30, once 2026-11-11 08:30",
       "form_time_invalid": "Bad time: 08:30 or 2026-11-11 08:30",
-      "form_rule_time_ok": "Rule saved (fires on UTC time)"
+      "form_rule_time_ok": "Rule saved (fires on UTC time)",
+      "sys_adapters_title": "Adapters",
+      "sys_adapters_hint": "Tick to enable; greyed = not built in",
+      "sys_adapters_unsupported": "Not in firmware",
+      "sys_adapters_saved": "Adapter config saved",
+      "sys_adapters_conflict_802154": "Zigbee and Thread are exclusive",
+      "sys_adapters_conflict_group": "Wi-Fi / BLE Mesh cannot run with Zigbee / Thread",
+      "sys_adapter_wifi": "Wi-Fi",
+      "sys_adapter_mqtt_broker": "MQTT broker",
+      "sys_adapter_thread": "Thread",
+      "sys_adapter_matter": "Matter",
+      "sys_adapter_zigbee": "Zigbee",
+      "sys_adapter_ble_mesh": "BLE Mesh",
+      "sys_adapter_modbus": "Modbus",
+      "nav_config": "Config",
+      "common_save": "Save",
+      "sys_adapters_conflict_with_group": "Conflicts with Wi-Fi / BLE Mesh",
+      "sys_adapters_conflict_with_154": "Conflicts with Zigbee / Thread"
     }
   }
 }

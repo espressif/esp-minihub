@@ -237,7 +237,24 @@
       "form_when_time_hint": "本地时间：08:30 或 2026-11-11 08:30",
       "form_when_time_tip": "填本地时间：每天 08:30，单次 2026-11-11 08:30",
       "form_time_invalid": "时间格式不对：08:30 或 2026-11-11 08:30",
-      "form_rule_time_ok": "规则已保存（按 UTC 时间触发）"
+      "form_rule_time_ok": "规则已保存（按 UTC 时间触发）",
+      "sys_adapters_title": "适配器",
+      "sys_adapters_hint": "勾选要启用的功能；置灰表示固件不支持",
+      "sys_adapters_unsupported": "固件不支持",
+      "sys_adapters_saved": "适配器配置已保存",
+      "sys_adapters_conflict_802154": "Zigbee 与 Thread 只能选一个",
+      "sys_adapters_conflict_group": "Wi-Fi / BLE Mesh 与 Zigbee / Thread 不能同时启用",
+      "sys_adapter_wifi": "Wi-Fi",
+      "sys_adapter_mqtt_broker": "MQTT broker",
+      "sys_adapter_thread": "Thread",
+      "sys_adapter_matter": "Matter",
+      "sys_adapter_zigbee": "Zigbee",
+      "sys_adapter_ble_mesh": "BLE Mesh",
+      "sys_adapter_modbus": "Modbus",
+      "nav_config": "配置",
+      "common_save": "保存",
+      "sys_adapters_conflict_with_group": "与 Wi-Fi/BLE Mesh 冲突",
+      "sys_adapters_conflict_with_154": "与 Zigbee/Thread 冲突"
     }
   }
 }

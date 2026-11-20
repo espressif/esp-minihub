@@ -6,6 +6,7 @@
     "map",
     "store",
     "system",
+    "config",
     "rules",
     "scenes"
   ],
@@ -170,6 +171,66 @@
       "from": [],
       "action": "store_tab_installed",
       "to": "store"
+    },
+    {
+      "from": [],
+      "action": "nav_overview_from_config",
+      "to": "overview"
+    },
+    {
+      "from": [],
+      "action": "nav_map_from_config",
+      "to": "map"
+    },
+    {
+      "from": [],
+      "action": "nav_store_from_config",
+      "to": "store"
+    },
+    {
+      "from": [],
+      "action": "nav_system_from_config",
+      "to": "system"
+    },
+    {
+      "from": [],
+      "action": "nav_config_from_overview",
+      "to": "config"
+    },
+    {
+      "from": [],
+      "action": "nav_config_from_map",
+      "to": "config"
+    },
+    {
+      "from": [],
+      "action": "nav_config_from_store",
+      "to": "config"
+    },
+    {
+      "from": [],
+      "action": "nav_config_from_system",
+      "to": "config"
+    },
+    {
+      "from": [],
+      "action": "nav_config_from_rules",
+      "to": "config"
+    },
+    {
+      "from": [],
+      "action": "nav_config_from_scenes",
+      "to": "config"
+    },
+    {
+      "from": [],
+      "action": "nav_rules_from_config",
+      "to": "rules"
+    },
+    {
+      "from": [],
+      "action": "nav_scenes_from_config",
+      "to": "scenes"
     }
   ]
 }
