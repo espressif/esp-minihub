@@ -213,6 +213,41 @@
         },
         {
           "type": "button",
+          "id": "nav_config",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_config_from_store"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_config_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_config}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
           "id": "nav_system",
           "events": [
             {

@@ -533,6 +533,12 @@ function switchView(v) {
         loadSystem();
         sysOtaPoll();
     }
+    if (v === 'config') {
+        /* Network settings read sysSnap; adapter config has its own document.
+         * Load once per page: a second fetch would overwrite unsaved JSON edits. */
+        loadSystem();
+        if (typeof adaptersCfgLoad === 'function' && !adaptersCfgLoadedOnce) adaptersCfgLoad();
+    }
     /* The device list paints from what is already cached — a synchronous render —
      * and only then catches up over the network. Awaiting points here would hold
      * the empty grid on screen for a whole round trip.
@@ -561,7 +567,7 @@ async function loadAdapters() {
         if (filter !== 'all' && !adapterEnabled(filter)) filter = 'all';
         renderToolbar();
         if (view === 'overview') renderOverview();
-        if (view === 'system' && typeof sysFillNet === 'function') sysFillNet();
+        if ((view === 'system' || view === 'config') && typeof sysFillNet === 'function') sysFillNet();
         return true;
     } catch (e) {
         return false;

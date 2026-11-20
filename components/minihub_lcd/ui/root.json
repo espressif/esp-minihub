@@ -10,6 +10,7 @@
     "screens/map.json",
     "screens/store.json",
     "screens/system.json",
+    "screens/config.json",
     "screens/rules.json",
     "screens/scenes.json",
     "flows/main.json"

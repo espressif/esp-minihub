@@ -1078,6 +1078,162 @@ static bool module_radio_host_firmware_enabled(const char *module_id)
     return true;
 }
 
+/** True when the adapter's stack is compiled into this firmware. Store module
+ *  adapters are supported once their manifest is installed, so unknown names
+ *  stay supported; only the Host-built stacks have compile-time gates. */
+bool minihub_module_adapter_supported(const char *name)
+{
+    if (!name || name[0] == '\0') {
+        return false;
+    }
+    if (strcmp(name, "zigbee") == 0) {
+#if CONFIG_MINIHUB_ZIGBEE_SDK
+        return true;
+#else
+        return false;
+#endif
+    }
+    if (strcmp(name, "ble_mesh") == 0) {
+#if CONFIG_MINIHUB_BLE_MESH_SDK
+        return true;
+#else
+        return false;
+#endif
+    }
+    if (strcmp(name, "matter") == 0) {
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+        return true;
+#else
+        return false;
+#endif
+    }
+    if (strcmp(name, "thread") == 0) {
+#if CONFIG_MINIHUB_THREAD_ADAPTER
+        return true;
+#else
+        return false;
+#endif
+    }
+    if (strcmp(name, "wifi") == 0) {
+#if CONFIG_MINIHUB_NET_WIFI_STA
+        return true;
+#else
+        return false;
+#endif
+    }
+    if (strcmp(name, "mqtt_broker") == 0 || strcmp(name, "mqtt") == 0) {
+#if CONFIG_MINIHUB_MQTT_BROKER && CONFIG_MINIHUB_MQTT_ADAPTER
+        return true;
+#else
+        return false;
+#endif
+    }
+    if (strcmp(name, "modbus") == 0) {
+#if CONFIG_MINIHUB_MODBUS
+        return true;
+#else
+        return false;
+#endif
+    }
+    return true;
+}
+
+static const char *const k_radio_154[] = {"zigbee", "thread"};
+static const char *const k_radio_group[] = {"wifi", "ble_mesh"};
+
+/* Only an explicit JSON false disables an adapter (firmware semantics). */
+static bool adapter_slot_is_on(const cJSON *slot)
+{
+    if (!cJSON_IsObject(slot)) {
+        return false;
+    }
+    const cJSON *enabled = cJSON_GetObjectItem(slot, "enabled");
+    return !cJSON_IsBool(enabled) || cJSON_IsTrue(enabled);
+}
+
+static bool adapter_name_in_list(const char *const *list, size_t count, const char *name)
+{
+    if (!name) {
+        return false;
+    }
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(list[i], name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static const cJSON *adapters_object(const cJSON *adapters_root)
+{
+    if (!cJSON_IsObject(adapters_root)) {
+        return NULL;
+    }
+    const cJSON *adapters = cJSON_GetObjectItem(adapters_root, "adapters");
+    return cJSON_IsObject(adapters) ? adapters : NULL;
+}
+
+static minihub_adapter_radio_status_t
+adapter_radio_status_for(const char *name, bool other154, bool other_group)
+{
+    const bool is154 = adapter_name_in_list(k_radio_154, 2, name);
+    const bool is_group = adapter_name_in_list(k_radio_group, 2, name);
+    if (is154 && other154) {
+        return MINIHUB_ADAPTER_RADIO_CONFLICT_802154;
+    }
+    if ((is154 && other_group) || (is_group && other154)) {
+        return MINIHUB_ADAPTER_RADIO_CONFLICT_GROUP;
+    }
+    return MINIHUB_ADAPTER_RADIO_OK;
+}
+
+minihub_adapter_radio_status_t
+minihub_module_adapter_radio_check(const cJSON *adapters_root, const char *name)
+{
+    const cJSON *adapters = adapters_object(adapters_root);
+    if (!adapters || !name || name[0] == '\0') {
+        return MINIHUB_ADAPTER_RADIO_OK;
+    }
+    bool other154 = false;
+    bool other_group = false;
+    for (const cJSON *slot = adapters->child; slot; slot = slot->next) {
+        if (!slot->string || strcmp(slot->string, name) == 0 || !adapter_slot_is_on(slot)) {
+            continue;
+        }
+        other154 = other154 || adapter_name_in_list(k_radio_154, 2, slot->string);
+        other_group = other_group || adapter_name_in_list(k_radio_group, 2, slot->string);
+    }
+    return adapter_radio_status_for(name, other154, other_group);
+}
+
+minihub_adapter_radio_status_t
+minihub_module_adapters_radio_validate(const cJSON *adapters_root)
+{
+    const cJSON *adapters = adapters_object(adapters_root);
+    if (!adapters) {
+        return MINIHUB_ADAPTER_RADIO_OK;
+    }
+    bool any154 = false;
+    bool any_group = false;
+    for (const cJSON *slot = adapters->child; slot; slot = slot->next) {
+        if (!slot->string || !adapter_slot_is_on(slot)) {
+            continue;
+        }
+        if (adapter_name_in_list(k_radio_154, 2, slot->string)) {
+            if (any154) {
+                return MINIHUB_ADAPTER_RADIO_CONFLICT_802154;
+            }
+            any154 = true;
+        } else if (adapter_name_in_list(k_radio_group, 2, slot->string)) {
+            any_group = true;
+        }
+    }
+    if (any154 && any_group) {
+        return MINIHUB_ADAPTER_RADIO_CONFLICT_GROUP;
+    }
+    return MINIHUB_ADAPTER_RADIO_OK;
+}
+
 static void remove_ephemeral_module_slot(const char *module_id)
 {
     for (size_t i = 0; i < s_module_count; i++) {
@@ -1409,6 +1565,10 @@ cJSON *minihub_module_overview_adapters_json(void)
         const char *name = names[i];
         cJSON *entry = cJSON_CreateObject();
         cJSON_AddBoolToObject(entry, "enabled", minihub_module_overview_adapter_visible(name));
+        /* `enabled` is the config/runtime state; `supported` is whether this
+         * firmware was built with the stack at all. The config UI uses the
+         * latter to hide selectors for adapters that could never start. */
+        cJSON_AddBoolToObject(entry, "supported", minihub_module_adapter_supported(name));
         cJSON_AddBoolToObject(entry, "auth", minihub_module_adapter_has_auth(name));
 
         module_slot_t *slot = find_module_by_adapter(name);

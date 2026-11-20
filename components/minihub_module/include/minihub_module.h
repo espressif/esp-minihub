@@ -94,6 +94,32 @@ esp_err_t minihub_module_invoke_rpc(const char *module_id, const char *method,
  */
 bool minihub_module_overview_adapter_visible(const char *adapter_name);
 
+/** Radio exclusion result when changing adapter enable state. */
+typedef enum {
+    MINIHUB_ADAPTER_RADIO_OK = 0,
+    MINIHUB_ADAPTER_RADIO_CONFLICT_802154,
+    MINIHUB_ADAPTER_RADIO_CONFLICT_GROUP,
+} minihub_adapter_radio_status_t;
+
+/**
+ * @brief True when this adapter's stack is compiled into the current firmware.
+ *        Unknown names (Store modules) are treated as supported.
+ */
+bool minihub_module_adapter_supported(const char *name);
+
+/**
+ * @brief Check whether enabling @p name conflicts with adapters already on in
+ *        @p adapters_root. Shared by Web (/api/adapters) and LCD config UI.
+ */
+minihub_adapter_radio_status_t
+minihub_module_adapter_radio_check(const cJSON *adapters_root, const char *name);
+
+/**
+ * @brief Validate a whole adapters document for radio conflicts.
+ */
+minihub_adapter_radio_status_t
+minihub_module_adapters_radio_validate(const cJSON *adapters_root);
+
 /**
  * @brief True if the module for this adapter exposes auth UI
  *        (`module.json` capabilities contains "auth", or `ui.json` `auth:true`); false otherwise.

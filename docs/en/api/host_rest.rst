@@ -415,8 +415,10 @@ Implementation: ``handle_api_adapters`` →
    **Returns**
 
    * **HTTP 200** — JSON object keyed by adapter name. Each value includes
-     ``enabled`` (bool), ``auth`` (bool), and when known ``module_id``,
-     ``module_name``, ``module_version``, ``adapter_version``.
+     ``enabled`` (bool), ``supported`` (bool), ``auth`` (bool), and when known
+     ``module_id``, ``module_name``, ``module_version``, ``adapter_version``.
+     ``supported`` is false when this firmware was built without that stack.
+     A name the Hub does not know (a Store module) is ``supported``.
 
 GET /api/config/adapters
 ------------------------

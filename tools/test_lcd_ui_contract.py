@@ -647,7 +647,7 @@ class StoreActionsTest(unittest.TestCase):
         modal on the store screen — /system/confirm_modal is invisible there."""
         c = load_contract()
         self.assertIn("confirm_screens", c["enums"])
-        self.assertEqual(["overview", "rules", "scenes", "store", "system"],
+        self.assertEqual(["config", "overview", "rules", "scenes", "store", "system"],
                          sorted(c["enums"]["confirm_screens"]))
         for key in ("CONFIRM_MODAL", "CONFIRM_TITLE", "CONFIRM_MSG"):
             self.assertIn(key, c["view_patterns"], f"contract is missing pattern {key}")
@@ -705,7 +705,7 @@ class TimezonePickerTest(unittest.TestCase):
         self.assertEqual("system_tz_pick", c["actions"]["SYSTEM_TZ_PICK"])
 
     def test_tz_and_lang_rows_sit_after_modstore_before_wifi(self):
-        """User asked for tz/lang AFTER 模块仓库 (and before 连接状态)."""
+        """User asked for tz/lang AFTER 模块仓库; network moved to the Config page."""
         system = screen_asset("system")
         main = next(n for n in system["children"] if n["id"] == "system_main")
         grid = next(n for n in main["children"] if n["id"] == "sys_grid")
@@ -713,7 +713,13 @@ class TimezonePickerTest(unittest.TestCase):
         self.assertIn("sys_tz_row", ids)
         self.assertIn("sys_lang_row", ids)
         self.assertLess(ids.index("sys_card_modstore"), ids.index("sys_tz_row"))
-        self.assertLess(ids.index("sys_lang_row"), ids.index("sys_card_wifi"))
+        self.assertNotIn("sys_card_wifi", ids)
+        config = screen_asset("config")
+        cfg_main = next(n for n in config["children"] if n["id"] == "config_main")
+        cfg_grid = next(n for n in cfg_main["children"] if n["id"] == "sys_grid")
+        cfg_ids = [n["id"] for n in cfg_grid["children"]]
+        self.assertIn("sys_card_wifi", cfg_ids)
+        self.assertIn("sys_card_adapters", cfg_ids)
 
     def test_system_json_uses_a_dropdown_node(self):
         system = screen_asset("system")

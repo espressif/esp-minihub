@@ -1,0 +1,1390 @@
+{
+  "type": "viewScreen",
+  "id": "config",
+  "style": {
+    "bgColor": "#0b0f1a"
+  },
+  "children": [
+    {
+      "type": "container",
+      "id": "sidebar",
+      "layout": {
+        "type": "flex",
+        "flexFlow": "column",
+        "mainAlign": "start",
+        "crossAlign": "stretch",
+        "gap": "6dp"
+      },
+      "placement": {
+        "x": "0dp",
+        "y": "0dp",
+        "width": "112dp",
+        "height": "480dp"
+      },
+      "style": {
+        "bgColor": "#0e1320",
+        "borderWidth": "1dp",
+        "borderColor": "#243049",
+        "padding": "4dp"
+      },
+      "children": [
+        {
+          "type": "label",
+          "id": "brand",
+          "labelProps": {
+            "text": "MiniHub"
+          },
+          "style": {
+            "textColor": "#818cf8",
+            "fontSize": "16sp"
+          }
+        },
+        {
+          "type": "button",
+          "id": "nav_overview",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_overview_from_config"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_overview_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_overview}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_map",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_map_from_config"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_map_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_map}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_rules",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_rules_from_config"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_rules_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_rules}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_scenes",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_scenes_from_config"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_scenes_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_scenes}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_store",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_store_from_config"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_store_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_store}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_config",
+          "style": {
+            "bgColor": "#6366f1",
+            "borderWidth": "1dp",
+            "borderColor": "#6366f1"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_config_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_config}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#eef2ff"
+              }
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "id": "nav_system",
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "nav_system_lbl",
+              "labelProps": {
+                "text": "${constant.strings.nav_system}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4"
+              }
+            }
+          ],
+          "events": [
+            {
+              "type": "clicked",
+              "action": "nav_system_from_config"
+            }
+          ]
+        },
+        {
+          "type": "container",
+          "id": "sidebar_spacer",
+          "placement": {
+            "mode": "flow",
+            "width": "wrap",
+            "height": "wrap",
+            "flexGrow": 1
+          }
+        },
+        {
+          "type": "button",
+          "id": "user_btn",
+          "events": [
+            {
+              "type": "clicked",
+              "action": "user_tap_config"
+            }
+          ],
+          "style": {
+            "bgColor": "#1a2238",
+            "borderWidth": "1dp",
+            "borderColor": "#243049"
+          },
+          "placement": {
+            "width": "100dp",
+            "height": "44dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "user_name",
+              "labelProps": {
+                "text": "${constant.strings.user_default_name}"
+              },
+              "placement": {
+                "mode": "relative",
+                "align": "center"
+              },
+              "style": {
+                "textColor": "#8b9bb4",
+                "fontSize": "12sp"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "container",
+      "id": "config_main",
+      "commonProps": {
+        "scrollable": true
+      },
+      "layout": {
+        "type": "flex",
+        "flexFlow": "column",
+        "mainAlign": "start",
+        "crossAlign": "stretch",
+        "gap": "12dp"
+      },
+      "placement": {
+        "x": "112dp",
+        "y": "0dp",
+        "width": "688dp",
+        "height": "480dp"
+      },
+      "style": {
+        "padding": "16dp"
+      },
+      "children": [
+        {
+          "type": "label",
+          "id": "config_title",
+          "labelProps": {
+            "text": "${constant.strings.nav_config}"
+          },
+          "style": {
+            "textColor": "#eef2ff",
+            "fontSize": "22sp"
+          }
+        },
+        {
+          "type": "container",
+          "id": "sys_grid",
+          "layout": {
+            "type": "flex",
+            "flexFlow": "column",
+            "mainAlign": "start",
+            "crossAlign": "center",
+            "gap": "10dp"
+          },
+          "placement": {
+            "width": "wrap",
+            "height": "wrap"
+          },
+          "style": {
+            "padding": "10dp"
+          },
+          "children": [
+            {
+              "type": "container",
+              "id": "sys_card_wifi",
+              "layout": {
+                "type": "flex",
+                "flexFlow": "column",
+                "mainAlign": "start",
+                "crossAlign": "stretch",
+                "gap": "8dp"
+              },
+              "placement": {
+                "width": "664dp",
+                "height": "wrap"
+              },
+              "style": {
+                "bgColor": "#131a2b",
+                "borderWidth": "1dp",
+                "borderColor": "#243049",
+                "padding": "10dp",
+                "radius": "8dp"
+              },
+              "children": [
+                {
+                  "type": "label",
+                  "id": "sys_wifi_title",
+                  "labelProps": {
+                    "text": "${constant.strings.sys_link}"
+                  },
+                  "placement": {
+                    "width": "110dp"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "13sp"
+                  }
+                },
+                {
+                  "type": "label",
+                  "id": "sys_wifi_val",
+                  "labelProps": {
+                    "text": "—"
+                  },
+                  "placement": {
+                    "width": "wrap",
+                    "flexGrow": 1
+                  },
+                  "style": {
+                    "textColor": "#eef2ff",
+                    "fontSize": "15sp"
+                  }
+                },
+                {
+                  "type": "label",
+                  "id": "wifi_ssid_lbl",
+                  "labelProps": {
+                    "text": "${constant.strings.wifi_ssid_label}"
+                  },
+                  "placement": {
+                    "width": "wrap"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "12sp"
+                  }
+                },
+                {
+                  "type": "textInput",
+                  "id": "wifi_ssid_input",
+                  "textInputProps": {
+                    "placeholder": "${constant.strings.wifi_ssid}",
+                    "maxLength": 32
+                  },
+                  "bindings": {
+                    "textInputProps.text": "wifi.ssid"
+                  },
+                  "events": [
+                    {
+                      "type": "valueChanged",
+                      "action": "wifi_ssid_changed"
+                    }
+                  ],
+                  "placement": {
+                    "mode": "flow",
+                    "width": "100%",
+                    "height": "40dp",
+                    "alignSelf": "stretch"
+                  },
+                  "style": {
+                    "bgColor": "#0b0f1a",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049",
+                    "radius": "8dp",
+                    "padding": "6dp",
+                    "textColor": "#eef2ff",
+                    "fontSize": "14sp"
+                  }
+                },
+                {
+                  "type": "label",
+                  "id": "wifi_pass_lbl",
+                  "labelProps": {
+                    "text": "${constant.strings.wifi_pass_label}"
+                  },
+                  "placement": {
+                    "width": "wrap"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "12sp"
+                  }
+                },
+                {
+                  "type": "container",
+                  "id": "wifi_pass_row",
+                  "layout": {
+                    "type": "flex",
+                    "flexFlow": "row",
+                    "mainAlign": "start",
+                    "crossAlign": "center",
+                    "gap": "8dp"
+                  },
+                  "placement": {
+                    "mode": "flow",
+                    "width": "100%",
+                    "alignSelf": "stretch"
+                  },
+                  "children": [
+                    {
+                      "type": "textInput",
+                      "id": "wifi_pass_input",
+                      "textInputProps": {
+                        "placeholder": "${constant.strings.wifi_password}",
+                        "maxLength": 63,
+                        "password": true
+                      },
+                      "bindings": {
+                        "textInputProps.text": "wifi.password",
+                        "textInputProps.password": "wifi.pass_masked"
+                      },
+                      "events": [
+                        {
+                          "type": "valueChanged",
+                          "action": "wifi_pass_changed"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap",
+                        "height": "40dp",
+                        "flexGrow": 1
+                      },
+                      "style": {
+                        "bgColor": "#0b0f1a",
+                        "borderWidth": "1dp",
+                        "borderColor": "#243049",
+                        "radius": "8dp",
+                        "padding": "6dp",
+                        "textColor": "#eef2ff",
+                        "fontSize": "14sp"
+                      }
+                    },
+                    {
+                      "type": "button",
+                      "id": "wifi_pass_show_btn",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "wifi_pass_show_toggle"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "72dp",
+                        "height": "40dp"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "wifi_pass_show_btn_lbl",
+                          "labelProps": {
+                            "text": "${constant.strings.wifi_pass_show}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "container",
+                  "id": "wifi_btn_row",
+                  "layout": {
+                    "type": "flex",
+                    "flexFlow": "row",
+                    "mainAlign": "start",
+                    "crossAlign": "center",
+                    "gap": "8dp"
+                  },
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "wifi_open_btn",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "wifi_open_toggle"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "wifi_open_btn_lbl",
+                          "labelProps": {
+                            "text": "${constant.strings.wifi_open_network}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "id": "wifi_save_btn",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "wifi_save"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "110dp"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "wifi_save_btn_lbl",
+                          "labelProps": {
+                            "text": "${constant.strings.wifi_save}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "net_mode_btn",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "net_mode_toggle"
+                    }
+                  ],
+                  "placement": {
+                    "mode": "flow",
+                    "width": "wrap"
+                  },
+                  "style": {
+                    "bgColor": "#1a2238",
+                    "textColor": "#eef2ff",
+                    "fontSize": "12sp",
+                    "radius": "8dp",
+                    "padding": "6dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "net_mode_btn_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.wifi_dhcp}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "label",
+                  "id": "net_cfg_lbl",
+                  "labelProps": {
+                    "text": "${constant.strings.net_cfg_label}"
+                  },
+                  "placement": {
+                    "width": "wrap"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "12sp"
+                  }
+                },
+                {
+                  "type": "textInput",
+                  "id": "net_ip_input",
+                  "textInputProps": {
+                    "placeholder": "${constant.strings.wifi_ip}",
+                    "maxLength": 15
+                  },
+                  "bindings": {
+                    "textInputProps.text": "net.ip"
+                  },
+                  "events": [
+                    {
+                      "type": "valueChanged",
+                      "action": "net_ip_changed"
+                    }
+                  ],
+                  "placement": {
+                    "mode": "flow",
+                    "width": "100%",
+                    "height": "40dp",
+                    "alignSelf": "stretch"
+                  },
+                  "style": {
+                    "bgColor": "#0b0f1a",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049",
+                    "radius": "8dp",
+                    "padding": "6dp",
+                    "textColor": "#eef2ff",
+                    "fontSize": "14sp"
+                  }
+                },
+                {
+                  "type": "textInput",
+                  "id": "net_mask_input",
+                  "textInputProps": {
+                    "placeholder": "${constant.strings.wifi_netmask}",
+                    "maxLength": 15
+                  },
+                  "bindings": {
+                    "textInputProps.text": "net.netmask"
+                  },
+                  "events": [
+                    {
+                      "type": "valueChanged",
+                      "action": "net_mask_changed"
+                    }
+                  ],
+                  "placement": {
+                    "mode": "flow",
+                    "width": "100%",
+                    "height": "40dp",
+                    "alignSelf": "stretch"
+                  },
+                  "style": {
+                    "bgColor": "#0b0f1a",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049",
+                    "radius": "8dp",
+                    "padding": "6dp",
+                    "textColor": "#eef2ff",
+                    "fontSize": "14sp"
+                  }
+                },
+                {
+                  "type": "textInput",
+                  "id": "net_dns_input",
+                  "textInputProps": {
+                    "placeholder": "${constant.strings.wifi_dns}",
+                    "maxLength": 15
+                  },
+                  "bindings": {
+                    "textInputProps.text": "net.dns"
+                  },
+                  "events": [
+                    {
+                      "type": "valueChanged",
+                      "action": "net_dns_changed"
+                    }
+                  ],
+                  "placement": {
+                    "mode": "flow",
+                    "width": "100%",
+                    "height": "40dp",
+                    "alignSelf": "stretch"
+                  },
+                  "style": {
+                    "bgColor": "#0b0f1a",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049",
+                    "radius": "8dp",
+                    "padding": "6dp",
+                    "textColor": "#eef2ff",
+                    "fontSize": "14sp"
+                  }
+                },
+                {
+                  "type": "button",
+                  "id": "net_save_btn",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "net_save"
+                    }
+                  ],
+                  "placement": {
+                    "mode": "flow",
+                    "width": "wrap"
+                  },
+                  "style": {
+                    "bgColor": "#1a2238",
+                    "textColor": "#eef2ff",
+                    "fontSize": "12sp",
+                    "radius": "8dp",
+                    "padding": "6dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "net_save_btn_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.wifi_net_save}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "container",
+              "id": "sys_card_adapters",
+              "layout": {
+                "type": "flex",
+                "flexFlow": "column",
+                "mainAlign": "start",
+                "crossAlign": "stretch",
+                "gap": "6dp"
+              },
+              "placement": {
+                "width": "664dp",
+                "height": "wrap"
+              },
+              "style": {
+                "bgColor": "#131a2b",
+                "borderWidth": "1dp",
+                "borderColor": "#243049",
+                "padding": "10dp",
+                "radius": "8dp"
+              },
+              "children": [
+                {
+                  "type": "label",
+                  "id": "sys_adapters_title",
+                  "labelProps": {
+                    "text": "${constant.strings.sys_adapters_title}"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "13sp"
+                  }
+                },
+                {
+                  "type": "label",
+                  "id": "sys_adapters_hint",
+                  "labelProps": {
+                    "text": "${constant.strings.sys_adapters_hint}"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "11sp"
+                  }
+                },
+                {
+                  "type": "container",
+                  "id": "sys_adapter_rows",
+                  "layout": {
+                    "type": "flex",
+                    "flexFlow": "column",
+                    "mainAlign": "start",
+                    "crossAlign": "stretch",
+                    "gap": "4dp"
+                  },
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "adapter_btn_wifi",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_adapter_wifi"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "adapter_lbl_wifi",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_adapter_wifi}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "12sp"
+                          },
+                          "bindings": {
+                            "style.textColor": "adapters.color_0"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "id": "adapter_btn_mqtt_broker",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_adapter_mqtt_broker"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "adapter_lbl_mqtt_broker",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_adapter_mqtt_broker}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "12sp"
+                          },
+                          "bindings": {
+                            "style.textColor": "adapters.color_1"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "id": "adapter_btn_thread",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_adapter_thread"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "adapter_lbl_thread",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_adapter_thread}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "12sp"
+                          },
+                          "bindings": {
+                            "style.textColor": "adapters.color_2"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "id": "adapter_btn_matter",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_adapter_matter"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "adapter_lbl_matter",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_adapter_matter}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "12sp"
+                          },
+                          "bindings": {
+                            "style.textColor": "adapters.color_3"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "id": "adapter_btn_zigbee",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_adapter_zigbee"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "adapter_lbl_zigbee",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_adapter_zigbee}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "12sp"
+                          },
+                          "bindings": {
+                            "style.textColor": "adapters.color_4"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "id": "adapter_btn_ble_mesh",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_adapter_ble_mesh"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "adapter_lbl_ble_mesh",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_adapter_ble_mesh}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "12sp"
+                          },
+                          "bindings": {
+                            "style.textColor": "adapters.color_5"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "id": "adapter_btn_modbus",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_adapter_modbus"
+                        }
+                      ],
+                      "placement": {
+                        "mode": "flow",
+                        "width": "wrap"
+                      },
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp",
+                        "radius": "8dp",
+                        "padding": "6dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "adapter_lbl_modbus",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_adapter_modbus}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "12sp"
+                          },
+                          "bindings": {
+                            "style.textColor": "adapters.color_6"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "sys_adapters_save_btn",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "system_adapters_save"
+                    }
+                  ],
+                  "placement": {
+                    "mode": "flow",
+                    "width": "wrap"
+                  },
+                  "style": {
+                    "bgColor": "#1a2238",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049",
+                    "radius": "8dp",
+                    "padding": "6dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "sys_adapters_save_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.common_save}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#eef2ff",
+                        "fontSize": "12sp"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "container",
+      "id": "confirm_modal",
+      "layout": {
+        "type": "flex",
+        "flexFlow": "column",
+        "mainAlign": "center",
+        "crossAlign": "center"
+      },
+      "placement": {
+        "x": "0dp",
+        "y": "0dp",
+        "width": "800dp",
+        "height": "480dp"
+      },
+      "style": {
+        "bgColor": "#0b0f1a"
+      },
+      "children": [
+        {
+          "type": "container",
+          "id": "confirm_card",
+          "layout": {
+            "type": "flex",
+            "flexFlow": "column",
+            "mainAlign": "start",
+            "crossAlign": "stretch",
+            "gap": "12dp"
+          },
+          "placement": {
+            "width": "420dp",
+            "height": "wrap"
+          },
+          "style": {
+            "bgColor": "#131a2b",
+            "borderWidth": "1dp",
+            "borderColor": "#243049",
+            "radius": "10dp",
+            "padding": "16dp"
+          },
+          "children": [
+            {
+              "type": "label",
+              "id": "confirm_title",
+              "labelProps": {
+                "text": "${constant.strings.confirm_title}"
+              },
+              "style": {
+                "textColor": "#eef2ff",
+                "fontSize": "17sp"
+              }
+            },
+            {
+              "type": "label",
+              "id": "confirm_msg",
+              "labelProps": {
+                "text": ""
+              },
+              "style": {
+                "textColor": "#8b9bb4",
+                "fontSize": "13sp"
+              }
+            },
+            {
+              "type": "container",
+              "id": "confirm_btn_row",
+              "layout": {
+                "type": "flex",
+                "flexFlow": "row",
+                "mainAlign": "end",
+                "crossAlign": "center",
+                "gap": "10dp"
+              },
+              "placement": {
+                "width": "wrap",
+                "height": "wrap"
+              },
+              "children": [
+                {
+                  "type": "button",
+                  "id": "confirm_cancel",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "confirm_config_cancel"
+                    }
+                  ],
+                  "style": {
+                    "bgColor": "#1a2238",
+                    "borderWidth": "1dp",
+                    "borderColor": "#243049",
+                    "radius": "8dp"
+                  },
+                  "placement": {
+                    "width": "100dp",
+                    "height": "36dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "confirm_cancel_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.common_cancel}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#8b9bb4",
+                        "fontSize": "13sp"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "confirm_ok",
+                  "events": [
+                    {
+                      "type": "clicked",
+                      "action": "confirm_config_ok"
+                    }
+                  ],
+                  "style": {
+                    "bgColor": "#ef4444",
+                    "borderWidth": "1dp",
+                    "borderColor": "#ef4444",
+                    "radius": "8dp"
+                  },
+                  "placement": {
+                    "width": "100dp",
+                    "height": "36dp"
+                  },
+                  "children": [
+                    {
+                      "type": "label",
+                      "id": "confirm_ok_lbl",
+                      "labelProps": {
+                        "text": "${constant.strings.common_ok}"
+                      },
+                      "placement": {
+                        "mode": "relative",
+                        "align": "center"
+                      },
+                      "style": {
+                        "textColor": "#ffffff",
+                        "fontSize": "13sp"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "commonProps": {
+        "hidden": true
+      }
+    }
+  ]
+}

@@ -351,6 +351,26 @@ static void rm_add_params(bridge_entry_t *e, const minihub_point_t *point,
     }
 }
 
+/* Mark a value dirty. esp_rmaker_report_updated_params() sends every dirty
+ * param — this device and any other staged in the same call — as one MQTT
+ * publish. update_and_report() would publish and clear the set after each
+ * param, so a light change became four messages. */
+static void rm_stage(esp_rmaker_param_t *param, esp_rmaker_param_val_t val)
+{
+    if (!param) {
+        return;
+    }
+    (void)esp_rmaker_param_update(param, val);
+}
+
+static void rm_flush_reports(void)
+{
+    if (esp_rmaker_get_state() != ESP_RMAKER_STATE_STARTED) {
+        return;
+    }
+    (void)esp_rmaker_report_updated_params();
+}
+
 static void rm_report_params(bridge_entry_t *e, const minihub_point_t *point,
                              const rm_param_t *list, size_t n)
 {
@@ -370,7 +390,7 @@ static void rm_report_params(bridge_entry_t *e, const minihub_point_t *point,
         if (!have) {
             continue;
         }
-        esp_rmaker_param_update_and_report(param, rm_initial(p, entry, point->value));
+        rm_stage(param, rm_initial(p, entry, point->value));
     }
 }
 
@@ -656,13 +676,14 @@ static void report_switch_or_light(bridge_entry_t *e, const minihub_point_t *poi
 {
     esp_rmaker_param_t *power = esp_rmaker_device_get_param_by_name(e->device, ESP_RMAKER_DEF_POWER_NAME);
     if (power) {
-        esp_rmaker_param_update_and_report(power, esp_rmaker_bool(value_is_on(point->value)));
+        rm_stage(power, esp_rmaker_bool(value_is_on(point->value)));
     }
     if ((rmaker_kind_t)e->kind == K_LIGHT) {
         rm_report_params(e, point, RM_LIGHT_PARAMS, sizeof(RM_LIGHT_PARAMS) / sizeof(RM_LIGHT_PARAMS[0]));
     } else {
         rm_report_params(e, point, RM_SWITCH_PARAMS, sizeof(RM_SWITCH_PARAMS) / sizeof(RM_SWITCH_PARAMS[0]));
     }
+    rm_flush_reports();
 }
 
 static void report_sensor(bridge_entry_t *e, const minihub_point_t *point)
@@ -670,16 +691,17 @@ static void report_sensor(bridge_entry_t *e, const minihub_point_t *point)
     esp_rmaker_param_t *temp = esp_rmaker_device_get_param_by_name(e->device, ESP_RMAKER_DEF_TEMPERATURE_NAME);
     if (temp) {
         const float t = rm_temperature(point);
-        esp_rmaker_param_update_and_report(temp, esp_rmaker_float(t));
+        rm_stage(temp, esp_rmaker_float(t));
     }
     rm_report_params(e, point, RM_SENSOR_PARAMS, sizeof(RM_SENSOR_PARAMS) / sizeof(RM_SENSOR_PARAMS[0]));
+    rm_flush_reports();
 }
 
 static void report_camera(bridge_entry_t *e, const minihub_point_t *point)
 {
     esp_rmaker_param_t *power = esp_rmaker_device_get_param_by_name(e->device, ESP_RMAKER_DEF_POWER_NAME);
     if (power) {
-        esp_rmaker_param_update_and_report(power, esp_rmaker_bool(value_is_on(point->value)));
+        rm_stage(power, esp_rmaker_bool(value_is_on(point->value)));
     }
     if (e->has_recording) {
         esp_rmaker_param_t *rec = esp_rmaker_device_get_param_by_name(e->device, "Recording");
@@ -689,9 +711,10 @@ static void report_camera(bridge_entry_t *e, const minihub_point_t *point)
                 const cJSON *v = cJSON_GetObjectItem(point->props, "recording");
                 recording = cJSON_IsTrue(v);
             }
-            esp_rmaker_param_update_and_report(rec, esp_rmaker_bool(recording));
+            rm_stage(rec, esp_rmaker_bool(recording));
         }
     }
+    rm_flush_reports();
 }
 
 static esp_err_t alloc_priv(bridge_entry_t *e)
@@ -824,35 +847,36 @@ static void report_generic(bridge_entry_t *e, const minihub_point_t *point)
             }
         }
         if (widget && strcmp(widget, "slider") == 0) {
-            esp_rmaker_param_update_and_report(param, esp_rmaker_float((float)rm_entry_num(entry, 0)));
+            rm_stage(param, esp_rmaker_float((float)rm_entry_num(entry, 0)));
         } else if (widget && strcmp(widget, "button") == 0) {
             /* value-less action: nothing to report */
         } else if (widget && strcmp(widget, "toggle") == 0) {
-            esp_rmaker_param_update_and_report(param, esp_rmaker_bool(rm_entry_bool(entry, false)));
+            rm_stage(param, esp_rmaker_bool(rm_entry_bool(entry, false)));
         } else if (widget && (strcmp(widget, "dropdown") == 0 || strcmp(widget, "hidden") == 0)) {
             const char *s = (val && cJSON_IsString(val)) ? val->valuestring : "";
-            esp_rmaker_param_update_and_report(param, esp_rmaker_str(s));
+            rm_stage(param, esp_rmaker_str(s));
         } else if (widget && strcmp(widget, "text") == 0) {
             /* Readout: report by the param's value type (matches create). */
             if (cJSON_IsBool(val)) {
-                esp_rmaker_param_update_and_report(param, esp_rmaker_bool(rm_entry_bool(entry, false)));
+                rm_stage(param, esp_rmaker_bool(rm_entry_bool(entry, false)));
             } else if (cJSON_IsNumber(val)) {
-                esp_rmaker_param_update_and_report(param, esp_rmaker_float((float)rm_entry_num(entry, 0)));
+                rm_stage(param, esp_rmaker_float((float)rm_entry_num(entry, 0)));
             } else {
                 const char *s = (val && cJSON_IsString(val)) ? val->valuestring : "";
-                esp_rmaker_param_update_and_report(param, esp_rmaker_str(s));
+                rm_stage(param, esp_rmaker_str(s));
             }
         } else if (cJSON_IsBool(val)) {
-            esp_rmaker_param_update_and_report(param, esp_rmaker_bool(rm_entry_bool(entry, false)));
+            rm_stage(param, esp_rmaker_bool(rm_entry_bool(entry, false)));
         } else if (cJSON_IsNumber(val)) {
-            esp_rmaker_param_update_and_report(param, esp_rmaker_float((float)rm_entry_num(entry, 0)));
+            rm_stage(param, esp_rmaker_float((float)rm_entry_num(entry, 0)));
         } else if (cJSON_IsString(val)) {
-            esp_rmaker_param_update_and_report(param, esp_rmaker_str(val->valuestring ? val->valuestring : ""));
+            rm_stage(param, esp_rmaker_str(val->valuestring ? val->valuestring : ""));
         }
         if (style) {
             cJSON_Delete(style);
         }
     }
+    rm_flush_reports();
 }
 
 /* Build one RainMaker param for a generic pass-through entry. The catalog
@@ -1219,13 +1243,13 @@ static void report_speaker(bridge_entry_t *e, const minihub_point_t *point)
     p = esp_rmaker_device_get_param_by_name(e->device, "volume");
     if (entry && p) {
         float hub = (float)rm_entry_num(entry, 0);
-        esp_rmaker_param_update_and_report(p, esp_rmaker_float(hub / 5.0f));
+        rm_stage(p, esp_rmaker_float(hub / 5.0f));
     }
 
     entry = rm_param_entry(point->props, "muted");
     p = esp_rmaker_device_get_param_by_name(e->device, "mute");
     if (entry && p) {
-        esp_rmaker_param_update_and_report(p, esp_rmaker_bool(rm_entry_bool(entry, false)));
+        rm_stage(p, esp_rmaker_bool(rm_entry_bool(entry, false)));
     }
 
     entry = rm_param_entry(point->props, "playing");
@@ -1233,19 +1257,20 @@ static void report_speaker(bridge_entry_t *e, const minihub_point_t *point)
         bool on = rm_entry_bool(entry, false);
         p = esp_rmaker_device_get_param_by_name(e->device, "media-playback-state");
         if (p) {
-            esp_rmaker_param_update_and_report(p, esp_rmaker_str(on ? "play" : "pause"));
+            rm_stage(p, esp_rmaker_str(on ? "play" : "pause"));
         }
         p = esp_rmaker_device_get_param_by_name(e->device, "media-activity-state");
         if (p) {
-            esp_rmaker_param_update_and_report(p, esp_rmaker_str(on ? "active" : "inactive"));
+            rm_stage(p, esp_rmaker_str(on ? "active" : "inactive"));
         }
     }
 
     entry = rm_param_entry(point->props, "power");
     p = esp_rmaker_device_get_param_by_name(e->device, "power");
     if (entry && p) {
-        esp_rmaker_param_update_and_report(p, esp_rmaker_bool(rm_entry_bool(entry, false)));
+        rm_stage(p, esp_rmaker_bool(rm_entry_bool(entry, false)));
     }
+    rm_flush_reports();
 }
 
 void rainmaker_bridge_on_point_updated(uint16_t point_index)
@@ -1486,17 +1511,18 @@ esp_err_t rainmaker_bridge_update_hub_status(void)
 
     esp_rmaker_param_t *p;
     p = esp_rmaker_device_get_param_by_name(s_hub_device, "Network");
-    if (p) esp_rmaker_param_update_and_report(p, esp_rmaker_str(net_buf));
+    if (p) rm_stage(p, esp_rmaker_str(net_buf));
     p = esp_rmaker_device_get_param_by_name(s_hub_device, "IP");
-    if (p) esp_rmaker_param_update_and_report(p, esp_rmaker_str(ip_buf));
+    if (p) rm_stage(p, esp_rmaker_str(ip_buf));
     p = esp_rmaker_device_get_param_by_name(s_hub_device, "Uptime (min)");
-    if (p) esp_rmaker_param_update_and_report(p, esp_rmaker_int(up_min));
+    if (p) rm_stage(p, esp_rmaker_int(up_min));
     p = esp_rmaker_device_get_param_by_name(s_hub_device, "Free Heap (KB)");
-    if (p) esp_rmaker_param_update_and_report(p, esp_rmaker_int(heap_kb));
+    if (p) rm_stage(p, esp_rmaker_int(heap_kb));
     p = esp_rmaker_device_get_param_by_name(s_hub_device, "PSRAM Free (KB)");
-    if (p) esp_rmaker_param_update_and_report(p, esp_rmaker_int(psram_kb));
+    if (p) rm_stage(p, esp_rmaker_int(psram_kb));
     p = esp_rmaker_device_get_param_by_name(s_hub_device, "Connected Devices");
-    if (p) esp_rmaker_param_update_and_report(p, esp_rmaker_int(devs));
+    if (p) rm_stage(p, esp_rmaker_int(devs));
+    rm_flush_reports();
     return ESP_OK;
 }
 

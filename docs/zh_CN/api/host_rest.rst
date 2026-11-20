@@ -383,9 +383,10 @@ GET /api/adapters
 
    **Returns**
 
-   * **HTTP 200** — 以适配器名为键的 JSON 对象。每项含 ``enabled``、``auth``；
-     已知时还有 ``module_id``、``module_name``、``module_version``、
-     ``adapter_version``。
+   * **HTTP 200** — 以适配器名为键的 JSON 对象。每项含 ``enabled``、``supported``、
+     ``auth``；已知时还有 ``module_id``、``module_name``、``module_version``、
+     ``adapter_version``。``supported`` 为 false 表示这份固件没有编进该协议栈。
+     Hub 不认识的名字（商店模块）仍为 ``supported``。
 
 GET /api/config/adapters
 ------------------------

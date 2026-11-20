@@ -65,7 +65,8 @@ def main() -> int:
         print(f"catalog fixture: {len(registry)} runtime entries, "
               f"{len({r['device'] for r in registry})} types")
         env = dict(os.environ, MINIHUB_TEST_CATALOG=str(fixture), MINIHUB_WEB_JS=str(WEB_JS))
-        return subprocess.run([node, "--test", str(HOST / "test_device_widgets.js")],
+        tests = [HOST / "test_device_widgets.js", HOST / "test_adapters_config.js"]
+        return subprocess.run([node, "--test", *(str(p) for p in tests)],
                               env=env).returncode
 
 

@@ -706,7 +706,6 @@
       "zh": "保存显示名失败",
       "en": "Failed to save display name"
     },
-
     "rename_placeholder": {
       "zh": "输入新名称",
       "en": "Enter a new name"
@@ -950,6 +949,74 @@
     "form_rule_time_ok": {
       "zh": "规则已保存（按 UTC 时间触发）",
       "en": "Rule saved (fires on UTC time)"
+    },
+    "sys_adapters_title": {
+      "zh": "适配器",
+      "en": "Adapters"
+    },
+    "sys_adapters_hint": {
+      "zh": "勾选要启用的功能；置灰表示固件不支持",
+      "en": "Tick to enable; greyed = not built in"
+    },
+    "sys_adapters_unsupported": {
+      "zh": "固件不支持",
+      "en": "Not in firmware"
+    },
+    "sys_adapters_saved": {
+      "zh": "适配器配置已保存",
+      "en": "Adapter config saved"
+    },
+    "sys_adapters_conflict_802154": {
+      "zh": "Zigbee 与 Thread 只能选一个",
+      "en": "Zigbee and Thread are exclusive"
+    },
+    "sys_adapters_conflict_group": {
+      "zh": "Wi-Fi / BLE Mesh 与 Zigbee / Thread 不能同时启用",
+      "en": "Wi-Fi / BLE Mesh cannot run with Zigbee / Thread"
+    },
+    "sys_adapter_wifi": {
+      "zh": "Wi-Fi",
+      "en": "Wi-Fi"
+    },
+    "sys_adapter_mqtt_broker": {
+      "zh": "MQTT broker",
+      "en": "MQTT broker"
+    },
+    "sys_adapter_thread": {
+      "zh": "Thread",
+      "en": "Thread"
+    },
+    "sys_adapter_matter": {
+      "zh": "Matter",
+      "en": "Matter"
+    },
+    "sys_adapter_zigbee": {
+      "zh": "Zigbee",
+      "en": "Zigbee"
+    },
+    "sys_adapter_ble_mesh": {
+      "zh": "BLE Mesh",
+      "en": "BLE Mesh"
+    },
+    "sys_adapter_modbus": {
+      "zh": "Modbus",
+      "en": "Modbus"
+    },
+    "nav_config": {
+      "zh": "配置",
+      "en": "Config"
+    },
+    "common_save": {
+      "zh": "保存",
+      "en": "Save"
+    },
+    "sys_adapters_conflict_with_group": {
+      "zh": "与 Wi-Fi/BLE Mesh 冲突",
+      "en": "Conflicts with Wi-Fi / BLE Mesh"
+    },
+    "sys_adapters_conflict_with_154": {
+      "zh": "与 Zigbee/Thread 冲突",
+      "en": "Conflicts with Zigbee / Thread"
     }
   }
 }
