@@ -41,6 +41,17 @@ From the repository root:
 product: ``minihub_merged.bin``) for jig flashing. A successful ``build`` is
 required first. The same naming is used for ``minihub_lcd`` and other products.
 
+Release logs
+------------
+
+``./tools/build_firmware.py --release build`` loads
+``configs/sdkconfig/feature/release.defaults`` and rewrites the product
+``sdkconfig`` so the app, bootloader, and maximum log level are Warning.
+Adding ``release`` to the product ``app.yml`` ``features`` list does the same
+on every build. ``CONFIG_MINIHUB_RELEASE`` selects those levels in Kconfig.
+A saved ``sdkconfig`` that already has ``LOG_DEFAULT_LEVEL_INFO`` stays at
+Info until this rewrite runs.
+
 Partitions (generic minihub, 16 MB)
 ------------------------------------
 

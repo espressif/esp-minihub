@@ -71,14 +71,13 @@ menu "MiniHub"
     endmenu
 
     config MINIHUB_LOCAL_MAP
-        bool "Enable local map (geolocation and tiles)"
+        bool "Enable local map"
         default n
         help
-            Build the on-device map stack: IP geolocation and the static
-            tile snapshot (OSM / Amap). This makes outbound requests to
-            third-party services. Web and LCD show a map only when this is
-            on. When off, the map code is left out and neither UI offers a
-            map.
+            Build IP geolocation and the map. This makes outbound requests
+            to third-party services. Web and LCD show a map only when this
+            is on. When off, the map code is left out and neither UI offers
+            a map.
 
     menu "UI"
         rsource "../../components/minihub_lcd/Kconfig.minihub"

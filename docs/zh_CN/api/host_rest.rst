@@ -551,16 +551,19 @@ GET /api/location
 
    ``GET /api/location``
 
-按公网 IP 估算位置，结果来自缓存。``?refresh=1`` 启动后台刷新，本次响应仍是缓存
-值。
+按公网 IP 估算位置，结果来自缓存。定位和地图功能只在
+``CONFIG_MINIHUB_LOCAL_MAP`` 打开时编进固件（缺省关闭）。关闭时处理函数返回
+``ok: false``，不会访问定位或地图服务。选项打开时 ``?refresh=1`` 启动后台
+刷新，本次响应仍是缓存值。
 
 .. container:: mh-api-block mh-api-returns
 
    **Returns**
 
-   * **HTTP 200** — ``ok`` （首次查询成功前为 false）；已知时还有 ``lat``、
-     ``lon``、``city``、``region``、``country``、``address``、``map_provider``
-     （``amap`` 或 ``osm``）、``public_ip``；Hub 有地址时总会带 ``local_ip``。
+   * **HTTP 200** — ``ok`` 在首次查询成功前为 false，``CONFIG_MINIHUB_LOCAL_MAP``
+     关闭时也为 false。``ok`` 为 true 时还有 ``lat``、``lon``、``city``、
+     ``region``、``country``、``address``、``map_provider`` （``amap`` 或
+     ``osm``）和 ``public_ip``。选项打开且 Hub 有地址时带 ``local_ip``。
 
 POST /api/net/config
 --------------------

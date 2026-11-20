@@ -39,6 +39,16 @@
 （本产品即 ``minihub_merged.bin``），供工装烧录；``minihub_lcd`` 等同理。须先成功
 ``build``。
 
+发布日志
+--------
+
+``./tools/build_firmware.py --release build`` 会载入
+``configs/sdkconfig/feature/release.defaults``，并改写产品 ``sdkconfig``，把
+应用、bootloader 和最高日志级别设为 Warning。把 ``release`` 写进产品
+``app.yml`` 的 ``features`` 后，每次构建都这样做。``CONFIG_MINIHUB_RELEASE``
+在 Kconfig 里 select 这些级别。已经保存为 ``LOG_DEFAULT_LEVEL_INFO`` 的
+``sdkconfig`` 会停在 Info，直到这次改写执行。
+
 分区（通用 minihub，16 MB）
 ---------------------------
 
