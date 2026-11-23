@@ -24,7 +24,7 @@ extern "C" {
  */
 
 /**
- * @brief Event bit set when STA or Ethernet obtains IPv4.
+ * @brief Event bit set when STA, Ethernet, or SoftAP obtains IPv4.
  */
 #define MINIHUB_NET_GOT_IP_BIT BIT0
 
@@ -50,13 +50,15 @@ esp_err_t minihub_net_start_wifi(void);
 
 /**
  * @brief True if any enabled uplink has a non-zero IPv4 address; false otherwise.
+ *
+ * Order: Ethernet, Wi-Fi STA, then SoftAP (provisioning hotspot).
  */
 bool minihub_net_has_ip(void);
 
 /**
  * @brief Copy dotted IPv4 of the uplink that currently has an address.
  *
- * Ethernet first, else Wi-Fi. False if neither has IPv4.
+ * Ethernet first, else Wi-Fi STA, else SoftAP. False if none has IPv4.
  *
  * @param buf Output buffer.
  * @param len Buffer size.
@@ -66,7 +68,7 @@ bool minihub_net_has_ip(void);
 bool minihub_net_get_ip(char *buf, size_t len);
 
 /**
- * @brief Netif with IPv4: Ethernet first, else Wi-Fi, else NULL.
+ * @brief Netif with IPv4: Ethernet, else Wi-Fi STA, else SoftAP, else NULL.
  *
  * @return esp_netif_t pointer, or NULL.
  */

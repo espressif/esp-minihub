@@ -18,8 +18,8 @@ Protocol or cloud behavior that is not in your firmware can still arrive later,
 because a Store module is installed at run time and needs no rebuild
 (:doc:`plugins/overview`). The console and your own integration use the same
 REST, WebSocket and JavaScript surface (:doc:`api/index`), which is also what
-the optional MCP server exposes: with ``CONFIG_MINIHUB_MCP_SERVER`` an assistant
-calls the same operations a browser does (:doc:`api/mcp`).
+the on-device MCP server exposes (on by default via ``CONFIG_MINIHUB_MCP_SERVER``):
+an assistant calls the same operations a browser does (:doc:`api/mcp`).
 
 Who reads this guide
 --------------------

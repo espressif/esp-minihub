@@ -15,8 +15,8 @@ MQTT 与 Modbus。规则存在设备上，
 
 固件里没有的协议或云能力，事后还能补进来，因为商店模块是运行时安装的，不必
 重新编译（ :doc:`plugins/overview` ）。控制台和你自己的集成走的是同一套 REST、
-WebSocket 与 JavaScript 接口（ :doc:`api/index` ），可选的 MCP 服务暴露的也是这一
-套：打开 ``CONFIG_MINIHUB_MCP_SERVER`` 之后，助手调的就是浏览器在调的那些操作
+WebSocket 与 JavaScript 接口（ :doc:`api/index` ），设备端 MCP 服务暴露的也是这一
+套（ ``CONFIG_MINIHUB_MCP_SERVER`` 默认打开）：助手调的就是浏览器在调的那些操作
 （ :doc:`api/mcp` ）。
 
 谁在读本指南

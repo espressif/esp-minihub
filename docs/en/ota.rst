@@ -160,7 +160,7 @@ directly, with no OTA server in between.
 
 Web UI: on the ``System`` page, choose a ``.bin`` file in the firmware-update
 area and click ``Upload``; the device restarts after staging. This path is not on
-the MCP ``hub.api`` allowlist, so use the Web UI or a LAN client, not ``hub.api``.
+the MCP ``hub.api`` allowlist.
 
 REST alternative (auxiliary): ``POST /api/ota/upload`` accepts the raw ``.bin``
 body. Send ``Content-Length`` (required).

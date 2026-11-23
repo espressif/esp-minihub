@@ -130,8 +130,7 @@ Web UI：在 ``系统`` 页的固件更新区填入固件 URL，点 ``开始更�
 ``.bin`` 直接推送给它，不经过 OTA 服务器。
 
 Web UI：在 ``系统`` 页的固件更新区选择 ``.bin`` 文件，点 ``上传`` ；暂存完成后设备
-重启。该路径不在 MCP ``hub.api`` 白名单，走 Web UI 或局域网客户端即可，不要走
-``hub.api``。
+重启。该路径不在 MCP ``hub.api`` 白名单。
 
 也可走 REST（辅助）： ``POST /api/ota/upload`` 接受原始 ``.bin`` 请求体，必须带
 ``Content-Length`` ：

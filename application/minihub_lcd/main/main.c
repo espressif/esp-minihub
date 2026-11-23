@@ -343,6 +343,9 @@ void app_main(void)
     minihub_event_bus_publish("hub.ready", NULL);
 #if CONFIG_MINIHUB_MCP_SERVER
     minihub_mcp_set_hub_ready(true);
+    if (minihub_net_has_ip()) {
+        minihub_mcp_notify_got_ip();
+    }
 #endif
     ESP_LOGI(TAG, "MiniHub ready (net=%s prov=%s web_ui=%s lcd_ui=%s eth=%d wifi=%d)",
              net_state,

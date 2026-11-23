@@ -72,13 +72,18 @@ endif()
 
 # cap_mcp_server lives in esp-claw, not this repo. Do not put it in bundle yml:
 # the claw tree is a product checkout (Host submodule vs Mosaic third-party).
+# Import only cap_mcp_server (and mcp_mdns): the whole claw_capabilities tree
+# would register every cap (cap_agent_mgr → claw_cap, …) and break Host CMake.
 foreach(_mh_claw IN ITEMS
         "${MINIHUB_CLAW_CAPABILITIES_DIR}"
         "${CMAKE_SOURCE_DIR}/third-party/esp-claw/components/claw_capabilities"
         "${MINIHUB_IMPORT_ROOT}/components/esp-claw/components/claw_capabilities"
         "${MINIHUB_IMPORT_ROOT}/application/minihub/components/esp-claw/components/claw_capabilities")
-    if(_mh_claw AND EXISTS "${_mh_claw}/cap_mcp_server")
-        list(APPEND EXTRA_COMPONENT_DIRS "${_mh_claw}")
+    if(_mh_claw AND EXISTS "${_mh_claw}/cap_mcp_server/CMakeLists.txt")
+        list(APPEND EXTRA_COMPONENT_DIRS "${_mh_claw}/cap_mcp_server")
+        if(EXISTS "${_mh_claw}/../common/mcp_mdns/CMakeLists.txt")
+            list(APPEND EXTRA_COMPONENT_DIRS "${_mh_claw}/../common/mcp_mdns")
+        endif()
         break()
     endif()
 endforeach()

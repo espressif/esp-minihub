@@ -58,22 +58,14 @@ IDE MCP
 设备端 MCP
 ----------
 
-Hub 自己也能提供 MCP。打开 ``CONFIG_MINIHUB_MCP_SERVER`` 并初始化
-``components/esp-claw`` 子模块，本地 MCP 客户端即可经产品接线的传输访问 Hub，工具
-统一返回 JSON 文本。
+Hub 自己也能提供 MCP（ ``CONFIG_MINIHUB_MCP_SERVER`` 默认打开）。初始化
+``components/esp-claw`` 子模块；STA / 以太网 / SoftAP 任一拿到 IPv4 后启动 HTTP
+MCP。地址 ``http://HUB_IP:18791/mcp`` 或
+``http://esp-minihub.local:18791/mcp`` （mDNS 实例 ``ESP-MiniHub``，类型
+``_mcp._tcp``）。步骤与工具列表见 :doc:`api/mcp`。
 
-工具只能作用于已就绪的 Hub，所以在启动过程中或刚 ``hub.reload`` 之后调用，可能得到
-``HUB_NOT_READY``。另外 ``hub.reload`` 限速 5 秒一次。完整工具列表与 ``hub.api``
-可代理的范围见 :doc:`api/mcp`。
-
-Hub 对外提供十二个工具，多数场景用到其中几个： ``points.list`` 与 ``command.invoke``
-负责查点位、下发命令， ``store.config.get`` 与 ``store.config.set`` 读写商店 URL，
-``hub.api`` 代理白名单内的 REST（JSON GET/POST/PUT；原始 ``.bin`` 固件上传不在白名单，
-所以做不到）；
-商店模块的安装与卸载也走 ``hub.api``，即 ``POST /api/store/install`` 与
-``POST /api/store/uninstall``。
-
-不用 MCP 时，同样的活走局域网的 ``http://HUB/api/`` （见 :doc:`api/host_rest` ）。
+启动或 ``hub.reload`` 过程中调用可能得到 ``HUB_NOT_READY``；``hub.reload`` 限速
+5 秒一次。不用 MCP 时走 ``http://HUB/api/`` （见 :doc:`api/host_rest` ）。
 
 工作方式建议
 ------------
