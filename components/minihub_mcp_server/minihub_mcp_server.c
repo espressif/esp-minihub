@@ -8,6 +8,7 @@
 
 #include "cap_mcp_server.h"
 #include "hub_api_gateway.h"
+#include "mcp_mdns.h"
 #include "minihub_config.h"
 #include "minihub_core.h"
 #include "minihub_hub.h"
@@ -177,26 +178,10 @@ static esp_mcp_value_t tool_points_get(const esp_mcp_property_list_t *properties
     return mcp_return_json(root);
 }
 
-static bool point_type_power_controllable(const char *type)
-{
-    static const char *const types[] = {
-        "switch", "light", "cover", "camera", "appliance", "fridge",
-        "water_heater", "water_purifier", "fan", "climate",
-    };
-    if (!type || !type[0]) {
-        return false;
-    }
-    for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
-        if (strcmp(type, types[i]) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/** Map on/off style writes to adapter command.invoke (points.set alone is registry-only). */
-static esp_err_t try_power_command_from_value(const char *point_id, const char *type,
-                                              const char *value, bool *handled_out)
+/** Map on/off style writes to adapter command.invoke (points.set alone is registry-only).
+ * Gate on live ``props.params.power``, not a hardcoded type-name list. */
+static esp_err_t try_power_command_from_value(const char *point_id, const char *value,
+                                              bool *handled_out)
 {
     char norm[16];
     size_t n = 0;
@@ -204,7 +189,7 @@ static esp_err_t try_power_command_from_value(const char *point_id, const char *
     if (handled_out) {
         *handled_out = false;
     }
-    if (!point_id || !value || !point_type_power_controllable(type)) {
+    if (!point_id || !value || !minihub_point_has_param(point_id, "power")) {
         return ESP_OK;
     }
 
@@ -494,7 +479,7 @@ static esp_mcp_value_t tool_points_set(const esp_mcp_property_list_t *properties
     }
 
     bool handled = false;
-    esp_err_t err = try_power_command_from_value(point_id, snap.type, value, &handled);
+    esp_err_t err = try_power_command_from_value(point_id, value, &handled);
     if (snap.props) {
         cJSON_Delete(snap.props);
     }
@@ -636,6 +621,19 @@ static esp_mcp_value_t tool_adapters_get(const esp_mcp_property_list_t *properti
     return mcp_wrap_config_object(minihub_config_get_adapters());
 }
 
+static esp_mcp_value_t tool_hub_routes(const esp_mcp_property_list_t *properties)
+{
+    (void)properties;
+
+    cJSON *resp = NULL;
+    esp_err_t err = hub_api_list_routes(&resp);
+    if (err != ESP_OK || !resp) {
+        cJSON_Delete(resp);
+        return mcp_error("INTERNAL");
+    }
+    return mcp_return_json(resp);
+}
+
 static esp_mcp_value_t tool_hub_reload(const esp_mcp_property_list_t *properties)
 {
     (void)properties;
@@ -737,16 +735,20 @@ static const cap_mcp_server_tool_def_t s_tools[] = {
     {
         .name = "hub.api",
         .description =
-            "Allowlisted MiniHub Host REST (/api/*). method+path required; optional query/body. "
-            "Includes OTA URL, hub.reload, zigbee/ble_mesh permit, Store install/upgrade/uninstall. "
-            "Denied: auth RPC (login/logout/session/verify), binary OTA upload.",
+            "Allowlisted MiniHub Host REST via in-process gateway (not Host :80). "
+            "Call hub.routes first if unsure of paths. "
+            "Always pass method, path, query, and body (use \"\" for unused query/body). "
+            "GET starters: /api/system, /api/points, /api/ota, /api/store/config. "
+            "No /api/status /api/version /api/info — DENIED (response includes try[] + hint). "
+            "Prefer points.list / command.invoke when enough. Do not HTTP-probe :80 or :18791 /api/*.",
         .callback = tool_hub_api,
         .property_names = {"method", "path", "query", "body"},
         .property_count = 4,
     },
     {
         .name = "points.list",
-        .description = "List MiniHub points (optional type/adapter filters).",
+        .description =
+            "List MiniHub points. Always pass type and adapter (use \"\" to skip a filter).",
         .callback = tool_points_list,
         .property_names = {"type", "adapter"},
         .property_count = 2,
@@ -761,21 +763,25 @@ static const cap_mcp_server_tool_def_t s_tools[] = {
     {
         .name = "points.history",
         .description =
-            "Event log for a point (local Hub transitions + module device_log when available).",
+            "Event log for a point. Always pass point_id and limit (use \"\" for default limit).",
         .callback = tool_points_history,
         .property_names = {"point_id", "limit"},
         .property_count = 2,
     },
     {
         .name = "points.set",
-        .description = "Set a MiniHub point value.",
+        .description =
+            "Set a MiniHub point value. If the point has a power param, "
+            "on/off/true/false/1/0 become turn_on/turn_off via the adapter.",
         .callback = tool_points_set,
         .property_names = {"point_id", "value"},
         .property_count = 2,
     },
     {
         .name = "command.invoke",
-        .description = "Invoke a MiniHub adapter command on a point.",
+        .description =
+            "Invoke a MiniHub adapter command. Always pass point_id, cmd, and params_json "
+            "(use \"{}\" or \"\" when no params).",
         .callback = tool_command_invoke,
         .property_names = {"point_id", "cmd", "params_json"},
         .property_count = 3,
@@ -798,6 +804,15 @@ static const cap_mcp_server_tool_def_t s_tools[] = {
         .name = "adapters.get",
         .description = "Read-only adapters config snippet from storage.",
         .callback = tool_adapters_get,
+        .property_names = {""},
+        .property_count = 0,
+    },
+    {
+        .name = "hub.routes",
+        .description =
+            "List allowlisted hub.api method+path pairs. Call this before guessing REST paths. "
+            "Do not HTTP-probe Host :80.",
+        .callback = tool_hub_routes,
         .property_names = {""},
         .property_count = 0,
     },
@@ -849,13 +864,40 @@ esp_err_t minihub_mcp_server_init(void)
     return ESP_OK;
 }
 
+/** Override claw defaults (esp-claw / ESP-Claw) before the HTTP transport starts. */
+static void minihub_mcp_apply_mdns_identity(void)
+{
+    const mcp_mdns_config_t cfg = {
+        .hostname = "esp-minihub",
+        .instance_name = "ESP-MiniHub",
+    };
+    esp_err_t err = mcp_mdns_set_config(&cfg);
+    /* INVALID_STATE: already started — leave the running identity alone. */
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "mcp_mdns_set_config: %s", esp_err_to_name(err));
+    }
+}
+
 esp_err_t minihub_mcp_server_register_tools(void)
 {
+    minihub_mcp_apply_mdns_identity();
     esp_err_t err = cap_mcp_server_add_tool(s_tools, sizeof(s_tools) / sizeof(s_tools[0]));
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "register tools failed: %s", esp_err_to_name(err));
     }
     return err;
+}
+
+void minihub_mcp_notify_got_ip(void)
+{
+    /* HTTP MCP transport (esp-claw cap_mcp_server). Idempotent if already up. */
+    minihub_mcp_apply_mdns_identity();
+    esp_err_t err = cap_mcp_server_start();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "cap_mcp_server_start: %s", esp_err_to_name(err));
+        return;
+    }
+    ESP_LOGI(TAG, "on-device MCP HTTP transport started");
 }
 
 static const char *json_arg_as_string(const cJSON *args, const char *key, char *scratch,

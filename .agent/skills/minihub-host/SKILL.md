@@ -180,4 +180,4 @@ permanently, amplified by the host's `pollAuthSyncWhileBusy` loop (which now has
 
 ## MCP
 
-`CONFIG_MINIHUB_MCP_SERVER` is default n. Enable only with `git submodule update --init components/esp-claw`.
+`CONFIG_MINIHUB_MCP_SERVER` is default y. Needs `git submodule update --init components/esp-claw`.

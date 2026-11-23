@@ -117,11 +117,19 @@ def _sources() -> list[Path]:
     component that reports an error joins the table by itself.
     """
     out = [WEB]
+    claw = (ROOT / "components" / "esp-claw").resolve()
     for path in sorted((ROOT / "components").rglob("*")):
         if path.suffix not in (".c", ".cpp") or not path.is_file():
             continue
         if path == WEB:
             continue
+        # Host docs list MiniHub HTTP answers only; skip the optional esp-claw
+        # submodule tree (its edge_agent / lua HTTP servers are not Host REST).
+        try:
+            path.resolve().relative_to(claw)
+            continue
+        except ValueError:
+            pass
         if "httpd_resp_send_err" in _text(path):
             out.append(path)
     return out

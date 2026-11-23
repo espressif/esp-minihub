@@ -53,6 +53,8 @@ static esp_eth_handle_t s_eth_handle;
 #endif
 #if CONFIG_MINIHUB_NET_WIFI_STA
 static esp_netif_t *s_sta_netif;
+/* SoftAP netif when Hub is in open provisioning AP (no STA credentials yet). */
+static esp_netif_t *s_ap_netif;
 /* set_config is rejected while STA is connecting. Hold auto-reconnect across
  * disconnect so the driver can leave that state before the new config. */
 static volatile bool s_wifi_hold_reconnect;
@@ -63,7 +65,7 @@ static EventGroupHandle_t s_wifi_idle_eg;
 static bool s_wifi_sta_disabled;
 #endif
 
-/* Optional hooks — weak so RainMaker / web / LCD can override when linked. */
+/* Optional hooks — weak so RainMaker / web / LCD / MCP can override when linked. */
 __attribute__((weak)) void minihub_rainmaker_notify_got_ip(void)
 {
 }
@@ -74,6 +76,10 @@ __attribute__((weak)) esp_err_t minihub_web_refresh_geo_async(void)
 }
 
 __attribute__((weak)) void minihub_lcd_request_refresh(void)
+{
+}
+
+__attribute__((weak)) void minihub_mcp_notify_got_ip(void)
 {
 }
 
@@ -197,6 +203,7 @@ static void on_got_ip(const char *ifname, esp_netif_t *netif)
     log_netif_dns(ifname ? ifname : "netif", netif);
     minihub_rainmaker_notify_got_ip();
     (void)minihub_web_refresh_geo_async();
+    minihub_mcp_notify_got_ip();
     minihub_lcd_request_refresh();
 }
 
@@ -311,7 +318,10 @@ static esp_err_t start_wifi_sta(void)
      * -> minihub_net_set_wifi_sta), so skip network_prov and bring up a plain
      * SoftAP purely so the web console on port 80 stays reachable. */
     ESP_LOGI(TAG, "no Wi-Fi credentials; starting SoftAP for web configuration");
-    esp_netif_create_default_wifi_ap();
+    s_ap_netif = esp_netif_create_default_wifi_ap();
+    if (!s_ap_netif) {
+        s_ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    }
     wifi_config_t ap_cfg = {0};
     strncpy((char *)ap_cfg.ap.ssid, MINIHUB_WEB_PROV_AP_SSID, sizeof(ap_cfg.ap.ssid) - 1);
     ap_cfg.ap.ssid_len = strlen(MINIHUB_WEB_PROV_AP_SSID);
@@ -321,6 +331,14 @@ static esp_err_t start_wifi_sta(void)
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_AP), TAG, "set AP mode");
     ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg), TAG, "set AP config");
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
+    /* SoftAP gets a static IPv4 (typically 192.168.4.1) without STA GOT_IP.
+     * Start MCP / set GOT_IP so clients joined to the AP can reach the Hub. */
+    if (s_ap_netif && netif_has_ip(s_ap_netif)) {
+        on_got_ip("wifi_ap", s_ap_netif);
+    } else {
+        ESP_LOGW(TAG, "SoftAP up but no IPv4 yet; MCP waits for AP IP");
+        minihub_mcp_notify_got_ip();
+    }
     return ESP_OK;
 #else
     ESP_LOGE(TAG, "no Wi-Fi credentials and provisioning disabled");
@@ -652,6 +670,16 @@ esp_netif_t *minihub_net_get_netif(void)
 #if CONFIG_MINIHUB_NET_WIFI_STA
     if (netif_has_ip(s_sta_netif)) {
         return s_sta_netif;
+    }
+    /* Open provisioning SoftAP: clients join the Hub AP (e.g. 192.168.4.1). */
+    if (netif_has_ip(s_ap_netif)) {
+        return s_ap_netif;
+    }
+    if (!s_ap_netif) {
+        s_ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+        if (netif_has_ip(s_ap_netif)) {
+            return s_ap_netif;
+        }
     }
 #endif
     return NULL;

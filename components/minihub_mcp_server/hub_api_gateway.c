@@ -16,6 +16,7 @@
 #include "minihub_net.h"
 #include "minihub_ota.h"
 #include "minihub_rules.h"
+#include "minihub_scenes.h"
 #include "minihub_store.h"
 #if CONFIG_MINIHUB_ZIGBEE_SDK
 #include "minihub_zigbee.h"
@@ -236,6 +237,60 @@ static cJSON *err_obj(const char *code, const char *detail)
         cJSON_AddStringToObject(root, "detail", detail);
     }
     return root;
+}
+
+static const char *mask_to_method(uint8_t methods)
+{
+    if (methods == HUB_M_GET) {
+        return "GET";
+    }
+    if (methods == HUB_M_POST) {
+        return "POST";
+    }
+    if (methods == HUB_M_PUT) {
+        return "PUT";
+    }
+    return "GET";
+}
+
+esp_err_t hub_api_list_routes(cJSON **out)
+{
+    if (!out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *out = NULL;
+    cJSON *root = cJSON_CreateObject();
+    cJSON *routes = cJSON_CreateArray();
+    if (!root || !routes) {
+        cJSON_Delete(root);
+        cJSON_Delete(routes);
+        return ESP_ERR_NO_MEM;
+    }
+    for (size_t i = 0; i < sizeof(s_rules) / sizeof(s_rules[0]); i++) {
+        uint8_t m = s_rules[i].methods;
+        /* One rule may combine masks; emit one entry per HTTP method bit. */
+        static const uint8_t bits[] = {HUB_M_GET, HUB_M_POST, HUB_M_PUT};
+        for (size_t b = 0; b < sizeof(bits) / sizeof(bits[0]); b++) {
+            if ((m & bits[b]) == 0) {
+                continue;
+            }
+            cJSON *row = cJSON_CreateObject();
+            if (!row) {
+                cJSON_Delete(root);
+                cJSON_Delete(routes);
+                return ESP_ERR_NO_MEM;
+            }
+            cJSON_AddStringToObject(row, "method", mask_to_method(bits[b]));
+            cJSON_AddStringToObject(row, "path", s_rules[i].path);
+            cJSON_AddItemToArray(routes, row);
+        }
+    }
+    cJSON_AddBoolToObject(root, "ok", true);
+    cJSON_AddStringToObject(root, "note",
+                            "Use MCP hub.api with these paths only. Do not HTTP-probe :80 or the MCP port.");
+    cJSON_AddItemToObject(root, "routes", routes);
+    *out = root;
+    return ESP_OK;
 }
 
 static void free_point_list(minihub_point_t *list, size_t count)
@@ -484,6 +539,82 @@ static esp_err_t dispatch_rules_import(const char *body, cJSON **out)
     }
     cJSON_AddBoolToObject(resp, "ok", true);
     cJSON_AddNumberToObject(resp, "count", count);
+    *out = resp;
+    return ESP_OK;
+}
+
+static esp_err_t dispatch_scenes_import(const char *body, cJSON **out)
+{
+    if (!body || !body[0]) {
+        *out = err_obj("INVALID_ARG", "body required");
+        return ESP_OK;
+    }
+    cJSON *root = cJSON_Parse(body);
+    if (!root) {
+        *out = err_obj("INVALID_JSON", NULL);
+        return ESP_OK;
+    }
+    const cJSON *scenes = cJSON_GetObjectItem(root, "scenes");
+    if (!cJSON_IsArray(scenes)) {
+        cJSON_Delete(root);
+        *out = err_obj("VALIDATION_FAILED", "scenes array required");
+        return ESP_OK;
+    }
+    int count = cJSON_GetArraySize(scenes);
+    esp_err_t err = minihub_config_save_scenes(root);
+    if (err != ESP_OK) {
+        cJSON_Delete(root);
+        *out = err_obj("SAVE_FAILED", esp_err_to_name(err));
+        return ESP_OK;
+    }
+    err = minihub_scenes_reload(minihub_config_get_scenes());
+    cJSON_Delete(root);
+    if (err != ESP_OK) {
+        *out = err_obj("RELOAD_FAILED", esp_err_to_name(err));
+        return ESP_OK;
+    }
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddBoolToObject(resp, "ok", true);
+    cJSON_AddNumberToObject(resp, "count", count);
+    *out = resp;
+    return ESP_OK;
+}
+
+static esp_err_t dispatch_scenes_invoke(const char *body, cJSON **out)
+{
+    if (!body || !body[0]) {
+        *out = err_obj("INVALID_ARG", "body required");
+        return ESP_OK;
+    }
+    cJSON *root = cJSON_Parse(body);
+    if (!root) {
+        *out = err_obj("INVALID_JSON", NULL);
+        return ESP_OK;
+    }
+    const cJSON *id = cJSON_GetObjectItem(root, "scene_id");
+    if (!cJSON_IsString(id) || !id->valuestring[0]) {
+        id = cJSON_GetObjectItem(root, "id");
+    }
+    if (!cJSON_IsString(id) || !id->valuestring[0]) {
+        cJSON_Delete(root);
+        *out = err_obj("INVALID_ARG", "scene_id required");
+        return ESP_OK;
+    }
+    esp_err_t err = minihub_scenes_invoke(id->valuestring);
+    cJSON_Delete(root);
+    if (err != ESP_OK) {
+        *out = err_obj(err == ESP_ERR_NOT_FOUND ? "NOT_FOUND" : "INVOKE_FAILED", esp_err_to_name(err));
+        return ESP_OK;
+    }
+    cJSON *resp = cJSON_CreateObject();
+    if (!resp) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddBoolToObject(resp, "ok", true);
+    cJSON_AddStringToObject(resp, "result", "ok");
     *out = resp;
     return ESP_OK;
 }
@@ -1185,7 +1316,22 @@ esp_err_t hub_api_call(const char *method, const char *path, const char *query, 
     }
     if (!rule_allows(mask, path_buf)) {
         ESP_LOGW(TAG, "denied %s %s", method, path_buf);
-        *out = err_obj("DENIED", path_buf);
+        cJSON *denied = err_obj("DENIED", path_buf);
+        if (denied) {
+            cJSON_AddStringToObject(
+                denied, "hint",
+                "Path not on hub.api allowlist. Call hub.routes, or try GET /api/system / "
+                "/api/points (always pass query and body as \"\"). Do not probe Host :80.");
+            cJSON *try_paths = cJSON_CreateArray();
+            if (try_paths) {
+                cJSON_AddItemToArray(try_paths, cJSON_CreateString("/api/system"));
+                cJSON_AddItemToArray(try_paths, cJSON_CreateString("/api/points"));
+                cJSON_AddItemToArray(try_paths, cJSON_CreateString("/api/ota"));
+                cJSON_AddItemToArray(try_paths, cJSON_CreateString("/api/store/config"));
+                cJSON_AddItemToObject(denied, "try", try_paths);
+            }
+        }
+        *out = denied;
         return ESP_OK;
     }
 
@@ -1226,6 +1372,26 @@ esp_err_t hub_api_call(const char *method, const char *path, const char *query, 
     }
     if (mask == HUB_M_POST && strcmp(path_buf, "/api/rules/import") == 0) {
         return dispatch_rules_import(body, out);
+    }
+    if (mask == HUB_M_GET && strcmp(path_buf, "/api/scenes") == 0) {
+        cJSON *scenes = minihub_config_get_scenes();
+        if (!scenes) {
+            *out = err_obj("CONFIG_NOT_READY", "scenes");
+            return ESP_OK;
+        }
+        cJSON *dup = cJSON_Duplicate(scenes, true);
+        if (!dup) {
+            return ESP_ERR_NO_MEM;
+        }
+        cJSON_AddBoolToObject(dup, "ok", true);
+        *out = dup;
+        return ESP_OK;
+    }
+    if (mask == HUB_M_POST && strcmp(path_buf, "/api/scenes/import") == 0) {
+        return dispatch_scenes_import(body, out);
+    }
+    if (mask == HUB_M_POST && strcmp(path_buf, "/api/scenes/invoke") == 0) {
+        return dispatch_scenes_invoke(body, out);
     }
     if (mask == HUB_M_GET &&
         (strcmp(path_buf, "/api/adapters") == 0 || strcmp(path_buf, "/api/config/adapters") == 0)) {

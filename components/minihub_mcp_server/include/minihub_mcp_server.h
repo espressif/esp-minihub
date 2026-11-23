@@ -17,6 +17,13 @@ void minihub_mcp_set_hub_ready(bool ready);
 bool minihub_mcp_hub_ready(void);
 
 /**
+ * @brief Start the HTTP MCP transport after IPv4 is up (also used as net got-IP hook).
+ *
+ * Overrides the weak stub in ``minihub_net``. Safe to call more than once.
+ */
+void minihub_mcp_notify_got_ip(void);
+
+/**
  * @brief In-process MiniHub MCP tools (no HTTP to self / no esp-claw patch).
  * `arguments_json` may be NULL or "{}" for tools with no args.
  * On success, writes tool JSON text into `out`.

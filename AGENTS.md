@@ -72,7 +72,7 @@ Repo configs live in `.agent/mcp/` (`cursor.mcp.json`, `vscode.mcp.json`), symli
   else the gitignored `esp-idf/` beside the repo. MiniHub needs IDF 6.2 or later. Python is
   not pinned: 3.10+ is enough for `idf.py` and this repo's `tools/*.py`. On a re-pin, move
   every copy at once: `grep -rl 2b10d127 README.md README_CN.md AGENTS.md docs/en docs/zh_CN`.
-- Optional **on-device** MCP: `CONFIG_MINIHUB_MCP_SERVER=y` + `git submodule update --init components/esp-claw`. Unrelated to the plugin-author IDE MCP above.
+- On-device MCP defaults on (`CONFIG_MINIHUB_MCP_SERVER=y`); needs `git submodule update --init components/esp-claw`. Unrelated to the plugin-author IDE MCP above.
 
 ## Deploy root
 

@@ -2,9 +2,10 @@ menu "MCP"
 
     config MINIHUB_MCP_SERVER
         bool "Enable on-device MCP tool server (Hub tools for agents)"
-        default n
+        default y
         help
             Register MiniHub REST-equivalent tools via minihub_mcp_server.
-            Requires cap_mcp_server from esp-claw. Used by idf_component.yml.
+            Requires ``git submodule update --init components/esp-claw``
+            (cap_mcp_server). Used by idf_component.yml.
 
 endmenu

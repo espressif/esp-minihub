@@ -1,13 +1,13 @@
-# Default Host builds leave components/esp-claw uninitialized. Register a stub so
-# IDF can still scan this directory without REQUIRES cap_mcp_server.
+# When MCP is off, register a stub so IDF can scan this directory without
+# REQUIRES cap_mcp_server (esp-claw submodule). Default is on.
 if(NOT CONFIG_MINIHUB_MCP_SERVER)
     idf_component_register()
     return()
 endif()
 
 set(_MCP_REQUIRES
-    minihub_core minihub_hub minihub_rules minihub_config minihub_store
-    minihub_module minihub_ota minihub_net json cap_mcp_server
+    minihub_core minihub_hub minihub_rules minihub_scenes minihub_config minihub_store
+    minihub_module minihub_ota minihub_net json cap_mcp_server mcp_mdns
 )
 
 if(CONFIG_MINIHUB_ZIGBEE_SDK)
@@ -32,13 +32,15 @@ target_link_libraries(${COMPONENT_LIB} PUBLIC
     idf::minihub_core
     idf::minihub_hub
     idf::minihub_rules
+    idf::minihub_scenes
     idf::minihub_config
     idf::minihub_store
     idf::minihub_module
     idf::minihub_ota
     idf::minihub_net
     idf::json
-    idf::cap_mcp_server)
+    idf::cap_mcp_server
+    idf::mcp_mdns)
 if(CONFIG_MINIHUB_ZIGBEE_SDK)
     target_link_libraries(${COMPONENT_LIB} PUBLIC idf::minihub_zigbee)
 endif()

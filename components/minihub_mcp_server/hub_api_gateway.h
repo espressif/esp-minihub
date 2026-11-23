@@ -24,6 +24,13 @@ extern "C" {
 esp_err_t hub_api_call(const char *method, const char *path, const char *query, const char *body,
                        cJSON **out);
 
+/**
+ * List allowlisted ``hub.api`` routes (method + path) for agent discovery.
+ *
+ * @param out  Owned JSON ``{"ok":true,"routes":[{"method":"GET","path":"/api/system"},…]}``.
+ */
+esp_err_t hub_api_list_routes(cJSON **out);
+
 #ifdef __cplusplus
 }
 #endif
