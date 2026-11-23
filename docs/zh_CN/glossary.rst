@@ -147,5 +147,6 @@ NVS
 MCP
     两个不相干的东西共用这个名字。 **设备侧** MCP 服务器
     （ ``CONFIG_MINIHUB_MCP_SERVER``，需要 ``components/esp-claw`` ）让 AI 助手
-    驱动一台在线 Hub。 **插件作者用的 IDE MCP** （ ``tools/minihub_plugin_mcp.py`` ）
-    跑在你的 PC 上，只做脚手架、校验与打包。
+    驱动一台在线 Hub；HTTP 端口 ``18791``、路径 ``/mcp``，mDNS 为 ``_mcp._tcp`` /
+    ``ESP-MiniHub`` / ``esp-minihub.local``。 **插件作者用的 IDE MCP**
+    （ ``tools/minihub_plugin_mcp.py`` ）跑在你的 PC 上，只做脚手架、校验与打包。

@@ -64,25 +64,15 @@ server described below is a separate thing: it talks to a Hub over the network.
 On-device MCP
 -------------
 
-A Hub can serve MCP itself. Enable ``CONFIG_MINIHUB_MCP_SERVER`` and initialize
-the ``components/esp-claw`` submodule; a local MCP client then reaches the Hub
-over the transport the product wires up, and every tool answers with JSON text.
+A Hub can serve MCP itself (``CONFIG_MINIHUB_MCP_SERVER`` is on by default).
+Initialize the ``components/esp-claw`` submodule; after IPv4 is up (STA,
+Ethernet, or SoftAP) the Hub starts HTTP MCP. URLs: ``http://HUB_IP:18791/mcp`` or
+``http://esp-minihub.local:18791/mcp`` (mDNS instance ``ESP-MiniHub``, type
+``_mcp._tcp``). Steps and tool list: :doc:`api/mcp`.
 
-A tool can only act on a Hub that has finished booting, so a call made during
-boot or just after ``hub.reload`` may come back ``HUB_NOT_READY``. ``hub.reload``
-is additionally limited to one call per 5 s. The full tool list, including what
-``hub.api`` is allowed to proxy, is in :doc:`api/mcp`.
-
-The Hub serves twelve tools. A few cover most sessions: ``points.list`` and
-``command.invoke`` read and drive points, ``store.config.get`` and
-``store.config.set`` read and write the Store URL, and ``hub.api`` proxies
-allowlisted REST calls (JSON GET/POST/PUT — the raw ``.bin`` firmware upload is
-not on the allowlist, so it stays out of reach) — installing or removing a Store
-module also goes through
-``hub.api``, as ``POST /api/store/install`` and ``POST /api/store/uninstall``.
-
-Without MCP, the same work goes over plain LAN at ``http://HUB/api/``
-(:doc:`api/host_rest`).
+A call during boot or ``hub.reload`` may return ``HUB_NOT_READY``;
+``hub.reload`` is limited to one call per 5 s. Without MCP, use
+``http://HUB/api/`` (:doc:`api/host_rest`).
 
 Suggested loop
 --------------

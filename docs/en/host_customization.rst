@@ -99,7 +99,7 @@ Step-by-step: create ``myhub``
 
    The device "firmware version" (OTA comparison, ``Firmwares/<chip>/<ver>/``)
    and the product/sidebar version (shown as ``v<ver>`` in the Web UI) are the
-   SAME value, ``MINIHUB_VERSION`` (default ``0.1.0``). Git describe still shows
+   SAME value, ``MINIHUB_VERSION`` (default ``0.1.0-dev``). Git describe still shows
    separately as the commit line.
 
    Only the Web bundle is versioned independently, via ``MINIHUB_WEB_VERSION``

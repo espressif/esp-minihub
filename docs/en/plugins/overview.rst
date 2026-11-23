@@ -10,7 +10,7 @@ Code that ships with every unit is linked into the firmware: Core, and the radio
 stacks and adapters that Kconfig enables (Zigbee, BLE Mesh, Matter, MQTT,
 Modbus). The web console is a linked HTTP server plus the HTML, CSS and
 JavaScript that live on the ``storage`` partition, so a re-skin does not rebuild
-the app (:doc:`../web_console`). The MCP server is its own component and is off
+the app (:doc:`../web_console`). The MCP server is its own component and is on
 by default (``CONFIG_MINIHUB_MCP_SERVER``).
 
 Developer and ecosystem adapters are different. They often carry credentials that

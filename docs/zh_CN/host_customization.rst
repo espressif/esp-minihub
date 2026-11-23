@@ -88,7 +88,7 @@ Core 是共用的，一台出货设备和通用 Host 的差别只有几处：跑
    出厂验证与自动化脚本不编进固件，它们打的是 REST： :doc:`api/host_rest` 。
 
    系统页的「Host 固件版本」与「Web 版本」是两个独立的值；但「产品/侧栏版本」与
-   「固件版本」是同一个，统一由 ``MINIHUB_VERSION`` 给出（默认 ``0.1.0``，侧栏
+   「固件版本」是同一个，统一由 ``MINIHUB_VERSION`` 给出（默认 ``0.1.0-dev``，侧栏
    前面加 ``v``）。``MINIHUB_VERSION`` 用于 OTA 比较、``Firmwares/<chip>/<ver>/``
    文件夹，并在侧栏/系统页显示为 ``v<ver>``；Git 描述仍单独显示为提交号。
 

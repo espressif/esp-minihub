@@ -11,7 +11,7 @@ One number per device, two release trains
 -----------------------------------------
 
 ``MINIHUB_VERSION`` is the device version, set once in
-:file:`cmake/minihub_bundle/Kconfig.projbuild` (default ``0.1.0``). The same string
+:file:`cmake/minihub_bundle/Kconfig.projbuild` (default ``0.1.0-dev``). The same string
 is what the firmware reports as ``firmware_version``, what ``tools/deploy.sh`` names
 the ``Firmwares/<chip>/<version>/`` folder with, and what the console shows in the
 sidebar. It is not ``git describe``: the commit is reported separately, so a
@@ -32,7 +32,7 @@ two steps usually does. Before you compare a device against this guide, check bo
 .. code-block:: bash
 
    curl -s -H "Authorization: Bearer $MINIHUB_TOKEN" http://HUB/api/system \
-     | python3 -m JSON.tool   # version, commit
+     | python3 -m json.tool   # version, commit
    # the console's own value is in window.mhWebVersion, shown in the sidebar
 
 A firmware that is newer than the console it runs against is normal; a console

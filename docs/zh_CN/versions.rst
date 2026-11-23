@@ -11,7 +11,7 @@
 --------------------------
 
 设备版本是 ``MINIHUB_VERSION`` ，在 :file:`cmake/minihub_bundle/Kconfig.projbuild`
-里设一次（缺省 ``0.1.0`` ）。同一个字符串就是固件上报的 ``firmware_version`` ，
+里设一次（缺省 ``0.1.0-dev`` ）。同一个字符串就是固件上报的 ``firmware_version`` ，
 是 ``tools/deploy.sh`` 拿来命名 ``Firmwares/<chip>/<version>/`` 目录的那个号，也是
 控制台侧栏显示的内容。它不是 ``git describe`` ：commit 单独上报，所以「版本号没动的
 重新编译」会表现为同一版本下的另一个 commit。
@@ -27,7 +27,7 @@
 .. code-block:: bash
 
    curl -s -H "Authorization: Bearer $MINIHUB_TOKEN" http://HUB/api/system \
-     | python3 -m JSON.tool   # version、commit
+     | python3 -m json.tool   # version、commit
    # 控制台自己的值是 window.mhWebVersion ，侧栏也会显示
 
 固件比控制台新是正常的；控制台比固件新，通常说明 ``app-flash`` 只换了应用，

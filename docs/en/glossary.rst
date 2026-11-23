@@ -177,6 +177,7 @@ Console (web console)
 MCP
     Two unrelated things use the name. The **on-device** MCP server
     (``CONFIG_MINIHUB_MCP_SERVER``, needs ``components/esp-claw``) lets an AI
-    assistant drive a live Hub. The **plugin-author IDE MCP**
-    (``tools/minihub_plugin_mcp.py``) runs on your PC and only scaffolds,
+    assistant drive a live Hub; HTTP on port ``18791`` at path ``/mcp``, mDNS is
+    ``_mcp._tcp`` / ``ESP-MiniHub`` / ``esp-minihub.local``. The **plugin-author
+    IDE MCP** (``tools/minihub_plugin_mcp.py``) runs on your PC and only scaffolds,
     validates, and packs modules.

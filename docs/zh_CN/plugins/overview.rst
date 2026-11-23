@@ -9,7 +9,7 @@ Host 与插件
 随每台设备出货的代码链进固件：Core，以及 Kconfig 打开的射频栈与适配器
 （Zigbee、BLE Mesh、Matter、MQTT、Modbus）。Web 控制台是链进去的 HTTP 服务，
 加上放在 ``storage`` 分区里的 HTML、CSS、JavaScript，所以换皮不用重编 app
-（见 :doc:`../web_console`）。MCP 服务是独立组件，默认关闭
+（见 :doc:`../web_console`）。MCP 服务是独立组件，默认打开
 （``CONFIG_MINIHUB_MCP_SERVER``）。
 
 开发者 / 生态适配器不同。它们常带不能出现在公开构建里的凭证，也不是每个产品都需要。
