@@ -78,11 +78,28 @@ JS 模块既不是浏览器页面，也不是 Node 进程。
      "requires": []
    }
 
-``requires`` 列出这个模块需要的能力，取自 ``Zigbee`` 、 ``BLE_mesh`` 、 ``Thread_Matter`` 、
-``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` 。 ``[]`` 表示不需要。目录请求带 ``caps=`` ，
-内容是这台 Hub 当前已启用的能力。列出的任一项不具备时，Hub 商店不把该模块放进可安装列表。
-已经安装的模块下次上电不启动，商店里标为当前固件不支持。 ``targets`` 用 ``any`` 表示任意芯片；
-写 ``ALL`` 也会按 ``any`` 保存。
+**``requires`` 要显式写清楚。** 打包时它会进 ``catalog.json`` ，Hub 用
+``GET /api/catalog`` 上的 ``caps=`` 按它过滤。取值来自 ``Zigbee`` 、 ``BLE_mesh`` 、
+``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` 。 ``[]`` 表示不依赖
+这些协议栈。列出的任一项未编进固件或未启用时，商店不把尚未安装的模块放进可安装列表；
+已经安装的模块下次上电不启动，并标为当前固件不支持。不要和 ``meta.json`` 的
+``capabilities`` （ ``points`` 、 ``auth`` 等）混用——后者只是说明，不参与目录过滤。
+
+依赖本机 MQTT broker 的模块要把该项写进列表，例如：
+
+.. code-block:: JSON
+
+   {
+     "id": "esphome",
+     "name": "ESPHome MQTT discovery",
+     "version": "0.1.0",
+     "runtime": "js",
+     "adapter": "esphome",
+     "targets": ["any"],
+     "requires": ["MQTT_Broker"]
+   }
+
+``targets`` 用 ``any`` 表示任意芯片；写 ``ALL`` 也会按 ``any`` 保存。
 
 JS manifest 不带 ``abi_version`` —— 那属于原生包。``ui`` 与 ``capabilities``
 随包里有 ``meta.json`` 时从它读，没有则回落到 ``module.json`` 里的同名字段。

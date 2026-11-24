@@ -104,6 +104,22 @@
 
    {
      "type": "module",
+     "id": "esphome",
+     "name": "ESPHome MQTT discovery",
+     "version": "0.1.0",
+     "targets": ["any"],
+     "requires": ["MQTT_Broker"],
+     "url": "/files/Stores/Common/esphome/esphome.mhub",
+     "adapter": "esphome",
+     "size": 5618
+   }
+
+不依赖协议栈的模块也要显式写出空列表：
+
+.. code-block:: JSON
+
+   {
+     "type": "module",
      "id": "color_bulb_js",
      "name": "Color Bulb (JS)",
      "version": "0.1.0",
@@ -125,10 +141,11 @@
   （例如 ``esp32s31`` ），任意芯片写成 ``any``。从 ``module.json``
   抄入时具体芯片名转为小写， ``any`` 、 ``ALL`` 和 ``*`` 都写成 ``any``。
   省略该字段时，JS 模块打包写成 ``["any"]``，其它模块写成 ``["esp32s31"]``
-* ``requires`` — 这个插件需要的能力，取自 ``Zigbee`` 、 ``BLE_mesh`` 、
-  ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` 。 ``[]`` 表示不需要。
-  每一项都必须已编进固件且处于启用状态。列出的任一项不具备时，Hub 商店不把尚未安装的插件
-  放进可安装列表。该列表原样抄进 ``catalog.json``；省略时写成 ``[]``
+* ``requires`` — **打包前在 ``module.json`` 里写好。** 这个插件需要的能力，取自
+  ``Zigbee`` 、 ``BLE_mesh`` 、 ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、
+  ``Modbus`` 。 ``[]`` 表示不需要。每一项都必须已编进固件且处于启用状态。列出的任一项
+  不具备时，Hub 商店不把尚未安装的插件放进可安装列表。该列表原样抄进 ``catalog.json`` ；
+  省略时写成 ``[]`` 。不要和 ``meta.json`` 的 ``capabilities`` （仅说明）混用
 * ``adapter`` — 可选；安装时 Host 会在 ``adapters.json`` 中建槽
 * ``size`` — **外层 zip** 字节数（须与磁盘上 ``.mhub`` 一致；``pack`` 会回写）
 

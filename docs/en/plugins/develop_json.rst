@@ -67,6 +67,7 @@ Minimal ``module.json`` (``runtime: pack``):
      "version": "1.0.0",
      "runtime": "pack",
      "enabled": true,
+     "requires": ["BLE_mesh"],
      "inject": {
        "adapter": "ble_mesh",
        "provision": {
@@ -78,9 +79,12 @@ Minimal ``module.json`` (``runtime: pack``):
      }
    }
 
-``inject.adapter`` names the key under ``adapters``. The merge is not a general
-deep merge: inside ``provision``, only ``uuid_filters`` and ``bind_models`` are
-appended to whatever the adapter already had
+``requires`` must include the Host adapter stack this pack injects into. A BLE
+Mesh defaults pack lists ``BLE_mesh``; an MQTT broker defaults pack lists
+``MQTT_Broker``. Without that token, Hubs that have the stack disabled never see
+the pack in the Store. ``inject.adapter`` names the key under ``adapters``. The
+merge is not a general deep merge: inside ``provision``, only ``uuid_filters``
+and ``bind_models`` are appended to whatever the adapter already had
 (``merge_provision()`` → ``merge_json_array_append()``), and every other key is
 replaced whole. A pack overrides a default rather than adding to it, except in
 those two arrays. See ``components/minihub_pack/minihub_pack.c``.

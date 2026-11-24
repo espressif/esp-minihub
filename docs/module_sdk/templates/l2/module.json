@@ -8,5 +8,5 @@
   "type": "module",
   "runtime": "js",
   "adapter": "PLACEHOLDER_ID",
-  "description": "L2 JS hello: log once via host.log"
+  "description": "L2 JS hello: log once via host.log. Set requires to the Host capability tokens this module needs (Zigbee, BLE_mesh, Thread_Matter, Matter, MQTT_Broker, Modbus), or [] when none."
 }

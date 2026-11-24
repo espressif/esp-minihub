@@ -109,6 +109,22 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
 
    {
      "type": "module",
+     "id": "esphome",
+     "name": "ESPHome MQTT discovery",
+     "version": "0.1.0",
+     "targets": ["any"],
+     "requires": ["MQTT_Broker"],
+     "url": "/files/Stores/Common/esphome/esphome.mhub",
+     "adapter": "esphome",
+     "size": 5618
+   }
+
+A module with no stack dependency still ships an explicit empty list:
+
+.. code-block:: JSON
+
+   {
+     "type": "module",
      "id": "color_bulb_js",
      "name": "Color Bulb (JS)",
      "version": "0.1.0",
@@ -134,12 +150,13 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
   from ``module.json``. A concrete chip is lowercased; ``any``, ``ALL``, and
   ``*`` are written as ``any``. When the field is omitted, pack writes
   ``["any"]`` for a JS module and ``["esp32s31"]`` for every other module
-* ``requires`` — capabilities this plugin needs, from ``Zigbee``,
-  ``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``, and
-  ``Modbus``. ``[]`` means none. Each name must be compiled in and enabled.
-  The Hub store omits a not-yet-installed plugin while any listed capability
-  is missing. Copied onto ``catalog.json`` as a list; an omitted field is
-  written ``[]``
+* ``requires`` — **set this in ``module.json`` before packing.** Capabilities
+  this plugin needs, from ``Zigbee``, ``BLE_mesh``, ``Thread_Matter``,
+  ``Matter``, ``MQTT_Broker``, and ``Modbus``. ``[]`` means none. Each name
+  must be compiled in and enabled. The Hub store omits a not-yet-installed
+  plugin while any listed capability is missing. Copied onto ``catalog.json``
+  as a list; an omitted field is written ``[]``. Do not confuse with
+  ``meta.json`` ``capabilities`` (informational only)
 * ``adapter`` — optional; Host creates an ``adapters.json`` slot on install
 * ``size`` — **outer zip** byte length (must match the ``.mhub`` on disk;
   ``pack`` rewrites this)

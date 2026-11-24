@@ -246,6 +246,14 @@ insists on:
   empty ``adapter`` fails validation for **every** tier, JS included, so a JS
   plugin without it never loads.
 
+**``requires``** is the capability gate for the Store. It is a list of tokens
+from ``Zigbee``, ``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``,
+and ``Modbus``. The Hub sends those tokens as ``caps=`` on ``GET /api/catalog``.
+The store omits a not-yet-installed plugin while any listed token is missing on
+that Hub. ``[]`` or an omitted field means no gate. This is not the same as
+``meta.json`` ``capabilities`` (``points``, ``auth``, ``device_sync``), which are
+informational only and do not filter the catalog.
+
 Everything else has a default, so leaving it out is not an error:
 
 * ``name`` · ``version`` — shown in catalog / ``GET /api/modules``; ``version``
@@ -254,6 +262,8 @@ Everything else has a default, so leaving it out is not an error:
 * ``abi_version`` · ``core_api_min`` — default to the Host's own values;
   ``core_api_max`` defaults to 0, meaning no upper bound
 * ``runtime`` — ``pack`` (JSON) or ``JS`` (JS)
+* ``requires`` — defaults to ``[]`` when omitted; pack copies it onto
+  ``catalog.json``
 
 ``ui`` / ``capabilities`` are read from ``meta.json`` when a sibling ``meta.json``
 exists, otherwise from ``module.json`` itself; ``ui`` is the optional Web form and

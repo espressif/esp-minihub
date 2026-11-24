@@ -210,10 +210,16 @@ Directory layout (scaffold ``my_native``)
      "enabled": true,
      "adapter": "my_native",
      "binary": "my_native.so",
+     "requires": [],
      "abi_version": 1,
      "core_api_min": 1,
      "core_api_max": 1
    }
+
+Set ``requires`` the same way as for JS: list every Host capability token the
+native adapter needs (``Zigbee``, ``BLE_mesh``, ``Thread_Matter``, ``Matter``,
+``MQTT_Broker``, ``Modbus``), or ``[]`` when it needs none. Pack copies the list
+onto ``catalog.json`` for ``caps=`` filtering.
 
 ``ui`` and ``capabilities`` now live in ``meta.json`` (a sibling file); module.json
 keeps only runtime/environment info.
