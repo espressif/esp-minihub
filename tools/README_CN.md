@@ -252,7 +252,8 @@ python3 tools/lcd_ui_editor/server.py --port 8791 --no-open
 
 ## LCD 字体（`ui_font/`）
 
-为 `components/minihub_lcd/ui/fonts/minihub_sc.otf` 子集化思源黑体。需要 `pyftsubset` 与 LVGL 自带 OTF（或 `SRC_FONT`）。
+为 `components/minihub_lcd/ui/fonts/minihub_sc.otf` 子集化思源黑体（UI 文案 ∪
+GB2312 一级汉字全集 3755 字）。需要 `pyftsubset` 与 LVGL 自带 OTF（或 `SRC_FONT`）。
 
 ```bash
 ./tools/ui_font/build_subset.sh
@@ -260,5 +261,16 @@ MINIHUB_FONT_UI_ONLY=1 ./tools/ui_font/build_subset.sh   # 更小，仅 UI ASCII
 ```
 
 `collect_chars.py` / `gen_chars_3000.py` 生成子集字符表；日常一般跑 shell 包装脚本。
+
+## LCD 设备图标
+
+`components/minihub_lcd/ui/images/icon_*.png`（Brookesia `device_icons`）。
+不要用 Web 的 SVG 直接缩小到 32×32（会糊成斜条）；用专用几何图标脚本重画：
+
+```bash
+python3 tools/regen_lcd_device_icons.py   # 需要 Pillow
+```
+
+改完后重编并烧录 **storage**。
 
 仅 vendor 的助手（不在本目录）：`MINIHUB_PLUGIN_DIRS` 下插件自己的 `tools/`。

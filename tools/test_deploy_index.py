@@ -18,6 +18,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import gen_deploy_index
+import minify_lcd_ui_assets
 import minify_web_assets
 import publish_firmware
 import store_paths
@@ -436,6 +437,57 @@ def main() -> int:
         assert served_note["type"] == "web"
         assert served_note["release_note"] == web_note
 
+        ui_src = deploy / "ui_src"
+        (ui_src / "images" / "devices").mkdir(parents=True)
+        (ui_src / "root.json").write_text('{"screens":[]}\n', encoding="utf-8")
+        (ui_src / "images" / "devices" / "light.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        (ui_src / "release_notes.txt").write_text("lcd ui notes\n", encoding="utf-8")
+        ui_root = deploy / "ui_publish"
+        rc = minify_lcd_ui_assets.main(
+            [
+                "--src",
+                str(ui_src),
+                "--deploy-root",
+                str(ui_root),
+                "--ui-version",
+                "v0.2.0",
+                "--notes",
+                str(ui_src / "release_notes.txt"),
+                "-q",
+            ]
+        )
+        assert rc == 0
+        assert (ui_root / "LCD_UI" / "v0.2.0" / "version.txt").read_text(encoding="utf-8") == "0.2.0\n"
+        assert (ui_root / "LCD_UI" / "v0.2.0" / "root.json").is_file()
+        assert (ui_root / "LCD_UI" / "v0.2.0" / "images" / "devices" / "light.png").is_file()
+        assert (ui_root / "LCD_UI" / "v0.2.0" / "release_notes.txt").read_text(
+            encoding="utf-8"
+        ) == "lcd ui notes\n"
+        # Host littlefs path stamps the same canonical string without a LCD_UI/ folder.
+        rc = minify_lcd_ui_assets.main(
+            [
+                "--src",
+                str(ui_src),
+                "--dst",
+                str(deploy / "ui_storage_image"),
+                "--ui-version",
+                "0.2.0",
+                "-q",
+            ]
+        )
+        assert rc == 0
+        assert (
+            deploy / "ui_storage_image" / "version.txt"
+        ).read_text(encoding="utf-8") == "0.2.0\n"
+        ui_idx = gen_deploy_index.build_ui_index(ui_root)
+        assert ui_idx["schema"] == "minihub.deploy.index/1"
+        assert ui_idx["kind"] == "ui"
+        assert ui_idx["base_url"] == "/files/LCD_UI"
+        ui_by_url = {item["url"]: item for item in ui_idx["items"]}
+        assert "v0.2.0/root.json" in ui_by_url
+        assert ui_by_url["v0.2.0/root.json"]["type"] == "ui"
+        assert ui_by_url["v0.2.0/release_notes.txt"]["release_note"] == "lcd ui notes\n"
+
         fw_api = store_server.load_firmware_catalog(deploy)
         assert len(fw_api) == 1
         assert fw_api[0]["version"] == "0.1.0"
@@ -546,6 +598,14 @@ def main() -> int:
             assert status == 200
             assert json.loads(body)["kind"] == "web"
             status_m, body_m = _get(base + "/api/web?mac=" + mac)
+            assert status_m == 200, body_m
+            assert json.loads(body_m) == json.loads(body)
+            # Empty LCD_UI/ still returns a valid empty ui manifest.
+            status, body = _get(base + "/api/ui")
+            assert status == 200
+            assert json.loads(body)["kind"] == "ui"
+            assert json.loads(body)["base_url"] == "/files/LCD_UI"
+            status_m, body_m = _get(base + "/api/ui?mac=" + mac)
             assert status_m == 200, body_m
             assert json.loads(body_m) == json.loads(body)
             for path in (

@@ -138,7 +138,7 @@ QuickJS
 Deploy root
     The PC-side folder tree a Hub pulls packages from, default
     ``~/workspace/minihub_store``, holding ``Stores/``, ``Firmwares/``,
-    ``Assets/``, and ``Webs/``. Served by ``tools/store_server.py``.
+    ``Assets/``, ``Webs/``, and ``LCD_UI/``. Served by ``tools/store_server.py``.
 
 ``catalog.json``
     The store entry for one plugin, next to its ``.mhub``. The PC server

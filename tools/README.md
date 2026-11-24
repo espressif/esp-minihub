@@ -277,7 +277,9 @@ The contract rules stay single-sourced, and a broken UI cannot land on disk. The
 
 ## LCD font (`ui_font/`)
 
-Subset Source Han Sans for `components/minihub_lcd/ui/fonts/minihub_sc.otf`. Needs `pyftsubset` and the LVGL bundled OTF (or `SRC_FONT`).
+Subset Source Han Sans for `components/minihub_lcd/ui/fonts/minihub_sc.otf`
+(UI strings ∪ full GB2312 level-1, 3755 Hanzi). Needs `pyftsubset` and the LVGL
+bundled OTF (or `SRC_FONT`).
 
 ```bash
 ./tools/ui_font/build_subset.sh
@@ -285,5 +287,17 @@ MINIHUB_FONT_UI_ONLY=1 ./tools/ui_font/build_subset.sh   # smaller, UI ASCII onl
 ```
 
 `collect_chars.py` / `gen_chars_3000.py` feed the subset list; you usually run the shell wrapper.
+
+## LCD device icons
+
+32×32 PNGs under `components/minihub_lcd/ui/images/icon_*.png` (Brookesia
+`device_icons` imageSet). Regenerated with purpose-drawn glyphs — do not
+downscale the Web SVGs; at 32px they become unreadable:
+
+```bash
+python3 tools/regen_lcd_device_icons.py   # needs Pillow
+```
+
+Rebuild/flash **storage** after changing icons.
 
 Vendor-only helpers (not this directory): plugin `tools/` under `MINIHUB_PLUGIN_DIRS`.

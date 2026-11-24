@@ -236,9 +236,10 @@ HTTP 200。匹配的插件与已发布的最高固件版本：
 ``device_widgets.css`` 里。样式表仍可经开发面板手动推上去
 （``PUT /api/dev/assets/styles/...``）。
 
-Web 与资源清单（schema ``minihub.deploy.index/1`` ）由 ``store_server.py`` 在请求时动态提供：
-``GET /api/web`` 与 ``GET /api/assets`` 分别扫描 ``Webs/<version>/`` 与 ``Assets/`` 生成，
-因此不再写静态 ``index.json`` （与 ``GET /api/firmware`` 一致）。
+Web、LCD UI 与资源清单（schema ``minihub.deploy.index/1`` ）由 ``store_server.py`` 在请求时动态提供：
+``GET /api/web``、``GET /api/ui`` 与 ``GET /api/assets`` 分别扫描 ``Webs/<version>/``、
+``LCD_UI/<version>/`` 与 ``Assets/`` 生成，因此不再写静态 ``index.json`` （与
+``GET /api/firmware`` 一致）。
 
 ``--only assets`` 仅重建设备类型查找表（放进一个新图标后重跑即可，无需重建固件或插件）。
 ``--sync-source`` 先把 ``model/`` 与 ``images/`` 从设备部件组件拷入部署根。
@@ -250,12 +251,14 @@ Web 与资源清单（schema ``minihub.deploy.index/1`` ）由 ``store_server.py
    ROOT/Assets/model/*.csv
    ROOT/Assets/images/{devices,parameters}/*.svg
    ROOT/Webs/<version>/...   （清单由 GET /api/web 提供）
+   ROOT/LCD_UI/<version>/...    （清单由 GET /api/ui 提供）
 
 .. code-block:: bash
 
    curl -s "http://127.0.0.1:8080/api/assets?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
    curl -s "http://127.0.0.1:8080/api/assets/device/light?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
    curl -s "http://127.0.0.1:8080/api/web?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
+   curl -s "http://127.0.0.1:8080/api/ui?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
 
 设备类型资源按需拉取：
 
@@ -274,6 +277,7 @@ Web 与资源清单（schema ``minihub.deploy.index/1`` ）由 ``store_server.py
 
 设备侧 ``minihub_update_check()`` 与 ``minihub_update_apply()``
 （``components/minihub_update`` ）读取 ``/api/firmware``、``/api/assets``、
-``/api/web``。固件调用 ``minihub_ota_start_url()``。``devices.csv`` 与
+``/api/web``、``/api/ui``。固件调用 ``minihub_ota_start_url()``。``devices.csv`` 与
 ``parameters.csv`` 经 ``minihub_device_widget_put_model()`` 进入 ``/data/config/model``，
-其余模型文件落该目录，图片落 ``/data/images``，web 文件落 ``/data/web``。下载边写边校验哈希，不匹配则丢弃。
+其余模型文件落该目录，图片落 ``/data/images``，web 文件落 ``/data/web``，LCD UI 落
+``/data/ui`` ；应用后需重启。下载边写边校验哈希，不匹配则丢弃。

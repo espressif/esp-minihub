@@ -6,9 +6,9 @@
 Generates under a deploy root (default MINIHUB_PLUGINS_DEPLOY_DIR or
 ~/workspace/minihub_store):
 
-  Web and asset manifests are served dynamically by store_server.py as
-  GET /api/web and GET /api/assets (built from Webs/<version>/ and Assets/),
-  so no static index.json is written here.
+  Web, LCD UI, and asset manifests are served dynamically by store_server.py as
+  GET /api/web, GET /api/ui, and GET /api/assets (built from Webs/<version>/,
+  LCD_UI/<version>/, and Assets/), so no static index.json is written here.
   Assets/device_widgets.json -- per device_id: icon + per-parameter icon/style/meta
   Assets/parameters.json     -- global parameter registry (icon/style/meta)
   Assets/styles/<param>.css  -- one CSS file per parameter (from parameters.csv css column)
@@ -115,14 +115,14 @@ def scan_assets(assets: Path) -> list[dict]:
     return items
 
 
-def scan_webs(webs: Path) -> list[dict]:
+def scan_webs(webs: Path, *, kind_type: str = "web") -> list[dict]:
     if not webs.is_dir():
         return []
     items: list[dict] = []
     for ver_dir in sorted(p for p in webs.iterdir() if p.is_dir() and not p.name.startswith(".")):
         version = ver_dir.name
         # Per-version release note, carried on its own item so the device can
-        # show the *new* version's notes before applying (probe_web_hint reads
+        # show the *new* version's notes before applying (probe_bundle_hint reads
         # release_note from any item whose version == latest).
         note_path = ver_dir / "release_notes.txt"
         note = note_path.read_text(encoding="utf-8", errors="replace") if note_path.is_file() else ""
@@ -131,7 +131,14 @@ def scan_webs(webs: Path) -> list[dict]:
                 continue
             rel = path.relative_to(ver_dir).as_posix()
             url = f"{version}/{rel}"
-            item = _item(item_id=url.replace("/", "_"), name=path.name, version=version, url=url, path=path, kind_type="web")
+            item = _item(
+                item_id=url.replace("/", "_"),
+                name=path.name,
+                version=version,
+                url=url,
+                path=path,
+                kind_type=kind_type,
+            )
             if note and path.name == "release_notes.txt":
                 item["release_note"] = note
             items.append(item)
@@ -150,7 +157,12 @@ def _document(kind: str, base_url: str, items: list[dict]) -> dict:
 
 def build_web_index(deploy: Path) -> dict:
     """Web manifest served dynamically by store_server.py as GET /api/web."""
-    return _document("web", "/files/Webs", scan_webs(deploy / "Webs"))
+    return _document("web", "/files/Webs", scan_webs(deploy / "Webs", kind_type="web"))
+
+
+def build_ui_index(deploy: Path) -> dict:
+    """LCD UI manifest served dynamically by store_server.py as GET /api/ui."""
+    return _document("ui", "/files/LCD_UI", scan_webs(deploy / "LCD_UI", kind_type="ui"))
 
 
 def build_asset_index(deploy: Path) -> dict:

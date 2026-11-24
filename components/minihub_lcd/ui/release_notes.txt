@@ -1,0 +1,3 @@
+LCD UI bundle (Brookesia JSON under /data/ui).
+Device icons: /data/ui/images/devices/<type>.png (Web keeps /data/images/devices/<type>.svg).
+After apply: reboot so Brookesia reloads root.json and screens.

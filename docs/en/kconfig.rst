@@ -148,8 +148,8 @@ What an OEM has to decide
 Most symbols can stay at their default. These are the ones that are a product decision,
 not a tuning knob:
 
-* ``MINIHUB_VERSION`` and ``MINIHUB_WEB_VERSION`` — the two release lines. See
-  :doc:`versions`.
+* ``MINIHUB_VERSION``, ``MINIHUB_WEB_VERSION``, ``MINIHUB_LCD_UI_VERSION`` — the
+  three release lines. See :doc:`versions`.
 * ``MINIHUB_LOCAL_MAP`` — default off. On, the firmware includes geolocation
   and the map, and the Web and LCD consoles show it. Off, neither console
   offers a map and ``GET /api/location`` returns ``ok: false``.

@@ -131,9 +131,13 @@ if(CONFIG_MINIHUB_LCD_UI AND EXISTS ${MINIHUB_REPO_ROOT}/components/minihub_lcd/
         # into the image (as the Web console already does): the expanded layout
         # alone costs ~147 KB and pushed littlefs into LFS_ERR_NOSPC at build
         # time, which also surfaced as runtime "No more free space" on the board.
+        # Stamp CONFIG_MINIHUB_LCD_UI_VERSION into version.txt (same Kconfig
+        # tools/deploy.sh publishes as LCD_UI/v<ver>/), so a freshly flashed Hub
+        # and the store tree report the same LCD UI version.
         COMMAND ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/minify_lcd_ui_assets.py
                 --src ${MINIHUB_REPO_ROOT}/components/minihub_lcd/ui
                 --dst ${MINIHUB_FS_DIR}/ui
+                --ui-version "${CONFIG_MINIHUB_LCD_UI_VERSION}"
                 -q
         COMMAND ${CMAKE_COMMAND} -E touch ${MINIHUB_FS_DIR}/ui/.stamp
         DEPENDS ${_minihub_ui_src} ${MINIHUB_REPO_ROOT}/tools/minify_lcd_ui_assets.py

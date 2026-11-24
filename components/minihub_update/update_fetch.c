@@ -162,7 +162,8 @@ esp_err_t mh_update_http_get(const char *url, char **body, size_t *len, size_t m
         ESP_LOGW(TAG, "GET %s HTTP %d", url, status);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
-        return ESP_FAIL;
+        /* 404 = nothing published at this URL (empty catalog / no icon). */
+        return (status == 404) ? ESP_ERR_NOT_FOUND : ESP_FAIL;
     }
     char *buf = malloc(max_len);
     if (!buf) {
@@ -234,10 +235,13 @@ esp_err_t mh_update_download_verified(const char *url, const char *dest,
         return err;
     }
     (void)esp_http_client_fetch_headers(client);
-    if (esp_http_client_get_status_code(client) != 200) {
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
+    {
+        int status = esp_http_client_get_status_code(client);
+        if (status != 200) {
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
+            return (status == 404) ? ESP_ERR_NOT_FOUND : ESP_FAIL;
+        }
     }
     FILE *out = fopen(tmp, "wb");
     if (!out) {
