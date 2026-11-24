@@ -39,7 +39,7 @@ Or IDE MCP: `scaffold_plugin` with `tier=l1` (`python3 tools/minihub_plugin_mcp.
 - `id` = directory name (must match folder)
 - `kind`: `"pack"` (or omit if `runtime` is `"pack"` / `config_only: true`)
 - `inject.adapter` must already exist on Host (`zigbee`, `ble_mesh`, `modbus`, `mqtt_broker`, …)
-- `requires` is the capability list (`Zigbee`, `BLE_mesh`, `Thread_Matter`, `Matter`, `MQTT_Broker`, `Modbus`; `[]` if none). The Hub store hides it from the available list while any listed capability is off, and does not apply the pack on boot. `inject.adapter` is still the slot the pack writes.
+- `requires` is the capability list (`Zigbee`, `BLE`, `BLE_mesh`, `Thread_Matter`, `Matter`, `MQTT_Broker`, `Modbus`; `[]` if none). `BLE` and `BLE_mesh` both follow the `ble_mesh` adapter. The Hub store hides it from the available list while any listed capability is off, and does not apply the pack on boot. `inject.adapter` is still the slot the pack writes.
 
 ## Env
 

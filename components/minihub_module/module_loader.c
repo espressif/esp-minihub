@@ -1446,6 +1446,7 @@ static const struct {
     const char *adapter;
 } k_capabilities[] = {
     {"Zigbee", "zigbee"},
+    {"BLE", "ble_mesh"},
     {"BLE_mesh", "ble_mesh"},
     {"Thread_Matter", "thread"},
     {"Matter", "matter"},

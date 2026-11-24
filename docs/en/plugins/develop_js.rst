@@ -84,8 +84,10 @@ Directory layout
 
 **Always set ``requires`` deliberately.** It is copied into ``catalog.json`` and
 is what ``caps=`` on ``GET /api/catalog`` filters against. Tokens come from
-``Zigbee``, ``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``, and
-``Modbus``. ``[]`` means the module needs none of those stacks. While any listed
+``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``,
+and ``Modbus``. ``BLE`` and ``BLE_mesh`` both follow the ``ble_mesh`` adapter
+(``host.ble`` plugins use ``["BLE"]``). ``[]`` means the module needs none of
+those stacks. While any listed
 token is off or not built into the Hub, the store hides a not-yet-installed
 module; an already installed module is not started on the next boot and is
 labelled as not supported by this firmware. Do not confuse this with

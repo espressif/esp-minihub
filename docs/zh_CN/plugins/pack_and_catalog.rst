@@ -142,8 +142,9 @@
   抄入时具体芯片名转为小写， ``any`` 、 ``ALL`` 和 ``*`` 都写成 ``any``。
   省略该字段时，JS 模块打包写成 ``["any"]``，其它模块写成 ``["esp32s31"]``
 * ``requires`` — **打包前在 ``module.json`` 里写好。** 这个插件需要的能力，取自
-  ``Zigbee`` 、 ``BLE_mesh`` 、 ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、
-  ``Modbus`` 。 ``[]`` 表示不需要。每一项都必须已编进固件且处于启用状态。列出的任一项
+  ``Zigbee`` 、 ``BLE`` 、 ``BLE_mesh`` 、 ``Thread_Matter`` 、 ``Matter`` 、
+  ``MQTT_Broker`` 、 ``Modbus`` 。``BLE`` 与 ``BLE_mesh`` 都跟随 ``ble_mesh``
+  适配器。 ``[]`` 表示不需要。每一项都必须已编进固件且处于启用状态。列出的任一项
   不具备时，Hub 商店不把尚未安装的插件放进可安装列表。该列表原样抄进 ``catalog.json`` ；
   省略时写成 ``[]`` 。不要和 ``meta.json`` 的 ``capabilities`` （仅说明）混用
 * ``adapter`` — 可选；安装时 Host 会在 ``adapters.json`` 中建槽

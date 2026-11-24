@@ -151,12 +151,13 @@ A module with no stack dependency still ships an explicit empty list:
   ``*`` are written as ``any``. When the field is omitted, pack writes
   ``["any"]`` for a JS module and ``["esp32s31"]`` for every other module
 * ``requires`` — **set this in ``module.json`` before packing.** Capabilities
-  this plugin needs, from ``Zigbee``, ``BLE_mesh``, ``Thread_Matter``,
-  ``Matter``, ``MQTT_Broker``, and ``Modbus``. ``[]`` means none. Each name
-  must be compiled in and enabled. The Hub store omits a not-yet-installed
-  plugin while any listed capability is missing. Copied onto ``catalog.json``
-  as a list; an omitted field is written ``[]``. Do not confuse with
-  ``meta.json`` ``capabilities`` (informational only)
+  this plugin needs, from ``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``,
+  ``Matter``, ``MQTT_Broker``, and ``Modbus``. ``BLE`` and ``BLE_mesh`` both
+  follow the ``ble_mesh`` adapter. ``[]`` means none. Each name must be
+  compiled in and enabled. The Hub store omits a not-yet-installed plugin
+  while any listed capability is missing. Copied onto ``catalog.json`` as a
+  list; an omitted field is written ``[]``. Do not confuse with ``meta.json``
+  ``capabilities`` (informational only)
 * ``adapter`` — optional; Host creates an ``adapters.json`` slot on install
 * ``size`` — **outer zip** byte length (must match the ``.mhub`` on disk;
   ``pack`` rewrites this)

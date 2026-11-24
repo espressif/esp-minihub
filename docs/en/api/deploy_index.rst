@@ -72,10 +72,12 @@ Catalog entry fields
 * ``adapter`` — the ``adapters.json`` key Host creates/enables; derived from
   ``adapter`` or ``inject.adapter``. When both are absent, the first
   ``requires`` entry is used.
-* ``requires`` — capabilities this plugin needs, from ``Zigbee``,
+* ``requires`` — capabilities this plugin needs, from ``Zigbee``, ``BLE``,
   ``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``, and
-  ``Modbus``. Empty means none. A listed capability must be compiled in and
-  enabled. The store omits the plugin from the available list otherwise.
+  ``Modbus``. ``BLE`` and ``BLE_mesh`` both track the ``ble_mesh`` adapter
+  (``host.ble`` / passive scan needs the same stack). Empty means none. A
+  listed capability must be compiled in and enabled. The store omits the
+  plugin from the available list otherwise.
   Already installed plugins stay listed and are marked not supported by this
   firmware.
 * ``url`` — the download path. The local tree uses

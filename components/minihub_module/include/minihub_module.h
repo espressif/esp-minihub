@@ -109,7 +109,8 @@ bool minihub_module_adapter_supported(const char *name);
 
 /**
  * @brief True when this Hub currently has the named capability.
- *        Tokens: Zigbee, BLE_mesh, Thread_Matter, Matter, MQTT_Broker, Modbus.
+ *        Tokens: Zigbee, BLE, BLE_mesh, Thread_Matter, Matter, MQTT_Broker,
+ *        Modbus. BLE and BLE_mesh both follow the ble_mesh adapter.
  *        A token is on only when that adapter is compiled in and enabled.
  */
 bool minihub_module_capability_on(const char *token);

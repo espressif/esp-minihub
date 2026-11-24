@@ -18,25 +18,25 @@
 
 #include "esp_log.h"
 
-#if CONFIG_MINIHUB_JS_BLE
+#if CONFIG_MINIHUB_BLE_SDK
 #include "minihub_ble_gatt.h"
 #endif
 
 #define JS_BLE_MAX_REFS 16
 
-#if CONFIG_MINIHUB_JS_BLE
+#if CONFIG_MINIHUB_BLE_SDK
 static int s_ble_refs;
 static minihub_ble_gatt_adv_t s_ble_ads[MINIHUB_BLE_GATT_ADV_MAX];
 #endif
 
-#if !CONFIG_MINIHUB_JS_BLE
+#if !CONFIG_MINIHUB_BLE_SDK
 static JSValue js_ble_disabled(JSContext *ctx)
 {
-    return JS_ThrowInternalError(ctx, "host.ble disabled (CONFIG_MINIHUB_JS_BLE)");
+    return JS_ThrowInternalError(ctx, "host.ble disabled (needs CONFIG_MINIHUB_BLE_MESH_SDK)");
 }
 #endif
 
-#if CONFIG_MINIHUB_JS_BLE
+#if CONFIG_MINIHUB_BLE_SDK
 static JSValue js_bytes_array(JSContext *ctx, const uint8_t *data, size_t len)
 {
     JSValue arr = JS_NewArray(ctx);
@@ -53,7 +53,7 @@ static JSValue js_ble_ensure_scan(JSContext *ctx, JSValueConst this_val,
     (void)this_val;
     (void)argc;
     (void)argv;
-#if !CONFIG_MINIHUB_JS_BLE
+#if !CONFIG_MINIHUB_BLE_SDK
     return js_ble_disabled(ctx);
 #else
     if (s_ble_refs >= JS_BLE_MAX_REFS) {
@@ -83,7 +83,7 @@ static JSValue js_ble_release_scan(JSContext *ctx, JSValueConst this_val,
     (void)this_val;
     (void)argc;
     (void)argv;
-#if !CONFIG_MINIHUB_JS_BLE
+#if !CONFIG_MINIHUB_BLE_SDK
     return js_ble_disabled(ctx);
 #else
     if (s_ble_refs > 0 && --s_ble_refs == 0) {
@@ -96,7 +96,7 @@ static JSValue js_ble_release_scan(JSContext *ctx, JSValueConst this_val,
 static JSValue js_ble_get_ads(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     (void)this_val;
-#if !CONFIG_MINIHUB_JS_BLE
+#if !CONFIG_MINIHUB_BLE_SDK
     (void)argc;
     (void)argv;
     return js_ble_disabled(ctx);

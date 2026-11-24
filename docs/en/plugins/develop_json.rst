@@ -80,9 +80,10 @@ Minimal ``module.json`` (``runtime: pack``):
    }
 
 ``requires`` must include the Host adapter stack this pack injects into. A BLE
-Mesh defaults pack lists ``BLE_mesh``; an MQTT broker defaults pack lists
-``MQTT_Broker``. Without that token, Hubs that have the stack disabled never see
-the pack in the Store. ``inject.adapter`` names the key under ``adapters``. The
+Mesh defaults pack lists ``BLE_mesh``; a ``host.ble`` passive-scan pack lists
+``BLE``; an MQTT broker defaults pack lists ``MQTT_Broker``. Without that token,
+Hubs that have the stack disabled never see the pack in the Store.
+``inject.adapter`` names the key under ``adapters``. The
 merge is not a general deep merge: inside ``provision``, only ``uuid_filters``
 and ``bind_models`` are appended to whatever the adapter already had
 (``merge_provision()`` → ``merge_json_array_append()``), and every other key is

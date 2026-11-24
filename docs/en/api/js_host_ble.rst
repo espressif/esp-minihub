@@ -14,8 +14,11 @@ Methods — host.ble
 ------------------
 
 One shared, reference-counted passive advertisement scanner for all BLE vendor
-plugins. Enable ``CONFIG_MINIHUB_JS_BLE`` (``menuconfig → JS plugins``); when off,
-these methods throw ``host.ble disabled`` so ``setup(host)`` can degrade gracefully.
+plugins. Available when ``CONFIG_MINIHUB_BLE_MESH_SDK`` is on (internal
+``CONFIG_MINIHUB_BLE_SDK`` follows it). When off, these methods throw
+``host.ble disabled`` so ``setup(host)`` can degrade gracefully. Store modules
+that need this API set ``requires: ["BLE"]`` (same adapter gate as
+``BLE_mesh``).
 
 Implementation: ``components/minihub_js/minihub_js_ble.c`` over ``minihub_ble_gatt``.
 

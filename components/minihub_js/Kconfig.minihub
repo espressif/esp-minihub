@@ -16,18 +16,6 @@ menu "JS plugins"
             single known stack. Raise if a large L2 script overflows during
             compile; lower only if PSRAM is scarce.
 
-    config MINIHUB_JS_BLE
-        bool "L2 host.ble: shared passive BLE advertisement scanner"
-        depends on MINIHUB_JS_PLUGINS
-        default n
-        help
-            Exposes host.ble.ensureScan() / releaseScan() / getAds() to L2
-            plugins. All BLE vendor plugins share ONE NimBLE scan, reference
-            counted, so enabling several of them does not restart the radio.
-            Requires CONFIG_BT_NIMBLE_ENABLED and GATT client. When disabled
-            the methods still exist but throw a clear "disabled" error, so
-            plugin setup() can degrade gracefully.
-
     config MINIHUB_JS_MDNS
         bool "L2 host.mdns: one-shot mDNS service discovery"
         depends on MINIHUB_JS_PLUGINS

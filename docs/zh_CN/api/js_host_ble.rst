@@ -13,9 +13,10 @@ JS 插件 BLE Host API
 方法 — host.ble
 ---------------
 
-所有 BLE 厂商插件共用的**单实例、引用计数**被动广播扫描器。需启用
-``CONFIG_MINIHUB_JS_BLE``（``menuconfig → JS plugins``）；未启用时下面的方法
-抛出 ``host.ble disabled``，``setup(host)`` 可据此优雅降级。
+所有 BLE 厂商插件共用的**单实例、引用计数**被动广播扫描器。在启用
+``CONFIG_MINIHUB_BLE_MESH_SDK`` 时可用（内部 ``CONFIG_MINIHUB_BLE_SDK`` 与之同步）。
+未启用时下面的方法抛出 ``host.ble disabled``，``setup(host)`` 可据此优雅降级。
+依赖本 API 的商店模块写 ``requires: ["BLE"]``（与 ``BLE_mesh`` 共用同一适配器门禁）。
 
 实现：``components/minihub_js/minihub_js_ble.c``，底层为 ``minihub_ble_gatt``。
 

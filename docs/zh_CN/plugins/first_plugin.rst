@@ -64,9 +64,10 @@
 ``--id`` 既是目录名也是模块 id：小写、下划线。这一步不编译任何东西，也什么都没装。
 
 打包前打开 ``examples/plugins/my_js/module.json`` ，写好 ``requires`` ：不依赖射频或
-MQTT 栈时用 ``[]`` ；否则把依赖的能力全部列出（ ``Zigbee`` 、 ``BLE_mesh`` 、
-``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` ）。打包会把该列表
-抄进 ``catalog.json`` 。Hub 的 ``caps=`` 盖不住时，商店不会提供安装入口。
+MQTT 栈时用 ``[]`` ；否则把依赖的能力全部列出（ ``Zigbee`` 、 ``BLE`` 、
+``BLE_mesh`` 、 ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` ）。
+``BLE`` 与 ``BLE_mesh`` 都跟随 ``ble_mesh`` 适配器。打包会把该列表抄进
+``catalog.json`` 。Hub 的 ``caps=`` 盖不住时，商店不会提供安装入口。
 
 .. code-block:: JSON
 

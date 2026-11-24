@@ -247,8 +247,10 @@ insists on:
   plugin without it never loads.
 
 **``requires``** is the capability gate for the Store. It is a list of tokens
-from ``Zigbee``, ``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``,
-and ``Modbus``. The Hub sends those tokens as ``caps=`` on ``GET /api/catalog``.
+from ``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``, ``Matter``,
+``MQTT_Broker``, and ``Modbus``. ``BLE`` and ``BLE_mesh`` both follow the
+``ble_mesh`` adapter. The Hub sends those tokens as ``caps=`` on
+``GET /api/catalog``.
 The store omits a not-yet-installed plugin while any listed token is missing on
 that Hub. ``[]`` or an omitted field means no gate. This is not the same as
 ``meta.json`` ``capabilities`` (``points``, ``auth``, ``device_sync``), which are

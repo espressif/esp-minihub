@@ -68,8 +68,9 @@ Nothing is compiled at this point, and nothing is installed.
 
 Open ``examples/plugins/my_js/module.json`` and set ``requires`` before you pack.
 Use ``[]`` when the module needs no radio or MQTT stack; otherwise list every
-token it depends on (``Zigbee``, ``BLE_mesh``, ``Thread_Matter``, ``Matter``,
-``MQTT_Broker``, ``Modbus``). Pack copies that list onto ``catalog.json``. A Hub
+token it depends on (``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``,
+``Matter``, ``MQTT_Broker``, ``Modbus``). ``BLE`` and ``BLE_mesh`` both follow
+the ``ble_mesh`` adapter. Pack copies that list onto ``catalog.json``. A Hub
 whose ``caps=`` does not cover it will not offer the plugin for install.
 
 .. code-block:: JSON
