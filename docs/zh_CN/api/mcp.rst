@@ -370,15 +370,20 @@ hub.api 白名单
 处理分支；没有分支时即使列在白名单里也回 ``NOT_IMPLEMENTED``。
 
 已实现的接口并不是 REST 应答的原样拷贝：网关用同样的核心调用自己拼 JSON。
-``GET /api/system`` 回 ``ok``、``local_ip``、``web_base`` （无 ``version`` /
-``commit``，需走局域网 REST —— :doc:`host_rest` ）。这里的 ``GET /api/ota`` 在
-``state`` / ``error`` / ``progress`` / ``bytes_written`` / ``source`` 之外还多给
-``ok`` 与 ``busy``；读取类调用拿不到 REST 路由本会返回的 HTTP 状态码 ——
-被拒绝时，MCP 结果本身是成功的，里面是一个 ``error`` 对象。
+``GET /api/system`` 回 ``ok``、``name``、``version``、``idf_version``、``commit``、
+``uptime_s``、``chip``、``local_ip``、``web_base`` （Host REST
+:doc:`host_rest` 的子集，不含 RAM / 存储 / 网络细节）。
+``GET /api/update/notes`` 与 Host REST 同形
+（``firmware_version`` / ``firmware_note`` / ``web_version`` / ``web_note``）。
+这里的 ``GET /api/ota`` 在 ``state`` / ``error`` / ``progress`` /
+``bytes_written`` / ``source`` 之外还多给 ``ok`` 与 ``busy``；读取类调用拿不到
+REST 路由本会返回的 HTTP 状态码 —— 被拒绝时，MCP 结果本身是成功的，里面是一个
+``error`` 对象。
 
 **GET — 可用**
 
-* ``/api/system``、``/api/points``、``/api/points/history``、``/api/ota``
+* ``/api/system``、``/api/update/notes``、``/api/points``、``/api/points/history``、
+  ``/api/ota``
 * ``/api/rules``、``/api/scenes``、``/api/adapters``、``/api/config/adapters``、
   ``/api/modules``
 * ``/api/store/catalog``、``/api/store/config``、``/api/radio/provision``
@@ -388,14 +393,15 @@ hub.api 白名单
 
 .. warning::
 
-   写操作经 ``hub.api`` 可替换规则、删除点位、卸载商店包、发起 OTA、重载 Hub。
-   ``CONFIG_MINIHUB_MCP_SERVER`` 只有总开关，无只读模式；白名单为编译期
+   写操作经 ``hub.api`` 可替换规则、删除点位、卸载商店包、发起 OTA、重载 Hub、
+   重启设备。``CONFIG_MINIHUB_MCP_SERVER`` 只有总开关，无只读模式；白名单为编译期
    ``s_rules[]``，不可按客户端裁剪。
 
 **POST — 可用**
 
 * ``/api/command``、``/api/rules/import``、``/api/scenes/import``、
-  ``/api/scenes/invoke``、``/api/hub/reload``、``/api/points/remove``、``/api/ota``
+  ``/api/scenes/invoke``、``/api/hub/reload``、``/api/system/reboot``
+  （body ``{"confirm":true}``）、``/api/points/remove``、``/api/ota``
 * ``/api/store/config``、``/api/store/install``、``/api/store/upgrade``、
   ``/api/store/uninstall``、``/api/store/refresh``
 * ``/api/matter/commission``、``/api/matter/devices`` （Matter 构建）
@@ -411,8 +417,8 @@ hub.api 白名单
 
 这些路径回 ``NOT_IMPLEMENTED``。局域网 REST：:doc:`host_rest`。
 
-* GET：``/api/``、``/api/update/notes``、``/api/location``、``/api/packs``、
-  ``/api/events``、``/api/modules/*/preview``
+* GET：``/api/``、``/api/location``、``/api/packs``、``/api/events``、
+  ``/api/modules/*/preview``
 * GET：``/api/thread/status``、``/api/thread/dataset`` （Thread 构建）
 * POST：``/api/thread/start``、``/api/thread/stop``、``/api/thread/dataset``
   （Thread 构建）

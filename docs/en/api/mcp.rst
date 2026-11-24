@@ -381,16 +381,20 @@ answers ``NOT_IMPLEMENTED`` even though the path is listed.
 
 An implemented path is **not** a byte-for-byte copy of the REST answer: the
 gateway builds its own JSON from the same core calls. ``GET /api/system``
-returns ``ok``, ``local_ip``, and ``web_base`` (no ``version`` / ``commit`` —
-those need LAN REST, :doc:`host_rest`). ``GET /api/ota`` here adds ``ok`` and
-``busy`` next
-to ``state`` / ``error`` / ``progress`` / ``bytes_written`` / ``source``, and
-reads come back without the HTTP status codes the REST route would use — a
-refusal is an ``error`` object inside a successful MCP result.
+returns ``ok``, ``name``, ``version``, ``idf_version``, ``commit``, ``uptime_s``,
+``chip``, ``local_ip``, and ``web_base`` (a subset of Host REST
+:doc:`host_rest` — no RAM / storage / net detail). ``GET /api/update/notes``
+returns the same object as Host REST
+(``firmware_version`` / ``firmware_note`` / ``web_version`` / ``web_note``).
+``GET /api/ota`` here adds ``ok`` and ``busy`` next to ``state`` / ``error`` /
+``progress`` / ``bytes_written`` / ``source``, and reads come back without the
+HTTP status codes the REST route would use — a refusal is an ``error`` object
+inside a successful MCP result.
 
 **GET — implemented**
 
-* ``/api/system``, ``/api/points``, ``/api/points/history``, ``/api/ota``
+* ``/api/system``, ``/api/update/notes``, ``/api/points``, ``/api/points/history``,
+  ``/api/ota``
 * ``/api/rules``, ``/api/scenes``, ``/api/adapters``, ``/api/config/adapters``,
   ``/api/modules``
 * ``/api/store/catalog``, ``/api/store/config``, ``/api/radio/provision``
@@ -401,14 +405,15 @@ refusal is an ``error`` object inside a successful MCP result.
 .. warning::
 
    Writes through ``hub.api`` can replace rules, remove points, uninstall Store
-   packages, start an OTA, and reload the Hub. ``CONFIG_MINIHUB_MCP_SERVER`` is
-   one switch with no read-only mode; the allowlist is compile-time
-   ``s_rules[]`` and is not per-client.
+   packages, start an OTA, reload the Hub, and reboot the device.
+   ``CONFIG_MINIHUB_MCP_SERVER`` is one switch with no read-only mode; the
+   allowlist is compile-time ``s_rules[]`` and is not per-client.
 
 **POST — implemented**
 
 * ``/api/command``, ``/api/rules/import``, ``/api/scenes/import``,
-  ``/api/scenes/invoke``, ``/api/hub/reload``, ``/api/points/remove``, ``/api/ota``
+  ``/api/scenes/invoke``, ``/api/hub/reload``, ``/api/system/reboot``
+  (body ``{"confirm":true}``), ``/api/points/remove``, ``/api/ota``
 * ``/api/store/config``, ``/api/store/install``, ``/api/store/upgrade``,
   ``/api/store/uninstall``, ``/api/store/refresh``
 * ``/api/matter/commission``, ``/api/matter/devices`` (Matter build)
@@ -424,8 +429,8 @@ refusal is an ``error`` object inside a successful MCP result.
 
 These answer ``NOT_IMPLEMENTED``. LAN REST: :doc:`host_rest`.
 
-* GET: ``/api/``, ``/api/update/notes``, ``/api/location``, ``/api/packs``,
-  ``/api/events``, ``/api/modules/*/preview``
+* GET: ``/api/``, ``/api/location``, ``/api/packs``, ``/api/events``,
+  ``/api/modules/*/preview``
 * GET: ``/api/thread/status``, ``/api/thread/dataset`` (Thread build)
 * POST: ``/api/thread/start``, ``/api/thread/stop``, ``/api/thread/dataset``
   (Thread build)

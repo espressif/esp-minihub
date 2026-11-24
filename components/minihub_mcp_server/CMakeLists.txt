@@ -7,7 +7,8 @@ endif()
 
 set(_MCP_REQUIRES
     minihub_core minihub_hub minihub_rules minihub_scenes minihub_config minihub_store
-    minihub_module minihub_ota minihub_net json cap_mcp_server mcp_mdns
+    minihub_module minihub_ota minihub_update minihub_net json app_update
+    cap_mcp_server mcp_mdns
 )
 
 if(CONFIG_MINIHUB_ZIGBEE_SDK)
@@ -37,8 +38,10 @@ target_link_libraries(${COMPONENT_LIB} PUBLIC
     idf::minihub_store
     idf::minihub_module
     idf::minihub_ota
+    idf::minihub_update
     idf::minihub_net
     idf::json
+    idf::app_update
     idf::cap_mcp_server
     idf::mcp_mdns)
 if(CONFIG_MINIHUB_ZIGBEE_SDK)
