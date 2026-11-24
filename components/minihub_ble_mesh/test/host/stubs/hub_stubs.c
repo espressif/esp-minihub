@@ -208,7 +208,28 @@ esp_err_t minihub_ble_mesh_onoff(uint16_t unicast, minihub_ble_mesh_onoff_cmd_t 
     if (c) {
         c->onoff = (int)cmd;
     }
-    return hub_mesh_result;
+    if (hub_mesh_result != ESP_OK) {
+        return hub_mesh_result;
+    }
+    /* Mirror ble_mesh_stack_onoff(): notify the attr callback synchronously so
+     * adapter tests catch a second flip of an already-updated point. */
+    if (hub_on_attr) {
+        bool on = (cmd == MINIHUB_BM_ONOFF_ON);
+        if (cmd == MINIHUB_BM_ONOFF_TOGGLE) {
+            const minihub_ble_mesh_device_t *dev = minihub_ble_mesh_find_by_unicast(unicast);
+            const hub_point_t *p = dev ? hub_point_find(dev->point_id) : NULL;
+            on = !(p && strcmp(p->point.value, "on") == 0);
+        } else if (cmd == MINIHUB_BM_ONOFF_OFF) {
+            on = false;
+        }
+        minihub_ble_mesh_attr_evt_t evt = {
+            .unicast = unicast,
+            .kind = MINIHUB_BM_ATTR_ONOFF,
+            .u.onoff = on,
+        };
+        hub_on_attr(&evt, hub_cb_ctx);
+    }
+    return ESP_OK;
 }
 
 esp_err_t minihub_ble_mesh_level(uint16_t unicast, int16_t level)

@@ -13,12 +13,15 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
+#include "cJSON.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "minihub_core.h"
 #include "sdkconfig.h"
 #if CONFIG_ESP_COEX_SW_COEXIST_ENABLE
 #include "esp_coexist.h"
@@ -32,6 +35,8 @@ static void *s_cb_ctx;
  *  ESP_BLE_MESH_PROVISIONER_RECV_UNPROV_ADV_PKT_EVT. Closing the window must
  *  not call prov_disable — that stops the mesh scanner and drops BLE RX. */
 static int64_t s_permit_until_ms;
+/** True while a permit window is open and close event not yet published. */
+static bool s_permit_notify_pending;
 static bool s_running;
 #if CONFIG_MINIHUB_BLE_MESH_SDK
 static const char *TAG = "bm_stack";
@@ -1355,6 +1360,20 @@ static void prov_busy_arm(void)
     (void)esp_timer_start_once(s_prov_busy_timer, PROV_BUSY_WATCHDOG_US);
 }
 
+static void publish_permit_event(const char *event_type, const char *reason)
+{
+    cJSON *data = cJSON_CreateObject();
+    if (!data) {
+        return;
+    }
+    cJSON_AddStringToObject(data, "adapter", "ble_mesh");
+    if (reason && reason[0]) {
+        cJSON_AddStringToObject(data, "reason", reason);
+    }
+    (void)minihub_event_bus_publish(event_type, data);
+    cJSON_Delete(data);
+}
+
 /**
  * Join window is closed. Bearers stay enabled so mesh scan / BLE RX continues.
  * Unprovisioned beacons are ignored while the permit flag is clear.
@@ -1373,6 +1392,10 @@ static void permit_window_closed(const char *why)
     /* Drop coex priority only. prov_disable would stop the scanner. */
     coex_mesh_standby();
     ESP_LOGI(TAG, "permit provision window closed (%s)", why ? why : "?");
+    if (s_permit_notify_pending) {
+        s_permit_notify_pending = false;
+        publish_permit_event("radio.permit_closed", why);
+    }
 }
 
 static void permit_timer_cb(void *arg)
@@ -2350,6 +2373,11 @@ esp_err_t ble_mesh_stack_permit_provision(int seconds)
         if (s_prov_busy) {
             prov_busy_abort("manual close");
         }
+        /* Always attempt close notify even if cfg is pending (manual stop). */
+        if (s_permit_notify_pending && s_cfg_pending_unicast != 0) {
+            s_permit_notify_pending = false;
+            publish_permit_event("radio.permit_closed", "manual");
+        }
         permit_window_closed("manual");
         return ESP_OK;
     }
@@ -2390,8 +2418,14 @@ esp_err_t ble_mesh_stack_permit_provision(int seconds)
         s_permit_until_ms = 0;
         return err;
     }
+    s_permit_notify_pending = true;
     ESP_LOGI(TAG, "permit provision %d s (accept_all=%d filters=%u)",
              seconds, (int)s_policy.accept_all_uuid, (unsigned)s_policy.filter_count);
+    {
+        char reason[24];
+        snprintf(reason, sizeof(reason), "%ds", seconds);
+        publish_permit_event("radio.permit_opened", reason);
+    }
     return ESP_OK;
 }
 

@@ -130,6 +130,10 @@ static void test_toggle_flips_the_power_param(void)
     const hub_point_t *p = hub_point_find("ble_mesh.bm_0001");
     CHECK_STR(p ? p->point.value : "x", "off");
     CHECK_STR(cJSON_GetStringValue(hub_point_param("ble_mesh.bm_0001", "power")), "off");
+    /* Absolute OFF (not stack TOGGLE): pre-snapshot decide + sync notify must
+     * not invert the echoed Hub state relative to the Mesh Set. */
+    const hub_mesh_cmd_t *c = hub_last_mesh_cmd();
+    CHECK(c && c->kind == HUB_MESH_ONOFF && c->onoff == MINIHUB_BM_ONOFF_OFF);
 }
 
 static void test_brightness_param_writes_lightness(void)
