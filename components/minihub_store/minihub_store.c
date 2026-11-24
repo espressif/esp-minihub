@@ -17,6 +17,7 @@
 #include "minihub_pack.h"
 #include "minihub_net.h"
 #include "minihub_module.h"
+#include "minihub_adapter.h"
 #include "minihub_module_abi.h"
 #include "minihub_module_abi_check.h"
 #include "minihub_config.h"
@@ -227,6 +228,12 @@ esp_err_t minihub_store_reinstall(const char *kind, const char *id)
 cJSON *minihub_store_catalog_merged(void)
 {
     return cJSON_CreateArray();
+}
+
+bool minihub_store_catalog_requires_met(const cJSON *entry)
+{
+    (void)entry;
+    return true;
 }
 
 esp_err_t minihub_store_refresh_catalog(void)
@@ -472,7 +479,7 @@ static bool catalog_entry_targets_chip(const cJSON *entry, const char *chip)
             continue;
         }
         if (strcmp(t->valuestring, "*") == 0 || chip_token_eq(t->valuestring, "ALL") ||
-            chip_token_eq(t->valuestring, chip)) {
+            chip_token_eq(t->valuestring, "any") || chip_token_eq(t->valuestring, chip)) {
             return true;
         }
     }
@@ -511,6 +518,17 @@ static cJSON *http_get_catalog_array(const char *base)
     if (!full) {
         return NULL;
     }
+    /* caps= is this Hub's enabled capabilities. An empty value means none, so
+     * the store can omit plugins this firmware cannot run. */
+    char caps[160];
+    minihub_module_format_caps(caps, sizeof(caps));
+    char *with_caps = NULL;
+    int caps_n = asprintf(&with_caps, "%s%scaps=%s", full, strchr(full, '?') ? "&" : "?", caps);
+    free(full);
+    if (caps_n < 0 || !with_caps) {
+        return NULL;
+    }
+    full = with_caps;
     char *body = NULL;
     esp_err_t err = http_get_body(full, &body, NULL);
     free(full);
@@ -547,6 +565,75 @@ static cJSON *http_get_catalog_array(const char *base)
     }
     catalog_filter_by_chip(arr);
     return arr;
+}
+
+/* Caller holds the adapter lifecycle lock. requires names are the six
+ * capability tokens, checked against the live adapter enable flags. */
+static bool catalog_requires_met_locked(const cJSON *entry)
+{
+    return minihub_module_requires_met(cJSON_GetObjectItem(entry, "requires"));
+}
+
+bool minihub_store_catalog_requires_met(const cJSON *entry)
+{
+    if (!entry) {
+        return false;
+    }
+    const cJSON *requires = cJSON_GetObjectItem(entry, "requires");
+    if (!cJSON_IsArray(requires) || cJSON_GetArraySize(requires) == 0) {
+        return true;
+    }
+    if (minihub_adapter_lifecycle_lock(1000) != ESP_OK) {
+        ESP_LOGW(TAG, "catalog requires: lifecycle lock timeout");
+        return true;
+    }
+    bool ok = catalog_requires_met_locked(entry);
+    minihub_adapter_lifecycle_unlock();
+    return ok;
+}
+
+/* Drop not-yet-installed plugins whose required adapters are off. Installed
+ * rows stay so they can still be turned off or removed. */
+static void catalog_hide_without_capability(cJSON *arr)
+{
+    if (!cJSON_IsArray(arr) || cJSON_GetArraySize(arr) == 0) {
+        return;
+    }
+    bool needs_lock = false;
+    for (int i = 0; i < cJSON_GetArraySize(arr); i++) {
+        cJSON *item = cJSON_GetArrayItem(arr, i);
+        const cJSON *installed = item ? cJSON_GetObjectItem(item, "installed") : NULL;
+        if (cJSON_IsTrue(installed)) {
+            continue;
+        }
+        const cJSON *requires = item ? cJSON_GetObjectItem(item, "requires") : NULL;
+        if (cJSON_IsArray(requires) && cJSON_GetArraySize(requires) > 0) {
+            needs_lock = true;
+            break;
+        }
+    }
+    if (!needs_lock) {
+        return;
+    }
+    if (minihub_adapter_lifecycle_lock(1000) != ESP_OK) {
+        ESP_LOGW(TAG, "catalog: skip requires filter, lifecycle lock timeout");
+        return;
+    }
+    for (int i = cJSON_GetArraySize(arr) - 1; i >= 0; i--) {
+        cJSON *item = cJSON_GetArrayItem(arr, i);
+        if (!item) {
+            continue;
+        }
+        const cJSON *installed = cJSON_GetObjectItem(item, "installed");
+        if (cJSON_IsTrue(installed) || catalog_requires_met_locked(item)) {
+            continue;
+        }
+        const cJSON *id = cJSON_GetObjectItem(item, "id");
+        ESP_LOGI(TAG, "catalog: hide %s (required adapter is off)",
+                 (id && cJSON_IsString(id)) ? id->valuestring : "?");
+        cJSON_DeleteItemFromArray(arr, i);
+    }
+    minihub_adapter_lifecycle_unlock();
 }
 
 static void catalog_rewrite_relative_urls(cJSON *arr, const char *base)
@@ -2029,6 +2116,11 @@ static esp_err_t store_install_from_catalog(const char *kind, const char *id, bo
         cJSON_Delete(catalog);
         return ESP_ERR_NOT_FOUND;
     }
+    if (!minihub_store_catalog_requires_met(item)) {
+        cJSON_Delete(catalog);
+        ESP_LOGI(TAG, "refuse %s %s: required adapter is off", kind, id);
+        return ESP_ERR_NOT_SUPPORTED;
+    }
 
     if (upgrade && !force) {
         const cJSON *version_j = cJSON_GetObjectItem(item, "version");
@@ -2313,6 +2405,7 @@ cJSON *minihub_store_catalog_merged(void)
         cJSON_AddItemToArray(merged, copy);
     }
     cJSON_Delete(remote);
+    catalog_hide_without_capability(merged);
     return merged;
 }
 

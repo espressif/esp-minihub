@@ -2709,6 +2709,11 @@ static bool manifest_is_js_enabled(const char *path, char *id_out, size_t id_len
     if (ok && cJSON_IsBool(en) && !cJSON_IsTrue(en)) {
         ok = false;
     }
+    if (ok && !minihub_module_requires_met(cJSON_GetObjectItem(root, "requires"))) {
+        ESP_LOGI(TAG, "skip JS module '%s' (required capability is off)",
+                 cJSON_IsString(id) ? id->valuestring : "?");
+        ok = false;
+    }
     if (ok && cJSON_IsString(id) && id_out && id_len) {
         strncpy(id_out, id->valuestring, id_len - 1);
         id_out[id_len - 1] = '\0';

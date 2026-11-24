@@ -138,9 +138,9 @@ def iter_module_source_dirs(*, root: Path = ROOT) -> list[Path]:
 def store_buckets(targets: list[str]) -> list[str]:
     """Folder names under ``Stores/``.
 
-    Any ``ALL`` (case-insensitive) selects ``Common`` only. Concrete chips
-    each get their own folder, lowercased to match ``Firmwares/esp32s31``
-    and the device query ``?chip=``.
+    Any ``any`` / ``ALL`` (case-insensitive) or ``*`` selects ``Common`` only.
+    Concrete chips each get their own folder, lowercased to match
+    ``Firmwares/esp32s31`` and the device query ``?chip=``.
     """
     chips: list[str] = []
     for raw in targets:
@@ -149,7 +149,7 @@ def store_buckets(targets: list[str]) -> list[str]:
         name = raw.strip()
         if not name:
             continue
-        if name.upper() == "ALL" or name == "*":
+        if name.upper() in ("ALL", "ANY") or name == "*":
             return ["Common"]
         folder = name.lower()
         if folder not in chips:

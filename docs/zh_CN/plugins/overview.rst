@@ -224,6 +224,14 @@ JSON 与 JS 使用该布局。原生与 hybrid 模块不发布：打包器不给
 * ``adapter`` — Host 要创建并启用的 ``adapters.json`` 键。**每一层** （含 JS）
   缺失或为空都通不过校验，所以没写 ``adapter`` 的 JS 插件根本不会加载
 
+**``requires``** 是商店侧的能力门禁：取自 ``Zigbee`` 、 ``BLE`` 、 ``BLE_mesh`` 、
+``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` 的字符串列表。
+``BLE`` 与 ``BLE_mesh`` 都跟随 ``ble_mesh`` 适配器。Hub 在 ``GET /api/catalog``
+上把本机已启用的能力写成 ``caps=`` ；商店会拿掉 ``requires`` 未被覆盖、且尚未安装
+的插件。 ``[]`` 或省略表示不设门禁。
+它与 ``meta.json`` 里的 ``capabilities`` （ ``points`` 、 ``auth`` 、
+``device_sync`` ）不是一回事：后者只是说明性标签，不参与目录过滤。
+
 其余字段都有默认值，不写不算错：
 
 * ``name`` · ``version`` — 目录 / ``GET /api/modules`` 展示；``version`` 缺省
@@ -232,6 +240,7 @@ JSON 与 JS 使用该布局。原生与 hybrid 模块不发布：打包器不给
 * ``abi_version`` · ``core_api_min`` — 缺省取 Host 自己的值；``core_api_max``
   缺省 0，表示不设上界
 * ``runtime`` — ``pack`` （JSON）或 ``JS`` （JS）
+* ``requires`` — 省略时按 ``[]`` ；打包时原样写入 ``catalog.json``
 
 ``ui`` / ``capabilities`` 优先读同目录的 ``meta.json``，没有该文件时才回落到
 ``module.json`` 里的同名字段；``ui`` 是可选 Web 表单，``capabilities`` 为说明性标签

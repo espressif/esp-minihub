@@ -134,6 +134,10 @@
       "zh": "未启用",
       "en": "Disabled"
     },
+    "store_firmware_unsupported": {
+      "zh": "当前固件不支持",
+      "en": "Not supported by this firmware"
+    },
     "state_activated_off": {
       "zh": "已停用",
       "en": "Disabled"

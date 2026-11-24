@@ -165,8 +165,11 @@ function renderStore() {
         (x.type === 'pack' || x.type === 'module')).filter(filt)
         .sort((a, b) => (a.name || a.id || '').localeCompare(b.name || b.id || ''));
     const kindLbl = (k, co) => co ? t('store.kind_config_module') : (k === 'module' ? t('store.kind_module') : t('store.kind_config_module'));
-    const actBtns = (kind, id, enabled, managed, upgradeAvailable, configOnly) => {
+    const actBtns = (kind, id, enabled, managed, upgradeAvailable, configOnly, firmwareSupported) => {
         if (managed === false) return '<span style="color:var(--dim);font-size:.72rem">' + t('store.builtin') + '</span>';
+        if (firmwareSupported === false) {
+            return '<div class="store-actions"><button class="btn-sm bad" onclick="storeUninstall(\'' + (configOnly ? 'pack' : kind) + '\',\'' + esc(id) + '\')">' + t('store.uninstall') + '</button></div>';
+        }
         const e = esc(id);
         const apiKind = configOnly ? 'pack' : kind;
         const en = enabled ? '<button class="btn-sm" onclick="storeAct(\'' + apiKind + '\',\'' + e + '\',false)">' + t('store.disable') + '</button>' : '<button class="btn-sm on" onclick="storeAct(\'' + apiKind + '\',\'' + e + '\',true)">' + t('store.enable') + '</button>';
@@ -210,7 +213,8 @@ function renderStore() {
         html += '<div class="section"><div class="section-h">' + t('store.installed') + ' <span>' + installed.length + '</span></div>';
         html += '<div class="store-list"><div class="store-row store-hdr"><div>' + t('store.name') + '</div><div>' + t('store.version') + '</div><div>' + t('store.description') + '</div>      <div>' + t('store.type') + '</div><div>' + t('store.adapter') + '</div><div>' + t('store.status') + '</div><div>' + t('store.actions') + '</div></div>';
         installed.forEach(it => {
-            html += itemRow(it, '<div class="' + (it.enabled ? 'tag-on' : 'tag-off') + '">' + (it.enabled ? t('store.enabled') : t('store.disabled')) + '</div>' + actBtns(it.type, it.id, it.enabled, it.managed !== false, it.upgrade_available, it.config_only));
+            const unsupported = it.firmware_supported === false;
+            html += itemRow(it, '<div class="' + (unsupported ? 'tag-off' : (it.enabled ? 'tag-on' : 'tag-off')) + '">' + (unsupported ? t('store.firmware_unsupported') : (it.enabled ? t('store.enabled') : t('store.disabled'))) + '</div>' + actBtns(it.type, it.id, it.enabled, it.managed !== false, it.upgrade_available, it.config_only, it.firmware_supported));
         });
         if (!installed.length) html += '<div class="empty" style="padding:24px">' + t('store.no_installed_items') + '</div>';
         html += '</div></div>';

@@ -192,10 +192,16 @@ ELF 常用脚本
      "enabled": true,
      "adapter": "my_native",
      "binary": "my_native.so",
+     "requires": [],
      "abi_version": 1,
      "core_api_min": 1,
      "core_api_max": 1
    }
+
+``requires`` 写法与 JS 相同：列出原生适配器依赖的 Host 能力（ ``Zigbee`` 、
+``BLE`` 、 ``BLE_mesh`` 、 ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、
+``Modbus`` ），不需要时写 ``[]`` 。``BLE`` 与 ``BLE_mesh`` 都跟随 ``ble_mesh``
+适配器。打包会把它抄进 ``catalog.json`` ，供 ``caps=`` 过滤。
 
 ``ui`` 与 ``capabilities`` 现放在同目录的 ``meta.json`` 里；module.json 只保留运行环境信息。
 

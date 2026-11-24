@@ -76,6 +76,12 @@ esp_err_t minihub_store_reinstall(const char *kind, const char *id);
 cJSON *minihub_store_catalog_merged(void);
 
 /**
+ * @brief True when every adapter in the catalog entry's requires list is enabled.
+ *        A missing or empty list matches every Hub.
+ */
+bool minihub_store_catalog_requires_met(const cJSON *entry);
+
+/**
  * @brief Runtime store server config (NVS).
  * @param custom_url      out buffer for custom base URL (may be empty).
  * @param custom_url_len  size of custom_url.

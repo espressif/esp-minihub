@@ -34,7 +34,7 @@ Or IDE MCP: `scaffold_plugin` with `tier=l2`. Do not invent `host.*` fields; ask
 
 ## Files
 
-- `module.json`: `"runtime": "js"`, `type`: `"module"`
+- `module.json`: `"runtime": "js"`, `type`: `"module"`, `targets`: `["any"]` (or a chip list), `requires`: capabilities that must be enabled (`Zigbee`, `BLE`, `BLE_mesh`, `Thread_Matter`, `Matter`, `MQTT_Broker`, `Modbus`; `[]` if none). `BLE` and `BLE_mesh` both follow the `ble_mesh` adapter (`host.ble` plugins use `["BLE"]`). The Hub store hides the module while any listed capability is off, and does not start it on boot.
 - `main.js`: QuickJS; Host bindings in `components/minihub_js/minihub_js.c`
 - Optional `meta.json` / `web/`
 

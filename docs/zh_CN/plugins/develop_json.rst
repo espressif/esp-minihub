@@ -59,6 +59,7 @@ JSON 模块是 **纯配置** 的 ``.mhub`` 包：不含 ``main.js`` 或原生 ``
      "version": "1.0.0",
      "runtime": "pack",
      "enabled": true,
+     "requires": ["BLE_mesh"],
      "inject": {
        "adapter": "ble_mesh",
        "provision": {
@@ -70,10 +71,13 @@ JSON 模块是 **纯配置** 的 ``.mhub`` 包：不含 ``main.js`` 或原生 ``
      }
    }
 
-``inject.adapter`` 对应内存树里 ``adapters`` 下的键名。这个合并不是通用的深合并：
-``provision`` 里只有 ``uuid_filters`` 与 ``bind_models`` 会追加到适配器原有内容之后
-（ ``merge_provision()`` → ``merge_json_array_append()`` ），其余每个键都是整体替换。
-也就是说除了这两个数组，包是在覆盖默认值而不是往里加。实现见
+``requires`` 必须覆盖本包 ``inject`` 所针对的 Host 协议栈：BLE Mesh 默认参数包写
+``BLE_mesh`` ，仅依赖 ``host.ble`` 被动扫描的包写 ``BLE`` ，MQTT broker 默认参数包写
+``MQTT_Broker`` 。缺了该项时，对应栈未启用的 Hub 在商店里看不到这个包。
+``inject.adapter`` 对应内存树里 ``adapters`` 下的键名。
+这个合并不是通用的深合并： ``provision`` 里只有 ``uuid_filters`` 与 ``bind_models``
+会追加到适配器原有内容之后（ ``merge_provision()`` → ``merge_json_array_append()`` ），
+其余每个键都是整体替换。也就是说除了这两个数组，包是在覆盖默认值而不是往里加。实现见
 ``components/minihub_pack/minihub_pack.c``。
 
 打包与安装

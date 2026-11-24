@@ -78,8 +78,38 @@ Directory layout
      "type": "module",
      "runtime": "js",
      "adapter": "demo_js",
-     "targets": ["ALL"]
+     "targets": ["any"],
+     "requires": []
    }
+
+**Always set ``requires`` deliberately.** It is copied into ``catalog.json`` and
+is what ``caps=`` on ``GET /api/catalog`` filters against. Tokens come from
+``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``,
+and ``Modbus``. ``BLE`` and ``BLE_mesh`` both follow the ``ble_mesh`` adapter
+(``host.ble`` plugins use ``["BLE"]``). ``[]`` means the module needs none of
+those stacks. While any listed
+token is off or not built into the Hub, the store hides a not-yet-installed
+module; an already installed module is not started on the next boot and is
+labelled as not supported by this firmware. Do not confuse this with
+``meta.json`` ``capabilities`` (``points``, ``auth``, …), which never gate the
+catalog.
+
+A module that uses the on-device MQTT broker lists that capability explicitly:
+
+.. code-block:: JSON
+
+   {
+     "id": "esphome",
+     "name": "ESPHome MQTT discovery",
+     "version": "0.1.0",
+     "runtime": "js",
+     "adapter": "esphome",
+     "targets": ["any"],
+     "requires": ["MQTT_Broker"]
+   }
+
+``targets`` uses ``any`` for every chip; ``ALL`` is accepted and stored as
+``any``.
 
 A JS manifest carries no ``abi_version`` — that belongs to a native package.
 ``ui`` and ``capabilities`` are read from ``meta.json`` when one is packaged, and

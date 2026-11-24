@@ -21,8 +21,8 @@
      - 谁来写
      - 谁来读
    * - ``module.json``
-     - 你（身份、 ``runtime``）
-     - 加载器：判断这个包能不能在当前 Host 上加载
+     - 你（身份、 ``runtime`` 、 ``requires``）
+     - 加载器与目录；``requires`` 经 ``caps=`` 决定商店是否列出该插件
    * - ``main.js``
      - 你（全部行为）
      - 嵌入式 QuickJS 引擎：在 ``setup(host)`` 里执行
@@ -63,6 +63,24 @@
 
 ``--id`` 既是目录名也是模块 id：小写、下划线。这一步不编译任何东西，也什么都没装。
 
+打包前打开 ``examples/plugins/my_js/module.json`` ，写好 ``requires`` ：不依赖射频或
+MQTT 栈时用 ``[]`` ；否则把依赖的能力全部列出（ ``Zigbee`` 、 ``BLE`` 、
+``BLE_mesh`` 、 ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` ）。
+``BLE`` 与 ``BLE_mesh`` 都跟随 ``ble_mesh`` 适配器。打包会把该列表抄进
+``catalog.json`` 。Hub 的 ``caps=`` 盖不住时，商店不会提供安装入口。
+
+.. code-block:: JSON
+
+   {
+     "id": "my_js",
+     "name": "My JS module",
+     "version": "0.1.0",
+     "runtime": "js",
+     "adapter": "my_js",
+     "targets": ["any"],
+     "requires": []
+   }
+
 2. 写行为
 ---------
 
@@ -88,8 +106,11 @@
        host.log.info('my_js ready');
    }
 
-三条决定“能不能用”的硬约束，不是风格问题：
+决定“能不能用”的硬约束，不是风格问题：
 
+* ``requires`` 必须和模块真正用到的协议栈一致。该写却写成空、或写错名字时，缺
+  少对应能力的 Hub 上商店看不到或装了也起不来（:doc:`pack_and_catalog` 、
+  :doc:`../api/deploy_index`）。
 * ``point_id`` 是你这个模块自己取的名字 —— ``<前缀>.<设备>`` 这种形状只是让它在各
   模块之间不撞名，没有人从它推导适配器；仓库里两个演示用的前缀就是 ``sim.``
   （ ``examples/plugins/color_bulb_js`` ）。 ``type`` 必须是类型目录里的

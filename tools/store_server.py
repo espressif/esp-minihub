@@ -54,7 +54,7 @@ import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, parse_qsl, unquote, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from store_paths import (  # noqa: E402
@@ -332,12 +332,47 @@ def catalog_compatible(entry: dict, host_abi: list | None, abi_version: int) -> 
     return True
 
 
+def advertised_caps(query: str) -> list[str] | None:
+    """Capability tokens from ``caps=``.
+
+    ``None`` means the request did not send the parameter. An empty list
+    means the Hub advertised no capabilities.
+    """
+    present = False
+    have: list[str] = []
+    for key, value in parse_qsl(query, keep_blank_values=True):
+        if key != "caps":
+            continue
+        present = True
+        have.extend(part.strip() for part in value.split(",") if part.strip())
+    return have if present else None
+
+
+def plugin_matches_caps(entry: dict, caps: list[str] | None) -> bool:
+    """True when every ``requires`` token is in the advertised set.
+
+    A missing parameter does not filter. A missing or empty ``requires``
+    matches every Hub.
+    """
+    if caps is None:
+        return True
+    requires = entry.get("requires")
+    if not isinstance(requires, list) or not requires:
+        return True
+    have = set(caps)
+    for item in requires:
+        if not isinstance(item, str) or item not in have:
+            return False
+    return True
+
+
 def plugin_matches_chip(entry: dict, chip: str) -> bool:
     """True when the entry may be installed on ``chip``.
 
-    ``targets`` holds chip folder names; ``ALL`` / ``*`` mean every chip. The
-    device advertises ?chip=, and an entry aimed at another chip must not be
-    offered -- a stale or hand-edited per-plugin catalog.json included.
+    ``targets`` holds chip folder names; ``any`` / ``ALL`` / ``*`` mean every
+    chip. The device advertises ?chip=, and an entry aimed at another chip
+    must not be offered -- a stale or hand-edited per-plugin catalog.json
+    included.
     """
     targets = entry.get("targets")
     if not isinstance(targets, list) or not targets:
@@ -349,7 +384,7 @@ def plugin_matches_chip(entry: dict, chip: str) -> bool:
         if not isinstance(t, str):
             continue
         v = t.strip().lower()
-        if v in ("all", "*") or v == want:
+        if v in ("all", "any", "*") or v == want:
             return True
     return False
 
@@ -696,6 +731,8 @@ def make_handler(deploy: Path, access_log=None):
             # chip (request without one) does not filter. Authorized mac
             # overrides below are appended regardless.
             plugins = [e for e in plugins if plugin_matches_chip(e, chip)]
+            caps = advertised_caps(raw.query)
+            plugins = [e for e in plugins if plugin_matches_caps(e, caps)]
 
             # Step 2b: server-authorized overrides (by mac).
             overrides = load_overrides(deploy)

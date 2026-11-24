@@ -109,10 +109,27 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
 
    {
      "type": "module",
+     "id": "esphome",
+     "name": "ESPHome MQTT discovery",
+     "version": "0.1.0",
+     "targets": ["any"],
+     "requires": ["MQTT_Broker"],
+     "url": "/files/Stores/Common/esphome/esphome.mhub",
+     "adapter": "esphome",
+     "size": 5618
+   }
+
+A module with no stack dependency still ships an explicit empty list:
+
+.. code-block:: JSON
+
+   {
+     "type": "module",
      "id": "color_bulb_js",
      "name": "Color Bulb (JS)",
      "version": "0.1.0",
-     "targets": ["ALL"],
+     "targets": ["any"],
+     "requires": [],
      "url": "/files/Stores/Common/color_bulb_js/color_bulb_js.mhub",
      "adapter": "color_bulb_js",
      "size": 3762
@@ -126,13 +143,21 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
   only where the Hub reports installed state — it cannot be *installed*: the
   catalog lookup lets a ``pack`` request find a ``module`` entry (and the
   reverse) only for ``config_only`` items, and an entry whose ``url`` ends in
-  ``.mhub`` is not one of those (``minihub_store.c:999-1006,1027-1036``).
+  ``.mhub`` is not one of those (``minihub_store.c:1104-1127,1081-1101``).
 * ``url`` — path or absolute HTTP URL of the ``.mhub``
 * ``targets`` — lowercase chip folder names, the same strings as the firmware
-  directories (for example ``esp32s31``), or ``ALL`` for a JS module. Copied
-  from ``module.json``. A concrete chip is lowercased; ``ALL`` stays ``ALL``.
-  When the field is omitted, pack writes ``["ALL"]`` for a JS module and
-  ``["esp32s31"]`` for every other module
+  directories (for example ``esp32s31``), or ``any`` for every chip. Copied
+  from ``module.json``. A concrete chip is lowercased; ``any``, ``ALL``, and
+  ``*`` are written as ``any``. When the field is omitted, pack writes
+  ``["any"]`` for a JS module and ``["esp32s31"]`` for every other module
+* ``requires`` — **set this in ``module.json`` before packing.** Capabilities
+  this plugin needs, from ``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``,
+  ``Matter``, ``MQTT_Broker``, and ``Modbus``. ``BLE`` and ``BLE_mesh`` both
+  follow the ``ble_mesh`` adapter. ``[]`` means none. Each name must be
+  compiled in and enabled. The Hub store omits a not-yet-installed plugin
+  while any listed capability is missing. Copied onto ``catalog.json`` as a
+  list; an omitted field is written ``[]``. Do not confuse with ``meta.json``
+  ``capabilities`` (informational only)
 * ``adapter`` — optional; Host creates an ``adapters.json`` slot on install
 * ``size`` — **outer zip** byte length (must match the ``.mhub`` on disk;
   ``pack`` rewrites this)
@@ -141,7 +166,7 @@ unpacker: ``components/minihub_store/hub_zip.c`` (zip only today).
   that id's compiled image whenever the packer finds one under the app build
   directory, so a non-zero ``binary_size`` next to a ``runtime: js`` entry means
   a leftover artifact from an earlier build of the same id, not a native module
-  (``sync_store_catalog.py:258-266``).
+  (``sync_store_catalog.py:282-290``).
 * ``sha256`` — the packer hashes every package and writes it here, and the
   Store API echoes it, but the install path never verifies it: ``size`` must
   match, the digest is not checked. Digest verification exists only for the

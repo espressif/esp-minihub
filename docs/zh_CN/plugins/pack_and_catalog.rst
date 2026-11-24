@@ -104,10 +104,27 @@
 
    {
      "type": "module",
+     "id": "esphome",
+     "name": "ESPHome MQTT discovery",
+     "version": "0.1.0",
+     "targets": ["any"],
+     "requires": ["MQTT_Broker"],
+     "url": "/files/Stores/Common/esphome/esphome.mhub",
+     "adapter": "esphome",
+     "size": 5618
+   }
+
+不依赖协议栈的模块也要显式写出空列表：
+
+.. code-block:: JSON
+
+   {
+     "type": "module",
      "id": "color_bulb_js",
      "name": "Color Bulb (JS)",
      "version": "0.1.0",
-     "targets": ["ALL"],
+     "targets": ["any"],
+     "requires": [],
      "url": "/files/Stores/Common/color_bulb_js/color_bulb_js.mhub",
      "adapter": "color_bulb_js",
      "size": 3762
@@ -118,19 +135,25 @@
   与加载器都读它，据此把包交给 ``minihub_pack``，而不是按可加载模块处理。
   手写 ``"type": "pack"`` 只在 Hub 报告已安装状态时被认，**装不了** ：目录查找只在
   ``config_only`` 条目上让 ``pack`` 与 ``module`` 互相兜底，而 URL 以 ``.mhub``
-  结尾的条目不属于它（ ``minihub_store.c:999-1006,1027-1036`` ）
+  结尾的条目不属于它（ ``minihub_store.c:1104-1127,1081-1101`` ）
 * ``url`` — ``.mhub`` 的路径或绝对 HTTP URL
 * ``targets`` — 小写芯片文件夹名，与固件目录使用同一套字符串
-  （例如 ``esp32s31`` ），JS 模块也可以是 ``ALL``。从 ``module.json``
-  抄入时具体芯片名转为小写， ``ALL`` 保持不变。省略该字段时，JS 模块打包写成
-  ``["ALL"]``，其它模块写成 ``["esp32s31"]``
+  （例如 ``esp32s31`` ），任意芯片写成 ``any``。从 ``module.json``
+  抄入时具体芯片名转为小写， ``any`` 、 ``ALL`` 和 ``*`` 都写成 ``any``。
+  省略该字段时，JS 模块打包写成 ``["any"]``，其它模块写成 ``["esp32s31"]``
+* ``requires`` — **打包前在 ``module.json`` 里写好。** 这个插件需要的能力，取自
+  ``Zigbee`` 、 ``BLE`` 、 ``BLE_mesh`` 、 ``Thread_Matter`` 、 ``Matter`` 、
+  ``MQTT_Broker`` 、 ``Modbus`` 。``BLE`` 与 ``BLE_mesh`` 都跟随 ``ble_mesh``
+  适配器。 ``[]`` 表示不需要。每一项都必须已编进固件且处于启用状态。列出的任一项
+  不具备时，Hub 商店不把尚未安装的插件放进可安装列表。该列表原样抄进 ``catalog.json`` ；
+  省略时写成 ``[]`` 。不要和 ``meta.json`` 的 ``capabilities`` （仅说明）混用
 * ``adapter`` — 可选；安装时 Host 会在 ``adapters.json`` 中建槽
 * ``size`` — **外层 zip** 字节数（须与磁盘上 ``.mhub`` 一致；``pack`` 会回写）
 
 * ``binary_size`` — 内层原生镜像的大小，不是 zip 的大小。只要打包器在应用构建目录里找得到这个
   id 编好的原生镜像，就会把它盖进来。所以 ``runtime: js`` 的条目旁出现一个非零
   ``binary_size`` ，意思是同 id 早前那次构建留下了产物，不是说它是原生模块
-  （ ``sync_store_catalog.py:258-266`` ）。
+  （ ``sync_store_catalog.py:282-290`` ）。
 * ``sha256`` — 打包器对每个包算一份写在这里，商店接口也照原样把它给出去，但安装路径
   从不校验它 ：校验的是 ``size`` 必须相等，摘要不看。摘要校验只存在于
   ``components/minihub_update/`` 的固件与资源记录里。

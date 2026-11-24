@@ -19,4 +19,10 @@ menu "BLE Mesh"
         select BLE_MESH_LIGHT_HSL_CLI
         select BLE_MESH_SENSOR_CLI
 
+    # Invisible: BLE host (NimBLE) available for shared scan / GATT / host.ble.
+    # Follows MINIHUB_BLE_MESH_SDK for now so products do not need a second switch.
+    config MINIHUB_BLE_SDK
+        bool
+        default MINIHUB_BLE_MESH_SDK
+
 endmenu

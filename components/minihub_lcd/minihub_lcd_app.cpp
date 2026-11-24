@@ -171,6 +171,7 @@ struct StoreRowInfo {
     bool upgrade;
     bool available;
     bool enabled;
+    bool firmware_supported;
 };
 constexpr int kStoreSections = 3; /* avail, pack, mod */
 /* Shared by all three STORE_ROW / STORE_AVAIL_ROW contract patterns. */
@@ -1901,6 +1902,8 @@ void refresh_store_rows(const char *prefix, cJSON *arr, cJSON *catalog)
                            || cJSON_IsTrue(cJSON_GetObjectItem(item, "binary_stale"));
             info.available = false;
             info.enabled = !cJSON_IsBool(enabled) || cJSON_IsTrue(enabled);
+            const cJSON *fw = cJSON_GetObjectItem(item, "firmware_supported");
+            info.firmware_supported = !cJSON_IsBool(fw) || cJSON_IsTrue(fw);
             const cJSON *ver = cJSON_GetObjectItem(item, "version");
             if (!cJSON_IsString(ver)) {
                 ver = cJSON_GetObjectItem(cat, "version");
@@ -1968,6 +1971,8 @@ void refresh_store_rows(const char *prefix, cJSON *arr, cJSON *catalog)
          * all and is labelled Built-in. */
         if (!s_store_rows[section][i].managed) {
             set_label_text(path, lcd_tr(LCD_STR_STORE_BUILTIN));
+        } else if (!s_store_rows[section][i].firmware_supported) {
+            set_label_text(path, lcd_tr(LCD_STR_STORE_FIRMWARE_UNSUPPORTED));
         } else {
             set_label_text(path, (!cJSON_IsBool(enabled) || cJSON_IsTrue(enabled)) ? lcd_tr(LCD_STR_STATE_ENABLED) : lcd_tr(LCD_STR_STATE_DISABLED));
         }
@@ -2188,6 +2193,9 @@ void refresh_store_available(cJSON *const *lists, int list_count, cJSON *catalog
         if (!cJSON_IsString(id) || id->valuestring[0] == '\0') {
             continue;
         }
+        if (!minihub_store_catalog_requires_met(item)) {
+            continue;
+        }
         if (store_id_installed(id->valuestring, lists, list_count)) {
             continue;
         }
@@ -2232,6 +2240,7 @@ void refresh_store_available(cJSON *const *lists, int list_count, cJSON *catalog
         info.upgrade = false;
         info.available = true;
         info.enabled = false;
+        info.firmware_supported = true;
         const cJSON *desc = cJSON_GetObjectItem(item, "description");
         const cJSON *vendor = cJSON_GetObjectItem(item, "vendor");
         snprintf(info.version, sizeof(info.version), "%s",
@@ -4754,7 +4763,7 @@ void store_sheet_show(int section, int index)
                    info.description[0] ? info.description : lcd_tr(LCD_STR_STORE_NO_DESC));
     set_view_hidden(LCD_VIEW_STORE_MODAL_INSTALL, true);
     set_view_hidden(LCD_VIEW_STORE_MODAL_UPGRADE, info.available || !info.upgrade);
-    set_view_hidden(LCD_VIEW_STORE_MODAL_ENABLE, info.available || !info.managed);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_ENABLE, info.available || !info.managed || !info.firmware_supported);
     set_label_text(LCD_VIEW_STORE_MODAL_ENABLE_LBL,
                    info.enabled ? lcd_tr(LCD_STR_STORE_DISABLE) : lcd_tr(LCD_STR_STORE_ENABLE));
     set_view_hidden(LCD_VIEW_STORE_MODAL_REINSTALL, info.available || !info.managed);

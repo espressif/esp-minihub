@@ -108,6 +108,25 @@ typedef enum {
 bool minihub_module_adapter_supported(const char *name);
 
 /**
+ * @brief True when this Hub currently has the named capability.
+ *        Tokens: Zigbee, BLE, BLE_mesh, Thread_Matter, Matter, MQTT_Broker,
+ *        Modbus. BLE and BLE_mesh both follow the ble_mesh adapter.
+ *        A token is on only when that adapter is compiled in and enabled.
+ */
+bool minihub_module_capability_on(const char *token);
+
+/**
+ * @brief True when every name in a module.json requires array is on.
+ *        A missing or empty array matches every Hub.
+ */
+bool minihub_module_requires_met(const cJSON *requires_json);
+
+/**
+ * @brief Comma-separated capabilities this Hub currently has. Empty if none.
+ */
+void minihub_module_format_caps(char *out, size_t out_len);
+
+/**
  * @brief Check whether enabling @p name conflicts with adapters already on in
  *        @p adapters_root. Shared by Web (/api/adapters) and LCD config UI.
  */

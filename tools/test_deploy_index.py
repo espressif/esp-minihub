@@ -93,6 +93,17 @@ def main() -> int:
         deploy = Path(tmp)
         assert store_paths.store_buckets(["esp32s31"]) == ["esp32s31"]
         assert store_paths.store_buckets(["ALL"]) == ["Common"]
+        assert store_paths.store_buckets(["any"]) == ["Common"]
+        assert store_server.plugin_matches_chip({"targets": ["any"]}, "esp32s31")
+        assert store_server.plugin_matches_caps({"requires": ["MQTT_Broker"]}, None)
+        assert store_server.plugin_matches_caps({"requires": ["MQTT_Broker"]}, ["MQTT_Broker"])
+        assert not store_server.plugin_matches_caps({"requires": ["BLE_mesh"]}, ["Zigbee"])
+        assert store_server.plugin_matches_caps({"requires": []}, [])
+        assert store_server.advertised_caps("chip=esp32s31") is None
+        assert store_server.advertised_caps("caps=") == []
+        assert store_server.advertised_caps("caps=Zigbee,MQTT_Broker") == ["Zigbee", "MQTT_Broker"]
+        assert store_server.plugin_matches_chip({"targets": ["ALL"]}, "esp32c6")
+        assert not store_server.plugin_matches_chip({"targets": ["esp32c6"]}, "esp32s31")
         assert store_paths.store_buckets(["all", "esp32s31"]) == ["Common"]
         assert store_paths.store_buckets(["esp32s31", "esp32c6"]) == ["esp32s31", "esp32c6"]
 
@@ -123,7 +134,8 @@ def main() -> int:
                 "name": "JS",
                 "version": "1.0.0",
                 "runtime": "js",
-                "targets": ["ALL"],
+                "targets": ["any"],
+                "requires": ["ble_mesh"],
             },
         )
         with zipfile.ZipFile(deploy / "Stores" / "Common" / "jsdemo" / "jsdemo.mhub", "a") as zf:
@@ -166,7 +178,9 @@ def main() -> int:
         assert "capabilities" not in by_id["jsdemo"]
         assert "sha256:" not in by_id["demo"]["sha256"]
         assert by_id["jsdemo"]["url"] == "/files/Stores/Common/jsdemo/jsdemo.mhub"
-        assert by_id["jsdemo"]["targets"] == ["ALL"]
+        assert by_id["jsdemo"]["targets"] == ["any"]
+        assert by_id["jsdemo"]["requires"] == ["ble_mesh"]
+        assert by_id["demo"]["requires"] == []
         per = json.loads(
             (deploy / "Stores" / "Common" / "demo" / "catalog.json").read_text(encoding="utf-8")
         )
@@ -190,7 +204,8 @@ def main() -> int:
             plugin,
             plugin,
         )
-        assert defaulted["targets"] == ["ALL"]
+        assert defaulted["targets"] == ["any"]
+        assert defaulted["requires"] == []
         native_default = sync_store_catalog.catalog_entry(
             {"id": "native", "name": "Native", "version": "1.0.0", "runtime": "native"},
             plugin,
@@ -506,7 +521,8 @@ def main() -> int:
             assert listed["demo"]["targets"] == ["esp32s31"]
             # JS plugins omit abi yet are still listed (ABI-independent).
             assert "abi" not in listed["demo"]
-            assert listed["jsdemo"]["targets"] == ["ALL"]
+            assert listed["jsdemo"]["targets"] == ["any"]
+            assert listed["jsdemo"]["requires"] == ["ble_mesh"]
             assert "multi" not in listed
             upgrade = payload["firmware_upgrade"]
             assert upgrade["available"] is True

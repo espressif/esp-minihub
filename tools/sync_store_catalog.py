@@ -145,15 +145,15 @@ def binary_size_from_mhub(pkg: Path, module_id: str) -> int | None:
 
 
 # Same chip-folder string as Firmwares/<chip>/ and /api/firmware "targets".
-# JS modules are not tied to one chip image, so an omitted list is ALL.
+# JS modules are not tied to one chip image, so an omitted list is any.
 DEFAULT_PLUGIN_TARGETS = ["esp32s31"]
-DEFAULT_JS_PLUGIN_TARGETS = ["ALL"]
+DEFAULT_JS_PLUGIN_TARGETS = ["any"]
 
 
 def _normalize_target(item: str) -> str:
     text = item.strip()
-    if text.upper() == "ALL" or text == "*":
-        return "ALL"
+    if text.upper() in ("ALL", "ANY") or text == "*":
+        return "any"
     return text.lower()
 
 
@@ -161,8 +161,9 @@ def plugin_targets(manifest: dict, module_dir: Path | None = None) -> list[str]:
     """Chip list for catalog.json and the packaged module.json.
 
     ``targets`` is a list of lowercase chip folder names. A single string is
-    wrapped. ``ALL`` stays ``ALL``. An omitted or empty value becomes ``ALL``
-    for a JS module and ``esp32s31`` for every other module.
+    wrapped. ``any``, ``ALL``, and ``*`` become ``any``. An omitted or empty
+    value becomes ``any`` for a JS module and ``esp32s31`` for every other
+    module.
     """
     raw = manifest.get("targets")
     if isinstance(raw, str):
@@ -179,6 +180,28 @@ def plugin_targets(manifest: dict, module_dir: Path | None = None) -> list[str]:
     if js:
         return list(DEFAULT_JS_PLUGIN_TARGETS)
     return list(DEFAULT_PLUGIN_TARGETS)
+
+
+def plugin_requires(manifest: dict) -> list[str]:
+    """Adapter names this plugin needs running. Empty means none.
+
+    A string is wrapped. Blank entries are dropped. Order is kept, duplicates
+    are not. This list is copied onto ``catalog.json``; it is not the catalog
+    ``adapter`` unless ``adapter`` and ``inject.adapter`` are both absent.
+    """
+    raw = manifest.get("requires")
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        name = item.strip()
+        if name and name not in out:
+            out.append(name)
+    return out
 
 
 def store_buckets_for_module(manifest: dict, module_dir: Path) -> list[str]:
@@ -243,6 +266,7 @@ def catalog_entry(
         adapter = manifest["requires"][0]
     if adapter:
         entry["adapter"] = adapter
+    entry["requires"] = plugin_requires(manifest)
 
     pkg = deploy_mod / f"{mid}.mhub"
     if pkg.is_file():

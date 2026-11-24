@@ -708,6 +708,7 @@
   "store.disabled": "未启用",
   "store.enable": "启用",
   "store.enabled": "已启用",
+  "store.firmware_unsupported": "当前固件不支持",
   "store.install": "安装",
   "store.installed": "已安装",
   "store.kind_config_module": "配置模块",
