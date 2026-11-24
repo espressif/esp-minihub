@@ -738,7 +738,7 @@ static const cap_mcp_server_tool_def_t s_tools[] = {
             "Allowlisted MiniHub Host REST via in-process gateway (not Host :80). "
             "Call hub.routes first if unsure of paths. "
             "Always pass method, path, query, and body (use \"\" for unused query/body). "
-            "GET starters: /api/system, /api/points, /api/ota, /api/store/config. "
+            "GET starters: /api/system, /api/update/notes, /api/points, /api/ota, /api/store/config. "
             "No /api/status /api/version /api/info — DENIED (response includes try[] + hint). "
             "Prefer points.list / command.invoke when enough. Do not HTTP-probe :80 or :18791 /api/*.",
         .callback = tool_hub_api,

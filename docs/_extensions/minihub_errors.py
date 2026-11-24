@@ -85,6 +85,8 @@ MCP_GLOSS = {
     "STORE_CONFIG_FAILED": ("the Store configuration could not be read or written",
                             "商店配置读不到或写不进"),
     "MODULE_ERROR": ("a module call failed", "模块调用失败"),
+    "NO_MEM": ("could not allocate memory or create a task",
+               "分配内存或创建任务失败"),
     "INTERNAL": ("an unexpected internal failure; the detail names it",
                  "意料之外的内部失败，detail 会写明是哪一个"),
 }

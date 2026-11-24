@@ -18,6 +18,13 @@
 #include "minihub_rules.h"
 #include "minihub_scenes.h"
 #include "minihub_store.h"
+#include "minihub_update.h"
+
+#include "esp_app_desc.h"
+#include "esp_system.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #if CONFIG_MINIHUB_ZIGBEE_SDK
 #include "minihub_zigbee.h"
 #endif
@@ -87,6 +94,7 @@ static const hub_api_rule_t s_rules[] = {
     {HUB_M_GET, "/api/ota"},
     {HUB_M_POST, "/api/ota"},
     {HUB_M_POST, "/api/hub/reload"},
+    {HUB_M_POST, "/api/system/reboot"},
     {HUB_M_POST, "/api/points/remove"},
 #if CONFIG_MINIHUB_ZIGBEE_SDK
     {HUB_M_POST, "/api/zigbee/permit_join"},
@@ -678,6 +686,36 @@ static esp_err_t dispatch_hub_reload(cJSON **out)
     if (err != ESP_OK) {
         cJSON_AddStringToObject(root, "error", esp_err_to_name(err));
     }
+    *out = root;
+    return ESP_OK;
+}
+
+static void reboot_deferred(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+}
+
+static esp_err_t dispatch_system_reboot(const char *body, cJSON **out)
+{
+    cJSON *req = body && body[0] ? cJSON_Parse(body) : NULL;
+    if (!req || !cJSON_IsTrue(cJSON_GetObjectItem(req, "confirm"))) {
+        cJSON_Delete(req);
+        *out = err_obj("INVALID_ARG", "confirm required (JSON {\"confirm\":true})");
+        return ESP_OK;
+    }
+    cJSON_Delete(req);
+    if (xTaskCreate(reboot_deferred, "mcp_reboot", 2048, NULL, 5, NULL) != pdPASS) {
+        *out = err_obj("NO_MEM", "reboot task create failed");
+        return ESP_OK;
+    }
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddBoolToObject(root, "ok", true);
+    cJSON_AddStringToObject(root, "result", "rebooting");
     *out = root;
     return ESP_OK;
 }
@@ -1336,198 +1374,224 @@ esp_err_t hub_api_call(const char *method, const char *path, const char *query, 
     }
 
     char module_id[32];
-    if (mask == HUB_M_POST && extract_module_rpc(path_buf, module_id, sizeof(module_id))) {
-        return dispatch_module_rpc(module_id, body, out);
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/points") == 0) {
-        return dispatch_get_points(effective_query, out);
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/points/history") == 0) {
-        return dispatch_get_history(effective_query, out);
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/radio/provision") == 0) {
-        return dispatch_get_radio_provision(out);
-    }
+
+    if (mask == HUB_M_GET) {
+        if (strcmp(path_buf, "/api/points") == 0) {
+            return dispatch_get_points(effective_query, out);
+        }
+        if (strcmp(path_buf, "/api/points/history") == 0) {
+            return dispatch_get_history(effective_query, out);
+        }
+        if (strcmp(path_buf, "/api/radio/provision") == 0) {
+            return dispatch_get_radio_provision(out);
+        }
 #if CONFIG_MINIHUB_ZIGBEE_SDK
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/zigbee") == 0) {
-        return dispatch_get_zigbee(out);
-    }
+        if (strcmp(path_buf, "/api/zigbee") == 0) {
+            return dispatch_get_zigbee(out);
+        }
 #endif
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/command") == 0) {
-        return dispatch_post_command(body, out);
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/rules") == 0) {
-        cJSON *rules = minihub_config_get_rules();
-        if (!rules) {
-            *out = err_obj("CONFIG_NOT_READY", "rules");
+        if (strcmp(path_buf, "/api/rules") == 0) {
+            cJSON *rules = minihub_config_get_rules();
+            if (!rules) {
+                *out = err_obj("CONFIG_NOT_READY", "rules");
+                return ESP_OK;
+            }
+            cJSON *dup = cJSON_Duplicate(rules, true);
+            if (!dup) {
+                return ESP_ERR_NO_MEM;
+            }
+            cJSON_AddBoolToObject(dup, "ok", true);
+            *out = dup;
             return ESP_OK;
         }
-        cJSON *dup = cJSON_Duplicate(rules, true);
-        if (!dup) {
-            return ESP_ERR_NO_MEM;
-        }
-        cJSON_AddBoolToObject(dup, "ok", true);
-        *out = dup;
-        return ESP_OK;
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/rules/import") == 0) {
-        return dispatch_rules_import(body, out);
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/scenes") == 0) {
-        cJSON *scenes = minihub_config_get_scenes();
-        if (!scenes) {
-            *out = err_obj("CONFIG_NOT_READY", "scenes");
+        if (strcmp(path_buf, "/api/scenes") == 0) {
+            cJSON *scenes = minihub_config_get_scenes();
+            if (!scenes) {
+                *out = err_obj("CONFIG_NOT_READY", "scenes");
+                return ESP_OK;
+            }
+            cJSON *dup = cJSON_Duplicate(scenes, true);
+            if (!dup) {
+                return ESP_ERR_NO_MEM;
+            }
+            cJSON_AddBoolToObject(dup, "ok", true);
+            *out = dup;
             return ESP_OK;
         }
-        cJSON *dup = cJSON_Duplicate(scenes, true);
-        if (!dup) {
-            return ESP_ERR_NO_MEM;
-        }
-        cJSON_AddBoolToObject(dup, "ok", true);
-        *out = dup;
-        return ESP_OK;
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/scenes/import") == 0) {
-        return dispatch_scenes_import(body, out);
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/scenes/invoke") == 0) {
-        return dispatch_scenes_invoke(body, out);
-    }
-    if (mask == HUB_M_GET &&
-        (strcmp(path_buf, "/api/adapters") == 0 || strcmp(path_buf, "/api/config/adapters") == 0)) {
-        cJSON *adapters = minihub_config_get_adapters();
-        if (!adapters) {
-            *out = err_obj("CONFIG_NOT_READY", "adapters");
+        if (strcmp(path_buf, "/api/adapters") == 0 || strcmp(path_buf, "/api/config/adapters") == 0) {
+            cJSON *adapters = minihub_config_get_adapters();
+            if (!adapters) {
+                *out = err_obj("CONFIG_NOT_READY", "adapters");
+                return ESP_OK;
+            }
+            cJSON *dup = cJSON_Duplicate(adapters, true);
+            if (!dup) {
+                return ESP_ERR_NO_MEM;
+            }
+            cJSON_AddBoolToObject(dup, "ok", true);
+            *out = dup;
             return ESP_OK;
         }
-        cJSON *dup = cJSON_Duplicate(adapters, true);
-        if (!dup) {
-            return ESP_ERR_NO_MEM;
-        }
-        cJSON_AddBoolToObject(dup, "ok", true);
-        *out = dup;
-        return ESP_OK;
-    }
-    if (mask == HUB_M_PUT && strcmp(path_buf, "/api/config/adapters") == 0) {
-        return dispatch_adapters_put(body, out);
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/store/catalog") == 0) {
-        cJSON *catalog = minihub_store_catalog_merged();
-        if (!catalog) {
-            *out = err_obj("STORE_ERROR", "catalog failed");
+        if (strcmp(path_buf, "/api/store/catalog") == 0) {
+            cJSON *catalog = minihub_store_catalog_merged();
+            if (!catalog) {
+                *out = err_obj("STORE_ERROR", "catalog failed");
+                return ESP_OK;
+            }
+            *out = catalog;
             return ESP_OK;
         }
-        *out = catalog;
-        return ESP_OK;
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/modules") == 0) {
-        cJSON *modules = minihub_module_list_json();
-        if (!modules) {
-            *out = err_obj("MODULE_ERROR", "modules list failed");
+        if (strcmp(path_buf, "/api/modules") == 0) {
+            cJSON *modules = minihub_module_list_json();
+            if (!modules) {
+                *out = err_obj("MODULE_ERROR", "modules list failed");
+                return ESP_OK;
+            }
+            *out = modules;
             return ESP_OK;
         }
-        *out = modules;
-        return ESP_OK;
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/system") == 0) {
-        cJSON *root = cJSON_CreateObject();
-        if (!root) {
-            return ESP_ERR_NO_MEM;
-        }
-        char ip[16] = {0};
-        (void)minihub_net_get_ip(ip, sizeof(ip));
-        cJSON_AddBoolToObject(root, "ok", true);
-        cJSON_AddStringToObject(root, "local_ip", ip);
+        if (strcmp(path_buf, "/api/system") == 0) {
+            cJSON *root = cJSON_CreateObject();
+            if (!root) {
+                return ESP_ERR_NO_MEM;
+            }
+            char ip[16] = {0};
+            (void)minihub_net_get_ip(ip, sizeof(ip));
+            const esp_app_desc_t *app = esp_app_get_description();
+            const int64_t uptime_ms = esp_timer_get_time() / 1000;
+            cJSON_AddBoolToObject(root, "ok", true);
+            cJSON_AddStringToObject(root, "name", "MiniHub");
+            cJSON_AddStringToObject(root, "version", CONFIG_MINIHUB_VERSION);
+            cJSON_AddStringToObject(root, "idf_version", esp_get_idf_version());
+            cJSON_AddStringToObject(root, "commit",
+                                    (app && app->version[0]) ? app->version : "");
+            cJSON_AddNumberToObject(root, "uptime_s", (double)(uptime_ms / 1000));
+            cJSON_AddStringToObject(root, "chip", CONFIG_IDF_TARGET);
+            cJSON_AddStringToObject(root, "local_ip", ip);
 #if defined(CONFIG_APP_CLAW_CAP_CORE)
-        /* Claw portal serves MiniHub UI at /minihub */
-        cJSON_AddStringToObject(root, "web_base", "/minihub");
+            /* Claw portal serves MiniHub UI at /minihub */
+            cJSON_AddStringToObject(root, "web_base", "/minihub");
 #else
-        cJSON_AddStringToObject(root, "web_base", "");
+            cJSON_AddStringToObject(root, "web_base", "");
 #endif
-        *out = root;
-        return ESP_OK;
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/store/config") == 0) {
-        cJSON *root = cJSON_CreateObject();
-        if (!root) {
-            return ESP_ERR_NO_MEM;
-        }
-        char url[128] = {0};
-        bool disable_default = false;
-        (void)minihub_store_get_config(url, sizeof(url), &disable_default, NULL, 0);
-        cJSON_AddBoolToObject(root, "ok", true);
-        cJSON_AddStringToObject(root, "custom_url", url);
-        cJSON_AddBoolToObject(root, "disable_default", disable_default);
-        *out = root;
-        return ESP_OK;
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/store/config") == 0) {
-        cJSON *req = body && body[0] ? cJSON_Parse(body) : NULL;
-        if (!req) {
-            *out = err_obj("INVALID_ARG", "JSON body required");
+            *out = root;
             return ESP_OK;
         }
-        const cJSON *url = cJSON_GetObjectItem(req, "custom_url");
-        const cJSON *dis = cJSON_GetObjectItem(req, "disable_default");
-        const char *url_s = cJSON_IsString(url) ? url->valuestring : "";
-        bool dis_b = cJSON_IsTrue(dis);
-        esp_err_t err = minihub_store_set_config(url_s, dis_b);
-        cJSON_Delete(req);
-        cJSON *root = cJSON_CreateObject();
-        if (!root) {
-            return ESP_ERR_NO_MEM;
+        if (strcmp(path_buf, "/api/update/notes") == 0) {
+            cJSON *notes = minihub_update_notes_json();
+            if (!notes) {
+                return ESP_ERR_NO_MEM;
+            }
+            *out = notes;
+            return ESP_OK;
         }
-        cJSON_AddBoolToObject(root, "ok", err == ESP_OK);
-        if (err != ESP_OK) {
-            cJSON_AddStringToObject(root, "error", esp_err_to_name(err));
+        if (strcmp(path_buf, "/api/store/config") == 0) {
+            cJSON *root = cJSON_CreateObject();
+            if (!root) {
+                return ESP_ERR_NO_MEM;
+            }
+            char url[128] = {0};
+            bool disable_default = false;
+            (void)minihub_store_get_config(url, sizeof(url), &disable_default, NULL, 0);
+            cJSON_AddBoolToObject(root, "ok", true);
+            cJSON_AddStringToObject(root, "custom_url", url);
+            cJSON_AddBoolToObject(root, "disable_default", disable_default);
+            *out = root;
+            return ESP_OK;
         }
-        *out = root;
-        return ESP_OK;
-    }
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/ota") == 0) {
-        return dispatch_ota_get(out);
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/ota") == 0) {
-        return dispatch_ota_start(body, out);
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/hub/reload") == 0) {
-        return dispatch_hub_reload(out);
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/points/remove") == 0) {
-        return dispatch_points_remove(body, out);
-    }
+        if (strcmp(path_buf, "/api/ota") == 0) {
+            return dispatch_ota_get(out);
+        }
+#if CONFIG_MINIHUB_MATTER_ADAPTER
+        if (strcmp(path_buf, "/api/matter/status") == 0) {
+            return dispatch_get_matter_status(out);
+        }
+#endif
+    } else if (mask == HUB_M_POST) {
+        if (extract_module_rpc(path_buf, module_id, sizeof(module_id))) {
+            return dispatch_module_rpc(module_id, body, out);
+        }
+        if (strcmp(path_buf, "/api/command") == 0) {
+            return dispatch_post_command(body, out);
+        }
+        if (strcmp(path_buf, "/api/rules/import") == 0) {
+            return dispatch_rules_import(body, out);
+        }
+        if (strcmp(path_buf, "/api/scenes/import") == 0) {
+            return dispatch_scenes_import(body, out);
+        }
+        if (strcmp(path_buf, "/api/scenes/invoke") == 0) {
+            return dispatch_scenes_invoke(body, out);
+        }
+        if (strcmp(path_buf, "/api/store/config") == 0) {
+            cJSON *req = body && body[0] ? cJSON_Parse(body) : NULL;
+            if (!req) {
+                *out = err_obj("INVALID_ARG", "JSON body required");
+                return ESP_OK;
+            }
+            const cJSON *url = cJSON_GetObjectItem(req, "custom_url");
+            const cJSON *dis = cJSON_GetObjectItem(req, "disable_default");
+            const char *url_s = cJSON_IsString(url) ? url->valuestring : "";
+            bool dis_b = cJSON_IsTrue(dis);
+            esp_err_t err = minihub_store_set_config(url_s, dis_b);
+            cJSON_Delete(req);
+            cJSON *root = cJSON_CreateObject();
+            if (!root) {
+                return ESP_ERR_NO_MEM;
+            }
+            cJSON_AddBoolToObject(root, "ok", err == ESP_OK);
+            if (err != ESP_OK) {
+                cJSON_AddStringToObject(root, "error", esp_err_to_name(err));
+            }
+            *out = root;
+            return ESP_OK;
+        }
+        if (strcmp(path_buf, "/api/ota") == 0) {
+            return dispatch_ota_start(body, out);
+        }
+        if (strcmp(path_buf, "/api/hub/reload") == 0) {
+            return dispatch_hub_reload(out);
+        }
+        if (strcmp(path_buf, "/api/system/reboot") == 0) {
+            return dispatch_system_reboot(body, out);
+        }
+        if (strcmp(path_buf, "/api/points/remove") == 0) {
+            return dispatch_points_remove(body, out);
+        }
 #if CONFIG_MINIHUB_ZIGBEE_SDK
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/zigbee/permit_join") == 0) {
-        return dispatch_zigbee_permit(body, out);
-    }
+        if (strcmp(path_buf, "/api/zigbee/permit_join") == 0) {
+            return dispatch_zigbee_permit(body, out);
+        }
 #endif
 #if CONFIG_MINIHUB_BLE_MESH_SDK
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/ble_mesh/permit_provision") == 0) {
-        return dispatch_ble_mesh_permit(body, out);
-    }
+        if (strcmp(path_buf, "/api/ble_mesh/permit_provision") == 0) {
+            return dispatch_ble_mesh_permit(body, out);
+        }
 #endif
 #if CONFIG_MINIHUB_MATTER_ADAPTER
-    if (mask == HUB_M_GET && strcmp(path_buf, "/api/matter/status") == 0) {
-        return dispatch_get_matter_status(out);
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/matter/commission") == 0) {
-        return dispatch_matter_commission(body, out);
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/matter/devices") == 0) {
-        return dispatch_matter_devices(body, out);
-    }
+        if (strcmp(path_buf, "/api/matter/commission") == 0) {
+            return dispatch_matter_commission(body, out);
+        }
+        if (strcmp(path_buf, "/api/matter/devices") == 0) {
+            return dispatch_matter_devices(body, out);
+        }
 #endif
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/store/install") == 0) {
-        return dispatch_store_op(STORE_OP_INSTALL, body, out);
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/store/upgrade") == 0) {
-        return dispatch_store_op(STORE_OP_UPGRADE, body, out);
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/store/uninstall") == 0) {
-        return dispatch_store_op(STORE_OP_UNINSTALL, body, out);
-    }
-    if (mask == HUB_M_POST && strcmp(path_buf, "/api/store/refresh") == 0) {
-        return dispatch_store_refresh(out);
+        if (strcmp(path_buf, "/api/store/install") == 0) {
+            return dispatch_store_op(STORE_OP_INSTALL, body, out);
+        }
+        if (strcmp(path_buf, "/api/store/upgrade") == 0) {
+            return dispatch_store_op(STORE_OP_UPGRADE, body, out);
+        }
+        if (strcmp(path_buf, "/api/store/uninstall") == 0) {
+            return dispatch_store_op(STORE_OP_UNINSTALL, body, out);
+        }
+        if (strcmp(path_buf, "/api/store/refresh") == 0) {
+            return dispatch_store_refresh(out);
+        }
+    } else if (mask == HUB_M_PUT) {
+        if (strcmp(path_buf, "/api/config/adapters") == 0) {
+            return dispatch_adapters_put(body, out);
+        }
     }
 
     ESP_LOGW(TAG, "allowlisted but unimplemented: %s %s", method, path_buf);
