@@ -893,18 +893,24 @@ function rulesVisibleParams(pointId) {
         const w = cp && (cp.widget || (cp.style && cp.style.widget) || cp.ui_element || '');
         return String(w).replace(/^ui\./, '').replace(/-/g, '_') === 'button';
     }
+    /* Same as device_widgets detail: playing/muted only feed the combined
+     * play/mute toggles — not standalone WHEN parameters (would show as raw
+     * English with no catalog label). */
+    function rulesIsMediaStateParam(name) {
+        return name === 'playing' || name === 'muted';
+    }
     order.forEach(function(name) {
         if (!name || seen[name]) return;
         const lv = live[name];
         if (!lv || lv.visible === false) return;
-        if (rulesIsButtonParam(name)) return;
+        if (rulesIsButtonParam(name) || rulesIsMediaStateParam(name)) return;
         seen[name] = true;
         names.push(name);
     });
     Object.keys(live).forEach(function(name) {
         if (seen[name]) return;
         if (live[name].visible === false) return;
-        if (rulesIsButtonParam(name)) return;
+        if (rulesIsButtonParam(name) || rulesIsMediaStateParam(name)) return;
         names.push(name);
     });
     return names;
@@ -966,12 +972,46 @@ function rulesDeviceOptionsHtml(selected) {
         return rulesCmdDefsForPoint(id, type).length > 0;
     });
     if (selected && ids.indexOf(selected) < 0) ids.unshift(selected);
-    if (!ids.length) ids = [''];
-    return ids.map(function(id) {
+    ids = ids.filter(Boolean);
+    /* Always lead with an empty “pick a device” row so the browser does not
+     * auto-select the first real device, and so command menus stay blank until
+     * a product is chosen. */
+    let html = '<option value=""' + (!selected ? ' selected' : '') + '>' +
+        esc(t('rules.pick_device')) + '</option>';
+    if (!ids.length) {
+        html += '<option value="" disabled>' + esc(t('rules.no_devices')) + '</option>';
+        return html;
+    }
+    return html + ids.map(function(id) {
         const pt = rulesFindPoint(id);
         const label = rulesDeviceLabel(id) + (pt && pt.type ? ' (' + pt.type + ')' : '');
         return '<option value="' + escAttr(id) + '"' + (id === selected ? ' selected' : '') + '>' +
-            esc(label || t('rules.no_devices')) + '</option>';
+            esc(label || id) + '</option>';
+    }).join('');
+}
+
+/** Command <option> list for a THEN/scene action. No device → placeholder only.
+ *  A cmd that is not legal for the selected type is dropped (no orphan turn_on). */
+function rulesCmdOptionsHtml(pid, type, cmd) {
+    const defs = pid ? rulesCmdDefsForPoint(pid, type) : [];
+    let effective = cmd || '';
+    if (!pid) {
+        effective = '';
+    } else if (effective && !defs.some(function (d) { return d.cmd === effective; })) {
+        effective = '';
+    }
+    let html = '<option value=""' + (!effective ? ' selected' : '') + '>' +
+        esc(t('rules.pick_cmd')) + '</option>';
+    if (!pid) {
+        return html;
+    }
+    if (!defs.length) {
+        html += '<option value="" disabled>' + esc(t('rules.no_cmds')) + '</option>';
+        return html;
+    }
+    return html + defs.map(function (d) {
+        return '<option value="' + escAttr(d.cmd) + '"' + (d.cmd === effective ? ' selected' : '') + '>' +
+            esc(rulesCmdLabel(d)) + '</option>';
     }).join('');
 }
 
@@ -1211,7 +1251,7 @@ function rulesThenList(then) {
         steps.push({ actions: [then], delay_after: 0 });
     }
     if (steps.length === 0) {
-        steps.push({ actions: [{ type: 'command', point_id: '', cmd: 'turn_on' }], delay_after: 0 });
+        steps.push({ actions: [{ type: 'command', point_id: '', cmd: '' }], delay_after: 0 });
     }
     return steps;
 }
@@ -1239,18 +1279,21 @@ function rulesEditActionHtml(si, aj, a) {
     if (typ === 'command') {
         const pid = act.point_id || '';
         const type = (rulesFindPoint(pid) || {}).type || '';
-        const defs = rulesCmdDefsForPoint(pid, type);
-        const cmd = act.cmd || (defs[0] && defs[0].cmd) || 'turn_on';
-        const cmdOpts = defs.map(function (d) {
-            return '<option value="' + d.cmd + '"' + (d.cmd === cmd ? ' selected' : '') + '>' + esc(rulesCmdLabel(d)) + '</option>';
-        }).join('');
-        const extra = (rulesCmdDefFor(cmd, type) == null) ?
-            '<option value="' + escAttr(cmd) + '" selected>' + esc(cmd) + '</option>' : '';
+        let cmd = act.cmd || '';
+        if (!pid) {
+            cmd = '';
+        } else if (cmd && rulesCmdDefFor(cmd, type) == null) {
+            /* Stale default (e.g. turn_on on a speaker) — drop it; do not paint
+             * an orphan option. The user picks from the type's real list. */
+            cmd = '';
+        }
         html += '<div><label>' + t('rules.target_device') + '</label>' +
-            rulesSelectHtml('re-step-' + idx + '-act-' + j + '-pid', rulesDeviceOptionsHtml(pid), 'rulesEditRerenderThen()') + '</div>';
+            rulesSelectHtml('re-step-' + idx + '-act-' + j + '-pid', rulesDeviceOptionsHtml(pid),
+                'rulesEditOnDeviceChange(' + idx + ',' + j + ')') + '</div>';
         html += '<div><label>' + t('rules.field_cmd') + '</label>' +
-            '<select id="re-step-' + idx + '-act-' + j + '-cmd" onchange="rulesEditRerenderThen()">' + extra + cmdOpts + '</select></div>';
-        const active = rulesCmdDefFor(cmd, type);
+            '<select id="re-step-' + idx + '-act-' + j + '-cmd" onchange="rulesEditRerenderThen()">' +
+            rulesCmdOptionsHtml(pid, type, cmd) + '</select></div>';
+        const active = cmd ? rulesCmdDefFor(cmd, type) : null;
         if (active && active.value) {
             const curVal = rulesActionParamValue(act, active.param);
             /* Resolved exactly like the WHEN row: the device picked in this row
@@ -1384,9 +1427,21 @@ function rulesEditSyncThenFoot() {
     foot.innerHTML = rulesEditThenFootHtml(rulesEditSteps(rulesEditCollectThen()));
 }
 
+function rulesEditOnDeviceChange(si, aj) {
+    /* Collect first so the new point_id is read from the DOM, then clear cmd /
+     * params so the next paint shows only that product's real commands. */
+    const steps = rulesEditCollectThen();
+    const step = steps[si];
+    if (step && step.actions && step.actions[aj] && step.actions[aj].type === 'command') {
+        step.actions[aj].cmd = '';
+        delete step.actions[aj].params;
+    }
+    rulesEditRerenderThenList(steps);
+}
+
 function rulesEditCollectThen() {
     const box = document.getElementById('re-then-box');
-    if (!box) return [{ actions: [{ type: 'command', point_id: '', cmd: 'turn_on' }], delay_after: 0 }];
+    if (!box) return [{ actions: [{ type: 'command', point_id: '', cmd: '' }], delay_after: 0 }];
     const steps = [];
     /* Only step cards carry `.rule-step-card`; action rows also set data-step-i,
      * so selecting by that attribute would count every action as its own step. */
@@ -1465,7 +1520,7 @@ function rulesEditCollectThen() {
         steps.push({ actions: actions, delay_after: delaySec });
     });
     if (steps.length === 0) {
-        steps.push({ actions: [{ type: 'command', point_id: '', cmd: 'turn_on' }], delay_after: 0 });
+        steps.push({ actions: [{ type: 'command', point_id: '', cmd: '' }], delay_after: 0 });
     }
     return steps;
 }
@@ -1491,8 +1546,7 @@ function rulesEditAddStep() {
         rulesEditSyncThenFoot();
         return;
     }
-    const first = (rulesDeviceInstances()[0] || {}).point_id || '';
-    steps.push({ actions: [{ type: 'command', point_id: first, cmd: 'turn_on' }] });
+    steps.push({ actions: [{ type: 'command', point_id: '', cmd: '' }] });
     rulesEditRerenderThenList(steps);
 }
 
@@ -1515,11 +1569,10 @@ function rulesEditAddStepAction(i) {
         toast(t('rules.err_action_max', { n: MAX_ACTIONS_PER_STEP_WEB }));
         return;
     }
-    const first = (rulesDeviceInstances()[0] || {}).point_id || '';
     /* Insert before a trailing wait so the card reads in execution order. */
     const tail = step.actions[step.actions.length - 1];
     const at = (tail && tail.type === 'delay') ? step.actions.length - 1 : step.actions.length;
-    step.actions.splice(at, 0, { type: 'command', point_id: first, cmd: 'turn_on' });
+    step.actions.splice(at, 0, { type: 'command', point_id: '', cmd: '' });
     rulesEditRerenderThenList(steps);
 }
 
@@ -1579,7 +1632,7 @@ function rulesEditRender(rule) {
         },
         if: [],
         then: [{
-            actions: [{ type: 'command', point_id: defaultPid, cmd: 'turn_on' }],
+            actions: [{ type: 'command', point_id: '', cmd: '' }],
             delay_after: 0
         }]
     };

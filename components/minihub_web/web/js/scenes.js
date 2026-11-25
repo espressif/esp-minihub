@@ -38,7 +38,7 @@ function scenesNormalize(sc) {
         steps = sc.steps.map(function (s) {
             return {
                 actions: (Array.isArray(s.actions) ? s.actions : []).map(function (a) {
-                    return { point_id: a.point_id || '', cmd: a.cmd || 'turn_on', params: scenesMigrateActionParams(a.cmd, a.params) };
+                    return { point_id: a.point_id || '', cmd: a.cmd || '', params: scenesMigrateActionParams(a.cmd, a.params) };
                 }),
                 loop: (s.loop > 0 ? s.loop : 1),
                 delay_after_ms: (s.delay_after_ms != null ? s.delay_after_ms : 0)
@@ -49,7 +49,7 @@ function scenesNormalize(sc) {
          * trailing delay of that step (preserves serial semantics). */
         steps = sc.commands.map(function (c) {
             return {
-                actions: [{ point_id: c.point_id || '', cmd: c.cmd || 'turn_on', params: scenesMigrateActionParams(c.cmd, c.params) }],
+                actions: [{ point_id: c.point_id || '', cmd: c.cmd || '', params: scenesMigrateActionParams(c.cmd, c.params) }],
                 loop: 1,
                 delay_after_ms: (c.delay_ms != null ? c.delay_ms : 0)
             };
@@ -65,7 +65,7 @@ function scenesNormalize(sc) {
 }
 
 function scenesBlankStep() {
-    return { actions: [{ point_id: '', cmd: 'turn_on', params: null }], loop: 1, delay_after_ms: 0 };
+    return { actions: [{ point_id: '', cmd: '', params: null }], loop: 1, delay_after_ms: 0 };
 }
 
 async function loadScenes() {
@@ -251,35 +251,21 @@ function scenesEditCancel() {
 function scenesActRow(act, si, aj) {
     const pid = act.point_id || '';
     const type = (rulesFindPoint(pid) || {}).type || '';
-    let defs = rulesCmdDefsForType(type);
-    /* No device chosen yet: there is no catalog type to derive commands from, so
-     * fall back to the generic power commands with localized labels instead of the
-     * raw stored cmd string (issue: switch step initially showed "turn_on"). */
-    if (!pid && defs.length === 0) {
-        defs = [
-            { cmd: 'turn_on', labelKey: 'rules.opt_on' },
-            { cmd: 'turn_off', labelKey: 'rules.opt_off' },
-            { cmd: 'toggle', labelKey: 'rules.opt_toggle' }
-        ];
+    let cmd = act.cmd || '';
+    if (!pid) {
+        cmd = '';
+    } else if (cmd && rulesCmdDefFor(cmd, type) == null) {
+        /* Drop stale defaults (e.g. turn_on on a speaker) instead of painting
+         * an orphan option. */
+        cmd = '';
     }
-    const cmd = act.cmd || (defs[0] && defs[0].cmd) || 'turn_on';
-    const cmdOpts = defs.map(function (d) {
-        return '<option value="' + d.cmd + '"' + (d.cmd === cmd ? ' selected' : '') + '>' + esc(rulesCmdLabel(d)) + '</option>';
-    }).join('');
-    /* Last-resort fallback for a stored cmd not in the current command list: show
-     * it with a localized label when possible rather than the raw command string. */
-    const inDefs = defs.some(function (d) { return d.cmd === cmd; });
-    const extraLabel = (cmd === 'turn_on' || cmd === 'turn_off' || cmd === 'toggle')
-        ? t(cmd === 'turn_on' ? 'rules.opt_on' : cmd === 'turn_off' ? 'rules.opt_off' : 'rules.opt_toggle')
-        : cmd;
-    const extra = (!inDefs)
-        ? '<option value="' + escAttr(cmd) + '" selected>' + esc(extraLabel) + '</option>' : '';
     let h = '<div class="rule-then-row" data-step="' + si + '" data-act="' + aj + '"><div class="rule-then-fields">';
     h += '<div><label>' + t('scenes.field_point') + '</label>' +
         rulesSelectHtml('sc-step-' + si + '-act-' + aj + '-pid', rulesDeviceOptionsHtml(pid), 'scenesEditOnDeviceChange(' + si + ',' + aj + ')') + '</div>';
     h += '<div><label>' + t('scenes.field_cmd') + '</label>' +
-        '<select id="sc-step-' + si + '-act-' + aj + '-cmd" onchange="scenesEditOnCmdChange(' + si + ',' + aj + ')">' + extra + cmdOpts + '</select></div>';
-    const def = rulesCmdDefFor(cmd, type);
+        '<select id="sc-step-' + si + '-act-' + aj + '-cmd" onchange="scenesEditOnCmdChange(' + si + ',' + aj + ')">' +
+        rulesCmdOptionsHtml(pid, type, cmd) + '</select></div>';
+    const def = cmd ? rulesCmdDefFor(cmd, type) : null;
     if (def && def.value) {
         const curVal = (def.param && act.params && act.params[def.param] != null) ? act.params[def.param] : '';
         const rng = rulesActionValueRange(pid, def.param, def);
@@ -371,7 +357,13 @@ function scenesEditRender() {
 /* ---- editor interactions ---- */
 function scenesEditOnDeviceChange(si, aj) {
     const el = document.getElementById('sc-step-' + si + '-act-' + aj + '-pid');
-    if (el) _scEdit.steps[si].actions[aj].point_id = el.value;
+    if (el) {
+        const a = _scEdit.steps[si].actions[aj];
+        a.point_id = el.value;
+        /* Clear command so the next paint shows only this product's real cmds. */
+        a.cmd = '';
+        a.params = null;
+    }
     scenesEditPaintSteps();
 }
 function scenesEditOnCmdChange(si, aj) {
@@ -414,7 +406,7 @@ function scenesEditAddAction(si) {
         toast(t('scenes.err_action_max', { n: SC_MAX_ACTIONS }));
         return;
     }
-    _scEdit.steps[si].actions.push({ point_id: '', cmd: 'turn_on', params: null });
+    _scEdit.steps[si].actions.push({ point_id: '', cmd: '', params: null });
     scenesEditPaintSteps();
 }
 function scenesEditRmAction(si, aj) {
