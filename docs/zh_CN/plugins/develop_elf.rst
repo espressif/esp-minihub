@@ -198,7 +198,7 @@ ELF 常用脚本
      "core_api_max": 1
    }
 
-``requires`` 写法与 JS 相同：列出原生适配器依赖的 Host 能力（ ``Zigbee`` 、
+``requires`` 写法与 JS 相同：列出原生适配器依赖的 Host 能力（ ``WiFi`` 、 ``WiFi_SoftAP`` 、 ``Zigbee`` 、
 ``BLE`` 、 ``BLE_mesh`` 、 ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、
 ``Modbus`` ），不需要时写 ``[]`` 。``BLE`` 与 ``BLE_mesh`` 都跟随 ``ble_mesh``
 适配器。打包会把它抄进 ``catalog.json`` ，供 ``caps=`` 过滤。

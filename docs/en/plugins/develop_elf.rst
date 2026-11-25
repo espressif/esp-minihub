@@ -217,7 +217,7 @@ Directory layout (scaffold ``my_native``)
    }
 
 Set ``requires`` the same way as for JS: list every Host capability token the
-native adapter needs (``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``,
+native adapter needs (``WiFi``, ``WiFi_SoftAP``, ``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``,
 ``Matter``, ``MQTT_Broker``, ``Modbus``), or ``[]`` when it needs none. ``BLE``
 and ``BLE_mesh`` both follow the ``ble_mesh`` adapter. Pack copies the list
 onto ``catalog.json`` for ``caps=`` filtering.

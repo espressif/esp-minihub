@@ -79,9 +79,11 @@ JS 模块既不是浏览器页面，也不是 Node 进程。
    }
 
 **``requires`` 要显式写清楚。** 打包时它会进 ``catalog.json`` ，Hub 用
-``GET /api/catalog`` 上的 ``caps=`` 按它过滤。取值来自 ``Zigbee`` 、 ``BLE`` 、
+``GET /api/catalog`` 上的 ``caps=`` 按它过滤。取值来自 ``WiFi`` 、 ``WiFi_SoftAP`` 、 ``Zigbee`` 、 ``BLE`` 、
 ``BLE_mesh`` 、
-``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` 。``BLE`` 与
+``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` 。``WiFi`` 对应
+STA 上行适配器； ``WiFi_SoftAP`` 预留给长期 SoftAP / 作路由器模式（该模式落地前
+为关）。``BLE`` 与
 ``BLE_mesh`` 都跟随 ``ble_mesh`` 适配器（``host.ble`` 插件写 ``["BLE"]``）。
 ``[]`` 表示不依赖这些协议栈。列出的任一项未编进固件或未启用时，商店不把尚未安装的模块放进可安装列表；
 已经安装的模块下次上电不启动，并标为当前固件不支持。不要和 ``meta.json`` 的
