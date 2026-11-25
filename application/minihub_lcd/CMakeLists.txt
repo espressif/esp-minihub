@@ -61,3 +61,14 @@ if(TARGET vibe_mode)
   esptool_py_flash_target_image(flash vibe_mode "${MINIHUB_FACTORY_OFFSET}"
                                 "${CMAKE_BINARY_DIR}/vibe_mode/vibe_mode.bin")
 endif()
+
+# Ship next to the app image for deploy.sh / OTA packages.
+if(EXISTS "${CMAKE_SOURCE_DIR}/release_notes.txt")
+  add_custom_command(
+    TARGET app POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/release_notes.txt"
+            "${CMAKE_BINARY_DIR}/release_notes.txt"
+    COMMENT "Copy release_notes.txt beside firmware"
+    VERBATIM)
+endif()

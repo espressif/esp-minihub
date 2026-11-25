@@ -41,6 +41,7 @@
 #   --fw-version <ver>   Firmwares/<chip>/<ver>/ (default: CONFIG_MINIHUB_VERSION, else git describe)
 #   --fw-chip <chip>     chip folder (default ESP32S31)
 #   --fw-note <file>     file copied to Firmwares/<chip>/<version>/release_notes.txt
+#                        (default: application/<app>/release_notes.txt, else build/)
 #   --web-version <ver>  Webs/<ver>/ (default: v + CONFIG_MINIHUB_WEB_VERSION, else v + git describe)
 #   --ui-version <ver>   LCD_UI/<ver>/ (default: v + CONFIG_MINIHUB_LCD_UI_VERSION, else v + git describe)
 #   --no-firmware        skip the firmware publish step
@@ -207,6 +208,8 @@ else
     cp -f "$FW_BIN" "$FW_DEST_DIR/$APP.bin"
     if [[ -n "$FW_NOTE" && -f "$FW_NOTE" ]]; then
       cp -f "$FW_NOTE" "$FW_DEST_DIR/release_notes.txt"
+    elif [[ -f "$ROOT/application/$APP/release_notes.txt" ]]; then
+      cp -f "$ROOT/application/$APP/release_notes.txt" "$FW_DEST_DIR/release_notes.txt"
     elif [[ -f "$ROOT/application/$APP/build/release_notes.txt" ]]; then
       cp -f "$ROOT/application/$APP/build/release_notes.txt" "$FW_DEST_DIR/release_notes.txt"
     else

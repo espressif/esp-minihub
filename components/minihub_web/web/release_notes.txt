@@ -1,1 +1,1 @@
-v0.1.0
+Please see https://docs.espressif.com/projects/esp-minihub/en/latest/releases/v0_1_0.html

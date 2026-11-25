@@ -97,15 +97,9 @@ Step-by-step: create ``myhub``
    Factory checks and automation scripts are not linked into the firmware; they drive
    the Hub over REST: :doc:`api/host_rest`.
 
-   The device "firmware version" (OTA comparison, ``Firmwares/<chip>/<ver>/``)
-   and the product/sidebar version (shown as ``v<ver>`` in the Web UI) are the
-   SAME value, ``MINIHUB_VERSION`` (default ``0.1.0-dev``). Git describe still shows
-   separately as the commit line.
-
-   ``MINIHUB_WEB_VERSION`` stamps ``Webs/v<ver>/`` and ``window.mhWebVersion``.
-   ``MINIHUB_LCD_UI_VERSION`` stamps ``LCD_UI/v<ver>/`` and ``/data/ui/version.txt``.
-   Both default to ``MINIHUB_VERSION``. ``tools/deploy.sh`` and the Host build
-   read the same three values. See :doc:`versions`.
+   Set ``MINIHUB_VERSION`` in :file:`configs/sdkconfig/common.defaults`.
+   ``MINIHUB_WEB_VERSION`` and ``MINIHUB_LCD_UI_VERSION`` default to that value.
+   See :doc:`versions`.
 
 6. **Build and flash**
 

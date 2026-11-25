@@ -1,0 +1,46 @@
+MiniHub 0.1.0
+=============
+
+:link_to_translation:`zh_CN:[中文]`
+
+First public MiniHub Host release. Chip: **ESP32-S31** (ESP-IDF 6.2 preview).
+Products: ``minihub`` (Ethernet reference) and ``minihub_lcd`` (Korvo-1 display).
+
+Supported boards
+----------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 44 18 38
+
+   * - Board id (``CONFIG_MINIHUB_BOARD``)
+     - Product
+     - Notes
+   * - ``ESP32-S31-Function-Coreboard-1``
+     - ``minihub``
+     - Ethernet hardware
+   * - ``ESP32-S31-Korvo-1``
+     - ``minihub_lcd``
+     - LCD touch hardware
+
+Features
+--------
+
+* Ethernet reference board and LCD touch hardware
+* Local setup from the Web console or the LCD
+* Router uplink over Wi-Fi or Ethernet
+* BLE Mesh, Zigbee, Thread, and Matter devices
+* Built-in MQTT broker; Store sample plugins for ESPHome and Tasmota
+* Third-party platforms; Store sample plugin ``miot_js``
+* Separate upgrades for firmware, Web, device icons (assets), and LCD UI
+* On-device rules and scenes
+* Install plugins from MiniHub Store
+* Enable and configure adapters on Web and LCD at run time
+* Scan a QR code on the LCD to continue setup on a phone
+* RainMaker cloud for remote control
+* On-device MCP for PC and other agents
+* LAN REST and WebSocket for scripts and automation
+* SoftAP provisioning when there is no uplink yet
+* Stage firmware on USB storage and finish with Vibe Mode
+
+See also: :doc:`../getting_started`, :doc:`../web_console`.

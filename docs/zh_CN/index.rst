@@ -99,6 +99,7 @@ API、WebSocket 事件、本机规则引擎以及 :doc:`radios` 中所列适配�
    web_console
    production
    versions
+   releases/index
    security
 
 .. toctree::
