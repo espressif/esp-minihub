@@ -102,6 +102,7 @@ Upstream platform docs are not duplicated here:
    web_console
    production
    versions
+   releases/index
    security
 
 .. toctree::

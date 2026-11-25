@@ -1,0 +1,46 @@
+MiniHub 0.1.0
+=============
+
+:link_to_translation:`en:[English]`
+
+MiniHub Host 首次公开发布。目标芯片 **ESP32-S31** （ESP-IDF 6.2 预览）。
+产品： ``minihub`` （以太网参考板）与 ``minihub_lcd`` （Korvo-1 触摸屏）。
+
+支持的开发板
+------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 44 18 38
+
+   * - 板级 id（ ``CONFIG_MINIHUB_BOARD`` ）
+     - 产品
+     - 说明
+   * - ``ESP32-S31-Function-Coreboard-1``
+     - ``minihub``
+     - 以太网硬件
+   * - ``ESP32-S31-Korvo-1``
+     - ``minihub_lcd``
+     - LCD 触摸屏硬件
+
+功能
+----
+
+* 支持以太网参考板与 LCD 触摸屏硬件
+* 支持通过 Web 控制台或 LCD 完成本地配置
+* 支持 Wi-Fi 或以太网接入路由器
+* 支持 BLE Mesh、Zigbee、Thread、Matter 设备
+* 支持内置 MQTT Broker；商店提供 ESPHome、Tasmota 样例插件
+* 支持对接第三方平台；商店提供 ``miot_js`` 样例插件
+* 支持固件、Web、设备图标资源、LCD UI 分别升级
+* 支持本机规则与场景联动
+* 支持从 MiniHub Store 安装插件
+* 支持在 Web 与 LCD 上动态启用、配置适配器
+* 支持在 LCD 扫码打开 Web，并在手机上继续操作
+* 支持对接 RainMaker 云远程控制设备
+* 支持本机 MCP，便于 PC 等 Agent 控制 MiniHub
+* 支持局域网 REST 与 WebSocket，便于脚本与自动化
+* 支持无上行时 SoftAP 配网
+* 支持 USB 外存暂存固件，配合 Vibe Mode 完成本地升级
+
+另见： :doc:`../getting_started` 、 :doc:`../web_console` 。

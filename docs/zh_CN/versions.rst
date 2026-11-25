@@ -3,18 +3,17 @@
 
 :link_to_translation:`en:[English]`
 
-本指南对应 |product_version| —— 就是设备自己上报的那个字符串。把它和
-``GET /api/system`` 里的 commit 一起读：版本说的是产品作者声明的版本，commit 说的是
-被编译的那棵树。
+把设备版本和 ``GET /api/system`` 里的 commit 一起读：版本是产品作者设定的号，
+commit 是被编译的那棵树。
 
 一个设备一个号，三条发布线
 --------------------------
 
-设备版本是 ``MINIHUB_VERSION`` ，在 :file:`cmake/minihub_bundle/Kconfig.projbuild`
-里设一次（缺省 ``0.1.0-dev`` ）。同一个字符串就是固件上报的 ``firmware_version`` ，
-是 ``tools/deploy.sh`` 拿来命名 ``Firmwares/<chip>/<version>/`` 目录的那个号，也是
-控制台侧栏显示的内容。它不是 ``git describe`` ：commit 单独上报，所以「版本号没动的
-重新编译」会表现为同一版本下的另一个 commit。
+设备版本是 ``MINIHUB_VERSION`` （固件 ``firmware_version`` 与
+``tools/deploy.sh`` 的 ``Firmwares/<chip>/<version>/`` ）。
+在 :file:`configs/sdkconfig/common.defaults` 里改。
+Kconfig 符号在 :file:`cmake/minihub_bundle/Kconfig.projbuild` 。它不是
+``git describe`` ：commit 单独上报。
 
 控制台版本是 ``MINIHUB_WEB_VERSION`` （ :file:`components/minihub_web/Kconfig.minihub` ）。
 固件构建与 ``tools/deploy.sh`` 都读它；部署目录名为 ``Webs/v<ver>/`` ，写入包内的
@@ -33,7 +32,6 @@ LCD Brookesia UI（``/data/ui``）版本是 ``MINIHUB_LCD_UI_VERSION``
 
    curl -s -H "Authorization: Bearer $MINIHUB_TOKEN" http://HUB/api/system \
      | python3 -m json.tool   # version、commit
-   # 控制台自己的值是 window.mhWebVersion ，侧栏也会显示
 
 固件与 Web / LCD UI 可分步升级。各界面只暴露本通道加固件：
 
@@ -62,11 +60,11 @@ LCD Brookesia UI（``/data/ui``）版本是 ``MINIHUB_LCD_UI_VERSION``
 发布说明在哪
 ------------
 
-没有汇总式的 changelog。每个发布出去的固件自带
-``Firmwares/<chip>/<version>/release_notes.txt`` （ ``tools/publish_firmware.py``
-把文件写在固件旁边），Hub 会在升级界面和 ``GET /api/update/notes`` 里显示被给出的那一份
-（ :doc:`ota` ）。需要 changelog 的产品须自行按版本汇总这些文件 —— 除此之外没有
-别处记录两次构建之间改了什么。
+正式发布说明在编程指南 :doc:`releases/index` 。部署包旁仍带短
+``release_notes.txt`` ，指向该页（Hub 升级界面与 ``GET /api/update/notes`` ）。
+固件说明在 :file:`application/<name>/release_notes.txt` ，构建时拷到应用镜像旁；
+``tools/deploy.sh`` 发布到 ``Firmwares/<chip>/<version>/`` 。Web / LCD UI 说明随
+各自资源树发布到 ``Webs/<version>/`` 或 ``LCD_UI/<version>/`` 。
 
 钉住的工具链
 ------------
@@ -75,5 +73,5 @@ LCD Brookesia UI（``/data/ui``）版本是 ``MINIHUB_LCD_UI_VERSION``
 补丁说明：它会改动构建步骤、分区假设，有时还有内存预算，所以对你自己的移植来说，
 「指南换到新的 IDF」就是一次版本分界。
 
-相关： :doc:`getting_started`、 :doc:`production`、 :doc:`ota`、 :doc:`web_console`、
-:doc:`api/deploy_index`、 :doc:`limits` 。
+相关： :doc:`getting_started` 、 :doc:`production` 、 :doc:`ota` 、 :doc:`web_console` 、
+:doc:`api/deploy_index` 、 :doc:`limits` 、 :doc:`releases/index` 。

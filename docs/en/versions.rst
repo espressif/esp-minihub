@@ -3,20 +3,17 @@ Versions
 
 :link_to_translation:`zh_CN:[中文]`
 
-This guide documents |product_version| — the same string the device reports. Read
-it together with the commit line in ``GET /api/system``: the version says what the
-product author declared, the commit says which tree was built.
+Read the device version together with the commit line in ``GET /api/system``: the
+version is what the product author set, the commit is which tree was built.
 
 One number per device, three release trains
 -------------------------------------------
 
-``MINIHUB_VERSION`` is the device version, set once in
-:file:`cmake/minihub_bundle/Kconfig.projbuild` (default ``0.1.0-dev``). The same string
-is what the firmware reports as ``firmware_version``, what ``tools/deploy.sh`` names
-the ``Firmwares/<chip>/<version>/`` folder with, and what the console shows in the
-sidebar. It is not ``git describe``: the commit is reported separately, so a
-rebuild without a version bump is visible as a different commit under the same
-version.
+``MINIHUB_VERSION`` is the device version (firmware ``firmware_version`` and
+``Firmwares/<chip>/<version>/`` for ``tools/deploy.sh``).
+Set it in :file:`configs/sdkconfig/common.defaults`.
+The Kconfig symbol lives in :file:`cmake/minihub_bundle/Kconfig.projbuild`.
+It is not ``git describe``: the commit is reported separately.
 
 The console version is ``MINIHUB_WEB_VERSION``
 (:file:`components/minihub_web/Kconfig.minihub`). The firmware build and
@@ -38,7 +35,6 @@ a device to this guide:
 
    curl -s -H "Authorization: Bearer $MINIHUB_TOKEN" http://HUB/api/system \
      | python3 -m json.tool   # version, commit
-   # the console's own value is in window.mhWebVersion, shown in the sidebar
 
 Firmware, Web, and LCD UI can update independently. Each surface only offers its
 own channels plus firmware:
@@ -72,12 +68,14 @@ compared by the catalog's own version field, and a downgrade is not accepted by
 Where the notes live
 --------------------
 
-There is no collected changelog. Each published firmware carries its own
-``Firmwares/<chip>/<version>/release_notes.txt`` (``tools/publish_firmware.py``
-writes the file next to the image), and a Hub shows the notes of what it is being
-offered through the update UI and ``GET /api/update/notes`` (:doc:`ota`). A product
-that needs a changelog assembles it from those per-version files — nothing else
-records what changed between two builds.
+Canonical release notes live in the programming guide under
+:doc:`releases/index`. Each deploy package still carries a short
+``release_notes.txt`` that points at that page (Hub update UI and
+``GET /api/update/notes``). Firmware notes live in
+:file:`application/<name>/release_notes.txt` and are copied next to the app
+image at build time; ``tools/deploy.sh`` publishes them under
+``Firmwares/<chip>/<version>/``. Web and LCD UI notes live with those asset
+trees and publish under ``Webs/<version>/`` or ``LCD_UI/<version>/``.
 
 Pinned toolchain
 ----------------
@@ -88,4 +86,4 @@ build instructions, the partition assumptions and sometimes the memory budget, s
 treat "the guide moved to a new IDF" as a version boundary for your own port.
 
 Related: :doc:`getting_started`, :doc:`production`, :doc:`ota`, :doc:`web_console`,
-:doc:`api/deploy_index`, :doc:`limits`.
+:doc:`api/deploy_index`, :doc:`limits`, :doc:`releases/index`.
