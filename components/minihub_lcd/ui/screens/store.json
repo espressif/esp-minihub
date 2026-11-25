@@ -58,7 +58,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -93,7 +93,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -128,7 +128,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -163,7 +163,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -192,7 +192,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -227,7 +227,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -262,7 +262,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -289,6 +289,18 @@
             "width": "wrap",
             "height": "wrap",
             "flexGrow": 1
+          }
+        },
+        {
+          "type": "container",
+          "id": "web_qr_slot",
+          "placement": {
+            "width": "100dp",
+            "height": "84dp"
+          },
+          "style": {
+            "bgColor": "#0e1320",
+            "radius": "6dp"
           }
         },
         {

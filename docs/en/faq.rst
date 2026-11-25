@@ -89,7 +89,7 @@ Where is adapters.json?
 Runtime copy: ``/data/config/adapters.json`` on device. Factory JSON:
 ``application/minihub/configs/adapters.json`` or product-specific tree. This file
 is runtime config in ``/data/config`` and is NOT covered by the online update
-(only firmware, the web console, and device assets are); it ships in the
+(firmware, web console, LCD UI, and device assets are); it ships in the
 factory/storage image, or edit via REST: ``PUT /api/config/adapters``, then
 ``POST /api/hub/reload`` if needed.
 Full JSON schemas: :doc:`data_model`.

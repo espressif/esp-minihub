@@ -20,4 +20,14 @@ menu "LCD UI"
             high (the default is 30 s); the coalesce window that actually gates
             redraws is fixed at 100 ms in the firmware.
 
+    config MINIHUB_LCD_UI_VERSION
+        string "LCD UI bundle version"
+        depends on MINIHUB_LCD_UI
+        default MINIHUB_VERSION
+        help
+            Version stamped into /data/ui/version.txt and published under
+            LCD_UI/v<ver>/ for GET /api/ui. Independent of firmware and web so a
+            panel-only fix can ship without bumping either. Defaults to the
+            product MINIHUB_VERSION.
+
 endmenu

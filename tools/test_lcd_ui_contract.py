@@ -324,7 +324,7 @@ class DeviceTemplateTest(unittest.TestCase):
         self.assertEqual(spec["parent"], "/overview/overview_main/device_list")
         self.assertEqual(
             spec["children"],
-            ["icon", "name", "type", "meta", "val", "rename_btn"])
+            ["icon", "name", "type", "meta", "val", "power_sw", "delete_btn", "rename_btn"])
         self.assertNotIn("DEVICE_CARD", c["view_patterns"])
 
     def test_template_exists_and_has_no_indexed_slots(self):
@@ -364,6 +364,49 @@ class DeviceTemplateTest(unittest.TestCase):
         self.assertEqual("dev_", spec["instance_format"].split("%d")[0])
         self.assertEqual(spec["instance_prefix"], spec["instance_format"].split("%d")[0])
 
+    def test_device_card_is_wide_enough_for_two_per_row(self):
+        text = (UI / "templates" / "device_card.json").read_text(encoding="utf-8")
+        self.assertIn('"width": "320dp"', text)
+
+    def test_device_param_row_template_and_detail_modal(self):
+        c = load_contract()
+        spec = c["templates"]["DEVICE_PARAM_ROW"]
+        self.assertEqual(spec["template_id"], "device_param_row")
+        self.assertEqual(spec["count_key"], "param_slots")
+        self.assertEqual(c["counts"]["param_slots"], 8)
+        self.assertEqual(
+            spec["parent"],
+            "/overview/device_detail_modal/device_detail_card/device_detail_params")
+        paths, templates, actions = view_paths()
+        self.assertIn("device_param_row", templates)
+        self.assertIn("/overview/device_detail_modal", paths)
+        for name in ("device_detail_close", "device_detail_info", "device_param_toggle",
+                     "device_param_slider", "device_param_dropdown", "device_param_button"):
+            self.assertIn(name, actions)
+        self.assertIn("/overview/device_detail_modal/device_detail_card/device_detail_info", paths)
+        src = LCD_APP_CPP.read_text(encoding="utf-8")
+        self.assertIn("LCD_TEMPLATE_DEVICE_PARAM_ROW_ID", src)
+        self.assertIn("LCD_ACTION_DEVICE_DETAIL_CLOSE", src)
+        self.assertIn("refresh_device_detail", src)
+
+    def test_template_image_refs_exist_in_image_sets(self):
+        """Brookesia fails UI load if a template default `${image.id}` is missing."""
+        ids: set[str] = set()
+        for asset in ui_assets():
+            if asset.get("type") != "imageSet":
+                continue
+            for img in asset.get("images") or []:
+                if isinstance(img, dict) and isinstance(img.get("id"), str):
+                    ids.add(img["id"])
+        refs = set()
+        for path in (UI / "templates").glob("*.json"):
+            text = path.read_text(encoding="utf-8")
+            refs.update(re.findall(r"\$\{image\.([A-Za-z0-9_-]+)\}", text))
+        missing = sorted(refs - ids)
+        self.assertEqual(
+            [], missing,
+            f"template image refs missing from imageSet assets: {missing}")
+
 
 class RefreshWiringTest(unittest.TestCase):
     def test_lcd_subscribes_to_the_point_events(self):
@@ -396,26 +439,26 @@ class RefreshWiringTest(unittest.TestCase):
 
 
 class FontContractTest(unittest.TestCase):
-    def test_builtin_cjk_is_on_in_the_recipe(self):
+    def test_builtin_han_sans_is_off_in_the_recipe(self):
+        """FreeType-only CJK: built-in Han Sans subsets are not compiled in."""
         table = composed("lcd")
-        self.assertEqual(table.get("CONFIG_LV_FONT_SOURCE_HAN_SANS_SC_16_CJK"), "y")
+        self.assertNotEqual(table.get("CONFIG_LV_FONT_SOURCE_HAN_SANS_SC_14_CJK"), "y")
+        self.assertNotEqual(table.get("CONFIG_LV_FONT_SOURCE_HAN_SANS_SC_16_CJK"), "y")
 
-    def test_native_font_declared_and_registered(self):
+    def test_freetype_sc_font_is_required(self):
         src = (LCD / "minihub_lcd_app.cpp").read_text(encoding="utf-8")
-        self.assertIn("LV_FONT_DECLARE(lv_font_source_han_sans_sc_16_cjk)", src)
-        self.assertIn('"cjk_16"', src)
-        self.assertIn("&lv_font_source_han_sans_sc_16_cjk", src)
-
-    def test_missing_otf_falls_back_to_builtin_cjk(self):
-        src = (LCD / "minihub_lcd_app.cpp").read_text(encoding="utf-8")
-        self.assertIn('const char *fallback = "cjk_16";', src)
+        self.assertIn("/data/ui/fonts/minihub_sc.otf", src)
+        self.assertIn('sc.id = "sc_14"', src)
+        self.assertIn('set_default_font_for_language("zh", "sc_14")', src)
+        self.assertNotIn('"cjk_16"', src)
+        self.assertNotIn("lv_font_source_han_sans_sc_16_cjk", src)
 
     def test_zh_default_font_never_uses_latin_only(self):
         src = (LCD / "minihub_lcd_app.cpp").read_text(encoding="utf-8")
         block = src[src.index("void bind_ui_font_language("):]
         block = block[:block.index("\n}")]
         self.assertNotIn('set_default_font_for_language("zh", "latin_14")', block)
-        self.assertNotIn('const char *font_id = "latin_14";', block)
+        self.assertIn('set_default_font_for_language("zh", "sc_14")', block)
 
 
 class FreezeWindowTest(unittest.TestCase):

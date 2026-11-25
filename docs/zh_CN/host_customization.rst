@@ -92,11 +92,10 @@ Core 是共用的，一台出货设备和通用 Host 的差别只有几处：跑
    前面加 ``v``）。``MINIHUB_VERSION`` 用于 OTA 比较、``Firmwares/<chip>/<ver>/``
    文件夹，并在侧栏/系统页显示为 ``v<ver>``；Git 描述仍单独显示为提交号。
 
-   Web 版本单独由 ``MINIHUB_WEB_VERSION`` 管理（``Webs/v<ver>/`` 文件夹与
-   ``window.mhWebVersion``）。Web 与固件发布常不同步，可在 ``menuconfig`` 里单独
-   设置，默认跟随 ``MINIHUB_VERSION``；``tools/deploy.sh`` 发布时分别读取这两个值，
-   Host 编译时也把同一个值打进 ``storage`` 里的控制台。源码树上没有第二处 Web 版本，
-   详见 :doc:`versions`。
+   ``MINIHUB_WEB_VERSION`` 对应 ``Webs/v<ver>/`` 与 ``window.mhWebVersion`` 。
+   ``MINIHUB_LCD_UI_VERSION`` 对应 ``LCD_UI/v<ver>/`` 与 ``/data/ui/version.txt`` 。
+   二者缺省等于 ``MINIHUB_VERSION`` 。``tools/deploy.sh`` 与 Host 构建读同一组三个值。
+   详见 :doc:`versions` 。
 
 6. **编译烧录**
 
@@ -235,9 +234,24 @@ JSON 文档。 ``application/minihub/manifest.yml`` 只决定这块屏是否编�
 - ``CONFIG_MINIHUB_STORAGE_MIN_FREE_BYTES`` （在 Store 安装路径上检查）会拒绝
   吃掉 UI 与设备状态所需余量的包。
 
-设备名等自由文本来自网络，不受内置字形集限制。 ``ui/fonts/`` 放的是给这些文本
-用的可选 FreeType 字体。UI chrome 由 LVGL 内置的 Han Sans 渲染，该文件缺失时
-仍可读。
+中文 UI（chrome 与设备名）统一走 FreeType：``ui/fonts/minihub_sc.otf`` 必须
+出现在设备 storage 分区的 ``/data/ui/fonts/``。该 OTF 为思源黑体子集，覆盖 UI
+文案与 **GB2312 一级汉字全集** （3755 字，约 1.8 MiB）。固件不再编入 LVGL 内置
+Han Sans 子集（约省数百 KB flash）。该 OTF 缺失时中文会不可读；拉丁文案仍可用
+Montserrat。改字表后跑 ``./tools/ui_font/build_subset.sh`` 并重烧 ``storage``。
+
+概览 toolbar 在适配器启用时显示 Zigbee / BLE Mesh「允许入网」与 Matter「添加」
+（Matter 仍引导到 Web 输配对码）。过滤器芯片与入网条分属不同行，不再共用一个外框。
+``CONFIG_MINIHUB_WEB_UI`` 且已拿到 IP 时，各主屏左侧栏「系统」与「用户」之间嵌有
+二维码，扫码打开 ``http://<ip>/``；二维码挂在侧栏槽位上，侧栏不显示时二维码也不显示。
+STA 尚未拿到 IP 时，槽位显示提示「配网后扫码进 Web」（英文 ``Enter Web after IP``），
+避免留白。
+
+概览设备卡较大（约一行两个）。卡上电源控件只负责开关；点卡片打开近全屏 **通用**
+参数弹层（类型目录 ∩ ``props.params`` ：开关 / 滑杆 / 下拉 / 按钮），并可用「详情」
+查看身份字段——与 Web 控制台 ``openDeviceDetail`` 主路径一致，不移植 Web 上按类型
+硬编码的专用面板。设备图标来自 ``/data/ui/images/devices/<type>.png``
+（见 ``assets/device_icons.json``）；可用 ``tools/regen_lcd_device_icons.py`` 重生成。
 
 屏 **不是** 什么：它不是一个 hub point，不出现在类型目录里，不能被规则指向，
 也没有自己的设备卡片。

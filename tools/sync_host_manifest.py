@@ -270,7 +270,10 @@ def sync(project_root: Path, app_name: str) -> None:
             yaml_dump(comp_manifests["minihub_lcd"]),
             encoding="utf-8",
         )
-    elif lcd_yml.exists():
+    elif app_name == "minihub_lcd" and lcd_yml.exists():
+        # Only the LCD product may remove its own generated yml. Syncing
+        # another product (e.g. minihub / vibe) must not delete it — a
+        # concurrent minihub_lcd cmake would then fail the brookesia gate.
         lcd_yml.unlink()
 
     cmake_path = gen_dir / "minihub_components.cmake"

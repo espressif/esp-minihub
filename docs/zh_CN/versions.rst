@@ -7,7 +7,7 @@
 ``GET /api/system`` 里的 commit 一起读：版本说的是产品作者声明的版本，commit 说的是
 被编译的那棵树。
 
-一个设备一个号，两条发布线
+一个设备一个号，三条发布线
 --------------------------
 
 设备版本是 ``MINIHUB_VERSION`` ，在 :file:`cmake/minihub_bundle/Kconfig.projbuild`
@@ -16,13 +16,18 @@
 控制台侧栏显示的内容。它不是 ``git describe`` ：commit 单独上报，所以「版本号没动的
 重新编译」会表现为同一版本下的另一个 commit。
 
-控制台走自己的发布线。``MINIHUB_WEB_VERSION`` （ :file:`components/minihub_web/Kconfig.minihub` ）
-是它的**唯一**来源：固件构建和发布都从它派生，两边永远一致。填写时不带前面的 ``v``
-（只有部署目录名会加）。它的缺省值跟着 ``MINIHUB_VERSION`` ，但两者刻意分开：只改前端的
-修复抬高它就够，不必动固件。源码头里没有、也别手写 ``version.txt`` —— 它是构建时生成的。
+控制台版本是 ``MINIHUB_WEB_VERSION`` （ :file:`components/minihub_web/Kconfig.minihub` ）。
+固件构建与 ``tools/deploy.sh`` 都读它；部署目录名为 ``Webs/v<ver>/`` ，写入包内的
+``version.txt`` 与 ``window.mhWebVersion`` 不带前导 ``v`` 。缺省等于 ``MINIHUB_VERSION`` 。
+``version.txt`` 由构建生成，不在源码树中手写。
 
-所以 **一台 Hub 合理地上报两个版本** ，分两步升级过的设备通常就是如此。拿设备跟本指南
-对比之前，两个都看：
+LCD Brookesia UI（``/data/ui``）版本是 ``MINIHUB_LCD_UI_VERSION``
+（ :file:`components/minihub_lcd/Kconfig.minihub` ）。Host 构建写入
+``/data/ui/version.txt``；``tools/deploy.sh`` 发布 ``LCD_UI/v<ver>/`` ，清单为
+``GET /api/ui`` 。``POST /api/update/apply`` 配 ``"type":"ui"`` 写入 ``/data/ui`` ，
+之后需重启。缺省等于 ``MINIHUB_VERSION`` 。
+
+一台 Hub 可同时上报固件、Web、LCD UI 三个版本。对照时分别查看：
 
 .. code-block:: bash
 
@@ -30,9 +35,14 @@
      | python3 -m json.tool   # version、commit
    # 控制台自己的值是 window.mhWebVersion ，侧栏也会显示
 
-固件比控制台新是正常的；控制台比固件新，通常说明 ``app-flash`` 只换了应用，
-``/data/web`` 还是上一代。把控制台当成单独一步升级 （ :doc:`web_console` ），或者
-整机烧录 （ :doc:`production` ）。
+固件与 Web / LCD UI 可分步升级。各界面只暴露本通道加固件：
+
+* Web 控制台（:doc:`web_console`）：固件、Web、设备资源（Assets）。
+* LCD 系统页：固件与 LCD UI（检查/升级）；UI 应用后需重启。
+* REST：``POST /api/update/apply`` 配 ``"type":"firmware"|"web"|"ui"|"asset"``
+  （自动化；Web 控制台不提供 ``ui``）。
+
+整机烧录见 :doc:`production` 。
 
 升级能给你什么
 --------------

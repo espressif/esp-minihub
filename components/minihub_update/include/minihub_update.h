@@ -16,6 +16,7 @@ typedef enum {
     MINIHUB_UPDATE_FIRMWARE, /* GET /api/firmware, then minihub_ota_start_url() */
     MINIHUB_UPDATE_ASSET,    /* GET /api/assets → model and images */
     MINIHUB_UPDATE_WEB,      /* GET /api/web → /data/web */
+    MINIHUB_UPDATE_UI,       /* GET /api/ui → /data/ui (LCD Brookesia) */
 } minihub_update_kind_t;
 
 /**
@@ -105,10 +106,10 @@ cJSON *minihub_update_notes_json(void);
  * needed; this also covers a plugin-owned type that the shared model does not
  * know. `base_url` may be NULL to use the configured store URL.
  *
- * A type with no artwork is a 404 and leaves the tree untouched. An icon that is
- * already present (non-empty regular file) is NOT fetched again -- so replacing
- * the artwork on the server does not reach devices that already have it; delete
- * the file to force a refresh.
+ * A type with no artwork is HTTP 404 (``ESP_ERR_NOT_FOUND``) and leaves the tree
+ * untouched. An icon that is already present (non-empty regular file) is NOT
+ * fetched again -- so replacing the artwork on the server does not reach
+ * devices that already have it; delete the file to force a refresh.
  */
 esp_err_t minihub_update_fetch_device_icon(const char *base_url, const char *type);
 

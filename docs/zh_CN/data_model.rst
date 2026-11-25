@@ -197,7 +197,7 @@ CID/PID/VID 与 ``uuid``；Matter Basic Information 与 ``node_id``）。品类�
 * ``/data/config/model/`` — 可选上传的 ``devices.csv`` + ``parameters.csv``
 
 编辑活动 JSON。``adapters.json`` 是 ``/data/config`` 下的运行时配置，不在在线更新范围内
-（在线更新只含固件、Web 控制台、设备资源）；它随出厂 / storage 镜像下发，或你直接用
+（在线更新含固件、Web 控制台、LCD UI、设备资源）；它随出厂 / storage 镜像下发，或你直接用
 REST 改（``PUT /api/config/adapters``）。规则与场景从各自页面导入，或用
 ``POST /api/rules/import`` / ``POST /api/scenes/import``。若接口未自动重载，再
 ``POST /api/hub/reload``。

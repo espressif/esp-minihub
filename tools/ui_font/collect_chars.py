@@ -11,7 +11,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-CHARS_3000_FILE = ROOT / "tools" / "ui_font" / "data" / "chars_3000.txt"
+CHARS_GB2312_L1_FILE = ROOT / "tools" / "ui_font" / "data" / "chars_gb2312_l1.txt"
 
 
 def walk_json(value: object, chars: set[str]) -> None:
@@ -51,20 +51,20 @@ def collect_cpp_chars(path: pathlib.Path, chars: set[str]) -> None:
         chars.update(match.group(1))
 
 
-def load_common_3000() -> str:
-    if CHARS_3000_FILE.is_file():
-        return CHARS_3000_FILE.read_text(encoding="utf-8").strip()
+def load_gb2312_l1() -> str:
+    if CHARS_GB2312_L1_FILE.is_file():
+        return CHARS_GB2312_L1_FILE.read_text(encoding="utf-8").strip()
     # Regenerate if data file missing (e.g. fresh clone before first font build).
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
-        "gen_chars_3000", ROOT / "tools" / "ui_font" / "gen_chars_3000.py"
+        "gen_gb2312_l1", ROOT / "tools" / "ui_font" / "gen_gb2312_l1.py"
     )
     if spec is None or spec.loader is None:
-        raise RuntimeError("gen_chars_3000.py not found")
+        raise RuntimeError("gen_gb2312_l1.py not found")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.gb2312_level1_chars(3000)
+    return mod.gb2312_level1_chars()  # full GB2312 level-1 (3755)
 
 
 def collect_ui_chars() -> set[str]:
@@ -96,22 +96,27 @@ def collect_ui_chars() -> set[str]:
     return chars
 
 
-def collect(*, include_common_3000: bool = False) -> str:
+def collect(*, include_gb2312_l1: bool = False) -> str:
     chars = collect_ui_chars()
-    if include_common_3000:
-        chars.update(load_common_3000())
+    if include_gb2312_l1:
+        chars.update(load_gb2312_l1())
     return "".join(sorted(chars))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Collect font subset characters for minihub_sc.otf")
     parser.add_argument(
+        "--gb2312-l1",
+        action="store_true",
+        help="Include full GB2312 level-1 Hanzi (3755; used by tools/ui_font/build_subset.sh)",
+    )
+    parser.add_argument(
         "--common3000",
         action="store_true",
-        help="Include GB2312 level-1 level-1 3000 Hanzi (default for tools/ui_font/build_subset.sh)",
+        help=argparse.SUPPRESS,  # legacy alias for --gb2312-l1
     )
     args = parser.parse_args()
-    sys.stdout.write(collect(include_common_3000=args.common3000))
+    sys.stdout.write(collect(include_gb2312_l1=args.gb2312_l1 or args.common3000))
     return 0
 
 

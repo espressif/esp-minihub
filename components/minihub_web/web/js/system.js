@@ -482,9 +482,8 @@ async function loadSystem() {
             const fwHint = (hints && hints.firmware) || {};
             const webHint = (hints && hints.web) || {};
             const assetsHint = (hints && hints.assets) || {};
-            /* Both rows are symmetric: the "新版本 vX" badge opens that channel's
-             * release notes (sysShowNotes), the 更新… button applies the new
-             * bundle, and 重新安装 force re-pulls the same version (force=true). */
+            /* Surface-local: Web offers firmware + web + assets. LCD UI is
+             * upgraded on the panel (REST type=ui still works for automation). */
             const fwNew = fwHint.version ? '<button type="button" class="badge-new badge-btn" onclick="sysShowNotes(\'firmware\')">' + t('sys.new_version', { v: fwHint.version }) + '</button>' : '';
             const fwUp = fwHint.version ?
                 '<button class="btn-sm on" type="button" onclick="sysUpdateApply(\'firmware\')">' + t('sys.update_firmware') + '</button>' : '';
@@ -758,7 +757,11 @@ async function sysUpdateCheck() {
 }
 
 async function sysUpdateApply(kind, force) {
-    const labels = { web: t('sys.update_web'), asset: t('sys.update_assets'), firmware: t('sys.update_firmware') };
+    const labels = {
+        web: t('sys.update_web'),
+        asset: t('sys.update_assets'),
+        firmware: t('sys.update_firmware')
+    };
     const name = labels[kind] || kind;
     toast(t(force ? 'sys.applying_force_update' : 'sys.applying_update', { name: name }));
     try {

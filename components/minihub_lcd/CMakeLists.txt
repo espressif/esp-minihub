@@ -52,6 +52,7 @@ if(CONFIG_MINIHUB_LCD_UI)
         "${CMAKE_CURRENT_LIST_DIR}/../minihub_hub/include"
         "${CMAKE_CURRENT_LIST_DIR}/../minihub_adapter/include"
         "${CMAKE_CURRENT_LIST_DIR}/../minihub_web/include"
+        "${CMAKE_CURRENT_LIST_DIR}/../minihub_device_widget/include"
         # minihub_ota is a main component whose public REQUIRES edge is dropped
         # by IDF's cycle resolution (ota -> net -> ... -> store -> lcd). We only
         # read minihub_ota_is_busy() from app.cpp, so an include path is enough;
@@ -74,6 +75,10 @@ if(CONFIG_MINIHUB_LCD_UI)
         # minihub_web -> minihub_store.
         "${CMAKE_CURRENT_LIST_DIR}/../minihub_store/include"
         "${CMAKE_CURRENT_LIST_DIR}/../minihub_update/include"
+        # Radio permit APIs: REQUIRES edges into zigbee/ble_mesh are dropped by
+        # cycle resolution; symbols remain in the final link via adapters.
+        "${CMAKE_CURRENT_LIST_DIR}/../minihub_zigbee/include"
+        "${CMAKE_CURRENT_LIST_DIR}/../minihub_ble_mesh/include"
     )
 else()
     idf_component_register(

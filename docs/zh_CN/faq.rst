@@ -83,7 +83,7 @@ adapters.json 在哪？
 
 设备运行时： ``/data/config/adapters.json``。出厂配置：
 ``application/minihub/configs/adapters.json`` 或产品专用树。此文件是 ``/data/config``
-下的运行时配置，不在在线更新范围内（在线更新只含固件、Web 控制台、设备资源）；它随
+下的运行时配置，不在在线更新范围内（在线更新含固件、Web 控制台、LCD UI、设备资源）；它随
 出厂 / storage 镜像下发，否则用 REST 编辑： ``PUT /api/config/adapters``，必要时
 ``POST /api/hub/reload``。
 完整 JSON 字段： :doc:`data_model`。

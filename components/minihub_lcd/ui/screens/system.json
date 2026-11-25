@@ -55,7 +55,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -90,7 +90,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -125,7 +125,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -160,7 +160,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -195,7 +195,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -224,7 +224,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -259,7 +259,7 @@
           },
           "placement": {
             "width": "100dp",
-            "height": "44dp"
+            "height": "36dp"
           },
           "children": [
             {
@@ -286,6 +286,18 @@
             "width": "wrap",
             "height": "wrap",
             "flexGrow": 1
+          }
+        },
+        {
+          "type": "container",
+          "id": "web_qr_slot",
+          "placement": {
+            "width": "100dp",
+            "height": "84dp"
+          },
+          "style": {
+            "bgColor": "#0e1320",
+            "radius": "6dp"
           }
         },
         {
@@ -616,7 +628,7 @@
                   "type": "label",
                   "id": "sys_psram_title",
                   "labelProps": {
-                    "text": "PSRAM"
+                    "text": "${constant.strings.sys_psram}"
                   },
                   "placement": {
                     "width": "110dp"
@@ -1281,6 +1293,157 @@
                   ]
                 }
               ]
+            },
+            {
+              "type": "container",
+              "id": "sys_card_ui",
+              "layout": {
+                "type": "flex",
+                "flexFlow": "column",
+                "mainAlign": "start",
+                "crossAlign": "stretch",
+                "gap": "8dp"
+              },
+              "placement": {
+                "width": "664dp",
+                "height": "wrap"
+              },
+              "style": {
+                "bgColor": "#131a2b",
+                "borderWidth": "1dp",
+                "borderColor": "#243049",
+                "padding": "10dp",
+                "radius": "8dp"
+              },
+              "children": [
+                {
+                  "type": "label",
+                  "id": "sys_card_ui_title",
+                  "labelProps": {
+                    "text": "${constant.strings.sys_ui_update}"
+                  },
+                  "placement": {
+                    "width": "140dp"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "13sp"
+                  }
+                },
+                {
+                  "type": "label",
+                  "id": "sys_ui_val",
+                  "labelProps": {
+                    "text": "—"
+                  },
+                  "placement": {
+                    "width": "wrap",
+                    "flexGrow": 1
+                  },
+                  "style": {
+                    "textColor": "#eef2ff",
+                    "fontSize": "15sp"
+                  }
+                },
+                {
+                  "type": "label",
+                  "id": "sys_ui_status",
+                  "labelProps": {
+                    "text": "—"
+                  },
+                  "style": {
+                    "textColor": "#8b9bb4",
+                    "fontSize": "12sp"
+                  }
+                },
+                {
+                  "type": "container",
+                  "id": "sys_ui_btn_row",
+                  "layout": {
+                    "type": "flex",
+                    "flexFlow": "row",
+                    "mainAlign": "end",
+                    "crossAlign": "center",
+                    "gap": "10dp"
+                  },
+                  "children": [
+                    {
+                      "type": "button",
+                      "id": "sys_ui_check_btn",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_check_ui"
+                        }
+                      ],
+                      "style": {
+                        "bgColor": "#1a2238",
+                        "borderWidth": "1dp",
+                        "borderColor": "#243049",
+                        "radius": "8dp"
+                      },
+                      "placement": {
+                        "width": "120dp",
+                        "height": "36dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "sys_ui_check_lbl",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_check_update}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "13sp"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "id": "sys_ui_upgrade_btn",
+                      "events": [
+                        {
+                          "type": "clicked",
+                          "action": "system_do_ui"
+                        }
+                      ],
+                      "style": {
+                        "bgColor": "#1d4ed8",
+                        "borderWidth": "1dp",
+                        "borderColor": "#243049",
+                        "radius": "8dp"
+                      },
+                      "placement": {
+                        "width": "120dp",
+                        "height": "36dp"
+                      },
+                      "children": [
+                        {
+                          "type": "label",
+                          "id": "sys_ui_upgrade_lbl",
+                          "labelProps": {
+                            "text": "${constant.strings.sys_upgrade_now}"
+                          },
+                          "placement": {
+                            "mode": "relative",
+                            "align": "center"
+                          },
+                          "style": {
+                            "textColor": "#eef2ff",
+                            "fontSize": "13sp"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         },
@@ -1289,56 +1452,19 @@
           "id": "sys_btn_row",
           "layout": {
             "type": "flex",
-            "flexFlow": "column",
+            "flexFlow": "row",
             "mainAlign": "start",
             "crossAlign": "center",
             "gap": "10dp"
           },
           "placement": {
-            "width": "wrap",
+            "width": "664dp",
             "height": "wrap"
           },
           "style": {
             "padding": "10dp"
           },
           "children": [
-            {
-              "type": "button",
-              "id": "reboot_btn",
-              "events": [
-                {
-                  "type": "clicked",
-                  "action": "system_reboot"
-                }
-              ],
-              "style": {
-                "bgColor": "#ef4444",
-                "borderWidth": "1dp",
-                "borderColor": "#ef4444",
-                "radius": "8dp"
-              },
-              "placement": {
-                "width": "664dp",
-                "height": "44dp"
-              },
-              "children": [
-                {
-                  "type": "label",
-                  "id": "reboot_lbl",
-                  "labelProps": {
-                    "text": "${constant.strings.sys_reboot_device}"
-                  },
-                  "placement": {
-                    "mode": "relative",
-                    "align": "center"
-                  },
-                  "style": {
-                    "textColor": "#ffffff",
-                    "fontSize": "14sp"
-                  }
-                }
-              ]
-            },
             {
               "type": "button",
               "id": "factory_btn",
@@ -1355,7 +1481,7 @@
                 "radius": "8dp"
               },
               "placement": {
-                "width": "664dp",
+                "width": "327dp",
                 "height": "44dp"
               },
               "children": [
@@ -1364,6 +1490,43 @@
                   "id": "factory_lbl",
                   "labelProps": {
                     "text": "${constant.strings.sys_factory_device}"
+                  },
+                  "placement": {
+                    "mode": "relative",
+                    "align": "center"
+                  },
+                  "style": {
+                    "textColor": "#ffffff",
+                    "fontSize": "14sp"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "button",
+              "id": "reboot_btn",
+              "events": [
+                {
+                  "type": "clicked",
+                  "action": "system_reboot"
+                }
+              ],
+              "style": {
+                "bgColor": "#ef4444",
+                "borderWidth": "1dp",
+                "borderColor": "#ef4444",
+                "radius": "8dp"
+              },
+              "placement": {
+                "width": "327dp",
+                "height": "44dp"
+              },
+              "children": [
+                {
+                  "type": "label",
+                  "id": "reboot_lbl",
+                  "labelProps": {
+                    "text": "${constant.strings.sys_reboot_device}"
                   },
                   "placement": {
                     "mode": "relative",

@@ -63,6 +63,14 @@
 #define MINIHUB_WEB_LOGIN            MINIHUB_WEB_DIR "/login.html"
 
 /**
+ * @brief LCD Brookesia UI tree on storage — staged as /data/ui/ (root.json,
+ * screens, fonts, images/devices). Updated via GET /api/ui → MINIHUB_UPDATE_UI.
+ */
+#define MINIHUB_UI_DIR               MINIHUB_VFS_MOUNT "/ui"
+#define MINIHUB_UI_ROOT              MINIHUB_UI_DIR "/root.json"
+#define MINIHUB_UI_VERSION_FILE      MINIHUB_UI_DIR "/version.txt"
+
+/**
  * @brief Store factory preinstall (product_params quirks, zigbee map, …) on /store.
  */
 #define MINIHUB_PREINSTALL_DIR       MINIHUB_STORE_MOUNT "/preinstall"

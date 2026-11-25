@@ -513,6 +513,35 @@ static void bm_echo_onoff(const char *point_id, bool on, const char *pname)
     }
 }
 
+/* Prefer props.params.power; fall back to the summary value. */
+static bool bm_snap_is_on(const minihub_point_t *snap)
+{
+    if (!snap) {
+        return false;
+    }
+    if (snap->props) {
+        const cJSON *params = cJSON_GetObjectItem(snap->props, "params");
+        const cJSON *power = cJSON_IsObject(params) ? cJSON_GetObjectItem(params, "power") : NULL;
+        if (cJSON_IsObject(power)) {
+            const cJSON *val = cJSON_GetObjectItem(power, "value");
+            if (cJSON_IsString(val)) {
+                return strcmp(val->valuestring, "on") == 0 ||
+                       strcmp(val->valuestring, "true") == 0 ||
+                       strcmp(val->valuestring, "1") == 0;
+            }
+            if (cJSON_IsBool(val)) {
+                return cJSON_IsTrue(val);
+            }
+        } else if (cJSON_IsString(power)) {
+            return strcmp(power->valuestring, "on") == 0 ||
+                   strcmp(power->valuestring, "true") == 0 ||
+                   strcmp(power->valuestring, "1") == 0;
+        }
+    }
+    return strcmp(snap->value, "on") == 0 || strcmp(snap->value, "true") == 0 ||
+           strcmp(snap->value, "open") == 0;
+}
+
 /* Publish the HSL state the node reported: hue in degrees, saturation and
  * lightness in percent (Mesh Lighting Model §6.1.4). */
 static void bm_report_hsl(const minihub_ble_mesh_device_t *dev, uint16_t raw_hue,
@@ -1117,47 +1146,43 @@ static esp_err_t ble_mesh_adapter_handle_command(const minihub_command_t *cmd)
         return ESP_ERR_NOT_SUPPORTED;
     }
 
-#if CONFIG_MINIHUB_BLE_MESH_SDK
-    minihub_ble_mesh_onoff_cmd_t bm_cmd;
+    const char *onoff_param = bm_control_param_for_field(MINIHUB_BM_CTRL_ONOFF, "onoff");
+    bool want_on = false;
     if (strcmp(cmd->cmd, "turn_on") == 0) {
-        bm_cmd = MINIHUB_BM_ONOFF_ON;
+        want_on = true;
     } else if (strcmp(cmd->cmd, "turn_off") == 0) {
-        bm_cmd = MINIHUB_BM_ONOFF_OFF;
+        want_on = false;
     } else if (strcmp(cmd->cmd, "toggle") == 0) {
-        bm_cmd = MINIHUB_BM_ONOFF_TOGGLE;
+        /* Decide the target from the Hub point *before* the stack runs.
+         * ble_mesh_stack_onoff() notifies synchronously, so flipping again
+         * from a post-call snapshot inverted the UI vs the Mesh Set (and vs
+         * the device when TX succeeded). Prefer absolute ON/OFF over the
+         * stack's TOGGLE so a desynced node->onoff table cannot fight the
+         * point. */
+        minihub_point_t snap = {0};
+        (void)minihub_point_get_snapshot(cmd->point_id, &snap);
+        want_on = !bm_snap_is_on(&snap);
+        if (snap.props) {
+            cJSON_Delete(snap.props);
+        }
     } else {
         return ESP_ERR_NOT_SUPPORTED;
     }
+
+#if CONFIG_MINIHUB_BLE_MESH_SDK
     if (dev->unicast == 0) {
         return ESP_ERR_INVALID_STATE;
     }
-    esp_err_t err = minihub_ble_mesh_onoff(dev->unicast, bm_cmd);
+    esp_err_t err = minihub_ble_mesh_onoff(
+        dev->unicast, want_on ? MINIHUB_BM_ONOFF_ON : MINIHUB_BM_ONOFF_OFF);
     if (err != ESP_OK) {
         return err;
     }
 #endif
-
-    const char *onoff_param = bm_control_param_for_field(MINIHUB_BM_CTRL_ONOFF, "onoff");
-    if (strcmp(cmd->cmd, "turn_on") == 0) {
-        bm_echo_onoff(cmd->point_id, true, onoff_param);
-        return ESP_OK;
-    }
-    if (strcmp(cmd->cmd, "turn_off") == 0) {
-        bm_echo_onoff(cmd->point_id, false, onoff_param);
-        return ESP_OK;
-    }
-    if (strcmp(cmd->cmd, "toggle") == 0) {
-        minihub_point_t snap = {0};
-        minihub_point_get_snapshot(cmd->point_id, &snap);
-        bool next = strcmp(snap.value, "on") != 0;
-        if (snap.props) {
-            cJSON_Delete(snap.props);
-        }
-        bm_echo_onoff(cmd->point_id, next, onoff_param);
-        return ESP_OK;
-    }
-    ESP_LOGW(TAG, "command '%s' not supported on %s", cmd->cmd, cmd->point_id);
-    return ESP_ERR_NOT_SUPPORTED;
+    /* Echo even when the SDK path already notified — same value twice is fine;
+     * host stubs do not fire the attr callback, so the echo is required there. */
+    bm_echo_onoff(cmd->point_id, want_on, onoff_param);
+    return ESP_OK;
 }
 
 const minihub_adapter_t ble_mesh_adapter = {

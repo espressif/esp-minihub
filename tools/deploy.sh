@@ -9,7 +9,7 @@
 # Deploy root precedence (mirrors store_paths.resolve_deploy_dir):
 #   $MINIHUB_DEPLOY_DIR  >  ./MiniHub_store  >  ~/workspace/minihub_store
 #
-# Plugin packing: step [3/4] runs tools/pack_store_module.py pack all
+# Plugin packing: step [4/5] runs tools/pack_store_module.py pack all
 # (scanning examples/plugins and MINIHUB_PLUGIN_DIRS) before re-indexing.
 # pack all skips native and hybrid modules.
 #
@@ -27,8 +27,10 @@
 # sync -- a web-only fix bumps the web version without touching the firmware.
 # It is also what the Host build stamps into the storage image, so published and
 # freshly flashed bundles always report the same version.
-# Both are read from the built sdkconfig; see the "Release versions" note right
-# after the argument parsing.
+# LCD Brookesia UI (LCD_UI/<vX>/ → /data/ui) uses CONFIG_MINIHUB_LCD_UI_VERSION the
+# same way; panel-only fixes bump it without a firmware or web release.
+# All three are read from the built sdkconfig; see the "Release versions" note
+# right after the argument parsing.
 #
 # Run from anywhere: this script resolves the repo root as the parent of its
 # own directory (tools/) so the tools/..., components/..., and run.sh references
@@ -40,6 +42,7 @@
 #   --fw-chip <chip>     chip folder (default ESP32S31)
 #   --fw-note <file>     file copied to Firmwares/<chip>/<version>/release_notes.txt
 #   --web-version <ver>  Webs/<ver>/ (default: v + CONFIG_MINIHUB_WEB_VERSION, else v + git describe)
+#   --ui-version <ver>   LCD_UI/<ver>/ (default: v + CONFIG_MINIHUB_LCD_UI_VERSION, else v + git describe)
 #   --no-firmware        skip the firmware publish step
 #   -h | --help          show this help
 set -euo pipefail
@@ -55,6 +58,7 @@ FW_VERSION=""
 FW_NOTE=""
 SKIP_FW=0
 WEB_VERSION=""
+UI_VERSION=""
 
 usage() {
   grep -E '^#' "$0" | sed 's/^# \{0,1\}//'
@@ -73,6 +77,8 @@ while [[ $# -gt 0 ]]; do
       FW_NOTE="$2"; shift 2;;
     --web-version)
       WEB_VERSION="$2"; shift 2;;
+    --ui-version)
+      UI_VERSION="$2"; shift 2;;
     --no-firmware)
       SKIP_FW=1; shift;;
     -h|--help)
@@ -85,17 +91,16 @@ done
 
 FW_CHIP="$(printf '%s' "$FW_CHIP" | tr '[:upper:]' '[:lower:]')"
 
-# Release versions come from two independent Kconfig values -- web and firmware
-# releases are usually not in sync, so a web-only fix bumps only the web one.
-# Manage both under `idf.py menuconfig` > MiniHub:
-#   CONFIG_MINIHUB_VERSION      firmware folder / reported firmware_version
-#                               (<ver>, no leading "v")
-#   CONFIG_MINIHUB_WEB_VERSION  web bundle version -- single source of truth.
-#                               Webs/v<ver>/ folder name (the leading "v" is UI
-#                               style) and the value stamped into the bundle as
-#                               version.txt + window.mhWebVersion (<ver>, no "v")
-# Both default to MINIHUB_VERSION (which also drives the product/sidebar
-# version); each can still be overridden per-run with --fw-version / --web-version.
+# Release versions come from independent Kconfig values -- firmware, web, and
+# LCD UI releases are usually not in sync, so a single-channel fix bumps only
+# that channel. Manage them under `idf.py menuconfig` > MiniHub:
+#   CONFIG_MINIHUB_VERSION         firmware folder / reported firmware_version
+#                                  (<ver>, no leading "v")
+#   CONFIG_MINIHUB_WEB_VERSION     web bundle -- Webs/v<ver>/ + version.txt +
+#                                  window.mhWebVersion (<ver>, no "v")
+#   CONFIG_MINIHUB_LCD_UI_VERSION  LCD UI -- LCD_UI/v<ver>/ + /data/ui/version.txt
+# All default to MINIHUB_VERSION; override per-run with --fw-version /
+# --web-version / --ui-version.
 sdkconfig_value() {  # $1 = sdkconfig path, $2 = config key
   local sdk="$1" key="$2" v=""
   if [[ -f "$sdk" ]]; then
@@ -110,7 +115,7 @@ sdkconfig_value() {  # $1 = sdkconfig path, $2 = config key
   echo "$v"
 }
 
-if [[ -z "$FW_VERSION" || -z "$WEB_VERSION" ]]; then
+if [[ -z "$FW_VERSION" || -z "$WEB_VERSION" || -z "$UI_VERSION" ]]; then
   SDKCONFIG="$ROOT/application/$APP/build/sdkconfig"
   if [[ ! -f "$SDKCONFIG" ]]; then
     SDKCONFIG="$ROOT/application/$APP/sdkconfig"
@@ -120,6 +125,10 @@ if [[ -z "$FW_VERSION" || -z "$WEB_VERSION" ]]; then
   fi
   if [[ -z "$WEB_VERSION" ]]; then
     WEB_VERSION="v$(printf '%s' "$(sdkconfig_value "$SDKCONFIG" CONFIG_MINIHUB_WEB_VERSION)" \
+      | sed -E 's/^v//')"
+  fi
+  if [[ -z "$UI_VERSION" ]]; then
+    UI_VERSION="v$(printf '%s' "$(sdkconfig_value "$SDKCONFIG" CONFIG_MINIHUB_LCD_UI_VERSION)" \
       | sed -E 's/^v//')"
   fi
 fi
@@ -141,34 +150,51 @@ export MINIHUB_DEPLOY_DIR="$DEPLOY_ROOT"
 echo "==> deploy root: $DEPLOY_ROOT"
 
 # 1) Web assets: minify components/minihub_web/web -> Webs/<WEB_VERSION>/
-echo "==> [1/4] web assets (Webs/$WEB_VERSION)"
+echo "==> [1/5] web assets (Webs/$WEB_VERSION)"
 _WEB_NOTES="components/minihub_web/web/release_notes.txt"
 _MINIFY_NOTES_FLAG=""
 if [ -f "$_WEB_NOTES" ]; then
   _MINIFY_NOTES_FLAG="--notes $_WEB_NOTES"
 fi
+# Publish plain/ and gzip/ parallel trees (not sibling .gz in one folder) so
+# either encoding can be uploaded alone; Hubs on any WEB_ASSET_* mode can OTA.
 $PY tools/minify_web_assets.py --src components/minihub_web/web \
   --deploy-root "$DEPLOY_ROOT" --web-version "$WEB_VERSION" \
+  --encoding both \
   $_MINIFY_NOTES_FLAG
 
-# 2) Device-type registry. Web and asset manifests are no longer written as
-#    static index.json files: store_server.py serves GET /api/web and
-#    GET /api/assets by walking Webs/<version>/ and Assets/ at request time.
-echo "==> [2/4] device-type registry"
+# 2) LCD UI: minify components/minihub_lcd/ui -> LCD_UI/<UI_VERSION>/
+echo "==> [2/5] LCD UI (LCD_UI/$UI_VERSION)"
+_UI_NOTES="components/minihub_lcd/ui/release_notes.txt"
+_UI_NOTES_FLAG=""
+if [ -f "$_UI_NOTES" ]; then
+  _UI_NOTES_FLAG="--notes $_UI_NOTES"
+fi
+if [ -f components/minihub_lcd/ui/root.json ]; then
+  $PY tools/minify_lcd_ui_assets.py --src components/minihub_lcd/ui \
+    --deploy-root "$DEPLOY_ROOT" --ui-version "$UI_VERSION" \
+    $_UI_NOTES_FLAG
+else
+  echo "==> skip LCD UI: no components/minihub_lcd/ui/root.json"
+fi
+
+# 3) Device-type registry. Web / UI / asset manifests are served dynamically by
+#    store_server.py (GET /api/web, /api/ui, /api/assets) — no static index.json.
+echo "==> [3/5] device-type registry"
 $PY tools/gen_deploy_index.py --deploy "$DEPLOY_ROOT" --device-widget components/minihub_device_widget --sync-source
 
-# 3) Plugin pack (+ abi blocks) then catalogs.
+# 4) Plugin pack (+ abi blocks) then catalogs.
 #    JS and config-only modules only. Native and hybrid modules are omitted.
-echo "==> [3/4] plugin catalogs"
+echo "==> [4/5] plugin catalogs"
 $PY tools/pack_store_module.py pack all --continue-on-error --deploy "$DEPLOY_ROOT" || true
 $PY tools/sync_store_catalog.py --from-store --deploy "$DEPLOY_ROOT"
 
-# 4) Firmware publish.
+# 5) Firmware publish.
 #    One folder: Firmwares/<chip>/<version>/
 #      <app>.bin + release_notes.txt     OTA image (GET /api/firmware)
 #      bootloader, partition-table, ota_data, storage, modstore, merged.bin,
 #      <app>.elf, flash_command.txt      full flash set for a flashing tool
-echo "==> [4/4] firmware publish"
+echo "==> [5/5] firmware publish"
 if [[ "$SKIP_FW" -eq 1 ]]; then
   echo "==> skipped (--no-firmware)"
 else

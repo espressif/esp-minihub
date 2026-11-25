@@ -271,10 +271,11 @@ No per-parameter stylesheet is published. The ``css`` column of
 A stylesheet can still be pushed by hand through the dev panel
 (``PUT /api/dev/assets/styles/...``).
 
-The web and asset manifests (schema ``minihub.deploy.index/1``) are served
-dynamically by ``store_server.py`` as ``GET /api/web`` and ``GET /api/assets``:
-they are built from ``Webs/<version>/`` and ``Assets/`` at request time, so no
-static ``index.json`` is written (mirroring ``GET /api/firmware``).
+The web, LCD UI, and asset manifests (schema ``minihub.deploy.index/1``) are served
+dynamically by ``store_server.py`` as ``GET /api/web``, ``GET /api/ui``, and
+``GET /api/assets``: they are built from ``Webs/<version>/``, ``LCD_UI/<version>/``,
+and ``Assets/`` at request time, so no static ``index.json`` is written
+(mirroring ``GET /api/firmware``).
 
 ``--only assets`` rebuilds only the device-type registry after a single icon file
 is dropped in — no firmware or plugin rebuild required. ``--sync-source``
@@ -288,12 +289,14 @@ deploy root first.
    ROOT/Assets/model/*.csv
    ROOT/Assets/images/{devices,parameters}/*.svg
    ROOT/Webs/<version>/...   (manifest served at GET /api/web)
+   ROOT/LCD_UI/<version>/...    (manifest served at GET /api/ui)
 
 .. code-block:: bash
 
    curl -s "http://127.0.0.1:8080/api/assets?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
    curl -s "http://127.0.0.1:8080/api/assets/device/light?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
    curl -s "http://127.0.0.1:8080/api/web?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
+   curl -s "http://127.0.0.1:8080/api/ui?mac=aa:bb:cc:dd:ee:ff&chip=esp32s31&cur_version=0.1.0"
 
 On-demand device-type assets:
 
@@ -317,9 +320,10 @@ contains ``..`` or escapes the root.
 
 On the device, ``minihub_update_check()`` and ``minihub_update_apply()``
 (``components/minihub_update``) read ``/api/firmware``,
-``/api/assets``, and ``/api/web``. Firmware
+``/api/assets``, ``/api/web``, and ``/api/ui``. Firmware
 calls ``minihub_ota_start_url()``. ``devices.csv`` and
 ``parameters.csv`` go through ``minihub_device_widget_put_model()`` into
 ``/data/config/model``. Other model files land in that directory.
-Images land in ``/data/images``. Web files land in ``/data/web``.
-Downloads are hashed while they are written; a mismatch is discarded.
+Images land in ``/data/images``. Web files land in ``/data/web``. LCD UI
+files land in ``/data/ui``; reboot after apply. Downloads are hashed while
+they are written; a mismatch is discarded.

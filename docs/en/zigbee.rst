@@ -66,6 +66,10 @@ Permit join
 Optional JSON body. ``seconds`` defaults to 60. ``0`` closes the window. Values
 above **254** are silently clamped to 254 before they reach the stack — the log
 line reports what was actually opened — because the field is one byte.
+When the Zigbee adapter is enabled, the LCD Overview bar exposes the same
+Allow joining control (same ``permit_join`` path as the Web console).
+Open and close publish ``radio.permit_opened`` / ``radio.permit_closed`` so
+the LCD and Web stay in sync.
 
 .. code-block:: bash
 

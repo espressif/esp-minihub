@@ -843,9 +843,14 @@ Host 发布的 ``event_type``：
    * - ``adapter.loaded``
      - 适配器 ``init`` 与 ``start`` 都成功、命令处理函数已注册。
      - ``data``：``adapter``
+   * - ``radio.permit_opened``
+     - Zigbee 或 BLE Mesh 入网 / 配网窗口打开（含 LCD 与 Web 触发）。
+     - ``data``：``adapter`` （``zigbee`` / ``ble_mesh``）、``reason`` （如
+       ``60s``）
    * - ``radio.permit_closed``
-     - Zigbee 允许入网窗口关闭。
-     - ``data``：``adapter`` （``zigbee``）、``reason`` （协议栈给出时）
+     - Zigbee 或 BLE Mesh 入网 / 配网窗口关闭。
+     - ``data``：``adapter`` （``zigbee`` / ``ble_mesh``）、``reason`` （协议栈
+       给出时，如 ``manual`` / ``timeout``）
    * - ``hub.reloaded``
      - 一次软重载结束，包括 install、启用、停用、卸载触发的重载 —— 这些会增删
        点位。

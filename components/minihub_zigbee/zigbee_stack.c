@@ -245,12 +245,8 @@ static minihub_zigbee_attr_cb_t s_on_attr;
 static zigbee_stack_ready_cb_t s_on_ready;
 static void *s_cb_ctx;
 
-static void publish_permit_closed(const char *reason)
+static void publish_permit_event(const char *event_type, const char *reason)
 {
-    if (!s_permit_notify_pending) {
-        return;
-    }
-    s_permit_notify_pending = false;
     cJSON *data = cJSON_CreateObject();
     if (!data) {
         return;
@@ -259,8 +255,24 @@ static void publish_permit_closed(const char *reason)
     if (reason && reason[0]) {
         cJSON_AddStringToObject(data, "reason", reason);
     }
-    (void)minihub_event_bus_publish("radio.permit_closed", data);
+    (void)minihub_event_bus_publish(event_type, data);
     cJSON_Delete(data);
+}
+
+static void publish_permit_closed(const char *reason)
+{
+    if (!s_permit_notify_pending) {
+        return;
+    }
+    s_permit_notify_pending = false;
+    publish_permit_event("radio.permit_closed", reason);
+}
+
+static void publish_permit_opened(int seconds)
+{
+    char reason[24];
+    snprintf(reason, sizeof(reason), "%ds", seconds);
+    publish_permit_event("radio.permit_opened", reason);
 }
 
 typedef enum {
@@ -2489,6 +2501,7 @@ esp_err_t zigbee_stack_permit_join(int seconds)
     s_permit_notify_pending = true;
     ESP_LOGI(TAG, "permit_join open %d s (PAN 0x%04x ch=%d short=0x%04x)", seconds, ezb_nwk_get_panid(),
              ezb_nwk_get_current_channel(), ezb_nwk_get_short_address());
+    publish_permit_opened(seconds);
     return ESP_OK;
 }
 

@@ -16,6 +16,7 @@ Routes:
   GET /api/firmware           walk Firmwares/<chip>/<version>/ and build the array
   GET /api/v1/firmware        alias of /api/firmware (portal-compatible path)
   GET /api/web               walk Webs/<version>/ and build the web manifest
+  GET /api/ui                walk LCD_UI/<version>/ and build the LCD UI manifest
   GET /api/assets            walk Assets/ and build the asset manifest
   GET /api/assets/device/<id> device icon + per-parameter meta (404 if unknown);
                              a type absent from model/devices.csv is served from
@@ -62,7 +63,7 @@ from store_paths import (  # noqa: E402
     normalize_chip_folders,
     resolve_deploy_dir,
 )
-from gen_deploy_index import build_asset_index, build_web_index  # noqa: E402
+from gen_deploy_index import build_asset_index, build_ui_index, build_web_index  # noqa: E402
 
 
 def sha256_file(path: Path) -> str:
@@ -793,6 +794,9 @@ def make_handler(deploy: Path, access_log=None):
             if route == "/api/web":
                 self._json(200, build_web_index(deploy))
                 return
+            if route == "/api/ui":
+                self._json(200, build_ui_index(deploy))
+                return
             if route == "/api/assets":
                 self._json(200, build_asset_index(deploy))
                 return
@@ -885,6 +889,7 @@ def main() -> int:
     print("  catalog:  GET /api/catalog  (Stores/<chip-or-Common>/<id>/catalog.json)")
     print("  firmware: GET /api/firmware and /api/v1/firmware (Firmwares/<chip>/<version>/)")
     print("  web:      GET /api/web      (Webs/<version>/)")
+    print("  ui:       GET /api/ui       (LCD_UI/<version>/)")
     print("  assets:   GET /api/assets   (Assets/)")
     print("            GET /api/assets/device/<id> | /api/assets/parameter/<param>")
     print("  files:    GET /files/<path>")

@@ -1,0 +1,165 @@
+{
+  "type": "viewTemplate",
+  "id": "device_param_row",
+  "node": {
+    "type": "container",
+    "layout": {
+      "type": "flex",
+      "flexFlow": "row",
+      "mainAlign": "spaceBetween",
+      "crossAlign": "center",
+      "gap": "10dp"
+    },
+    "placement": {
+      "width": "700dp",
+      "height": "wrap"
+    },
+    "style": {
+      "bgColor": "#1a2238",
+      "borderWidth": "1dp",
+      "borderColor": "#243049",
+      "padding": "10dp",
+      "radius": "10dp"
+    },
+    "children": [
+      {
+        "type": "label",
+        "id": "label",
+        "labelProps": {"text": ""},
+        "bindings": {"labelProps.text": "param.label"},
+        "placement": {"width": "160dp", "height": "wrap"},
+        "style": {"textColor": "#eef2ff", "fontSize": "16sp"}
+      },
+      {
+        "type": "switch",
+        "id": "sw",
+        "toggleProps": {"checked": false},
+        "bindings": {"toggleProps.checked": "param.checked"},
+        "events": [
+          {
+            "type": "valueChanged",
+            "action": "device_param_toggle"
+          }
+        ],
+        "placement": {"width": "64dp", "height": "34dp"},
+        "commonProps": {"hidden": true}
+      },
+      {
+        "type": "container",
+        "id": "sl_wrap",
+        "layout": {
+          "type": "flex",
+          "flexFlow": "row",
+          "mainAlign": "end",
+          "crossAlign": "center",
+          "gap": "8dp"
+        },
+        "placement": {"width": "wrap", "flexGrow": 1, "height": "wrap"},
+        "commonProps": {"hidden": true},
+        "children": [
+          {
+            "type": "slider",
+            "id": "sl",
+            "rangeProps": {"value": 0, "min": 0, "max": 100, "step": 1},
+            "bindings": {
+              "rangeProps.value": "param.sl_value",
+              "rangeProps.min": "param.sl_min",
+              "rangeProps.max": "param.sl_max"
+            },
+            "events": [
+              {
+                "type": "valueChanged",
+                "action": "device_param_slider"
+              }
+            ],
+            "partStyles": {
+              "indicator": {
+                "bgColor": "#22c55e"
+              },
+              "knob": {
+                "style": {
+                  "bgColor": "#ffffff",
+                  "radius": "12dp"
+                }
+              }
+            },
+            "placement": {"width": "360dp", "height": "28dp"}
+          },
+          {
+            "type": "label",
+            "id": "sl_val",
+            "labelProps": {"text": ""},
+            "bindings": {"labelProps.text": "param.sl_text"},
+            "placement": {"width": "72dp"},
+            "style": {"textColor": "#cbd5e1", "fontSize": "15sp"}
+          }
+        ]
+      },
+      {
+        "type": "dropdown",
+        "id": "dd",
+        "dropdownProps": {
+          "options": [],
+          "selectedIndex": 0
+        },
+        "bindings": {
+          "dropdownProps.options": "param.dd_options",
+          "dropdownProps.selectedIndex": "param.dd_selected"
+        },
+        "events": [
+          {
+            "type": "valueChanged",
+            "action": "device_param_dropdown"
+          }
+        ],
+        "placement": {"width": "280dp", "height": "36dp"},
+        "commonProps": {"hidden": true},
+        "style": {
+          "bgColor": "#111827",
+          "borderWidth": "1dp",
+          "borderColor": "#243049",
+          "radius": "8dp",
+          "textColor": "#eef2ff",
+          "fontSize": "14sp"
+        }
+      },
+      {
+        "type": "button",
+        "id": "btn",
+        "events": [
+          {
+            "type": "clicked",
+            "action": "device_param_button"
+          }
+        ],
+        "placement": {"width": "120dp", "height": "36dp"},
+        "commonProps": {"hidden": true},
+        "style": {
+          "bgColor": "#1d4ed8",
+          "borderWidth": "1dp",
+          "borderColor": "#243049",
+          "radius": "8dp"
+        },
+        "children": [
+          {
+            "type": "label",
+            "id": "btn_lbl",
+            "labelProps": {"text": ""},
+            "bindings": {"labelProps.text": "param.btn_text"},
+            "placement": {"mode": "relative", "align": "center"},
+            "style": {"textColor": "#eef2ff", "fontSize": "15sp"}
+          }
+        ]
+      },
+      {
+        "type": "label",
+        "id": "ro",
+        "labelProps": {"text": ""},
+        "bindings": {"labelProps.text": "param.ro_text"},
+        "placement": {"width": "wrap", "flexGrow": 1},
+        "commonProps": {"hidden": true},
+        "style": {"textColor": "#8b9bb4", "fontSize": "15sp"}
+      }
+    ]
+  }
+}

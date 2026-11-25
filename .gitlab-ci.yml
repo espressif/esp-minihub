@@ -133,6 +133,25 @@ check:lcd_contract:
     - python3 tools/test_lcd_recipe.py
     - python3 tools/test_lcd_ui_contract.py
 
+pack:store_resources:
+  # Portal-ready Web (plain + gzip ZIPs), LCD UI, and Assets — no IDF needed.
+  # .stamp / editor junk is stripped by pack_store_resources / minify tools.
+  stage: pack
+  image: python:3.12-bookworm
+  needs: []
+  script:
+    - python3 tools/pack_store_resources.py --out-dir ci_deploy
+    - python3 tools/test_pack_store_resources.py
+  artifacts:
+    when: on_success
+    expire_in: 14 days
+    name: "store-resources-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ci_deploy/*.zip
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
 build:app:
   extends:
     - .idf_env

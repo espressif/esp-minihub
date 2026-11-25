@@ -52,6 +52,9 @@ STATUS_GLOSS = {
             "既没有会话 cookie，也没有被接受的 Bearer token"),
     "403": ("authenticated, but not allowed to do this", "已登录但不允许做这件事"),
     "404": ("no route, no file, no such point or module", "没有这条路由、没有这个文件、点位或模块不存在"),
+    "406": ("the file on storage is gzip-only and the request has no "
+            "``Accept-Encoding: gzip`` (body ``gzip required``)",
+            "存储上只有 gzip 文件，且请求未带 ``Accept-Encoding: gzip`` （正文 ``gzip required``）"),
     "409": ("something already occupies the slot: an OTA is in progress, or the "
             "password has already been set", "位置已经被占了：正在跑一次 OTA，或密码早已设置过"),
     "500": ("the request reached its handler and the handler failed; the detail is "

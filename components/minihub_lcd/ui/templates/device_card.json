@@ -3,27 +3,27 @@
   "id": "device_card",
   "node": {
     "type": "container",
-    "layout": {"type": "flex", "flexFlow": "column", "gap": "4dp"},
-    "placement": {"width": "166dp", "height": "wrap"},
+    "layout": {"type": "flex", "flexFlow": "column", "gap": "8dp"},
+    "placement": {"width": "320dp", "height": "wrap"},
     "style": {
       "bgColor": "#151c2f",
       "borderWidth": "1dp",
       "borderColor": "#243049",
-      "padding": "8dp",
-      "radius": "10dp"
+      "padding": "12dp",
+      "radius": "12dp"
     },
     "children": [
       {
         "type": "container",
         "id": "top",
-        "layout": {"type": "flex", "flexFlow": "row", "mainAlign": "start", "crossAlign": "center", "gap": "6dp"},
-        "placement": {"width": "150dp", "height": "wrap"},
+        "layout": {"type": "flex", "flexFlow": "row", "mainAlign": "start", "crossAlign": "center", "gap": "10dp"},
+        "placement": {"width": "296dp", "height": "wrap"},
         "children": [
           {
             "type": "image",
             "id": "icon",
-            "imageProps": {"src": "${image.icon_device}"},
-            "placement": {"width": "32dp", "height": "32dp"},
+            "imageProps": {"src": "${image.device}"},
+            "placement": {"width": "56dp", "height": "56dp"},
             "commonProps": {"clickable": false}
           },
           {
@@ -32,14 +32,14 @@
             "labelProps": {"text": ""},
             "bindings": {"labelProps.text": "card.name"},
             "placement": {"width": "wrap", "flexGrow": 1},
-            "style": {"textColor": "#eef2ff", "fontSize": "13sp"}
+            "style": {"textColor": "#eef2ff", "fontSize": "16sp"}
           },
           {
             "type": "label",
             "id": "type",
             "labelProps": {"text": ""},
             "bindings": {"labelProps.text": "card.type"},
-            "style": {"textColor": "#818cf8", "fontSize": "10sp", "bgColor": "#1a2238", "padding": "2dp", "radius": "4dp"}
+            "style": {"textColor": "#818cf8", "fontSize": "12sp", "bgColor": "#1a2238", "padding": "3dp", "radius": "4dp"}
           }
         ]
       },
@@ -48,45 +48,153 @@
         "id": "meta",
         "labelProps": {"text": ""},
         "bindings": {"labelProps.text": "card.meta"},
-        "style": {"textColor": "#5c6b85", "fontSize": "10sp"}
+        "style": {"textColor": "#5c6b85", "fontSize": "12sp"}
       },
       {
-        "type": "label",
-        "id": "val",
-        "labelProps": {"text": ""},
-        "bindings": {"labelProps.text": "card.value"},
-        "style": {"textColor": "#22c55e", "fontSize": "16sp"}
-      },
-      {
-        "type": "button",
-        "id": "rename_btn",
-        "events": [
-          {
-            "type": "clicked",
-            "action": "device_rename"
-          }
-        ],
-        "placement": {
-          "width": "150dp",
-          "height": "24dp"
+        "type": "container",
+        "id": "power_row",
+        "layout": {
+          "type": "flex",
+          "flexFlow": "row",
+          "mainAlign": "spaceBetween",
+          "crossAlign": "center",
+          "gap": "8dp"
         },
-        "style": {
-          "bgColor": "#1a2238",
-          "textColor": "#cbd5e1",
-          "fontSize": "10sp",
-          "radius": "4dp"
+        "placement": {
+          "width": "296dp",
+          "height": "wrap"
         },
         "children": [
           {
             "type": "label",
-            "id": "rename_btn_lbl",
-            "labelProps": {
-              "text": "${constant.strings.ov_rename}"
+            "id": "val",
+            "labelProps": {"text": ""},
+            "bindings": {
+              "labelProps.text": "card.value",
+              "style.textColor": "card.value_color"
+            },
+            "placement": {"width": "wrap", "flexGrow": 1},
+            "style": {"textColor": "#22c55e", "fontSize": "18sp"}
+          },
+          {
+            "type": "button",
+            "id": "power_sw",
+            "events": [
+              {
+                "type": "clicked",
+                "action": "device_power"
+              }
+            ],
+            "bindings": {
+              "style.bgColor": "card.power_bg"
+            },
+            "style": {
+              "bgColor": "#334155",
+              "radius": "18dp",
+              "borderWidth": "1dp",
+              "borderColor": "#64748b"
             },
             "placement": {
-              "mode": "relative",
-              "align": "center"
+              "width": "64dp",
+              "height": "36dp"
             }
+          }
+        ]
+      },
+      {
+        "type": "container",
+        "id": "actions",
+        "layout": {
+          "type": "flex",
+          "flexFlow": "row",
+          "mainAlign": "start",
+          "crossAlign": "center",
+          "gap": "16dp"
+        },
+        "placement": {
+          "width": "296dp",
+          "height": "wrap"
+        },
+        "children": [
+          {
+            "type": "button",
+            "id": "rename_btn",
+            "events": [
+              {
+                "type": "clicked",
+                "action": "device_rename"
+              }
+            ],
+            "bindings": {
+              "style.bgColor": "card.rename_bg"
+            },
+            "placement": {
+              "width": "88dp",
+              "height": "28dp"
+            },
+            "style": {
+              "bgColor": "#1a2238",
+              "borderWidth": "1dp",
+              "borderColor": "#243049",
+              "radius": "6dp"
+            },
+            "children": [
+              {
+                "type": "label",
+                "id": "rename_btn_lbl",
+                "labelProps": {
+                  "text": "${constant.strings.ov_rename}"
+                },
+                "placement": {
+                  "mode": "relative",
+                  "align": "center"
+                },
+                "style": {
+                  "textColor": "#cbd5e1",
+                  "fontSize": "13sp"
+                }
+              }
+            ]
+          },
+          {
+            "type": "button",
+            "id": "delete_btn",
+            "events": [
+              {
+                "type": "clicked",
+                "action": "device_delete"
+              }
+            ],
+            "bindings": {
+              "style.bgColor": "card.delete_bg"
+            },
+            "placement": {
+              "width": "88dp",
+              "height": "28dp"
+            },
+            "style": {
+              "bgColor": "#7f1d1d",
+              "borderWidth": "1dp",
+              "borderColor": "#991b1b",
+              "radius": "6dp"
+            },
+            "children": [
+              {
+                "type": "label",
+                "id": "delete_btn_lbl",
+                "labelProps": {
+                  "text": "${constant.strings.ov_delete}"
+                },
+                "placement": {
+                  "mode": "relative",
+                  "align": "center"
+                },
+                "style": {
+                  "textColor": "#fecaca",
+                  "fontSize": "13sp"
+                }
+              }
+            ]
           }
         ]
       }

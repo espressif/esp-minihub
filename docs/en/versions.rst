@@ -7,8 +7,8 @@ This guide documents |product_version| — the same string the device reports. R
 it together with the commit line in ``GET /api/system``: the version says what the
 product author declared, the commit says which tree was built.
 
-One number per device, two release trains
------------------------------------------
+One number per device, three release trains
+-------------------------------------------
 
 ``MINIHUB_VERSION`` is the device version, set once in
 :file:`cmake/minihub_bundle/Kconfig.projbuild` (default ``0.1.0-dev``). The same string
@@ -18,16 +18,21 @@ sidebar. It is not ``git describe``: the commit is reported separately, so a
 rebuild without a version bump is visible as a different commit under the same
 version.
 
-The console ships on its own train. ``MINIHUB_WEB_VERSION``
-(:file:`components/minihub_web/Kconfig.minihub`) is its **single** source: both the
-firmware build and the deploy step derive from it, so a freshly flashed Hub and the
-published bundle always agree. Write it without the leading ``v`` (only the deploy
-folder name adds that). It defaults to ``MINIHUB_VERSION`` but is deliberately
-separate: a web-only fix bumps it and leaves the firmware version alone. Do not
-hand-edit a ``version.txt`` in the tree -- it is generated at build time.
+The console version is ``MINIHUB_WEB_VERSION``
+(:file:`components/minihub_web/Kconfig.minihub`). The firmware build and
+``tools/deploy.sh`` both read it. The deploy folder is ``Webs/v<ver>/``; the stamped
+``version.txt`` and ``window.mhWebVersion`` omit the leading ``v``. It defaults to
+``MINIHUB_VERSION``. ``version.txt`` is generated at build time and is not hand-edited
+in the tree.
 
-So **a Hub can legitimately report two versions**, and a device that was updated in
-two steps usually does. Before you compare a device against this guide, check both:
+The LCD Brookesia UI (``/data/ui``) version is ``MINIHUB_LCD_UI_VERSION``
+(:file:`components/minihub_lcd/Kconfig.minihub`). The Host build stamps
+``/data/ui/version.txt``; ``tools/deploy.sh`` publishes ``LCD_UI/v<ver>/``, served as
+``GET /api/ui``. ``POST /api/update/apply`` with ``"type":"ui"`` writes
+``/data/ui``; reboot after apply. It defaults to ``MINIHUB_VERSION``.
+
+A Hub can report firmware, Web, and LCD UI versions at once. Check each when comparing
+a device to this guide:
 
 .. code-block:: bash
 
@@ -35,10 +40,15 @@ two steps usually does. Before you compare a device against this guide, check bo
      | python3 -m json.tool   # version, commit
    # the console's own value is in window.mhWebVersion, shown in the sidebar
 
-A firmware that is newer than the console it runs against is normal; a console
-newer than the firmware usually means ``app-flash`` updated the app while
-``/data/web`` kept the previous bundle. Update the console as its own step
-(:doc:`web_console`) or flash the whole set (:doc:`production`).
+Firmware, Web, and LCD UI can update independently. Each surface only offers its
+own channels plus firmware:
+
+* Web console (:doc:`web_console`): firmware, Web, and device assets.
+* LCD System page: firmware and LCD UI (check / upgrade); reboot after a UI apply.
+* REST: ``POST /api/update/apply`` with ``"type":"firmware"|"web"|"ui"|"asset"``
+  (automation; the Web console does not expose ``ui``).
+
+Full flash: :doc:`production`.
 
 What an update may offer
 ------------------------

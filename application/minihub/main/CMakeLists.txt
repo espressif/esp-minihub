@@ -131,9 +131,13 @@ if(CONFIG_MINIHUB_LCD_UI AND EXISTS ${MINIHUB_REPO_ROOT}/components/minihub_lcd/
         # into the image (as the Web console already does): the expanded layout
         # alone costs ~147 KB and pushed littlefs into LFS_ERR_NOSPC at build
         # time, which also surfaced as runtime "No more free space" on the board.
+        # Stamp CONFIG_MINIHUB_LCD_UI_VERSION into version.txt (same Kconfig
+        # tools/deploy.sh publishes as LCD_UI/v<ver>/), so a freshly flashed Hub
+        # and the store tree report the same LCD UI version.
         COMMAND ${Python3_EXECUTABLE} ${MINIHUB_REPO_ROOT}/tools/minify_lcd_ui_assets.py
                 --src ${MINIHUB_REPO_ROOT}/components/minihub_lcd/ui
                 --dst ${MINIHUB_FS_DIR}/ui
+                --ui-version "${CONFIG_MINIHUB_LCD_UI_VERSION}"
                 -q
         COMMAND ${CMAKE_COMMAND} -E touch ${MINIHUB_FS_DIR}/ui/.stamp
         DEPENDS ${_minihub_ui_src} ${MINIHUB_REPO_ROOT}/tools/minify_lcd_ui_assets.py
@@ -167,6 +171,14 @@ if(CONFIG_MINIHUB_WEB_UI)
     # the same Kconfig tools/deploy.sh uses for Webs/v<version>/. It is stamped
     # into version.txt and window.mhWebVersion here, so a freshly flashed Hub and
     # the published bundle report the same value (no phantom "new web" hint).
+    # CONFIG_MINIHUB_WEB_ASSET_* picks plain / gzip / both for /data/web/.
+    if(CONFIG_MINIHUB_WEB_ASSET_GZIP)
+        set(_MINIHUB_WEB_ENCODING gzip)
+    elseif(CONFIG_MINIHUB_WEB_ASSET_PLAIN)
+        set(_MINIHUB_WEB_ENCODING plain)
+    else()
+        set(_MINIHUB_WEB_ENCODING both)
+    endif()
     add_custom_command(
         OUTPUT ${MINIHUB_FS_DIR}/web/.stamp
         COMMAND ${CMAKE_COMMAND} -E rm -rf ${MINIHUB_FS_DIR}/web
@@ -174,15 +186,15 @@ if(CONFIG_MINIHUB_WEB_UI)
                 --src ${_MINIHUB_WEB_SRC}
                 --dst ${MINIHUB_FS_DIR}/web
                 --web-version "${CONFIG_MINIHUB_WEB_VERSION}"
-                --gzip
+                --encoding ${_MINIHUB_WEB_ENCODING}
                 -q
         COMMAND ${CMAKE_COMMAND} -E touch ${MINIHUB_FS_DIR}/web/.stamp
         DEPENDS ${_minihub_web_src} ${MINIHUB_REPO_ROOT}/tools/minify_web_assets.py
-        COMMENT "Minify Host Web console into littlefs storage image"
+        COMMENT "Minify Host Web console into littlefs storage image (${_MINIHUB_WEB_ENCODING})"
         VERBATIM
     )
     set(_minihub_web_dep ${MINIHUB_FS_DIR}/web/.stamp)
-    message(STATUS "storage: Host Web UI from ${_MINIHUB_WEB_SRC} → web/ (minified at build)")
+    message(STATUS "storage: Host Web UI from ${_MINIHUB_WEB_SRC} → web/ (encoding=${_MINIHUB_WEB_ENCODING})")
 endif()
 
 littlefs_create_partition_image(storage ${MINIHUB_FS_DIR} FLASH_IN_PROJECT

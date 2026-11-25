@@ -16,6 +16,9 @@ CONFIG_BT_NIMBLE_GATT_CLIENT=y
 CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3
 CONFIG_BT_NIMBLE_MAX_CCCDS=6
 # NimBLE MSYS/ACL headroom: radio_coexist_memory.defaults (when ble_mesh stack enabled)
+# BTC_TASK delivers Mesh callbacks; 4096 overflows during provisioner sprintf/log
+# (Stack protection fault, SP below stack bounds). Keep ≥8192 with NimBLE+Mesh.
+CONFIG_BT_BTC_TASK_STACK_SIZE=8192
 CONFIG_BLE_MESH=y
 CONFIG_BLE_MESH_PROVISIONER=y
 CONFIG_BLE_MESH_PB_ADV=y

@@ -56,8 +56,8 @@ esp_err_t minihub_dw_cloud_fetch_default(const char *base_url, const char *devic
         }
         base_url = base;
     }
-    /* device_id is a TYPE here (zigbee_adapter.c passes dev->type). ESP_FAIL is
-     * the download helper's answer to a 404, i.e. this type ships no artwork. */
+    /* device_id is a TYPE here (zigbee_adapter.c passes dev->type).
+     * ESP_ERR_NOT_FOUND is the download helper's answer to a 404 (no artwork). */
     esp_err_t err = minihub_update_fetch_device_icon(base_url, device_id);
     if (err != ESP_OK) {
         return err;
@@ -250,6 +250,8 @@ static esp_err_t index_url(minihub_update_kind_t kind, const char *base, char *o
         suffix = "/api/assets";
     } else if (kind == MINIHUB_UPDATE_WEB) {
         suffix = "/api/web";
+    } else if (kind == MINIHUB_UPDATE_UI) {
+        suffix = "/api/ui";
     } else {
         return ESP_ERR_INVALID_ARG;
     }
@@ -273,6 +275,13 @@ static esp_err_t fetch_index(minihub_update_kind_t kind, const char *base, mh_up
     size_t len = 0;
     err = mh_update_http_get(full, &body, &len, MH_UPDATE_INDEX_MAX);
     free(full);
+    if (err == ESP_ERR_NOT_FOUND) {
+        /* Deploy server has no published package for this kind (e.g. public
+         * portal returns 404 when LCD_UI/ is empty). Treat as an empty index so
+         * check/apply report "up to date" instead of a hard failure. */
+        memset(idx, 0, sizeof(*idx));
+        return ESP_OK;
+    }
     if (err != ESP_OK) {
         return err;
     }
@@ -300,10 +309,11 @@ static const mh_update_item_t *best_firmware(const mh_update_index_t *idx, const
  * that is running, used by a forced re-install (repair, not upgrade). */
 static const mh_update_item_t *running_firmware(const mh_update_index_t *idx, const char *chip);
 
-/* Defined below, after read_web_named(): the web version whose files should be
- * applied. A forced re-install re-applies the running version (repair), a plain
- * update the newest one. */
-static const char *web_version_target(const mh_update_index_t *idx, const char *chip, bool force);
+/* Defined below, after read_bundle_named(): versioned bundle (web or LCD UI)
+ * whose files should be applied. Forced re-install re-applies the running
+ * version; a plain update takes the newest. */
+static const char *bundle_version_target(minihub_update_kind_t kind, const mh_update_index_t *idx,
+                                         const char *chip, bool force);
 
 /* Defined below: pull icons/styles for the device types this Hub actually runs
  * (GET /api/assets/device/<type>). Bulk ASSET sync skips images/ and styles/,
@@ -350,12 +360,20 @@ static esp_err_t dest_for(minihub_update_kind_t kind, const mh_update_item_t *it
         } else {
             root = MINIHUB_DW_MODEL_DIR;
         }
-    } else if (kind == MINIHUB_UPDATE_WEB) {
-        root = MINIHUB_WEB_DIR;
+    } else if (kind == MINIHUB_UPDATE_WEB || kind == MINIHUB_UPDATE_UI) {
+        root = (kind == MINIHUB_UPDATE_WEB) ? MINIHUB_WEB_DIR : MINIHUB_UI_DIR;
         if (item->version && item->version[0]) {
             size_t vl = strlen(item->version);
             if (strncmp(url, item->version, vl) == 0 && url[vl] == '/') {
                 rel = url + vl + 1;
+            }
+        }
+        /* Store may publish Webs/<ver>/plain/… and …/gzip/…; flatten onto /data/web. */
+        if (kind == MINIHUB_UPDATE_WEB) {
+            if (strncmp(rel, "plain/", 6) == 0) {
+                rel += 6;
+            } else if (strncmp(rel, "gzip/", 5) == 0) {
+                rel += 5;
             }
         }
     } else {
@@ -403,6 +421,55 @@ static bool asset_item_needed(const mh_update_item_t *item)
     return true;
 }
 
+/* After stripping <version>/, decide whether a Web catalog path matches the
+ * Hub's CONFIG_MINIHUB_WEB_ASSET_* layout (plain/ vs gzip/ trees, or legacy flat). */
+static bool web_asset_path_wanted(const char *rel)
+{
+    if (!rel || !rel[0]) {
+        return false;
+    }
+    const bool under_plain = (strncmp(rel, "plain/", 6) == 0);
+    const bool under_gzip = (strncmp(rel, "gzip/", 5) == 0);
+    const char *leaf = rel;
+    if (under_plain) {
+        leaf = rel + 6;
+    } else if (under_gzip) {
+        leaf = rel + 5;
+    }
+    const size_t leaf_len = strlen(leaf);
+    const bool is_gz = (leaf_len > 3 && strcmp(leaf + leaf_len - 3, ".gz") == 0);
+#ifdef CONFIG_MINIHUB_WEB_ASSET_PLAIN
+    if (under_gzip) {
+        return false;
+    }
+    if (!under_plain && is_gz) {
+        return false; /* legacy flat .gz sibling */
+    }
+    return true;
+#elif defined(CONFIG_MINIHUB_WEB_ASSET_GZIP)
+    if (under_plain) {
+        /* gzip tree carries plain markers (login.html, version.txt, …). */
+        return false;
+    }
+    if (!under_gzip && !is_gz) {
+        /* Legacy flat: keep markers / non-compressible; skip plain JS/CSS/HTML. */
+        const char *dot = strrchr(leaf, '.');
+        if (dot && (strcasecmp(dot, ".js") == 0 || strcasecmp(dot, ".css") == 0 ||
+                    strcasecmp(dot, ".html") == 0 || strcasecmp(dot, ".htm") == 0 ||
+                    strcasecmp(dot, ".json") == 0 || strcasecmp(dot, ".svg") == 0)) {
+            /* Prefer gzip counterparts when the catalog is flat+siblings. */
+            if (strcmp(leaf, "login.html") != 0 && strcmp(leaf, "manifest.json") != 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+#else
+    (void)is_gz;
+    return true; /* BOTH or unset: take every path */
+#endif
+}
+
 static bool item_selected(minihub_update_kind_t kind, const mh_update_index_t *idx,
                           const mh_update_item_t *item, const char *chip, const char *web_ver)
 {
@@ -412,12 +479,25 @@ static bool item_selected(minihub_update_kind_t kind, const mh_update_index_t *i
     if (!item->url || !item->url[0] || !mh_update_target_match(item, chip)) {
         return false;
     }
-    if (kind == MINIHUB_UPDATE_WEB) {
+    if (kind == MINIHUB_UPDATE_WEB || kind == MINIHUB_UPDATE_UI) {
         if (!web_ver || !item->version || strcmp(item->version, web_ver) != 0) {
             return false;
         }
     }
-    if (kind == MINIHUB_UPDATE_ASSET || kind == MINIHUB_UPDATE_WEB) {
+    if (kind == MINIHUB_UPDATE_WEB) {
+        const char *rel = item->url;
+        if (item->version && item->version[0]) {
+            size_t vl = strlen(item->version);
+            if (strncmp(rel, item->version, vl) == 0 && rel[vl] == '/') {
+                rel += vl + 1;
+            }
+        }
+        if (!web_asset_path_wanted(rel)) {
+            return false;
+        }
+    }
+    if (kind == MINIHUB_UPDATE_ASSET || kind == MINIHUB_UPDATE_WEB ||
+        kind == MINIHUB_UPDATE_UI) {
         char dest[MH_UPDATE_URL_MAX];
         if (dest_for(kind, item, dest, sizeof(dest)) != ESP_OK) {
             return false;
@@ -449,11 +529,14 @@ static int count_pending(minihub_update_kind_t kind, const mh_update_index_t *id
         }
         return (firmware_needs(best) || force) ? 1 : 0;
     }
-    const char *web_ver = (kind == MINIHUB_UPDATE_WEB) ? web_version_target(idx, chip, force) : NULL;
+    const char *bundle_ver =
+        (kind == MINIHUB_UPDATE_WEB || kind == MINIHUB_UPDATE_UI)
+            ? bundle_version_target(kind, idx, chip, force)
+            : NULL;
     int pending = 0;
     for (size_t i = 0; i < idx->nitems; i++) {
         const mh_update_item_t *item = &idx->items[i];
-        if (!item_selected(kind, idx, item, chip, web_ver)) {
+        if (!item_selected(kind, idx, item, chip, bundle_ver)) {
             continue;
         }
         char dest[MH_UPDATE_URL_MAX];
@@ -512,10 +595,13 @@ static esp_err_t apply_model_reload(const char *dest)
 static esp_err_t apply_files(minihub_update_kind_t kind, const char *base, const mh_update_index_t *idx,
                              const char *chip, bool force)
 {
-    const char *web_ver = (kind == MINIHUB_UPDATE_WEB) ? web_version_target(idx, chip, force) : NULL;
+    const char *bundle_ver =
+        (kind == MINIHUB_UPDATE_WEB || kind == MINIHUB_UPDATE_UI)
+            ? bundle_version_target(kind, idx, chip, force)
+            : NULL;
     for (size_t i = 0; i < idx->nitems; i++) {
         const mh_update_item_t *item = &idx->items[i];
-        if (!item_selected(kind, idx, item, chip, web_ver)) {
+        if (!item_selected(kind, idx, item, chip, bundle_ver)) {
             continue;
         }
         char dest[MH_UPDATE_URL_MAX];
@@ -546,6 +632,10 @@ static esp_err_t apply_files(minihub_update_kind_t kind, const char *base, const
                 return err;
             }
         }
+    }
+    if (kind == MINIHUB_UPDATE_UI) {
+        ESP_LOGW(TAG, "LCD UI files updated under %s — reboot to reload Brookesia",
+                 MINIHUB_UI_DIR);
     }
     return ESP_OK;
 }
@@ -644,6 +734,7 @@ static SemaphoreHandle_t s_hint_mu;
 static cJSON *s_hint_fw;
 static cJSON *s_hint_plugins;
 static cJSON *s_hint_web;
+static cJSON *s_hint_ui;
 static cJSON *s_hint_assets;
 static char *s_fw_note;
 
@@ -712,6 +803,21 @@ static void hint_store_web(cJSON *web, bool ok)
     cJSON_Delete(web);
 }
 
+static void hint_store_ui(cJSON *ui, bool ok)
+{
+    if (!hint_lock()) {
+        cJSON_Delete(ui);
+        return;
+    }
+    if (ok) {
+        cJSON_Delete(s_hint_ui);
+        s_hint_ui = ui;
+        ui = NULL;
+    }
+    hint_unlock();
+    cJSON_Delete(ui);
+}
+
 static void hint_store_assets(cJSON *assets, bool ok)
 {
     if (!hint_lock()) {
@@ -738,6 +844,8 @@ static void hint_clear_all(void)
     s_hint_plugins = cJSON_CreateArray();
     cJSON_Delete(s_hint_web);
     s_hint_web = NULL;
+    cJSON_Delete(s_hint_ui);
+    s_hint_ui = NULL;
     cJSON_Delete(s_hint_assets);
     s_hint_assets = NULL;
     hint_unlock();
@@ -876,11 +984,19 @@ static char *read_text_capped(const char *path, size_t cap, bool first_line)
     return buf;
 }
 
-static char *read_web_named(const char *name, size_t cap, bool first_line)
+static char *read_bundle_named(minihub_update_kind_t kind, const char *name, size_t cap,
+                               bool first_line)
 {
     char path[96];
-    const char *roots[] = {MINIHUB_WEB_DIR, MINIHUB_PREINSTALL_WEB_DIR};
-    for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); i++) {
+    const char *roots[2];
+    size_t nroots = 0;
+    if (kind == MINIHUB_UPDATE_UI) {
+        roots[nroots++] = MINIHUB_UI_DIR;
+    } else {
+        roots[nroots++] = MINIHUB_WEB_DIR;
+        roots[nroots++] = MINIHUB_PREINSTALL_WEB_DIR;
+    }
+    for (size_t i = 0; i < nroots; i++) {
         int wrote = snprintf(path, sizeof(path), "%s/%s", roots[i], name);
         if (wrote < 0 || (size_t)wrote >= sizeof(path)) {
             continue;
@@ -891,6 +1007,11 @@ static char *read_web_named(const char *name, size_t cap, bool first_line)
         }
     }
     return NULL;
+}
+
+static char *read_web_named(const char *name, size_t cap, bool first_line)
+{
+    return read_bundle_named(MINIHUB_UPDATE_WEB, name, cap, first_line);
 }
 
 static esp_err_t probe_firmware_hint(const char *base, cJSON **out)
@@ -938,16 +1059,17 @@ static const char *ver_norm(const char *v)
     return v ? v : "";
 }
 
-/* Which published web version to apply: a forced re-install re-applies the
+/* Which published web/UI version to apply: a forced re-install re-applies the
  * version that is running (repair), a plain update takes the newest one. Falls
  * back to newest when the running version is no longer published. */
-static const char *web_version_target(const mh_update_index_t *idx, const char *chip, bool force)
+static const char *bundle_version_target(minihub_update_kind_t kind, const mh_update_index_t *idx,
+                                         const char *chip, bool force)
 {
     const char *latest = web_version_max(idx, chip);
     if (!force || !latest) {
         return latest;
     }
-    char *cur = read_web_named("version.txt", 64, true);
+    char *cur = read_bundle_named(kind, "version.txt", 64, true);
     if (!cur) {
         return latest;
     }
@@ -964,10 +1086,13 @@ static const char *web_version_target(const mh_update_index_t *idx, const char *
     return pick;
 }
 
-static void probe_web_hint(const char *base, cJSON **out, bool *ok)
+static void probe_bundle_hint(minihub_update_kind_t kind, const char *base, cJSON **out, bool *ok)
 {
     *out = NULL;
     *ok = false;
+    if (kind != MINIHUB_UPDATE_WEB && kind != MINIHUB_UPDATE_UI) {
+        return;
+    }
     if (!lock_take()) {
         return;
     }
@@ -975,10 +1100,10 @@ static void probe_web_hint(const char *base, cJSON **out, bool *ok)
     local_chip(chip, sizeof(chip));
     mh_update_index_t idx;
     memset(&idx, 0, sizeof(idx));
-    esp_err_t err = fetch_index(MINIHUB_UPDATE_WEB, base, &idx);
+    esp_err_t err = fetch_index(kind, base, &idx);
     if (err == ESP_OK) {
         const char *latest = web_version_max(&idx, chip);
-        char *cur = read_web_named("version.txt", 64, true);
+        char *cur = read_bundle_named(kind, "version.txt", 64, true);
         if (latest && strcmp(ver_norm(latest), ver_norm(cur)) != 0) {
             cJSON *obj = cJSON_CreateObject();
             if (obj) {
@@ -1002,6 +1127,11 @@ static void probe_web_hint(const char *base, cJSON **out, bool *ok)
     *ok = (err == ESP_OK);
 }
 
+static void probe_web_hint(const char *base, cJSON **out, bool *ok)
+{
+    probe_bundle_hint(MINIHUB_UPDATE_WEB, base, out, ok);
+}
+
 static void hint_check_once(void)
 {
     char base[MINIHUB_STORE_BASE_URL_MAX];
@@ -1018,6 +1148,9 @@ static void hint_check_once(void)
     cJSON *web = NULL;
     bool wok = false;
     probe_web_hint(base, &web, &wok);
+    cJSON *ui = NULL;
+    bool uok = false;
+    probe_bundle_hint(MINIHUB_UPDATE_UI, base, &ui, &uok);
     int apending = minihub_update_check(MINIHUB_UPDATE_ASSET, base);
     bool aok = (apending >= 0);
     cJSON *assets = NULL;
@@ -1025,13 +1158,14 @@ static void hint_check_once(void)
         assets = cJSON_CreateObject();
         cJSON_AddNumberToObject(assets, "pending", apending);
     }
-    if (ferr != ESP_OK && perr != ESP_OK && !wok && !aok) {
-        ESP_LOGW(TAG, "update hint check failed: firmware %s, plugins %s, web %s, assets %s",
+    if (ferr != ESP_OK && perr != ESP_OK && !wok && !uok && !aok) {
+        ESP_LOGW(TAG, "update hint check failed: firmware %s, plugins %s, web %s, ui %s, assets %s",
                  esp_err_to_name(ferr), esp_err_to_name(perr),
-                 wok ? "ok" : "err", aok ? "ok" : "err");
+                 wok ? "ok" : "err", uok ? "ok" : "err", aok ? "ok" : "err");
         cJSON_Delete(fw);
         cJSON_Delete(plugins);
         cJSON_Delete(web);
+        cJSON_Delete(ui);
         cJSON_Delete(assets);
         return;
     }
@@ -1044,16 +1178,21 @@ static void hint_check_once(void)
     if (!wok) {
         ESP_LOGW(TAG, "web hint check failed");
     }
+    if (!uok) {
+        ESP_LOGW(TAG, "ui hint check failed");
+    }
     if (!aok) {
         ESP_LOGW(TAG, "asset hint check failed");
     }
     int nplug = (perr == ESP_OK && plugins) ? cJSON_GetArraySize(plugins) : -1;
     int npending = (aok && assets) ? cJSON_GetObjectItem(assets, "pending")->valueint : 0;
-    ESP_LOGI(TAG, "update hint: firmware %s, plugins %d, web %s, assets %d",
+    ESP_LOGI(TAG, "update hint: firmware %s, plugins %d, web %s, ui %s, assets %d",
              (ferr == ESP_OK && fw) ? "yes" : (ferr == ESP_OK ? "no" : "err"), nplug,
-             (wok && web) ? "yes" : (wok ? "no" : "err"), npending);
+             (wok && web) ? "yes" : (wok ? "no" : "err"),
+             (uok && ui) ? "yes" : (uok ? "no" : "err"), npending);
     hint_store(fw, ferr == ESP_OK, plugins, perr == ESP_OK, false);
     hint_store_web(web, wok);
+    hint_store_ui(ui, uok);
     hint_store_assets(assets, aok);
 }
 
@@ -1246,6 +1385,12 @@ cJSON *minihub_update_hints_json(void)
     } else {
         cJSON_AddItemToObject(root, "web", cJSON_CreateNull());
     }
+    if (s_hint_ui) {
+        cJSON *copy = cJSON_Duplicate(s_hint_ui, true);
+        cJSON_AddItemToObject(root, "ui", copy ? copy : cJSON_CreateNull());
+    } else {
+        cJSON_AddItemToObject(root, "ui", cJSON_CreateNull());
+    }
     if (s_hint_assets) {
         cJSON *copy = cJSON_Duplicate(s_hint_assets, true);
         cJSON_AddItemToObject(root, "assets", copy ? copy : cJSON_CreateNull());
@@ -1279,6 +1424,13 @@ cJSON *minihub_update_notes_json(void)
     cJSON_AddStringToObject(root, "web_note", web_note ? web_note : "");
     free(web_ver);
     free(web_note);
+
+    char *ui_ver = read_bundle_named(MINIHUB_UPDATE_UI, "version.txt", 64, true);
+    char *ui_note = read_bundle_named(MINIHUB_UPDATE_UI, "release_notes.txt", MH_UPDATE_NOTE_MAX, false);
+    cJSON_AddStringToObject(root, "ui_version", ui_ver ? ui_ver : "");
+    cJSON_AddStringToObject(root, "ui_note", ui_note ? ui_note : "");
+    free(ui_ver);
+    free(ui_note);
     return root;
 }
 
