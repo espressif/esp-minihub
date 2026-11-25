@@ -84,8 +84,10 @@ Directory layout
 
 **Always set ``requires`` deliberately.** It is copied into ``catalog.json`` and
 is what ``caps=`` on ``GET /api/catalog`` filters against. Tokens come from
-``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``,
-and ``Modbus``. ``BLE`` and ``BLE_mesh`` both follow the ``ble_mesh`` adapter
+``WiFi``, ``WiFi_SoftAP``, ``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``,
+``Matter``, ``MQTT_Broker``, and ``Modbus``. ``WiFi`` is the STA uplink adapter;
+``WiFi_SoftAP`` is reserved for a lasting Hub SoftAP / AP-router mode (off until
+that mode ships). ``BLE`` and ``BLE_mesh`` both follow the ``ble_mesh`` adapter
 (``host.ble`` plugins use ``["BLE"]``). ``[]`` means the module needs none of
 those stacks. While any listed
 token is off or not built into the Hub, the store hides a not-yet-installed

@@ -151,7 +151,7 @@ A module with no stack dependency still ships an explicit empty list:
   ``*`` are written as ``any``. When the field is omitted, pack writes
   ``["any"]`` for a JS module and ``["esp32s31"]`` for every other module
 * ``requires`` — **set this in ``module.json`` before packing.** Capabilities
-  this plugin needs, from ``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``,
+  this plugin needs, from ``WiFi``, ``WiFi_SoftAP``, ``Zigbee``, ``BLE``, ``BLE_mesh``, ``Thread_Matter``,
   ``Matter``, ``MQTT_Broker``, and ``Modbus``. ``BLE`` and ``BLE_mesh`` both
   follow the ``ble_mesh`` adapter. ``[]`` means none. Each name must be
   compiled in and enabled. The Hub store omits a not-yet-installed plugin

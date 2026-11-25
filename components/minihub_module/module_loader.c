@@ -1445,6 +1445,11 @@ static const struct {
     const char *token;
     const char *adapter;
 } k_capabilities[] = {
+    /* WiFi = STA uplink adapter. WiFi_SoftAP is reserved for a lasting Hub
+     * SoftAP / AP-router mode; no adapter is registered yet, so the token
+     * stays off until that product path lands (name kept stable for Store). */
+    {"WiFi", "wifi"},
+    {"WiFi_SoftAP", "wifi_softap"},
     {"Zigbee", "zigbee"},
     {"BLE", "ble_mesh"},
     {"BLE_mesh", "ble_mesh"},

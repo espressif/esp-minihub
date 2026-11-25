@@ -72,9 +72,11 @@ Catalog entry fields
 * ``adapter`` — the ``adapters.json`` key Host creates/enables; derived from
   ``adapter`` or ``inject.adapter``. When both are absent, the first
   ``requires`` entry is used.
-* ``requires`` — capabilities this plugin needs, from ``Zigbee``, ``BLE``,
+* ``requires`` — capabilities this plugin needs, from ``WiFi``, ``WiFi_SoftAP``, ``Zigbee``, ``BLE``,
   ``BLE_mesh``, ``Thread_Matter``, ``Matter``, ``MQTT_Broker``, and
-  ``Modbus``. ``BLE`` and ``BLE_mesh`` both track the ``ble_mesh`` adapter
+  ``Modbus``. ``WiFi`` is the STA uplink; ``WiFi_SoftAP`` is reserved for a
+  lasting Hub SoftAP / AP-router mode (off until that mode ships). ``BLE`` and
+  ``BLE_mesh`` both track the ``ble_mesh`` adapter
   (``host.ble`` / passive scan needs the same stack). Empty means none. A
   listed capability must be compiled in and enabled. The store omits the
   plugin from the available list otherwise.

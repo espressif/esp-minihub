@@ -63,9 +63,11 @@ catalog 条目字段
 * ``description`` —— module.json 的 ``description``。
 * ``adapter`` —— Host 会创建/启用的 ``adapters.json`` 键；取自 ``adapter`` 或
   ``inject.adapter``。两者都没有时，用 ``requires`` 的第一项。
-* ``requires`` —— 这个插件需要的能力，取自 ``Zigbee`` 、 ``BLE`` 、 ``BLE_mesh`` 、
-  ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、 ``Modbus`` 。``BLE`` 与
-  ``BLE_mesh`` 都跟随 ``ble_mesh`` 适配器（``host.ble`` / 被动扫描共用同一套栈）。
+* ``requires`` —— 这个插件需要的能力，取自 ``WiFi`` 、 ``WiFi_SoftAP`` 、 ``Zigbee`` 、
+  ``BLE`` 、 ``BLE_mesh`` 、 ``Thread_Matter`` 、 ``Matter`` 、 ``MQTT_Broker`` 、
+  ``Modbus`` 。``WiFi`` 对应 STA 上行； ``WiFi_SoftAP`` 预留给长期 SoftAP /
+  作路由器模式（落地前为关）。``BLE`` 与 ``BLE_mesh`` 都跟随 ``ble_mesh``
+  适配器（``host.ble`` / 被动扫描共用同一套栈）。
   空列表表示不需要。列出的能力必须已编进固件且处于启用状态，否则商店不把它放进可安装列表。
   已经安装的插件仍留在已安装列表，并标为当前固件不支持。
 * ``url`` —— 下载路径。本地部署树用 ``/files/Stores/<bucket>/<id>/<id>.mhub``，

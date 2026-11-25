@@ -109,9 +109,12 @@ bool minihub_module_adapter_supported(const char *name);
 
 /**
  * @brief True when this Hub currently has the named capability.
- *        Tokens: Zigbee, BLE, BLE_mesh, Thread_Matter, Matter, MQTT_Broker,
- *        Modbus. BLE and BLE_mesh both follow the ble_mesh adapter.
- *        A token is on only when that adapter is compiled in and enabled.
+ *        Tokens: WiFi, WiFi_SoftAP, Zigbee, BLE, BLE_mesh, Thread_Matter,
+ *        Matter, MQTT_Broker, Modbus. WiFi follows the wifi STA adapter.
+ *        WiFi_SoftAP is reserved for a lasting Hub SoftAP / AP-router mode
+ *        (always off until that mode ships). BLE and BLE_mesh both follow
+ *        ble_mesh. A token is on only when its adapter is compiled in and
+ *        enabled (or, for reserved SoftAP, when that mode is active).
  */
 bool minihub_module_capability_on(const char *token);
 
