@@ -227,12 +227,32 @@
       "en": "Refresh"
     },
     "store_refreshing": {
-      "zh": "正在从商店刷新目录…",
-      "en": "Refreshing the catalog…"
+      "zh": "正在刷新…",
+      "en": "Refreshing…"
+    },
+    "store_refresh_busy": {
+      "zh": "刷新中…",
+      "en": "Busy…"
     },
     "store_refresh_fail": {
       "zh": "刷新失败",
       "en": "Refresh failed"
+    },
+    "store_installing": {
+      "zh": "正在安装…",
+      "en": "Installing…"
+    },
+    "store_upgrading": {
+      "zh": "正在升级…",
+      "en": "Upgrading…"
+    },
+    "store_reinstalling": {
+      "zh": "正在重新安装…",
+      "en": "Reinstalling…"
+    },
+    "store_uninstalling": {
+      "zh": "正在卸载…",
+      "en": "Uninstalling…"
     },
     "store_op_unsupported": {
       "zh": "该项不支持此操作",
@@ -271,8 +291,12 @@
       "en": "Uptime"
     },
     "sys_memory": {
-      "zh": "内存",
-      "en": "Memory"
+      "zh": "内部内存",
+      "en": "Internal RAM"
+    },
+    "sys_psram": {
+      "zh": "PSRAM",
+      "en": "PSRAM"
     },
     "sys_storage": {
       "zh": "存储",
@@ -314,6 +338,27 @@
       "zh": "固件更新",
       "en": "Firmware update"
     },
+    "sys_ui_update": {
+      "zh": "LCD UI 更新",
+      "en": "LCD UI update"
+    },
+    "sys_ui_idle": {
+      "zh": "点检查更新，从商店获取界面",
+      "en": "Check to fetch UI from the store"
+    },
+    "sys_ui_available": {
+      "zh": "商店有新界面",
+      "en": "New LCD UI on the store"
+    },
+    "sys_ui_starting": {
+      "zh": "正在下载界面…",
+      "en": "Downloading LCD UI…"
+    },
+    "sys_ui_done_reboot": {
+      "zh": "界面已更新，请重启",
+      "en": "LCD UI updated — reboot"
+    },
+
     "sys_timezone": {
       "zh": "时区",
       "en": "Time zone"
@@ -671,8 +716,49 @@
       "en": "Add"
     },
     "matter_add_hint": {
-      "zh": "请在 Web 控制台完成设备配对",
-      "en": "Complete pairing in the Web console"
+      "zh": "请扫左侧栏二维码打开 Web 控制台完成配对",
+      "en": "Scan the sidebar QR code to finish pairing in the Web console"
+    },
+    "web_qr_hint": {
+      "zh": "配网后扫码进 Web",
+      "en": "Enter Web after IP"
+    },
+
+    "zigbee_section": {
+      "zh": "Zigbee",
+      "en": "Zigbee"
+    },
+    "ble_mesh_section": {
+      "zh": "BLE Mesh",
+      "en": "BLE Mesh"
+    },
+    "radio_allow_join": {
+      "zh": "允许入网",
+      "en": "Allow joining"
+    },
+    "radio_stop_join": {
+      "zh": "停止",
+      "en": "Stop"
+    },
+    "radio_joining": {
+      "zh": "入网中…",
+      "en": "Joining…"
+    },
+    "radio_provisioning": {
+      "zh": "配网中…",
+      "en": "Provisioning…"
+    },
+    "radio_zigbee_busy": {
+      "zh": "Zigbee 入网中，请稍候",
+      "en": "Zigbee joining is active"
+    },
+    "radio_ble_mesh_busy": {
+      "zh": "BLE Mesh 配网中，请稍候",
+      "en": "BLE Mesh provisioning is active"
+    },
+    "radio_join_failed": {
+      "zh": "无法开启入网",
+      "en": "Could not open join window"
     },
     "auth_checking": {
       "zh": "登录状态检查中…",
@@ -682,10 +768,83 @@
       "zh": "重命名",
       "en": "Rename"
     },
+    "ov_on": {
+      "zh": "开",
+      "en": "ON"
+    },
+    "ov_off": {
+      "zh": "关",
+      "en": "OFF"
+    },
+    "ov_delete": {
+      "zh": "删除",
+      "en": "Delete"
+    },
+    "detail_close": {
+      "zh": "关闭",
+      "en": "Close"
+    },
+    "detail_info": {
+      "zh": "详情",
+      "en": "Details"
+    },
+    "detail_back": {
+      "zh": "返回",
+      "en": "Back"
+    },
+    "detail_empty": {
+      "zh": "该设备暂无可显示的参数",
+      "en": "No parameters to show"
+    },
+    "detail_info_id": {
+      "zh": "设备 ID",
+      "en": "Device ID"
+    },
+    "detail_info_type": {
+      "zh": "类型",
+      "en": "Type"
+    },
+    "detail_info_adapter": {
+      "zh": "适配器",
+      "en": "Adapter"
+    },
+    "detail_info_status": {
+      "zh": "状态",
+      "en": "Status"
+    },
+    "detail_info_mfr": {
+      "zh": "厂商",
+      "en": "Manufacturer"
+    },
+    "detail_info_model": {
+      "zh": "型号",
+      "en": "Model"
+    },
+    "detail_info_sw": {
+      "zh": "软件版本",
+      "en": "Software"
+    },
+    "detail_info_hw": {
+      "zh": "硬件版本",
+      "en": "Hardware"
+    },
+    "detail_unknown": {
+      "zh": "未知",
+      "en": "Unknown"
+    },
+    "confirm_delete_device_title": {
+      "zh": "删除设备",
+      "en": "Delete device"
+    },
+    "confirm_delete_device_msg": {
+      "zh": "确定删除该设备？删除后无法恢复。",
+      "en": "Delete this device? This cannot be undone."
+    },
     "ov_device_name": {
       "zh": "设备名称",
       "en": "Device name"
     },
+
     "rename_title": {
       "zh": "重命名设备",
       "en": "Rename device"

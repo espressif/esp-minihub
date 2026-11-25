@@ -260,7 +260,7 @@ GB2312 一级汉字全集 3755 字）。需要 `pyftsubset` 与 LVGL 自带 OTF�
 MINIHUB_FONT_UI_ONLY=1 ./tools/ui_font/build_subset.sh   # 更小，仅 UI ASCII
 ```
 
-`collect_chars.py` / `gen_chars_3000.py` 生成子集字符表；日常一般跑 shell 包装脚本。
+`collect_chars.py` / `gen_gb2312_l1.py` 生成子集字符表；日常一般跑 shell 包装脚本。
 
 ## LCD 设备图标
 

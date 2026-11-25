@@ -4,6 +4,7 @@
     "constants/theme.json",
     "assets/device_icons.json",
     "templates/device_card.json",
+    "templates/device_param_row.json",
     "templates/rule_row.json",
     "templates/scene_row.json",
     "screens/overview.json",

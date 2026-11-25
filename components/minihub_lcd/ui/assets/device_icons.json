@@ -1,10 +1,137 @@
 {
   "type": "imageSet",
   "images": [
-    { "id": "icon_switch", "src": "../images/icon_switch.png", "width": 32, "height": 32 },
-    { "id": "icon_light", "src": "../images/icon_light.png", "width": 32, "height": 32 },
-    { "id": "icon_sensor", "src": "../images/icon_sensor.png", "width": 32, "height": 32 },
-    { "id": "icon_button", "src": "../images/icon_button.png", "width": 32, "height": 32 },
-    { "id": "icon_device", "src": "../images/icon_device.png", "width": 32, "height": 32 }
+    {
+      "id": "air-conditioner",
+      "src": "../images/devices/air-conditioner.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "airer",
+      "src": "../images/devices/airer.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "button",
+      "src": "../images/devices/button.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "camera",
+      "src": "../images/devices/camera.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "curtain",
+      "src": "../images/devices/curtain.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "device",
+      "src": "../images/devices/device.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "fan",
+      "src": "../images/devices/fan.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "fan_light",
+      "src": "../images/devices/fan_light.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "light",
+      "src": "../images/devices/light.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "light_strip",
+      "src": "../images/devices/light_strip.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "sensor_air_quality",
+      "src": "../images/devices/sensor_air_quality.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "sensor_contact",
+      "src": "../images/devices/sensor_contact.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "sensor_illuminance",
+      "src": "../images/devices/sensor_illuminance.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "sensor_motion",
+      "src": "../images/devices/sensor_motion.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "sensor_occupancy",
+      "src": "../images/devices/sensor_occupancy.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "sensor_smoke",
+      "src": "../images/devices/sensor_smoke.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "sensor_tamper",
+      "src": "../images/devices/sensor_tamper.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "sensor_temp_humidity",
+      "src": "../images/devices/sensor_temp_humidity.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "sensor_water",
+      "src": "../images/devices/sensor_water.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "speaker",
+      "src": "../images/devices/speaker.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "switch",
+      "src": "../images/devices/switch.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "television",
+      "src": "../images/devices/television.png",
+      "width": 32,
+      "height": 32
+    }
   ]
 }

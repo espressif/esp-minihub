@@ -319,6 +319,13 @@ function connectEventsWs() {
                 if (msg.event_type === 'hub.reloaded' || msg.event_type === 'store.module.installed') {
                     scheduleLoadStore();
                 }
+                if (msg.event_type === 'radio.permit_opened' || msg.event_type === 'radio.permit_closed') {
+                    if (typeof refreshRadioProv === 'function') {
+                        refreshRadioProv();
+                    } else if (typeof loadPoints === 'function') {
+                        scheduleLoadPoints();
+                    }
+                }
             } catch (e) {}
         };
         ws.onclose = function () {
@@ -344,6 +351,8 @@ function connectEventsWs() {
 const UPDATE_HINT_DISMISS_KEY = 'mhUpdateHintDismiss';
 
 function updateHintSignature(data) {
+    /* LCD UI hints stay on the panel; Web banner only tracks firmware / web /
+     * assets / plugins. */
     const fw = (data && data.firmware && data.firmware.version) ? String(data.firmware.version) : '';
     const web = (data && data.web && data.web.version) ? String(data.web.version) : '';
     const assets = (data && data.assets && data.assets.pending > 0) ? ('a' + String(data.assets.pending)) : '';

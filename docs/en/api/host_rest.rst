@@ -901,9 +901,14 @@ Host-published ``event_type`` values:
      - An adapter finished ``init`` and ``start`` and its command handler was
        registered.
      - ``data``: ``adapter``
+   * - ``radio.permit_opened``
+     - A Zigbee or BLE Mesh join / provision window opened (LCD or Web).
+     - ``data``: ``adapter`` (``zigbee`` / ``ble_mesh``), ``reason`` (e.g.
+       ``60s``)
    * - ``radio.permit_closed``
-     - The Zigbee permit-join window closed.
-     - ``data``: ``adapter`` (``zigbee``), ``reason`` when the stack supplies one
+     - A Zigbee or BLE Mesh join / provision window closed.
+     - ``data``: ``adapter`` (``zigbee`` / ``ble_mesh``), ``reason`` when the
+       stack supplies one (e.g. ``manual`` / ``timeout``)
    * - ``hub.reloaded``
      - A soft reload finished — including the reloads triggered by install,
        enable, disable, or uninstall, which add and drop points.

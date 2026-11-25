@@ -46,7 +46,7 @@ python3 tools/lcd_ui_editor/server.py --port 8791 --no-open
 - 顶部一排按钮切换 6 个屏；下面按固件当前分辨率（默认 **800×480**）画出画面。
 - **点画面里的元素 → 自动跳回结构编辑并选中该节点**（面包屑给出完整路径）。
 - 空文本的槽位用虚线标出（运行时才填充的，如商店行、设备卡）。
-- `image` 用斜纹占位并显示 `imageProps.src`（`${image.icon_device}` 这种占位符）。
+- `image` 用斜纹占位并显示 `imageProps.src`（`${image.device}` 这种占位符）。
 - 第二排可以**切换目标屏宽**（预设 480/640/800/960/1280 或自定义），用来看
   同比例、不同分辨率的屏上布局对不对。
 
@@ -99,7 +99,7 @@ overview_main `(112,0) 688x480`、导航按钮 `100x44`、统计卡 `160dp`、
 **预览没有建模的设备端差异**（真效果仍以上板为准）：
 
 - `imageSet` 里的图标是固定 32×32 位图，`parser_assets.cpp` 不读 density；
-- CJK 字体按固定字号注册（`sc_14` FreeType + `cjk_16` fallback），缩放行为未实测；
+- CJK 仅 FreeType（`sc_14` / `minihub_sc.otf`），无内置 Han Sans fallback；缩放行为未实测；
 - 内置 Montserrat 有 8~28 的字号阶梯，后端会取"最接近且更小"的一档。
 
 

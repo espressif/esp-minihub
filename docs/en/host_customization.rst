@@ -102,13 +102,10 @@ Step-by-step: create ``myhub``
    SAME value, ``MINIHUB_VERSION`` (default ``0.1.0-dev``). Git describe still shows
    separately as the commit line.
 
-   Only the Web bundle is versioned independently, via ``MINIHUB_WEB_VERSION``
-   (``Webs/v<ver>/`` and ``window.mhWebVersion``). Web and firmware releases are
-   usually not in sync, so set it separately in ``menuconfig`` (defaults to
-   ``MINIHUB_VERSION``). ``tools/deploy.sh`` reads both ``MINIHUB_VERSION`` and
-   ``MINIHUB_WEB_VERSION`` at publish time, and the Host build stamps the same
-   value into the console it puts in ``storage``; nothing else in the tree
-   carries a web version. See :doc:`versions`.
+   ``MINIHUB_WEB_VERSION`` stamps ``Webs/v<ver>/`` and ``window.mhWebVersion``.
+   ``MINIHUB_LCD_UI_VERSION`` stamps ``LCD_UI/v<ver>/`` and ``/data/ui/version.txt``.
+   Both default to ``MINIHUB_VERSION``. ``tools/deploy.sh`` and the Host build
+   read the same three values. See :doc:`versions`.
 
 6. **Build and flash**
 
@@ -252,10 +249,31 @@ Two checks keep an OEM edit within the firmware contract. Both run at build time
 - ``CONFIG_MINIHUB_STORAGE_MIN_FREE_BYTES`` (checked in the Store install path)
   refuses a package that would eat the headroom the UI and device state need.
 
-Device names and other free text come from the network, so they are not limited
-to the built-in glyph set. ``ui/fonts/`` holds the optional FreeType face used
-for those. UI chrome renders with LVGL's built-in Han Sans and stays readable
-when that file is absent.
+Chinese UI (chrome and device names) uses FreeType only:
+``ui/fonts/minihub_sc.otf`` must be present on the device storage partition at
+``/data/ui/fonts/``. That OTF is a Source Han Sans subset covering UI strings
+plus the full GB2312 level-1 set (3755 Hanzi, about 1.8 MiB). LVGL's built-in
+Han Sans subsets are not compiled in (saving a few hundred KB of flash).
+Without that OTF, Chinese text is unreadable; Latin chrome can still use
+Montserrat. Rebuild with ``./tools/ui_font/build_subset.sh`` and reflash
+``storage`` after changing the charset.
+
+The Overview toolbar shows Zigbee / BLE Mesh Allow joining and Matter Add when
+those adapters are enabled (Matter still points you to the Web console for the
+pairing code). Filter chips and radio bars are separate rows (not one shared
+frame). With ``CONFIG_MINIHUB_WEB_UI`` and a station IP, every main screen
+embeds a QR code in the left sidebar (between System and User) for
+``http://<ip>/``. The QR is a child of that sidebar slot, so it is hidden
+whenever the sidebar is. Before the station has an IP the slot shows a short
+hint (``Enter Web after IP`` / 「配网后扫码进 Web」) instead of a blank gap.
+
+Device cards on Overview are large (~two per row). The power control on the
+card toggles only; tapping the card opens a near-fullscreen **generic**
+parameter modal (catalog ∩ ``props.params``: toggle / slider / dropdown /
+button), with a Details panel for identity fields — the same main path as the
+Web console's ``openDeviceDetail``, not the legacy type-specific Web panels.
+Device icons load from ``/data/ui/images/devices/<type>.png`` (see
+``assets/device_icons.json``); regenerate with ``tools/regen_lcd_device_icons.py``.
 
 What the panel is **not**: it is not a hub point. It does not appear in the type
 catalog, cannot be targeted by a rule, and has no device card of its own.

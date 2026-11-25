@@ -286,7 +286,7 @@ bundled OTF (or `SRC_FONT`).
 MINIHUB_FONT_UI_ONLY=1 ./tools/ui_font/build_subset.sh   # smaller, UI ASCII only
 ```
 
-`collect_chars.py` / `gen_chars_3000.py` feed the subset list; you usually run the shell wrapper.
+`collect_chars.py` / `gen_gb2312_l1.py` feed the subset list; you usually run the shell wrapper.
 
 ## LCD device icons
 

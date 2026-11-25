@@ -182,6 +182,10 @@ Permit provision
 ^^^^^^^^^^^^^^^^
 
 Optional JSON body. ``seconds`` defaults to 60. ``0`` closes the window.
+When the BLE Mesh adapter is enabled, the LCD Overview bar exposes the same
+Allow joining control (same ``permit_provision`` path as the Web console).
+Open and close publish ``radio.permit_opened`` / ``radio.permit_closed`` so
+the LCD and Web stay in sync.
 
 The window is not exactly ``seconds`` long: if a provision is still in flight when
 it expires, the Hub extends it **once** by 30 s, and on the second expiry aborts the

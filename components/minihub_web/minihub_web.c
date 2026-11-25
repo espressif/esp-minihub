@@ -3987,6 +3987,7 @@ static esp_err_t handle_api_update_apply(httpd_req_t *req)
         if (!strcmp(kind->valuestring, "firmware")) { k = MINIHUB_UPDATE_FIRMWARE; known = true; }
         else if (!strcmp(kind->valuestring, "asset")) { k = MINIHUB_UPDATE_ASSET; known = true; }
         else if (!strcmp(kind->valuestring, "web")) { k = MINIHUB_UPDATE_WEB; known = true; }
+        else if (!strcmp(kind->valuestring, "ui")) { k = MINIHUB_UPDATE_UI; known = true; }
     }
     cJSON_Delete(root);
     if (!known) {
@@ -5600,7 +5601,7 @@ static esp_err_t handle_api_config_adapters_put(httpd_req_t *req)
 }
 
 #if CONFIG_MINIHUB_DEV_FS_UPLOAD
-/* minihub_sc.otf (3000 CJK subset) is ~1.5 MiB; JSON UI files stay well under 256 KiB. */
+/* minihub_sc.otf (full GB2312 level-1 + UI) is ~1.5–2 MiB; JSON UI files stay under 256 KiB. */
 #define DEV_FS_UPLOAD_MAX_BYTES (2 * 1024 * 1024)
 
 static esp_err_t handle_api_dev_fs_put(httpd_req_t *req)

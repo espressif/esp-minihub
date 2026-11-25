@@ -61,6 +61,9 @@ REST 接口
 
 请求体 JSON 可选。 ``seconds`` 缺省 60。 ``0`` 关闭窗口。超过 **254** 的值会在进
 协议栈之前被静默压到 254 —— 这个字段只有一个字节，日志里记的是实际打开的秒数。
+LCD 概览在 Zigbee 适配器启用时也有「允许入网」按钮，与 Web 调用同一
+``permit_join`` 路径；开窗 / 关窗会发 ``radio.permit_opened`` /
+``radio.permit_closed``，屏与 Web 都会刷新状态。
 
 .. code-block:: bash
 

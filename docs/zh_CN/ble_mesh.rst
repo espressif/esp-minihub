@@ -161,6 +161,9 @@ REST 接口
 ^^^^^^^^
 
 请求体 JSON 可选。 ``seconds`` 缺省 60。 ``0`` 关闭窗口。
+LCD 概览在 BLE Mesh 适配器启用时也有「允许入网」按钮，与 Web 调用同一
+``permit_provision`` 路径；开窗 / 关窗会发 ``radio.permit_opened`` /
+``radio.permit_closed``，屏与 Web 都会刷新状态。
 
 窗口实际长度并不等于 ``seconds``：到期时若仍有配网进行中，Hub 会把它 **延长一次**
 30 秒，第二次到期就中止卡住的配网并关窗。所以 60 秒的请求最长会占用射频约 90 秒。

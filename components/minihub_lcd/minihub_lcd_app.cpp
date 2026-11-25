@@ -20,11 +20,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <algorithm>
 #include <atomic>
 #include <future>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -64,6 +67,7 @@ esp_err_t minihub_net_set_wifi_sta(const char *ssid, const char *password, bool 
 #include "minihub_scenes.h"
 #include "minihub_tz.h"
 #include "minihub_hub.h"
+#include "minihub_device_widget.h"
 #include "esp_lv_adapter.h"
 #include "esp_system.h"
 #include "minihub_lcd_i18n.h"
@@ -82,22 +86,29 @@ extern "C" esp_err_t minihub_factory_reset_schedule(void);
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "lvgl.h"
+#if CONFIG_LV_USE_FREETYPE
+#include "libs/freetype/lv_freetype.h"
+#endif
+#if CONFIG_LV_USE_QRCODE
+#include "libs/qrcode/lv_qrcode.h"
+#endif
 #include "widgets/textarea/lv_textarea_private.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "minihub_zigbee.h"
+#include "minihub_ble_mesh.h"
 esp_err_t esp_vfs_littlefs_unregister(const char *partition_label);
 /* minihub_net.h pulls esp_netif.h, which is not on this component's include
  * path (and a REQUIRES edge to it would be dropped by cycle resolution), so
  * only the one function the system screen needs is declared here. */
 bool minihub_net_get_ip(char *buf, size_t len);
+bool minihub_web_sta_has_ip(void);
+bool minihub_web_get_sta_ip(char *buf, size_t len);
 #if CONFIG_LV_FONT_MONTSERRAT_14
 LV_FONT_DECLARE(lv_font_montserrat_14);
 #endif
 #if CONFIG_LV_FONT_MONTSERRAT_16
 LV_FONT_DECLARE(lv_font_montserrat_16);
-#endif
-#if CONFIG_LV_FONT_SOURCE_HAN_SANS_SC_16_CJK
-LV_FONT_DECLARE(lv_font_source_han_sans_sc_16_cjk);
 #endif
 }
 
@@ -114,6 +125,7 @@ constexpr const char *UI_BASE_DIR = "/data/ui";
 constexpr const char *FLOW_ID = "main";
 constexpr uint32_t DISPLAY_SERVICE_TIMEOUT_MS = 2000;
 constexpr int kOverviewDeviceSlots = LCD_COUNT_DEVICE_SLOTS;
+constexpr int kDetailParamSlots = LCD_COUNT_PARAM_SLOTS;
 constexpr int kMapCanvasW = 664;
 constexpr int kMapCanvasH = 316;
 constexpr const char *MAP_IMAGE_VIEW = LCD_VIEW_MAP_IMAGE;
@@ -138,6 +150,7 @@ std::atomic<bool> s_flash_write{false};
 std::atomic<bool> s_store_busy{false};
 std::atomic<bool> s_store_refresh_wait{false};
 std::atomic<bool> s_ota_query_busy{false};
+std::atomic<bool> s_ui_query_busy{false};
 
 enum class StoreOp { Install, Upgrade, Reinstall, Uninstall };
 enum class PendingConfirm {
@@ -148,9 +161,11 @@ enum class PendingConfirm {
     StoreUninstall,
     RuleDelete,
     SceneDelete,
+    DeviceDelete,
     OtaFormat,
 };
 static PendingConfirm s_pending_confirm = PendingConfirm::None;
+static char s_pending_delete_point_id[MINIHUB_POINT_ID_MAX] = {};
 static void show_confirm(const char *title, const char *msg, PendingConfirm kind);
 static void show_alert(const char *title, const char *msg);
 
@@ -212,6 +227,9 @@ void refresh_system_lang();
 void refresh_system_wifi();
 void refresh_system_adapters();
 void refresh_config();
+void refresh_radio_bars();
+void web_qr_refresh();
+void web_qr_init();
 
 std::atomic<bool> s_map_fetching{false};
 
@@ -592,26 +610,35 @@ static void floating_keyboard_set_cursors(lv_obj_t *active)
     floating_keyboard_refresh_cursors();
 }
 
-/* The built-in lv_font_source_han_sans_sc_16_cjk covers only ~1338 glyphs, so
- * new Chinese chrome text renders as garbage. Brookesia's runtime CJK font is
- * a FreeType instance with no global singleton; borrow it from any Chinese
- * label that the parsed document already created. */
+/* FreeType-only CJK: Brookesia language default is sc_14 from minihub_sc.otf.
+ * Manually created LVGL chrome (floating keyboard, QR hint) has no Brookesia
+ * style pass — borrow a FreeType face from an existing Chinese label, or open
+ * the OTF once ourselves. */
+static constexpr const char *kScFontPath = "/data/ui/fonts/minihub_sc.otf";
+
+static bool label_has_non_ascii(const char *txt)
+{
+    if (txt == nullptr) {
+        return false;
+    }
+    for (const unsigned char *p = (const unsigned char *)txt; *p != 0; ++p) {
+        if (*p >= 0x80) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static const lv_font_t *floating_keyboard_cjk_font(lv_obj_t *obj)
 {
     if (obj == nullptr || !lv_obj_is_valid(obj)) {
         return nullptr;
     }
     if (lv_obj_check_type(obj, &lv_label_class)) {
-        const char *txt = lv_label_get_text(obj);
-        if (txt != nullptr) {
-            for (const unsigned char *p = (const unsigned char *)txt; *p != 0; ++p) {
-                if (*p >= 0x80) {
-                    const lv_font_t *font = lv_obj_get_style_text_font(obj, LV_PART_MAIN);
-                    if (font != nullptr) {
-                        return font;
-                    }
-                    break;
-                }
+        if (label_has_non_ascii(lv_label_get_text(obj))) {
+            const lv_font_t *font = lv_obj_get_style_text_font(obj, LV_PART_MAIN);
+            if (font != nullptr) {
+                return font;
             }
         }
     }
@@ -623,6 +650,52 @@ static const lv_font_t *floating_keyboard_cjk_font(lv_obj_t *obj)
         }
     }
     return nullptr;
+}
+
+static const lv_font_t *ensure_sc_freetype_font(uint32_t size_px)
+{
+#if CONFIG_LV_USE_FREETYPE
+    static lv_font_t *s_sc16 = nullptr;
+    static uint32_t s_sc16_size = 0;
+    if (s_sc16 != nullptr && s_sc16_size == size_px) {
+        return s_sc16;
+    }
+    struct stat st {};
+    if (stat(kScFontPath, &st) != 0 || st.st_size <= 0) {
+        return nullptr;
+    }
+    lv_font_t *created = lv_freetype_font_create(kScFontPath, LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+                                                 size_px, LV_FREETYPE_FONT_STYLE_NORMAL);
+    if (created == nullptr) {
+        return nullptr;
+    }
+    if (s_sc16 != nullptr) {
+        lv_freetype_font_delete(s_sc16);
+    }
+    s_sc16 = created;
+    s_sc16_size = size_px;
+    return s_sc16;
+#else
+    (void)size_px;
+    return nullptr;
+#endif
+}
+
+static const lv_font_t *resolve_ui_cjk_font(lv_obj_t *hint_src)
+{
+    const lv_font_t *font = floating_keyboard_cjk_font(hint_src);
+    if (font != nullptr) {
+        return font;
+    }
+    font = ensure_sc_freetype_font(16);
+    if (font != nullptr) {
+        return font;
+    }
+#if CONFIG_LV_FONT_MONTSERRAT_14
+    return &lv_font_montserrat_14;
+#else
+    return LV_FONT_DEFAULT;
+#endif
 }
 
 static void floating_keyboard_hide()
@@ -873,6 +946,205 @@ static void floating_keyboard_key_cb(lv_event_t *e)
     floating_keyboard_apply_style();
 }
 
+#if CONFIG_MINIHUB_WEB_UI && CONFIG_LV_USE_QRCODE
+static lv_obj_t *s_web_qr = nullptr;
+static lv_obj_t *s_web_qr_hint_box = nullptr;
+static lv_obj_t *s_web_qr_hint = nullptr;
+static char s_web_qr_url[64] = {};
+/* Nested in sidebar web_qr_slot (100×84) between System and User — not layer_top. */
+constexpr lv_coord_t kWebQrSize = 80;
+constexpr lv_coord_t kWebQrHintPad = 6;
+
+/* Sidebar child order ends with …, web_qr_slot, user_btn. */
+static lv_obj_t *find_visible_web_qr_slot()
+{
+    lv_display_t *disp = lv_display_get_default();
+    if (disp == nullptr) {
+        return nullptr;
+    }
+    lv_obj_t *scr = lv_display_get_screen_active(disp);
+    if (scr == nullptr) {
+        return nullptr;
+    }
+    const uint32_t shells = lv_obj_get_child_cnt(scr);
+    for (uint32_t i = 0; i < shells; i++) {
+        lv_obj_t *shell = lv_obj_get_child(scr, i);
+        if (shell == nullptr || lv_obj_has_flag(shell, LV_OBJ_FLAG_HIDDEN)) {
+            continue;
+        }
+        if (lv_obj_get_child_cnt(shell) < 2) {
+            continue;
+        }
+        lv_obj_t *sidebar = lv_obj_get_child(shell, 0);
+        if (sidebar == nullptr || lv_obj_has_flag(sidebar, LV_OBJ_FLAG_HIDDEN)) {
+            continue;
+        }
+        const uint32_t n = lv_obj_get_child_cnt(sidebar);
+        if (n < 2) {
+            continue;
+        }
+        lv_obj_t *slot = lv_obj_get_child(sidebar, n - 2);
+        if (slot == nullptr || lv_obj_has_flag(slot, LV_OBJ_FLAG_HIDDEN)) {
+            continue;
+        }
+        if (lv_obj_get_width(slot) < 80 || lv_obj_get_height(slot) < 70) {
+            continue;
+        }
+        return slot;
+    }
+    return nullptr;
+}
+
+static void web_qr_drop_stale()
+{
+    if (s_web_qr != nullptr && !lv_obj_is_valid(s_web_qr)) {
+        s_web_qr = nullptr;
+        s_web_qr_url[0] = '\0';
+    }
+    if (s_web_qr_hint_box != nullptr && !lv_obj_is_valid(s_web_qr_hint_box)) {
+        s_web_qr_hint_box = nullptr;
+        s_web_qr_hint = nullptr;
+    } else if (s_web_qr_hint != nullptr && !lv_obj_is_valid(s_web_qr_hint)) {
+        s_web_qr_hint = nullptr;
+    }
+}
+
+static void web_qr_apply_frame(lv_obj_t *obj)
+{
+    lv_obj_set_size(obj, kWebQrSize, kWebQrSize);
+    lv_obj_set_style_bg_color(obj, lv_color_hex(0xeef2ff), 0);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(obj, 2, 0);
+    lv_obj_set_style_border_color(obj, lv_color_hex(0xeef2ff), 0);
+    lv_obj_set_style_pad_all(obj, kWebQrHintPad, 0);
+    lv_obj_set_style_radius(obj, 4, 0);
+    lv_obj_align(obj, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+}
+
+static void web_qr_style(lv_obj_t *qr)
+{
+    lv_qrcode_set_size(qr, kWebQrSize);
+    lv_qrcode_set_dark_color(qr, lv_color_hex(0x0b0f1a));
+    lv_qrcode_set_light_color(qr, lv_color_hex(0xeef2ff));
+    lv_obj_set_style_border_width(qr, 2, 0);
+    lv_obj_set_style_border_color(qr, lv_color_hex(0xeef2ff), 0);
+    lv_obj_set_style_pad_all(qr, 2, 0);
+    lv_obj_set_style_radius(qr, 4, 0);
+    lv_obj_align(qr, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(qr, LV_OBJ_FLAG_CLICKABLE);
+}
+
+static void web_qr_hint_style(lv_obj_t *hint, lv_obj_t *font_src)
+{
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, kWebQrSize - (2 * kWebQrHintPad) - 4);
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x0b0f1a), 0);
+    /* Same as floating keyboard: built-in Han Sans subset garbs 乱码 for new
+     * chrome CJK — FreeType from Brookesia labels or minihub_sc.otf. */
+    lv_obj_set_style_text_font(hint, resolve_ui_cjk_font(font_src), 0);
+    lv_obj_align(hint, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(hint, LV_OBJ_FLAG_CLICKABLE);
+}
+
+static void web_qr_ensure_children(lv_obj_t *slot)
+{
+    if (s_web_qr == nullptr) {
+        s_web_qr = lv_qrcode_create(slot);
+        if (s_web_qr != nullptr) {
+            web_qr_style(s_web_qr);
+            lv_obj_add_flag(s_web_qr, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            ESP_LOGW(TAG, "web QR create failed");
+        }
+    } else if (lv_obj_get_parent(s_web_qr) != slot) {
+        lv_obj_set_parent(s_web_qr, slot);
+        lv_obj_align(s_web_qr, LV_ALIGN_CENTER, 0, 0);
+    }
+
+    if (s_web_qr_hint_box == nullptr) {
+        s_web_qr_hint_box = lv_obj_create(slot);
+        if (s_web_qr_hint_box != nullptr) {
+            web_qr_apply_frame(s_web_qr_hint_box);
+            lv_obj_add_flag(s_web_qr_hint_box, LV_OBJ_FLAG_HIDDEN);
+            s_web_qr_hint = lv_label_create(s_web_qr_hint_box);
+        }
+    } else if (lv_obj_get_parent(s_web_qr_hint_box) != slot) {
+        lv_obj_set_parent(s_web_qr_hint_box, slot);
+        lv_obj_align(s_web_qr_hint_box, LV_ALIGN_CENTER, 0, 0);
+    }
+    if (s_web_qr_hint != nullptr) {
+        /* Borrow Brookesia FreeType from sidebar chrome (slot itself has no CJK). */
+        lv_obj_t *font_src = lv_obj_get_parent(slot);
+        if (font_src == nullptr) {
+            font_src = slot;
+        }
+        web_qr_hint_style(s_web_qr_hint, font_src);
+        lv_label_set_text(s_web_qr_hint, lcd_tr(LCD_STR_WEB_QR_HINT));
+    }
+}
+
+void web_qr_refresh()
+{
+    web_qr_drop_stale();
+    lv_obj_t *slot = find_visible_web_qr_slot();
+    if (slot == nullptr) {
+        if (s_web_qr != nullptr && lv_obj_is_valid(s_web_qr)) {
+            lv_obj_add_flag(s_web_qr, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (s_web_qr_hint_box != nullptr && lv_obj_is_valid(s_web_qr_hint_box)) {
+            lv_obj_add_flag(s_web_qr_hint_box, LV_OBJ_FLAG_HIDDEN);
+        }
+        return;
+    }
+    web_qr_ensure_children(slot);
+    if (s_web_qr == nullptr) {
+        return;
+    }
+
+    char ip[48] = {};
+    const bool has_ip = minihub_web_sta_has_ip() && minihub_web_get_sta_ip(ip, sizeof(ip)) &&
+                        ip[0] != '\0';
+    if (!has_ip) {
+        lv_obj_add_flag(s_web_qr, LV_OBJ_FLAG_HIDDEN);
+        s_web_qr_url[0] = '\0';
+        if (s_web_qr_hint_box != nullptr) {
+            lv_obj_remove_flag(s_web_qr_hint_box, LV_OBJ_FLAG_HIDDEN);
+        }
+        return;
+    }
+    if (s_web_qr_hint_box != nullptr) {
+        lv_obj_add_flag(s_web_qr_hint_box, LV_OBJ_FLAG_HIDDEN);
+    }
+    char url[64];
+    snprintf(url, sizeof(url), "http://%s/", ip);
+    if (strcmp(url, s_web_qr_url) == 0) {
+        lv_obj_remove_flag(s_web_qr, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    if (lv_qrcode_update(s_web_qr, url, (uint32_t)strlen(url)) != LV_RESULT_OK) {
+        ESP_LOGW(TAG, "web QR update failed for %s", url);
+        lv_obj_add_flag(s_web_qr, LV_OBJ_FLAG_HIDDEN);
+        if (s_web_qr_hint_box != nullptr) {
+            lv_obj_remove_flag(s_web_qr_hint_box, LV_OBJ_FLAG_HIDDEN);
+        }
+        return;
+    }
+    snprintf(s_web_qr_url, sizeof(s_web_qr_url), "%s", url);
+    lv_obj_remove_flag(s_web_qr, LV_OBJ_FLAG_HIDDEN);
+}
+
+void web_qr_init()
+{
+    web_qr_refresh();
+}
+#else
+void web_qr_refresh() {}
+void web_qr_init() {}
+#endif
+
 static void floating_keyboard_init()
 {
     lv_display_t *disp = lv_display_get_default();
@@ -886,10 +1158,7 @@ static void floating_keyboard_init()
     if (top == nullptr) {
         return;
     }
-    const lv_font_t *cjk = floating_keyboard_cjk_font(lv_display_get_screen_active(disp));
-    if (cjk == nullptr) {
-        cjk = &lv_font_source_han_sans_sc_16_cjk;
-    }
+    const lv_font_t *cjk = resolve_ui_cjk_font(lv_display_get_screen_active(disp));
     const lv_coord_t sw = (lv_coord_t)lv_display_get_horizontal_resolution(disp);
     const lv_coord_t sh = (lv_coord_t)lv_display_get_vertical_resolution(disp);
     const lv_coord_t w = sw - 120;
@@ -1084,6 +1353,8 @@ void pin_screen_shell_layout()
             }
             pin_shell_geometry(shell, screen_w, screen_h);
         }
+        /* Re-parent Web QR into the visible sidebar slot (or hide if none). */
+        web_qr_refresh();
         /* Long pages stay mounted, so their scroll offset survives a trip to
          * another page. Opening 系统/配置 should show the title first. */
         if (is_lcd_screen("system") || is_lcd_screen("config")) {
@@ -1227,26 +1498,20 @@ bool setup_ui_fonts(gui::lvgl::Backend &backend)
 {
     bool ok = true;
 #if CONFIG_LV_FONT_MONTSERRAT_14
+    /* Latin-only faces for en chrome / keyboard; never registered for zh. */
     ok &= register_lvgl_native_font(backend, "latin_14", &lv_font_montserrat_14, 14, {"en"});
 #endif
 #if CONFIG_LV_FONT_MONTSERRAT_16
     ok &= register_lvgl_native_font(backend, "latin_16", &lv_font_montserrat_16, 16, {"en"});
-#endif
-#if CONFIG_LV_FONT_SOURCE_HAN_SANS_SC_16_CJK
-    /* Built-in ~1338-glyph Han Sans: chrome text (titles, buttons, chips) renders
-     * with no FreeType and no 1.4 MB OTF on the device. */
-    ok &= register_lvgl_native_font(backend, "cjk_16",
-                                    &lv_font_source_han_sans_sc_16_cjk, 16, {"zh", "en"});
 #endif
     return ok;
 }
 
 bool register_ui_sc_font(gui::Runtime &runtime)
 {
-    static const char *kScFontPath = "/data/ui/fonts/minihub_sc.otf";
     struct stat st {};
     if (stat(kScFontPath, &st) != 0 || st.st_size <= 0) {
-        ESP_LOGW(TAG, "sc font not on device: %s (flash storage or push ui/fonts/)", kScFontPath);
+        ESP_LOGE(TAG, "required CJK font missing: %s (flash storage with ui/fonts/)", kScFontPath);
         return false;
     }
 
@@ -1259,31 +1524,36 @@ bool register_ui_sc_font(gui::Runtime &runtime)
      * ("latin_14") to FreeType as a file path instead of using native Montserrat. */
     auto result = runtime.register_font(sc);
     if (!result) {
-        ESP_LOGW(TAG, "sc font register: %s", result.error().c_str());
+        ESP_LOGE(TAG, "sc font register: %s", result.error().c_str());
         return false;
     }
-    ESP_LOGD(TAG, "registered font sc_14 (%ld bytes)", (long)st.st_size);
+    ESP_LOGI(TAG, "registered FreeType font sc_14 (%ld bytes)", (long)st.st_size);
     return true;
 }
 
 void bind_ui_font_language(gui::Runtime &runtime)
 {
-    const char *fallback = "cjk_16";
-    const char *font_id = register_ui_sc_font(runtime) ? "sc_14" : fallback;
-    auto en = runtime.set_default_font_for_language("en", font_id);
+    /* FreeType-only CJK: no built-in Han Sans. OTF must be on the storage
+     * partition. Without it zh chrome will be unreadable. */
+    if (!register_ui_sc_font(runtime)) {
+        ESP_LOGE(TAG, "UI fonts: FreeType sc_14 unavailable — Chinese UI will fail");
+#if CONFIG_LV_FONT_MONTSERRAT_14
+        (void)runtime.set_default_font_for_language("en", "latin_14");
+#endif
+        return;
+    }
+    auto en = runtime.set_default_font_for_language("en", "sc_14");
     if (!en) {
         ESP_LOGW(TAG, "en default font: %s", en.error().c_str());
-        font_id = fallback;
-        en = runtime.set_default_font_for_language("en", font_id);
+#if CONFIG_LV_FONT_MONTSERRAT_14
+        (void)runtime.set_default_font_for_language("en", "latin_14");
+#endif
     }
-    auto zh = runtime.set_default_font_for_language("zh", font_id);
+    auto zh = runtime.set_default_font_for_language("zh", "sc_14");
     if (!zh) {
-        ESP_LOGW(TAG, "zh default font: %s", zh.error().c_str());
-        /* Never let zh fall back to a latin-only face: with the built-in Han
-         * Sans compiled in, cjk_16 is always the last drawable option. */
-        (void)runtime.set_default_font_for_language("zh", fallback);
+        ESP_LOGE(TAG, "zh default font: %s", zh.error().c_str());
     }
-    ESP_LOGD(TAG, "UI fonts: en/zh=%s (fallback %s)", font_id, fallback);
+    ESP_LOGI(TAG, "UI fonts: en/zh=sc_14 (FreeType-only CJK)");
 }
 
 bool start_display_service()
@@ -1414,6 +1684,7 @@ void apply_filter_chip_visibility()
     if (!show_matter && s_overview_filter == OverviewFilter::Matter) {
         s_overview_filter = OverviewFilter::All;
     }
+    refresh_radio_bars();
     static bool logged_auth = false;
     static bool logged_matter = false;
     static bool logged = false;
@@ -1425,11 +1696,88 @@ void apply_filter_chip_visibility()
     }
 }
 
+void refresh_radio_bars()
+{
+    const bool show_zb = minihub_module_overview_adapter_visible("zigbee");
+    const bool show_bm = minihub_module_overview_adapter_visible("ble_mesh");
+    set_view_hidden(LCD_VIEW_ZIGBEE_BAR, !show_zb);
+    set_view_hidden(LCD_VIEW_BLE_MESH_BAR, !show_bm);
+    if (!show_zb && !show_bm) {
+        return;
+    }
+
+    const bool zb_on = show_zb && minihub_zigbee_permit_join_active();
+    const bool bm_on = show_bm && (minihub_ble_mesh_permit_provision_active() ||
+                                   minihub_ble_mesh_provisioning_busy());
+
+    if (show_zb) {
+        if (zb_on) {
+            set_label_text(LCD_VIEW_ZIGBEE_STATUS, lcd_tr(LCD_STR_RADIO_JOINING));
+            set_label_text(LCD_VIEW_ZIGBEE_JOIN_LBL, lcd_tr(LCD_STR_RADIO_STOP_JOIN));
+        } else if (bm_on) {
+            set_label_text(LCD_VIEW_ZIGBEE_STATUS, lcd_tr(LCD_STR_RADIO_BLE_MESH_BUSY));
+            set_label_text(LCD_VIEW_ZIGBEE_JOIN_LBL, lcd_tr(LCD_STR_RADIO_ALLOW_JOIN));
+        } else {
+            set_label_text(LCD_VIEW_ZIGBEE_STATUS, "");
+            set_label_text(LCD_VIEW_ZIGBEE_JOIN_LBL, lcd_tr(LCD_STR_RADIO_ALLOW_JOIN));
+        }
+    }
+    if (show_bm) {
+        if (bm_on) {
+            set_label_text(LCD_VIEW_BLE_MESH_STATUS, lcd_tr(LCD_STR_RADIO_PROVISIONING));
+            set_label_text(LCD_VIEW_BLE_MESH_JOIN_LBL, lcd_tr(LCD_STR_RADIO_STOP_JOIN));
+        } else if (zb_on) {
+            set_label_text(LCD_VIEW_BLE_MESH_STATUS, lcd_tr(LCD_STR_RADIO_ZIGBEE_BUSY));
+            set_label_text(LCD_VIEW_BLE_MESH_JOIN_LBL, lcd_tr(LCD_STR_RADIO_ALLOW_JOIN));
+        } else {
+            set_label_text(LCD_VIEW_BLE_MESH_STATUS, "");
+            set_label_text(LCD_VIEW_BLE_MESH_JOIN_LBL, lcd_tr(LCD_STR_RADIO_ALLOW_JOIN));
+        }
+    }
+}
+
 void handle_matter_add()
 {
     /* Full commissioning needs a pairing code + polling; on-device we degrade
      * to a hint, same as the "feature parity, degraded interaction" rule. */
     set_label_text(LCD_VIEW_MATTER_STATUS, lcd_tr(LCD_STR_MATTER_ADD_HINT));
+}
+
+void handle_zigbee_join_toggle()
+{
+    if (!minihub_module_overview_adapter_visible("zigbee")) {
+        return;
+    }
+    if (minihub_ble_mesh_permit_provision_active() || minihub_ble_mesh_provisioning_busy()) {
+        set_label_text(LCD_VIEW_ZIGBEE_STATUS, lcd_tr(LCD_STR_RADIO_BLE_MESH_BUSY));
+        return;
+    }
+    const bool on = minihub_zigbee_permit_join_active();
+    const esp_err_t err = minihub_zigbee_permit_join(on ? 0 : 60);
+    if (err != ESP_OK) {
+        set_label_text(LCD_VIEW_ZIGBEE_STATUS, lcd_tr(LCD_STR_RADIO_JOIN_FAILED));
+        ESP_LOGW(TAG, "zigbee permit_join: %s", esp_err_to_name(err));
+    }
+    refresh_radio_bars();
+}
+
+void handle_ble_mesh_join_toggle()
+{
+    if (!minihub_module_overview_adapter_visible("ble_mesh")) {
+        return;
+    }
+    if (minihub_zigbee_permit_join_active()) {
+        set_label_text(LCD_VIEW_BLE_MESH_STATUS, lcd_tr(LCD_STR_RADIO_ZIGBEE_BUSY));
+        return;
+    }
+    const bool on = minihub_ble_mesh_permit_provision_active() ||
+                    minihub_ble_mesh_provisioning_busy();
+    const esp_err_t err = minihub_ble_mesh_permit_provision(on ? 0 : 60);
+    if (err != ESP_OK) {
+        set_label_text(LCD_VIEW_BLE_MESH_STATUS, lcd_tr(LCD_STR_RADIO_JOIN_FAILED));
+        ESP_LOGW(TAG, "ble_mesh permit_provision: %s", esp_err_to_name(err));
+    }
+    refresh_radio_bars();
 }
 
 void refresh_filter_chips()
@@ -1519,24 +1867,27 @@ void set_row_binding(const char *row_path, const char *child, const char *key, c
     s_lcd.runtime->set_binding_value(s_lcd.document_id, path, key, value);
 }
 
+/* Brookesia imageSet id = device type stem (same as Web SVG under
+ * /data/images/devices/<type>.svg → /data/ui/images/devices/<type>.png). */
 const char *device_type_icon_id(const char *type)
 {
+    static char id[48];
     if (!type || !type[0]) {
-        return "icon_device";
+        return "device";
     }
-    if (strcmp(type, "switch") == 0) {
-        return "icon_switch";
+    size_t n = 0;
+    for (; type[n] != '\0' && n + 1 < sizeof(id); ++n) {
+        const char c = type[n];
+        /* Keep the SVG stem as-is (incl. '-') so it matches devices/<stem>.png. */
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+            c == '_' || c == '-') {
+            id[n] = c;
+        } else {
+            id[n] = '_';
+        }
     }
-    if (strcmp(type, "light") == 0) {
-        return "icon_light";
-    }
-    if (strcmp(type, "sensor") == 0) {
-        return "icon_sensor";
-    }
-    if (strcmp(type, "button") == 0) {
-        return "icon_button";
-    }
-    return "icon_device";
+    id[n] = '\0';
+    return id[0] ? id : "device";
 }
 
 const char *point_short_name(const char *point_id)
@@ -1558,6 +1909,14 @@ const char *point_display_name(const minihub_point_t &pt)
     }
     return point_short_name(pt.point_id);
 }
+
+static bool point_power_on(const minihub_point_t &pt);
+static bool point_can_delete(const minihub_point_t &pt);
+static bool point_allows_power_control(const minihub_point_t &pt);
+/* Device-detail modal state lives with the handlers below; overview refresh
+ * needs the open-point id and refresh hook declared up here. */
+static char s_detail_point_id[MINIHUB_POINT_ID_MAX];
+static void refresh_device_detail();
 
 void ensure_device_card(int index)
 {
@@ -1616,17 +1975,43 @@ void refresh_overview_updated_label()
     set_label_text(LCD_VIEW_OVERVIEW_UPDATED, updated);
 }
 
+static void overview_filtered_clear()
+{
+    /* refresh_overview takes ownership of each list entry's props (see free of
+     * the array below). Drop them here so clear() does not leak / UAF. */
+    for (minihub_point_t &pt : s_overview_filtered) {
+        if (pt.props) {
+            cJSON_Delete(pt.props);
+            pt.props = nullptr;
+        }
+    }
+    s_overview_filtered.clear();
+}
+
 void refresh_overview()
 {
     warn_if_overview_ui_stale();
 
     minihub_point_t *points = NULL;
     size_t count = 0;
-    if (minihub_point_list(&points, &count) != ESP_OK || !points) {
+    if (minihub_point_list(&points, &count) != ESP_OK) {
+        return;
+    }
+    /* Empty registry: minihub_point_list returns points=NULL. Must still clear
+     * cards — otherwise a successful delete leaves a ghost device card and
+     * rename/delete keep acting on the stale s_overview_filtered entry. */
+    if (!points || count == 0) {
+        overview_filtered_clear();
+        set_label_text(LCD_VIEW_STAT_DEVICES, "0");
+        set_label_text(LCD_VIEW_STAT_ONLINE, "0");
+        set_label_text(LCD_VIEW_STAT_ADAPTERS, "0");
+        hide_device_cards_from(0);
+        refresh_overview_updated_label();
+        refresh_radio_bars();
         return;
     }
 
-    s_overview_filtered.clear();
+    overview_filtered_clear();
     s_overview_filtered.reserve(count);
     char auth_adapter[32] = {};
     const bool auth_visible = minihub_module_pick_auth_adapter(auth_adapter, sizeof(auth_adapter));
@@ -1763,14 +2148,51 @@ void refresh_overview()
         char text[128];
         snprintf(text, sizeof(text), "%s · %s", pt.online ? lcd_tr(LCD_STR_STATE_ONLINE) : lcd_tr(LCD_STR_STATE_OFFLINE), pt.adapter);
         set_row_binding(path, "meta", "card.meta", std::string{text});
-        set_row_binding(path, "val", "card.value", pt.value);
+
+        const bool show_power = point_allows_power_control(pt);
+        const bool show_delete = point_can_delete(pt);
+        const bool power_on = point_power_on(pt);
+        /* Hub keeps canonical on/off; presentation maps like Web overview.js. */
+        if (show_power) {
+            set_row_binding(path, "power_row/val", "card.value",
+                            power_on ? lcd_tr(LCD_STR_OV_ON) : lcd_tr(LCD_STR_OV_OFF));
+            /* Match Web .card-val.on / .card-val.off — never leave 关 in green. */
+            set_row_binding(path, "power_row/val", "card.value_color",
+                            power_on ? "#22c55e" : "#5c6b85");
+            /* Pill = next action, not current state: off → green (tap to turn
+             * on); on → muted (tap to turn off). Label 开/关 still shows state. */
+            set_row_binding(path, "power_row/power_sw", "card.power_bg",
+                            power_on ? "#334155" : "#22c55e");
+        } else {
+            set_row_binding(path, "power_row/val", "card.value", pt.value);
+            set_row_binding(path, "power_row/val", "card.value_color", "#eef2ff");
+        }
+
+        /* Re-apply action colors every refresh: LVGL's default button theme is
+         * primary blue and can win over the template's static style.bgColor. */
+        set_row_binding(path, "actions/rename_btn", "card.rename_bg", "#1a2238");
+        set_row_binding(path, "actions/delete_btn", "card.delete_bg", "#7f1d1d");
+
+        char power_path[sizeof(path) + sizeof("/power_row/power_sw")];
+        char delete_path[sizeof(path) + sizeof("/actions/delete_btn")];
+        snprintf(power_path, sizeof(power_path), "%s/power_row/power_sw", path);
+        snprintf(delete_path, sizeof(delete_path), "%s/actions/delete_btn", path);
+        set_view_hidden(power_path, !show_power);
+        set_view_hidden(delete_path, !show_delete);
+
         auto view = s_lcd.runtime->find_view(s_lcd.document_id, path);
         if (view.valid()) {
             view.set_hidden(false);
         }
     }
     hide_device_cards_from(static_cast<int>(shown));
+    /* Ownership of each points[i].props moved into s_overview_filtered; only
+     * the array itself is freed here (not minihub_point_list_free). */
     free(points);
+    refresh_radio_bars();
+    if (s_detail_point_id[0]) {
+        refresh_device_detail();
+    }
 }
 
 const cJSON *catalog_entry(cJSON *catalog, const char *id)
@@ -2274,9 +2696,22 @@ void store_update_inst_empty()
 
 /* The tab row is only 已安装 / 可用. The line under it is 插件 or 可用, and
  * the refresh button sits on the right of that line. */
+void store_set_refresh_busy_ui(bool busy)
+{
+    set_label_text(LCD_VIEW_STORE_REFRESH_LBL,
+                   busy ? lcd_tr(LCD_STR_STORE_REFRESH_BUSY) : lcd_tr(LCD_STR_STORE_REFRESH));
+}
+
 void store_update_list_hdr()
 {
     if (!s_lcd.runtime || !s_lcd.document_id.is_valid()) {
+        return;
+    }
+    /* Keep the in-progress hint visible even when a point-event refresh
+     * rebuilds the list while the catalog fetch is still running. */
+    if (s_store_refresh_wait.load(std::memory_order_acquire)) {
+        set_label_text(LCD_VIEW_STORE_LIST_HDR, lcd_tr(LCD_STR_STORE_REFRESHING));
+        store_set_refresh_busy_ui(true);
         return;
     }
     if (s_store_tab_available) {
@@ -2286,6 +2721,7 @@ void store_update_list_hdr()
         set_label_text_fmt(LCD_VIEW_STORE_LIST_HDR, lcd_tr(LCD_STR_STORE_PLUGIN_COUNT_FMT),
                            s_store_row_count[1] + s_store_row_count[2]);
     }
+    store_set_refresh_busy_ui(false);
 }
 
 /* Toggle between the Available and Installed panels on the store screen. The two tab
@@ -2607,37 +3043,855 @@ bool is_controllable_point_type(const char *type)
     return type && (strcmp(type, "light") == 0 || strcmp(type, "switch") == 0);
 }
 
+/* Mirror overview.js pointParamVal(p, 'power') + powerOn. */
+static const char *point_param_value(const minihub_point_t &pt, const char *param)
+{
+    if (!pt.props || !param) {
+        return nullptr;
+    }
+    const cJSON *params = cJSON_GetObjectItem(pt.props, "params");
+    if (!cJSON_IsObject(params)) {
+        return nullptr;
+    }
+    const cJSON *entry = cJSON_GetObjectItem(params, param);
+    if (cJSON_IsObject(entry)) {
+        const cJSON *val = cJSON_GetObjectItem(entry, "value");
+        if (cJSON_IsString(val)) {
+            return val->valuestring;
+        }
+        if (cJSON_IsBool(val)) {
+            return cJSON_IsTrue(val) ? "true" : "false";
+        }
+    } else if (cJSON_IsString(entry)) {
+        return entry->valuestring;
+    }
+    return nullptr;
+}
+
+static bool point_power_on(const minihub_point_t &pt)
+{
+    const char *power = point_param_value(pt, "power");
+    if (power && (strcmp(power, "on") == 0 || strcmp(power, "true") == 0 ||
+                  strcmp(power, "1") == 0)) {
+        return true;
+    }
+    if (strcmp(pt.value, "on") == 0 || strcmp(pt.value, "true") == 0 ||
+        strcmp(pt.value, "open") == 0) {
+        return true;
+    }
+    if (power || strcmp(pt.value, "off") == 0 || strcmp(pt.value, "false") == 0) {
+        return false;
+    }
+    return atoi(pt.value) > 0;
+}
+
+static bool point_can_delete(const minihub_point_t &pt)
+{
+    return strcmp(pt.adapter, "matter") == 0 ||
+           strcmp(pt.adapter, "zigbee") == 0 ||
+           strcmp(pt.adapter, "ble_mesh") == 0;
+}
+
+static bool point_allows_power_control(const minihub_point_t &pt)
+{
+    if (!is_controllable_point_type(pt.type)) {
+        return false;
+    }
+    if (!pt.props) {
+        return true;
+    }
+    if (cJSON_IsTrue(cJSON_GetObjectItem(pt.props, "no_control")) ||
+        cJSON_IsTrue(cJSON_GetObjectItem(pt.props, "commissioning"))) {
+        return false;
+    }
+    const cJSON *access = cJSON_GetObjectItem(pt.props, "access");
+    if (cJSON_IsString(access) && strcmp(access->valuestring, "R") == 0) {
+        return false;
+    }
+    return true;
+}
+
+enum class DetailParamKind {
+    None = 0,
+    Toggle,
+    Slider,
+    Dropdown,
+    Button,
+    Ro,
+};
+
+struct DetailParamSlot {
+    char name[64] = {};
+    DetailParamKind kind = DetailParamKind::None;
+    std::vector<std::string> option_values;
+};
+
+static DetailParamSlot s_detail_params[kDetailParamSlots];
+static int s_detail_param_count = 0;
+/* Ignore valueChanged while bindings are pushed from refresh_device_detail(). */
+static bool s_detail_binding = false;
+/* false = controls panel (Web default); true = identity/info panel. */
+static bool s_detail_show_info = false;
+
+static void device_detail_close();
+static void device_detail_open_point(const char *point_id);
+/* Defined with the rename modal helpers further below. */
+void handle_rename_cancel();
+
+static int detail_param_slot_from_event(const gui::Event &ev)
+{
+    const std::string prefix =
+        std::string(LCD_TEMPLATE_DEVICE_PARAM_ROW_PARENT) + "/" +
+        LCD_TEMPLATE_DEVICE_PARAM_ROW_INSTANCE_PREFIX;
+    const size_t at = ev.path.rfind(prefix);
+    if (at == std::string::npos) {
+        return -1;
+    }
+    const int slot = atoi(ev.path.c_str() + at + prefix.size());
+    if (slot < 0 || slot >= kDetailParamSlots) {
+        return -1;
+    }
+    return slot;
+}
+
+static void ensure_detail_param_row(int index)
+{
+    if (!s_lcd.runtime || index < 0 || index >= kDetailParamSlots) {
+        return;
+    }
+    char path[128];
+    snprintf(path, sizeof(path),
+             LCD_TEMPLATE_DEVICE_PARAM_ROW_PARENT "/" LCD_TEMPLATE_DEVICE_PARAM_ROW_INSTANCE,
+             index);
+    if (s_lcd.runtime->find_view(s_lcd.document_id, path).valid()) {
+        return;
+    }
+    char instance[24];
+    snprintf(instance, sizeof(instance), LCD_TEMPLATE_DEVICE_PARAM_ROW_INSTANCE, index);
+    auto made = s_lcd.runtime->create_view(
+        s_lcd.document_id, LCD_TEMPLATE_DEVICE_PARAM_ROW_ID,
+        LCD_TEMPLATE_DEVICE_PARAM_ROW_PARENT, instance);
+    if (!made) {
+        ESP_LOGW(TAG, "param row %d: %s", index, made.error().c_str());
+    }
+}
+
+static void hide_detail_param_rows_from(int index)
+{
+    if (!s_lcd.runtime) {
+        return;
+    }
+    for (int i = index; i < kDetailParamSlots; i++) {
+        char path[128];
+        snprintf(path, sizeof(path),
+                 LCD_TEMPLATE_DEVICE_PARAM_ROW_PARENT "/" LCD_TEMPLATE_DEVICE_PARAM_ROW_INSTANCE,
+                 i);
+        s_lcd.runtime->destroy_view(s_lcd.document_id, path);
+        s_detail_params[i] = DetailParamSlot{};
+    }
+}
+
+static const char *style_widget(const cJSON *style)
+{
+    if (!cJSON_IsObject(style)) {
+        return "";
+    }
+    const cJSON *w = cJSON_GetObjectItem(style, "widget");
+    if (cJSON_IsString(w) && w->valuestring) {
+        return w->valuestring;
+    }
+    const cJSON *ui = cJSON_GetObjectItem(style, "ui_element");
+    if (cJSON_IsString(ui) && ui->valuestring) {
+        if (strcmp(ui->valuestring, "ui.toggle") == 0) {
+            return "toggle";
+        }
+        if (strcmp(ui->valuestring, "ui.slider") == 0) {
+            return "slider";
+        }
+        if (strcmp(ui->valuestring, "ui.dropdown") == 0) {
+            return "dropdown";
+        }
+        if (strcmp(ui->valuestring, "ui.button") == 0) {
+            return "button";
+        }
+        if (strcmp(ui->valuestring, "ui.text") == 0) {
+            return "text";
+        }
+        if (strcmp(ui->valuestring, "ui.hidden") == 0) {
+            return "hidden";
+        }
+    }
+    return "";
+}
+
+static std::string style_label(const cJSON *style, const char *fallback)
+{
+    if (cJSON_IsObject(style)) {
+        const cJSON *labels = cJSON_GetObjectItem(style, "labels");
+        if (cJSON_IsObject(labels)) {
+            const char *lang = lcd_language();
+            const cJSON *hit = cJSON_GetObjectItem(labels, lang && lang[0] ? lang : "zh");
+            if (!cJSON_IsString(hit) || !hit->valuestring || !hit->valuestring[0]) {
+                hit = cJSON_GetObjectItem(labels, "zh");
+            }
+            if (!cJSON_IsString(hit) || !hit->valuestring || !hit->valuestring[0]) {
+                hit = cJSON_GetObjectItem(labels, "en");
+            }
+            if (cJSON_IsString(hit) && hit->valuestring && hit->valuestring[0]) {
+                return hit->valuestring;
+            }
+        }
+        const cJSON *label = cJSON_GetObjectItem(style, "label");
+        if (cJSON_IsString(label) && label->valuestring && label->valuestring[0]) {
+            return label->valuestring;
+        }
+    }
+    return fallback ? fallback : "";
+}
+
+static bool param_instance_visible(const cJSON *entry)
+{
+    if (!cJSON_IsObject(entry)) {
+        return true;
+    }
+    const cJSON *vis = cJSON_GetObjectItem(entry, "visible");
+    if (cJSON_IsBool(vis)) {
+        return cJSON_IsTrue(vis);
+    }
+    return true;
+}
+
+static bool param_instance_readonly(const cJSON *entry, const cJSON *style)
+{
+    const cJSON *access = nullptr;
+    if (cJSON_IsObject(entry)) {
+        access = cJSON_GetObjectItem(entry, "access");
+    }
+    if (!cJSON_IsString(access) && cJSON_IsObject(style)) {
+        access = cJSON_GetObjectItem(style, "access");
+    }
+    return cJSON_IsString(access) && access->valuestring &&
+           strcmp(access->valuestring, "R") == 0;
+}
+
+static double style_num(const cJSON *style, const char *key, double fallback)
+{
+    if (!cJSON_IsObject(style)) {
+        return fallback;
+    }
+    const cJSON *v = cJSON_GetObjectItem(style, key);
+    return cJSON_IsNumber(v) ? cJSON_GetNumberValue(v) : fallback;
+}
+
+static const char *style_unit(const cJSON *style)
+{
+    if (!cJSON_IsObject(style)) {
+        return "";
+    }
+    const cJSON *u = cJSON_GetObjectItem(style, "unit");
+    return (cJSON_IsString(u) && u->valuestring) ? u->valuestring : "";
+}
+
+static std::string param_value_string(const cJSON *entry)
+{
+    if (cJSON_IsObject(entry)) {
+        const cJSON *val = cJSON_GetObjectItem(entry, "value");
+        if (cJSON_IsString(val) && val->valuestring) {
+            return val->valuestring;
+        }
+        if (cJSON_IsBool(val)) {
+            return cJSON_IsTrue(val) ? "true" : "false";
+        }
+        if (cJSON_IsNumber(val)) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%g", cJSON_GetNumberValue(val));
+            return buf;
+        }
+        return {};
+    }
+    if (cJSON_IsString(entry) && entry->valuestring) {
+        return entry->valuestring;
+    }
+    if (cJSON_IsBool(entry)) {
+        return cJSON_IsTrue(entry) ? "true" : "false";
+    }
+    if (cJSON_IsNumber(entry)) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%g", cJSON_GetNumberValue(entry));
+        return buf;
+    }
+    return {};
+}
+
+static bool value_is_on(const std::string &v)
+{
+    return v == "on" || v == "true" || v == "1" || v == "ON" || v == "TRUE";
+}
+
+static esp_err_t detail_invoke_set(const char *point_id, const char *parameter,
+                                   cJSON *value)
+{
+    if (!point_id || !parameter || !value) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    minihub_command_t command{};
+    strncpy(command.point_id, point_id, sizeof(command.point_id) - 1);
+    if (strcmp(parameter, "power") == 0) {
+        const bool on = cJSON_IsTrue(value) ||
+                        (cJSON_IsString(value) && value->valuestring &&
+                         value_is_on(value->valuestring));
+        strncpy(command.cmd, on ? "turn_on" : "turn_off", sizeof(command.cmd) - 1);
+    } else {
+        strncpy(command.cmd, "set", sizeof(command.cmd) - 1);
+        cJSON *params = cJSON_CreateObject();
+        if (!params) {
+            return ESP_ERR_NO_MEM;
+        }
+        cJSON_AddStringToObject(params, "parameter", parameter);
+        cJSON_AddItemToObject(params, "value", cJSON_Duplicate(value, true));
+        command.params = params;
+        esp_err_t err = minihub_command_invoke(&command);
+        cJSON_Delete(params);
+        return err;
+    }
+    return minihub_command_invoke(&command);
+}
+
+static const char *point_prop_str(const minihub_point_t &pt, std::initializer_list<const char *> keys)
+{
+    if (!pt.props) {
+        return nullptr;
+    }
+    for (const char *key : keys) {
+        const cJSON *v = cJSON_GetObjectItem(pt.props, key);
+        if (cJSON_IsString(v) && v->valuestring && v->valuestring[0]) {
+            return v->valuestring;
+        }
+    }
+    return nullptr;
+}
+
+static void device_detail_apply_panel_visibility(bool has_params)
+{
+    set_view_hidden(LCD_VIEW_DEVICE_DETAIL_INFO, !s_detail_show_info);
+    set_view_hidden(LCD_VIEW_DEVICE_DETAIL_PARAMS, s_detail_show_info);
+    set_view_hidden(LCD_VIEW_DEVICE_DETAIL_EMPTY,
+                    s_detail_show_info || has_params);
+    s_lcd.runtime->set_binding_value(
+        s_lcd.document_id, LCD_VIEW_DEVICE_DETAIL_INFO_BTN, "detail.info_btn",
+        s_detail_show_info ? lcd_tr(LCD_STR_DETAIL_BACK) : lcd_tr(LCD_STR_DETAIL_INFO));
+}
+
+static void device_detail_close()
+{
+    s_detail_point_id[0] = '\0';
+    s_detail_param_count = 0;
+    s_detail_show_info = false;
+    hide_detail_param_rows_from(0);
+    set_view_hidden(LCD_VIEW_DEVICE_DETAIL_MODAL, true);
+    request_display_refresh();
+}
+
+static void refresh_device_detail()
+{
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid() || !s_detail_point_id[0]) {
+        return;
+    }
+    minihub_point_t *pt = minihub_point_get(s_detail_point_id);
+    if (!pt) {
+        s_detail_binding = false;
+        device_detail_close();
+        return;
+    }
+
+    s_detail_binding = true;
+    s_lcd.runtime->set_binding_value(s_lcd.document_id, LCD_VIEW_DEVICE_DETAIL_TITLE,
+                                     "detail.title", point_display_name(*pt));
+    char meta[128];
+    snprintf(meta, sizeof(meta), "%s · %s · %s",
+             pt->online ? lcd_tr(LCD_STR_STATE_ONLINE) : lcd_tr(LCD_STR_STATE_OFFLINE),
+             pt->adapter, pt->type);
+    s_lcd.runtime->set_binding_value(s_lcd.document_id, LCD_VIEW_DEVICE_DETAIL_META,
+                                     "detail.meta", meta);
+
+    const char *unknown = lcd_tr(LCD_STR_DETAIL_UNKNOWN);
+    auto set_info = [&](const char *path, const char *key, const char *value) {
+        s_lcd.runtime->set_binding_value(s_lcd.document_id, path, key,
+                                         (value && value[0]) ? value : unknown);
+    };
+    set_info(LCD_VIEW_DEVICE_DETAIL_INFO_ID, "detail.info_id", pt->point_id);
+    set_info(LCD_VIEW_DEVICE_DETAIL_INFO_TYPE, "detail.info_type", pt->type);
+    set_info(LCD_VIEW_DEVICE_DETAIL_INFO_ADAPTER, "detail.info_adapter", pt->adapter);
+    set_info(LCD_VIEW_DEVICE_DETAIL_INFO_STATUS, "detail.info_status",
+             pt->online ? lcd_tr(LCD_STR_STATE_ONLINE) : lcd_tr(LCD_STR_STATE_OFFLINE));
+    set_info(LCD_VIEW_DEVICE_DETAIL_INFO_MFR, "detail.info_mfr",
+             point_prop_str(*pt, {"manufacturer", "vendor", "manufacturer_name"}));
+    set_info(LCD_VIEW_DEVICE_DETAIL_INFO_MODEL, "detail.info_model",
+             point_prop_str(*pt, {"model", "model_id", "model_identifier"}));
+    set_info(LCD_VIEW_DEVICE_DETAIL_INFO_SW, "detail.info_sw",
+             point_prop_str(*pt, {"sw_version", "fw_version", "firmware_version",
+                                  "app_version", "device_version"}));
+    set_info(LCD_VIEW_DEVICE_DETAIL_INFO_HW, "detail.info_hw",
+             point_prop_str(*pt, {"hw_version", "hardware_version"}));
+
+    const cJSON *params = pt->props ? cJSON_GetObjectItem(pt->props, "params") : nullptr;
+    const minihub_device_widget_device_t *cat =
+        pt->type[0] ? minihub_device_widget_get(pt->type) : nullptr;
+
+    struct PendingParam {
+        std::string name;
+        const cJSON *entry;
+        const minihub_device_widget_entry_t *cat_entry;
+    };
+    std::vector<PendingParam> pending;
+    if (cJSON_IsObject(params)) {
+        const cJSON *child = nullptr;
+        cJSON_ArrayForEach(child, params) {
+            if (!child || !child->string || !child->string[0]) {
+                continue;
+            }
+            if (!param_instance_visible(child)) {
+                continue;
+            }
+            const minihub_device_widget_entry_t *ce = nullptr;
+            if (cat) {
+                for (size_t i = 0; i < cat->count; i++) {
+                    if (cat->entries[i].parameter &&
+                        strcmp(cat->entries[i].parameter, child->string) == 0) {
+                        ce = &cat->entries[i];
+                        break;
+                    }
+                }
+            }
+            cJSON *style = nullptr;
+            if (ce && ce->style_json) {
+                style = cJSON_Parse(ce->style_json);
+            }
+            const char *widget = style_widget(style);
+            if (strcmp(widget, "hidden") == 0) {
+                cJSON_Delete(style);
+                continue;
+            }
+            cJSON_Delete(style);
+            pending.push_back(PendingParam{child->string, child, ce});
+        }
+    }
+
+    /* Prefer catalog declaration order when available. */
+    if (cat && !pending.empty()) {
+        std::vector<PendingParam> ordered;
+        ordered.reserve(pending.size());
+        for (size_t i = 0; i < cat->count; i++) {
+            const char *pname = cat->entries[i].parameter;
+            if (!pname) {
+                continue;
+            }
+            for (auto it = pending.begin(); it != pending.end(); ++it) {
+                if (it->name == pname) {
+                    ordered.push_back(*it);
+                    pending.erase(it);
+                    break;
+                }
+            }
+        }
+        for (auto &p : pending) {
+            ordered.push_back(p);
+        }
+        pending.swap(ordered);
+    }
+
+    const int shown = std::min(static_cast<int>(pending.size()), kDetailParamSlots);
+    for (int i = 0; i < shown; i++) {
+        ensure_detail_param_row(i);
+        char path[128];
+        snprintf(path, sizeof(path),
+                 LCD_TEMPLATE_DEVICE_PARAM_ROW_PARENT "/" LCD_TEMPLATE_DEVICE_PARAM_ROW_INSTANCE,
+                 i);
+        const PendingParam &pp = pending[static_cast<size_t>(i)];
+        cJSON *style = nullptr;
+        if (pp.cat_entry && pp.cat_entry->style_json) {
+            style = cJSON_Parse(pp.cat_entry->style_json);
+        }
+        const char *widget = style_widget(style);
+        if (!widget[0]) {
+            if (style_num(style, "max", 0) > style_num(style, "min", 0)) {
+                widget = "slider";
+            } else if (value_is_on(param_value_string(pp.entry)) ||
+                       param_value_string(pp.entry) == "off" ||
+                       param_value_string(pp.entry) == "false" ||
+                       param_value_string(pp.entry) == "0") {
+                widget = "toggle";
+            } else {
+                widget = "text";
+            }
+        }
+        const bool readonly = param_instance_readonly(pp.entry, style) || !pt->online;
+        std::string label = style_label(style, pp.name.c_str());
+        std::string val = param_value_string(pp.entry);
+
+        DetailParamSlot &slot = s_detail_params[i];
+        slot = DetailParamSlot{};
+        strncpy(slot.name, pp.name.c_str(), sizeof(slot.name) - 1);
+
+        set_row_binding(path, "label", "param.label", label);
+
+        /* One scratch buffer — avoid ~800B of path arrays on LcdUiWorker. */
+        char child_path[192];
+        auto hide_child = [&](const char *suffix) {
+            snprintf(child_path, sizeof(child_path), "%s/%s", path, suffix);
+            set_view_hidden(child_path, true);
+        };
+        hide_child("sw");
+        hide_child("sl_wrap");
+        hide_child("dd");
+        hide_child("btn");
+        hide_child("ro");
+
+        const bool as_ro = readonly || strcmp(widget, "text") == 0 ||
+                           strcmp(widget, "hidden") == 0;
+        if (as_ro) {
+            slot.kind = DetailParamKind::Ro;
+            const char *unit = style_unit(style);
+            std::string ro = val;
+            if (unit && unit[0] && !ro.empty()) {
+                ro += unit;
+            }
+            if (ro.empty()) {
+                ro = "-";
+            }
+            set_row_binding(path, "ro", "param.ro_text", ro);
+            snprintf(child_path, sizeof(child_path), "%s/ro", path);
+            set_view_hidden(child_path, false);
+            cJSON_Delete(style);
+            auto view = s_lcd.runtime->find_view(s_lcd.document_id, path);
+            if (view.valid()) {
+                view.set_hidden(false);
+            }
+            continue;
+        }
+
+        if (strcmp(widget, "slider") == 0) {
+            slot.kind = DetailParamKind::Slider;
+            double mn = style_num(style, "min", 0);
+            double mx = style_num(style, "max", 100);
+            if (cJSON_IsObject(pp.entry)) {
+                const cJSON *imn = cJSON_GetObjectItem(pp.entry, "min");
+                const cJSON *imx = cJSON_GetObjectItem(pp.entry, "max");
+                if (cJSON_IsNumber(imn)) {
+                    mn = cJSON_GetNumberValue(imn);
+                }
+                if (cJSON_IsNumber(imx)) {
+                    mx = cJSON_GetNumberValue(imx);
+                }
+            }
+            double cur = mn;
+            if (!val.empty()) {
+                cur = atof(val.c_str());
+            }
+            if (cur < mn) {
+                cur = mn;
+            }
+            if (cur > mx) {
+                cur = mx;
+            }
+            char text[48];
+            const char *unit = style_unit(style);
+            if (unit && unit[0]) {
+                snprintf(text, sizeof(text), "%g%s", cur, unit);
+            } else {
+                snprintf(text, sizeof(text), "%g", cur);
+            }
+            set_row_binding(path, "sl", "param.sl_min", std::to_string(static_cast<int>(mn)));
+            set_row_binding(path, "sl", "param.sl_max", std::to_string(static_cast<int>(mx)));
+            set_row_binding(path, "sl", "param.sl_value", std::to_string(static_cast<int>(cur)));
+            set_row_binding(path, "sl_val", "param.sl_text", text);
+            snprintf(child_path, sizeof(child_path), "%s/sl_wrap", path);
+            set_view_hidden(child_path, false);
+        } else if (strcmp(widget, "dropdown") == 0) {
+            slot.kind = DetailParamKind::Dropdown;
+            slot.option_values.clear();
+            cJSON *options_arr = cJSON_CreateArray();
+            int selected = 0;
+            const cJSON *opts = cJSON_IsObject(style) ? cJSON_GetObjectItem(style, "options") : nullptr;
+            int idx = 0;
+            if (cJSON_IsArray(opts)) {
+                const cJSON *o = nullptr;
+                cJSON_ArrayForEach(o, opts) {
+                    std::string ov;
+                    std::string ol;
+                    if (cJSON_IsObject(o)) {
+                        const cJSON *v = cJSON_GetObjectItem(o, "value");
+                        if (cJSON_IsString(v) && v->valuestring) {
+                            ov = v->valuestring;
+                        } else if (cJSON_IsNumber(v)) {
+                            char buf[32];
+                            snprintf(buf, sizeof(buf), "%g", cJSON_GetNumberValue(v));
+                            ov = buf;
+                        }
+                        const cJSON *labs = cJSON_GetObjectItem(o, "labels");
+                        const cJSON *lab = cJSON_GetObjectItem(o, "label");
+                        if (cJSON_IsObject(labs)) {
+                            const char *lang = lcd_language();
+                            const cJSON *hit = cJSON_GetObjectItem(labs, lang && lang[0] ? lang : "zh");
+                            if (!cJSON_IsString(hit)) {
+                                hit = cJSON_GetObjectItem(labs, "zh");
+                            }
+                            if (cJSON_IsString(hit) && hit->valuestring) {
+                                ol = hit->valuestring;
+                            }
+                        }
+                        if (ol.empty() && cJSON_IsString(lab) && lab->valuestring) {
+                            ol = lab->valuestring;
+                        }
+                        if (ol.empty()) {
+                            ol = ov;
+                        }
+                    } else if (cJSON_IsString(o) && o->valuestring) {
+                        ov = o->valuestring;
+                        ol = ov;
+                    }
+                    if (ov.empty()) {
+                        continue;
+                    }
+                    if (val == ov) {
+                        selected = idx;
+                    }
+                    slot.option_values.push_back(ov);
+                    cJSON_AddItemToArray(options_arr, cJSON_CreateString(ol.c_str()));
+                    idx++;
+                }
+            }
+            char *json = cJSON_PrintUnformatted(options_arr);
+            cJSON_Delete(options_arr);
+            if (json) {
+                set_row_binding(path, "dd", "param.dd_options", json);
+                free(json);
+            }
+            set_row_binding(path, "dd", "param.dd_selected", std::to_string(selected));
+            snprintf(child_path, sizeof(child_path), "%s/dd", path);
+            set_view_hidden(child_path, false);
+        } else if (strcmp(widget, "button") == 0) {
+            slot.kind = DetailParamKind::Button;
+            set_row_binding(path, "btn", "param.btn_text", label);
+            snprintf(child_path, sizeof(child_path), "%s/btn", path);
+            set_view_hidden(child_path, false);
+        } else {
+            /* toggle / default bool */
+            slot.kind = DetailParamKind::Toggle;
+            set_row_binding(path, "sw", "param.checked",
+                            value_is_on(val) ? "true" : "false");
+            snprintf(child_path, sizeof(child_path), "%s/sw", path);
+            set_view_hidden(child_path, false);
+        }
+
+        cJSON_Delete(style);
+        auto view = s_lcd.runtime->find_view(s_lcd.document_id, path);
+        if (view.valid()) {
+            view.set_hidden(false);
+        }
+    }
+    s_detail_param_count = shown;
+    hide_detail_param_rows_from(shown);
+    device_detail_apply_panel_visibility(shown > 0);
+    set_view_hidden(LCD_VIEW_DEVICE_DETAIL_MODAL, false);
+    s_detail_binding = false;
+    request_display_refresh();
+}
+
+static void device_detail_open_point(const char *point_id)
+{
+    if (!point_id || !point_id[0]) {
+        return;
+    }
+    /* Exclusive with rename modal (cancel is a no-op when closed). */
+    handle_rename_cancel();
+    s_detail_show_info = false;
+    strncpy(s_detail_point_id, point_id, sizeof(s_detail_point_id) - 1);
+    s_detail_point_id[sizeof(s_detail_point_id) - 1] = '\0';
+    refresh_device_detail();
+}
+
+static void handle_device_detail_info()
+{
+    if (!s_detail_point_id[0]) {
+        return;
+    }
+    s_detail_show_info = !s_detail_show_info;
+    device_detail_apply_panel_visibility(s_detail_param_count > 0);
+    request_display_refresh();
+}
+
 void handle_device_tap(int slot)
 {
     if (slot < 0 || static_cast<size_t>(slot) >= s_overview_filtered.size()) {
         return;
     }
-
     const minihub_point_t &pt = s_overview_filtered[static_cast<size_t>(slot)];
-    char point_id[MINIHUB_POINT_ID_MAX];
-    strncpy(point_id, pt.point_id, sizeof(point_id) - 1);
-    point_id[sizeof(point_id) - 1] = '\0';
-    const bool controllable = is_controllable_point_type(pt.type);
-    const bool online = pt.online;
+    device_detail_open_point(pt.point_id);
+}
 
-    if (!controllable) {
-        ESP_LOGD(TAG, "device tap slot %d ignored (type not controllable)", slot);
+void handle_device_power(int slot)
+{
+    if (slot < 0 || static_cast<size_t>(slot) >= s_overview_filtered.size()) {
         return;
     }
-    if (!online) {
-        ESP_LOGW(TAG, "device tap slot %d ignored (offline)", slot);
+    const minihub_point_t &pt = s_overview_filtered[static_cast<size_t>(slot)];
+    if (!point_allows_power_control(pt)) {
         return;
     }
-
+    if (!pt.online) {
+        ESP_LOGW(TAG, "device power slot %d ignored (offline)", slot);
+        return;
+    }
     minihub_command_t command{};
-    strncpy(command.point_id, point_id, sizeof(command.point_id) - 1);
+    strncpy(command.point_id, pt.point_id, sizeof(command.point_id) - 1);
     strncpy(command.cmd, "toggle", sizeof(command.cmd) - 1);
     esp_err_t err = minihub_command_invoke(&command);
-    ESP_LOGI(TAG, "toggle %s: %s", point_id, esp_err_to_name(err));
+    ESP_LOGI(TAG, "toggle %s: %s", pt.point_id, esp_err_to_name(err));
     if (err == ESP_OK) {
         refresh_overview();
+        if (s_detail_point_id[0]) {
+            refresh_device_detail();
+        }
         request_display_refresh();
     }
+}
+
+static void handle_device_detail_close()
+{
+    device_detail_close();
+}
+
+static void handle_device_param_toggle(int slot, bool checked)
+{
+    if (s_detail_binding) {
+        return;
+    }
+    if (slot < 0 || slot >= s_detail_param_count || !s_detail_point_id[0]) {
+        return;
+    }
+    const DetailParamSlot &ps = s_detail_params[slot];
+    if (ps.kind != DetailParamKind::Toggle || !ps.name[0]) {
+        return;
+    }
+    minihub_point_t *pt = minihub_point_get(s_detail_point_id);
+    if (!pt || !pt->online) {
+        return;
+    }
+    cJSON *val = cJSON_CreateBool(checked);
+    esp_err_t err = detail_invoke_set(s_detail_point_id, ps.name, val);
+    cJSON_Delete(val);
+    ESP_LOGI(TAG, "detail toggle %s.%s -> %d: %s", s_detail_point_id, ps.name,
+             checked ? 1 : 0, esp_err_to_name(err));
+    if (err == ESP_OK) {
+        refresh_overview();
+        refresh_device_detail();
+    }
+}
+
+static void handle_device_param_slider(int slot, int value)
+{
+    if (s_detail_binding) {
+        return;
+    }
+    if (slot < 0 || slot >= s_detail_param_count || !s_detail_point_id[0]) {
+        return;
+    }
+    const DetailParamSlot &ps = s_detail_params[slot];
+    if (ps.kind != DetailParamKind::Slider || !ps.name[0]) {
+        return;
+    }
+    minihub_point_t *pt = minihub_point_get(s_detail_point_id);
+    if (!pt || !pt->online) {
+        return;
+    }
+    cJSON *val = cJSON_CreateNumber(value);
+    esp_err_t err = detail_invoke_set(s_detail_point_id, ps.name, val);
+    cJSON_Delete(val);
+    ESP_LOGI(TAG, "detail slider %s.%s -> %d: %s", s_detail_point_id, ps.name, value,
+             esp_err_to_name(err));
+    if (err == ESP_OK) {
+        refresh_overview();
+        refresh_device_detail();
+    }
+}
+
+static void handle_device_param_dropdown(int slot, int selected)
+{
+    if (s_detail_binding) {
+        return;
+    }
+    if (slot < 0 || slot >= s_detail_param_count || !s_detail_point_id[0]) {
+        return;
+    }
+    const DetailParamSlot &ps = s_detail_params[slot];
+    if (ps.kind != DetailParamKind::Dropdown || !ps.name[0]) {
+        return;
+    }
+    if (selected < 0 || static_cast<size_t>(selected) >= ps.option_values.size()) {
+        return;
+    }
+    minihub_point_t *pt = minihub_point_get(s_detail_point_id);
+    if (!pt || !pt->online) {
+        return;
+    }
+    cJSON *val = cJSON_CreateString(ps.option_values[static_cast<size_t>(selected)].c_str());
+    esp_err_t err = detail_invoke_set(s_detail_point_id, ps.name, val);
+    cJSON_Delete(val);
+    if (err == ESP_OK) {
+        refresh_overview();
+        refresh_device_detail();
+    }
+}
+
+static void handle_device_param_button(int slot)
+{
+    if (slot < 0 || slot >= s_detail_param_count || !s_detail_point_id[0]) {
+        return;
+    }
+    const DetailParamSlot &ps = s_detail_params[slot];
+    if (ps.kind != DetailParamKind::Button || !ps.name[0]) {
+        return;
+    }
+    minihub_point_t *pt = minihub_point_get(s_detail_point_id);
+    if (!pt || !pt->online) {
+        return;
+    }
+    minihub_command_t command{};
+    strncpy(command.point_id, s_detail_point_id, sizeof(command.point_id) - 1);
+    /* play_pause / play_resume: pick by playing state when present. */
+    if (strcmp(ps.name, "play_pause") == 0 || strcmp(ps.name, "play_resume") == 0) {
+        const char *playing = point_param_value(*pt, "playing");
+        const bool is_playing = playing && value_is_on(playing);
+        strncpy(command.cmd, is_playing ? "play_pause" : "play_resume",
+                sizeof(command.cmd) - 1);
+    } else {
+        strncpy(command.cmd, ps.name, sizeof(command.cmd) - 1);
+    }
+    esp_err_t err = minihub_command_invoke(&command);
+    ESP_LOGI(TAG, "detail button %s %s: %s", s_detail_point_id, command.cmd,
+             esp_err_to_name(err));
+    if (err == ESP_OK) {
+        refresh_overview();
+        refresh_device_detail();
+    }
+}
+
+void handle_device_delete(int slot)
+{
+    if (slot < 0 || static_cast<size_t>(slot) >= s_overview_filtered.size()) {
+        return;
+    }
+    const minihub_point_t &pt = s_overview_filtered[static_cast<size_t>(slot)];
+    if (!point_can_delete(pt)) {
+        ESP_LOGD(TAG, "device delete slot %d ignored (adapter %s)", slot, pt.adapter);
+        return;
+    }
+    strncpy(s_pending_delete_point_id, pt.point_id, sizeof(s_pending_delete_point_id) - 1);
+    s_pending_delete_point_id[sizeof(s_pending_delete_point_id) - 1] = '\0';
+    show_confirm(lcd_tr(LCD_STR_CONFIRM_DELETE_DEVICE_TITLE),
+                 lcd_tr(LCD_STR_CONFIRM_DELETE_DEVICE_MSG),
+                 PendingConfirm::DeviceDelete);
 }
 
 void handle_user_tap()
@@ -3282,6 +4536,9 @@ void rename_modal_open(RenameMode mode, const char *seed, const char *title, con
     if (!s_lcd.runtime || !s_lcd.document_id.is_valid() || !seed) {
         return;
     }
+    if (s_detail_point_id[0]) {
+        device_detail_close();
+    }
     s_rename_mode = mode;
     s_rename_text = seed;
     char input_path[128], modal_path[128];
@@ -3578,6 +4835,141 @@ static void start_ota_query(bool apply)
     }
 }
 
+/* LCD Brookesia tree on /data/ui — independent of Web console. Apply writes
+ * files in place; Brookesia only reloads after reboot. */
+static const char *const kUiStatusPath = LCD_VIEW_SYSTEM_UI_STATUS;
+
+static void read_local_ui_version(char *out, size_t out_len)
+{
+    if (!out || out_len == 0) {
+        return;
+    }
+    out[0] = '\0';
+    FILE *f = fopen(MINIHUB_UI_VERSION_FILE, "r");
+    if (f) {
+        if (fgets(out, static_cast<int>(out_len), f)) {
+            size_t n = strlen(out);
+            while (n > 0 && (out[n - 1] == '\n' || out[n - 1] == '\r' || out[n - 1] == ' ')) {
+                out[--n] = '\0';
+            }
+            if ((out[0] == 'v' || out[0] == 'V') && out[1] >= '0' && out[1] <= '9') {
+                memmove(out, out + 1, n);
+            }
+        }
+        fclose(f);
+    }
+    if (out[0] == '\0') {
+        snprintf(out, out_len, "%s", CONFIG_MINIHUB_LCD_UI_VERSION);
+    }
+}
+
+static void refresh_ui_update_status()
+{
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid()) {
+        return;
+    }
+    char ver[64] = {};
+    read_local_ui_version(ver, sizeof(ver));
+    if (ver[0] != '\0') {
+        set_label_text_fmt(LCD_VIEW_SYSTEM_UI_VER, "v%s", ver);
+    } else {
+        set_label_text(LCD_VIEW_SYSTEM_UI_VER, "—");
+    }
+    if (!s_ui_query_busy.load(std::memory_order_acquire)) {
+        set_label_text(kUiStatusPath, lcd_tr(LCD_STR_SYS_UI_IDLE));
+    }
+}
+
+static void post_ui_status(std::string text)
+{
+    if (!s_lcd.scheduler) {
+        return;
+    }
+    s_lcd.scheduler->post([text = std::move(text)]() {
+        with_lvgl_lock([text]() { set_label_text(kUiStatusPath, text.c_str()); });
+    });
+}
+
+static void ui_query_task(void *arg)
+{
+    const bool apply = *static_cast<bool *>(arg);
+    delete static_cast<bool *>(arg);
+
+    char base[MINIHUB_STORE_BASE_URL_MAX];
+    if (!minihub_store_copy_base_url(base, sizeof(base))) {
+        post_ui_status(lcd_tr(LCD_STR_SYS_OTA_NO_URL));
+        s_ui_query_busy.store(false, std::memory_order_release);
+        vTaskDelete(nullptr);
+        return;
+    }
+    std::string text;
+    if (apply) {
+        /* Check first so an empty deploy tree (HTTP 404 → 0 pending) shows
+         * "up to date" instead of a false "updated — reboot". */
+        const int pending = minihub_update_check(MINIHUB_UPDATE_UI, base);
+        if (pending < 0) {
+            char buf[96];
+            snprintf(buf, sizeof(buf), lcd_tr(LCD_STR_SYS_OTA_FAIL_FMT),
+                     esp_err_to_name(static_cast<esp_err_t>(pending)));
+            text = buf;
+        } else if (pending == 0) {
+            text = lcd_tr(LCD_STR_SYS_OTA_UP_TO_DATE);
+        } else {
+            const int rc = minihub_update_apply(MINIHUB_UPDATE_UI, base);
+            if (rc == 0) {
+                text = lcd_tr(LCD_STR_SYS_UI_DONE_REBOOT);
+                if (s_lcd.scheduler) {
+                    s_lcd.scheduler->post([]() {
+                        with_lvgl_lock([]() {
+                            char ver[64] = {};
+                            read_local_ui_version(ver, sizeof(ver));
+                            if (ver[0] != '\0') {
+                                set_label_text_fmt(LCD_VIEW_SYSTEM_UI_VER, "v%s", ver);
+                            }
+                        });
+                    });
+                }
+            } else {
+                char buf[96];
+                snprintf(buf, sizeof(buf), lcd_tr(LCD_STR_SYS_OTA_FAIL_FMT),
+                         esp_err_to_name(static_cast<esp_err_t>(rc)));
+                text = buf;
+            }
+        }
+    } else {
+        const int rc = minihub_update_check(MINIHUB_UPDATE_UI, base);
+        if (rc > 0) {
+            text = lcd_tr(LCD_STR_SYS_UI_AVAILABLE);
+        } else if (rc == 0) {
+            text = lcd_tr(LCD_STR_SYS_OTA_UP_TO_DATE);
+        } else {
+            char buf[96];
+            snprintf(buf, sizeof(buf), lcd_tr(LCD_STR_SYS_OTA_FAIL_FMT),
+                     esp_err_to_name(static_cast<esp_err_t>(rc)));
+            text = buf;
+        }
+    }
+    post_ui_status(std::move(text));
+    s_ui_query_busy.store(false, std::memory_order_release);
+    vTaskDelete(nullptr);
+}
+
+static void start_ui_query(bool apply)
+{
+    if (s_ui_query_busy.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+    set_label_text(kUiStatusPath,
+                   lcd_tr(apply ? LCD_STR_SYS_UI_STARTING : LCD_STR_SYS_OTA_CHECKING));
+    auto *flag = new (std::nothrow) bool(apply);
+    if (flag == nullptr ||
+        minihub_task_create_psram(ui_query_task, "lcd_ui_query", 16384, flag, 5, nullptr) != pdPASS) {
+        delete flag;
+        s_ui_query_busy.store(false, std::memory_order_release);
+        set_label_text_fmt(kUiStatusPath, lcd_tr(LCD_STR_SYS_OTA_FAIL_FMT), "no mem");
+    }
+}
+
 static void form_update_enabled()
 {
     form_label(LCD_VIEW_PATTERN_FORM_ENABLED_LBL,
@@ -3845,6 +5237,8 @@ static void wire_update_center()
      * https://minihub.espressif.com, unless a custom store URL is saved). */
     wire_action(LCD_ACTION_SYSTEM_CHECK_UPDATE, []() { start_ota_query(false); });
     wire_action(LCD_ACTION_SYSTEM_DO_OTA, []() { start_ota_query(true); });
+    wire_action(LCD_ACTION_SYSTEM_CHECK_UI, []() { start_ui_query(false); });
+    wire_action(LCD_ACTION_SYSTEM_DO_UI, []() { start_ui_query(true); });
 #if CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
     wire_action(LCD_ACTION_SYSTEM_OTA_TARGET_SD,
                 []() { toggle_ota_target(MINIHUB_VIBE_DEV_SDMMC_BIT); });
@@ -3919,13 +5313,13 @@ void refresh_system()
 
     const size_t ram_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     const size_t ram_total = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
-    set_label_text_fmt(LCD_VIEW_SYSTEM_RAM, "%lu / %lu KB",
+    set_label_text_fmt(LCD_VIEW_SYSTEM_RAM, lcd_tr(LCD_STR_SYS_STORAGE_FMT),
                        (unsigned long)(ram_free / 1024), (unsigned long)(ram_total / 1024));
 
     const size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
     const size_t psram_total = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
     if (psram_total > 0) {
-        set_label_text_fmt(LCD_VIEW_SYSTEM_PSRAM, "%lu / %lu KB",
+        set_label_text_fmt(LCD_VIEW_SYSTEM_PSRAM, lcd_tr(LCD_STR_SYS_STORAGE_FMT),
                            (unsigned long)(psram_free / 1024), (unsigned long)(psram_total / 1024));
     } else {
         set_label_text(LCD_VIEW_SYSTEM_PSRAM, lcd_tr(LCD_STR_STATE_DISABLED));
@@ -3934,9 +5328,10 @@ void refresh_system()
     refresh_system_lang();
     ESP_LOGD(TAG, "system screen refreshed (ip=%s)", ip);
 
-    /* Firmware update: local OTA state. Cloud version check stays in the Web
-     * console (it needs the account); this card also exposes Check/Upgrade. */
+    /* Firmware OTA + LCD UI pack (GET /api/ui → /data/ui). Web and Assets stay
+     * on the Web console — LCD does not need them when the panel is the only UI. */
     refresh_ota_status();
+    refresh_ui_update_status();
 
 }
 
@@ -4422,6 +5817,7 @@ void handle_rule_tap(int slot)
 static void show_confirm(const char *title, const char *msg, PendingConfirm kind);
 void store_sheet_hide();
 void store_sheet_not_started(const char *why);
+void store_sheet_busy(StoreOp op, const char *title);
 
 /* Deleting a rule/scene needs a confirmation; the modal lives on the screen
  * the user is on, and show_confirm() picks it by the current screen. */
@@ -4657,7 +6053,13 @@ void handle_confirm_ok()
         ESP_LOGW(TAG, "factory reset executing");
         minihub_factory_reset_schedule();
     } else if (kind == PendingConfirm::StoreUninstall) {
-        store_start_request(s_store_pending);
+        if (store_start_request(s_store_pending)) {
+            store_sheet_busy(StoreOp::Uninstall,
+                            s_store_selected.name[0] ? s_store_selected.name
+                                                    : s_store_pending.id);
+        } else {
+            store_sheet_not_started(lcd_tr(LCD_STR_STORE_OP_NOT_STARTED));
+        }
     } else if (kind == PendingConfirm::RuleDelete) {
         const int slot = s_pending_delete_slot;
         s_pending_delete_slot = -1;
@@ -4690,6 +6092,34 @@ void handle_confirm_ok()
             }
         }
         refresh_scenes();
+    } else if (kind == PendingConfirm::DeviceDelete) {
+        char point_id[MINIHUB_POINT_ID_MAX];
+        strncpy(point_id, s_pending_delete_point_id, sizeof(point_id) - 1);
+        point_id[sizeof(point_id) - 1] = '\0';
+        s_pending_delete_point_id[0] = '\0';
+        if (point_id[0]) {
+            cJSON *req = cJSON_CreateObject();
+            cJSON *resp = nullptr;
+            if (req) {
+                cJSON_AddStringToObject(req, "point_id", point_id);
+                /* hub_points_remove returns ESP_OK even for NOT_FOUND; read JSON. */
+                const esp_err_t err = minihub_hub_points_remove(req, &resp);
+                const cJSON *result = resp ? cJSON_GetObjectItem(resp, "result") : nullptr;
+                const bool ok = err == ESP_OK && cJSON_IsString(result) &&
+                                strcmp(result->valuestring, "ok") == 0;
+                if (ok) {
+                    ESP_LOGI(TAG, "delete %s: ok", point_id);
+                } else {
+                    const cJSON *emsg = resp ? cJSON_GetObjectItem(resp, "error") : nullptr;
+                    ESP_LOGW(TAG, "delete %s failed: %s / %s", point_id, esp_err_to_name(err),
+                             cJSON_IsString(emsg) ? emsg->valuestring : "?");
+                }
+                cJSON_Delete(req);
+                cJSON_Delete(resp);
+            }
+            refresh_overview();
+            request_display_refresh();
+        }
 #if CONFIG_MINIHUB_OTA_EXTERNAL_STORAGE
     } else if (kind == PendingConfirm::OtaFormat) {
         const char *target = minihub_ota_get_format_target();
@@ -4737,6 +6167,7 @@ void handle_confirm_cancel()
     }
 #endif
     s_pending_confirm = PendingConfirm::None;
+    s_pending_delete_point_id[0] = '\0';
     s_store_pending = StoreOpRequest{};
     s_pending_delete_slot = -1;
     request_display_refresh();
@@ -4745,6 +6176,39 @@ void handle_confirm_cancel()
 void store_sheet_hide()
 {
     set_view_hidden(LCD_VIEW_STORE_MODAL, true);
+}
+
+static const char *store_op_busy_text(StoreOp op)
+{
+    switch (op) {
+    case StoreOp::Install:
+        return lcd_tr(LCD_STR_STORE_INSTALLING);
+    case StoreOp::Upgrade:
+        return lcd_tr(LCD_STR_STORE_UPGRADING);
+    case StoreOp::Reinstall:
+        return lcd_tr(LCD_STR_STORE_REINSTALLING);
+    case StoreOp::Uninstall:
+        return lcd_tr(LCD_STR_STORE_UNINSTALLING);
+    }
+    return lcd_tr(LCD_STR_STORE_INSTALLING);
+}
+
+/* Progress overlay while install/upgrade/reinstall/uninstall runs. Action
+ * buttons stay hidden; Close dismisses the sheet without aborting the op. */
+void store_sheet_busy(StoreOp op, const char *title)
+{
+    set_label_text(LCD_VIEW_STORE_MODAL_TITLE,
+                   (title && title[0]) ? title : lcd_tr(LCD_STR_STORE_ACTIONS_TITLE));
+    set_label_text(LCD_VIEW_STORE_MODAL_MSG, store_op_busy_text(op));
+    set_label_text(LCD_VIEW_STORE_MODAL_DESC, "");
+    set_view_hidden(LCD_VIEW_STORE_MODAL_INSTALL, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_UPGRADE, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_ENABLE, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_REINSTALL, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_UNINSTALL, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_CANCEL, false);
+    set_view_hidden(LCD_VIEW_STORE_MODAL, false);
+    request_display_refresh();
 }
 
 void store_sheet_show(int section, int index)
@@ -4811,8 +6275,15 @@ void handle_store_row_tap(const std::string &path)
 
 void store_sheet_not_started(const char *why)
 {
+    set_label_text(LCD_VIEW_STORE_MODAL_TITLE, lcd_tr(LCD_STR_STORE_ACTIONS_TITLE));
     set_label_text(LCD_VIEW_STORE_MODAL_MSG, why);
     set_label_text(LCD_VIEW_STORE_MODAL_DESC, "");
+    set_view_hidden(LCD_VIEW_STORE_MODAL_INSTALL, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_UPGRADE, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_ENABLE, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_REINSTALL, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_UNINSTALL, true);
+    set_view_hidden(LCD_VIEW_STORE_MODAL_CANCEL, false);
     set_view_hidden(LCD_VIEW_STORE_MODAL, false);
     request_display_refresh();
 }
@@ -4824,10 +6295,11 @@ void store_sheet_run(StoreOp op)
         store_sheet_not_started(lcd_tr(LCD_STR_STORE_OP_UNSUPPORTED));
         return;
     }
-    store_sheet_hide();
     if (!store_start_request(req)) {
         store_sheet_not_started(lcd_tr(LCD_STR_STORE_OP_NOT_STARTED));
+        return;
     }
+    store_sheet_busy(op, s_store_selected.name);
 }
 
 /* The Web shows the install button inside the row; the LCD now does the same.
@@ -5227,6 +6699,23 @@ void refresh_lcd_data()
      * refresh its timezone list. */
     configure_dropdown_popups();
     floating_keyboard_refresh_cursors();
+    web_qr_refresh();
+}
+
+static int device_card_slot_from_event(const gui::Event &ev)
+{
+    const std::string prefix =
+        std::string(LCD_TEMPLATE_DEVICE_CARD_PARENT) + "/" +
+        LCD_TEMPLATE_DEVICE_CARD_INSTANCE_PREFIX;
+    const size_t at = ev.path.rfind(prefix);
+    if (at == std::string::npos) {
+        return -1;
+    }
+    const int slot = atoi(ev.path.c_str() + at + prefix.size());
+    if (slot < 0 || slot >= LCD_COUNT_DEVICE_SLOTS) {
+        return -1;
+    }
+    return slot;
 }
 
 void wire_device_rename()
@@ -5237,15 +6726,8 @@ void wire_device_rename()
     s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
         s_lcd.document_id, LCD_ACTION_DEVICE_RENAME,
         [](const gui::Event &ev) {
-            const std::string prefix =
-                std::string(LCD_TEMPLATE_DEVICE_CARD_PARENT) + "/" +
-                LCD_TEMPLATE_DEVICE_CARD_INSTANCE_PREFIX;
-            const size_t at = ev.path.rfind(prefix);
-            if (at == std::string::npos) {
-                return;
-            }
-            const int slot = atoi(ev.path.c_str() + at + prefix.size());
-            if (slot < 0 || slot >= LCD_COUNT_DEVICE_SLOTS) {
+            const int slot = device_card_slot_from_event(ev);
+            if (slot < 0) {
                 return;
             }
             s_lcd.scheduler->post([slot]() {
@@ -5257,6 +6739,12 @@ void wire_device_rename()
 void wire_matter_add()
 {
     wire_action(LCD_ACTION_MATTER_ADD, handle_matter_add);
+}
+
+void wire_radio_join()
+{
+    wire_action(LCD_ACTION_ZIGBEE_JOIN_TOGGLE, handle_zigbee_join_toggle);
+    wire_action(LCD_ACTION_BLE_MESH_JOIN_TOGGLE, handle_ble_mesh_join_toggle);
 }
 
 void wire_navigation()
@@ -5319,6 +6807,27 @@ void wire_navigation()
                         return;
                     }
                     ESP_LOGD(TAG, "nav %s on task '%s'", action, pcTaskGetName(nullptr));
+                    /* Leaving/re-entering overview remounts the screen tree;
+                     * drop detail modal state so remount + refresh do not
+                     * rebuild param rows on the same critical path. */
+                    const bool touches_overview =
+                        strcmp(action, LCD_ACTION_NAV_OVERVIEW_FROM_MAP) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_OVERVIEW_FROM_STORE) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_OVERVIEW_FROM_SYSTEM) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_OVERVIEW_FROM_RULES) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_OVERVIEW_FROM_SCENES) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_OVERVIEW_FROM_CONFIG) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_MAP_FROM_OVERVIEW) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_STORE_FROM_OVERVIEW) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_SYSTEM_FROM_OVERVIEW) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_RULES_FROM_OVERVIEW) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_SCENES_FROM_OVERVIEW) == 0 ||
+                        strcmp(action, LCD_ACTION_NAV_CONFIG_FROM_OVERVIEW) == 0;
+                    if (touches_overview) {
+                        s_detail_point_id[0] = '\0';
+                        s_detail_param_count = 0;
+                        s_detail_show_info = false;
+                    }
                     std::expected<void, std::string> result;
                     {
                         LvglAdapterPauseGuard pause;
@@ -5330,8 +6839,17 @@ void wire_navigation()
                         return;
                     }
                     pin_screen_shell_layout();
-                    with_lvgl_lock([]() { refresh_lcd_data(); });
-                    request_display_refresh();
+                    /* Do not nest refresh_lcd_data on the same stack as
+                     * trigger_screen_flow: Brookesia remounts the whole
+                     * overview (incl. device_detail_modal) and then
+                     * refresh_overview used to overflow LcdUiWorker. */
+                    if (!s_lcd.scheduler) {
+                        return;
+                    }
+                    s_lcd.scheduler->post([]() {
+                        with_lvgl_lock([]() { refresh_lcd_data(); });
+                        request_display_refresh();
+                    });
                 });
             }));
     }
@@ -5533,11 +7051,15 @@ static void handle_store_refresh()
     }
     const esp_err_t err = minihub_store_refresh_catalog_async();
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        set_label_text(LCD_VIEW_STORE_AVAIL_HDR, lcd_tr(LCD_STR_STORE_REFRESH_FAIL));
+        set_label_text(LCD_VIEW_STORE_LIST_HDR, lcd_tr(LCD_STR_STORE_REFRESH_FAIL));
+        store_set_refresh_busy_ui(false);
+        request_display_refresh();
         return;
     }
     s_store_refresh_wait.store(true, std::memory_order_release);
-    set_label_text(LCD_VIEW_STORE_AVAIL_HDR, lcd_tr(LCD_STR_STORE_REFRESHING));
+    set_label_text(LCD_VIEW_STORE_LIST_HDR, lcd_tr(LCD_STR_STORE_REFRESHING));
+    store_set_refresh_busy_ui(true);
+    request_display_refresh();
 }
 
 void wire_store_tabs()
@@ -5682,23 +7204,123 @@ void wire_device_tap()
     s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
         s_lcd.document_id, LCD_ACTION_DEVICE_TAP,
         [](const gui::Event &ev) {
-            if (ev.path.find("rename_btn") != std::string::npos) {
-                return;                 /* the rename button owns this tap */
+            /* Child buttons own their own actions; ignore bubble taps. */
+            if (ev.path.find("rename_btn") != std::string::npos ||
+                ev.path.find("power_sw") != std::string::npos ||
+                ev.path.find("delete_btn") != std::string::npos) {
+                return;
             }
-            const std::string prefix =
-                std::string(LCD_TEMPLATE_DEVICE_CARD_PARENT) + "/" +
-                LCD_TEMPLATE_DEVICE_CARD_INSTANCE_PREFIX;
-            const size_t at = ev.path.rfind(prefix);
-            if (at == std::string::npos) {
+            const int slot = device_card_slot_from_event(ev);
+            if (slot < 0) {
                 ESP_LOGD(TAG, "device tap outside the template: %s", ev.path.c_str());
-                return;             /* never fall back to slot 0 */
-            }
-            const int slot = atoi(ev.path.c_str() + at + prefix.size());
-            if (slot < 0 || slot >= LCD_COUNT_DEVICE_SLOTS) {
                 return;
             }
             s_lcd.scheduler->post([slot]() {
                 with_lvgl_lock([slot]() { handle_device_tap(slot); });
+            });
+        }));
+}
+
+void wire_device_power()
+{
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid() || !s_lcd.scheduler) {
+        return;
+    }
+    s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
+        s_lcd.document_id, LCD_ACTION_DEVICE_POWER,
+        [](const gui::Event &ev) {
+            const int slot = device_card_slot_from_event(ev);
+            if (slot < 0) {
+                return;
+            }
+            s_lcd.scheduler->post([slot]() {
+                with_lvgl_lock([slot]() { handle_device_power(slot); });
+            });
+        }));
+}
+
+void wire_device_detail()
+{
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid() || !s_lcd.scheduler) {
+        return;
+    }
+    wire_action(LCD_ACTION_DEVICE_DETAIL_CLOSE, handle_device_detail_close);
+    wire_action(LCD_ACTION_DEVICE_DETAIL_INFO, handle_device_detail_info);
+
+    s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
+        s_lcd.document_id, LCD_ACTION_DEVICE_PARAM_TOGGLE,
+        [](const gui::Event &ev) {
+            const int slot = detail_param_slot_from_event(ev);
+            if (slot < 0) {
+                return;
+            }
+            const auto checked = ev.get_bool("checked");
+            const bool on = checked ? *checked : false;
+            s_lcd.scheduler->post([slot, on]() {
+                with_lvgl_lock([slot, on]() { handle_device_param_toggle(slot, on); });
+            });
+        }));
+    s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
+        s_lcd.document_id, LCD_ACTION_DEVICE_PARAM_SLIDER,
+        [](const gui::Event &ev) {
+            const int slot = detail_param_slot_from_event(ev);
+            if (slot < 0) {
+                return;
+            }
+            const auto value = ev.get_int64("value");
+            if (!value) {
+                return;
+            }
+            const int v = static_cast<int>(*value);
+            s_lcd.scheduler->post([slot, v]() {
+                with_lvgl_lock([slot, v]() { handle_device_param_slider(slot, v); });
+            });
+        }));
+    s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
+        s_lcd.document_id, LCD_ACTION_DEVICE_PARAM_DROPDOWN,
+        [](const gui::Event &ev) {
+            const int slot = detail_param_slot_from_event(ev);
+            if (slot < 0) {
+                return;
+            }
+            const auto index = ev.get_int64("selectedIndex");
+            if (!index) {
+                return;
+            }
+            const int selected = static_cast<int>(*index);
+            s_lcd.scheduler->post([slot, selected]() {
+                with_lvgl_lock([slot, selected]() {
+                    handle_device_param_dropdown(slot, selected);
+                });
+            });
+        }));
+    s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
+        s_lcd.document_id, LCD_ACTION_DEVICE_PARAM_BUTTON,
+        [](const gui::Event &ev) {
+            const int slot = detail_param_slot_from_event(ev);
+            if (slot < 0) {
+                return;
+            }
+            s_lcd.scheduler->post([slot]() {
+                with_lvgl_lock([slot]() { handle_device_param_button(slot); });
+            });
+        }));
+}
+
+void wire_device_delete()
+{
+    if (!s_lcd.runtime || !s_lcd.document_id.is_valid() || !s_lcd.scheduler) {
+        return;
+    }
+    s_lcd.nav_connections.push_back(s_lcd.runtime->subscribe_event_action(
+        s_lcd.document_id, LCD_ACTION_DEVICE_DELETE,
+        [](const gui::Event &ev) {
+            const int slot = device_card_slot_from_event(ev);
+            if (slot < 0) {
+                return;
+            }
+            s_lcd.scheduler->post([slot]() {
+                with_lvgl_lock([slot]() { handle_device_delete(slot); });
             });
         }));
 }
@@ -5736,13 +7358,16 @@ static void on_second_tick()
             if (result == ESP_OK || aborted) {
                 refresh_store();
             } else {
-                set_label_text(LCD_VIEW_STORE_AVAIL_HDR, lcd_tr(LCD_STR_STORE_REFRESH_FAIL));
+                set_label_text(LCD_VIEW_STORE_LIST_HDR, lcd_tr(LCD_STR_STORE_REFRESH_FAIL));
+                store_set_refresh_busy_ui(false);
+                request_display_refresh();
             }
         }
     }
     if (is_lcd_screen("overview")) {
         refresh_overview_updated_label();
     }
+    web_qr_refresh();
 }
 
 static void clock_timer_cb(void *)
@@ -5766,6 +7391,8 @@ void stop_lcd_point_events()
     minihub_event_bus_unsubscribe("point.registered", on_point_event);
     minihub_event_bus_unsubscribe("point.unregistered", on_point_event);
     minihub_event_bus_unsubscribe("hub.reloaded", on_point_event);
+    minihub_event_bus_unsubscribe("radio.permit_opened", on_point_event);
+    minihub_event_bus_unsubscribe("radio.permit_closed", on_point_event);
     s_events_live.store(false, std::memory_order_release);
     if (s_coalesce_timer) {
         esp_timer_stop(s_coalesce_timer);
@@ -5924,8 +7551,12 @@ bool setup_lcd_ui_mount()
     wire_navigation();
     wire_user_action();
     wire_device_tap();
+    wire_device_power();
+    wire_device_detail();
+    wire_device_delete();
     wire_device_rename();
     wire_matter_add();
+    wire_radio_join();
     wire_rule_tap();
     wire_wifi();
     wire_rule_delete();
@@ -5965,8 +7596,10 @@ bool setup_lcd_ui_mount()
         all &= minihub_event_bus_subscribe("point.registered", on_point_event, nullptr) == ESP_OK;
         all &= minihub_event_bus_subscribe("point.unregistered", on_point_event, nullptr) == ESP_OK;
         all &= minihub_event_bus_subscribe("hub.reloaded", on_point_event, nullptr) == ESP_OK;
+        all &= minihub_event_bus_subscribe("radio.permit_opened", on_point_event, nullptr) == ESP_OK;
+        all &= minihub_event_bus_subscribe("radio.permit_closed", on_point_event, nullptr) == ESP_OK;
         s_events_live.store(all, std::memory_order_release);
-        ESP_LOGI(TAG, "point events %s",
+        ESP_LOGI(TAG, "point/radio events %s",
                  all ? "subscribed" : "subscribe failed: fallback polling only");
     }
     esp_timer_create_args_t clock_args {
@@ -5988,6 +7621,7 @@ bool setup_lcd_ui_mount()
         refresh_overview();
         refresh_filter_chips();
         refresh_user_sidebar();
+        web_qr_init();
     });
     with_lvgl_lock([]() {
         lv_display_t *disp = lv_display_get_default();
@@ -6021,7 +7655,9 @@ static bool ensure_lcd_scheduler(void)
             .name = "LcdUiWorker",
             .core_id = 1,
             .priority = 3,
-            .stack_size = 96 * 1024,
+            /* overview + device_detail_modal remount needs headroom above the
+             * previous 96K (stack overflow seen on store→overview). */
+            .stack_size = 128 * 1024,
             .stack_in_ext = true,
         }},
     });
