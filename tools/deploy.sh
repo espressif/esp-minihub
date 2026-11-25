@@ -156,8 +156,11 @@ _MINIFY_NOTES_FLAG=""
 if [ -f "$_WEB_NOTES" ]; then
   _MINIFY_NOTES_FLAG="--notes $_WEB_NOTES"
 fi
+# Publish plain/ and gzip/ parallel trees (not sibling .gz in one folder) so
+# either encoding can be uploaded alone; Hubs on any WEB_ASSET_* mode can OTA.
 $PY tools/minify_web_assets.py --src components/minihub_web/web \
   --deploy-root "$DEPLOY_ROOT" --web-version "$WEB_VERSION" \
+  --encoding both \
   $_MINIFY_NOTES_FLAG
 
 # 2) LCD UI: minify components/minihub_lcd/ui -> LCD_UI/<UI_VERSION>/

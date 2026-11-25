@@ -368,6 +368,14 @@ static esp_err_t dest_for(minihub_update_kind_t kind, const mh_update_item_t *it
                 rel = url + vl + 1;
             }
         }
+        /* Store may publish Webs/<ver>/plain/… and …/gzip/…; flatten onto /data/web. */
+        if (kind == MINIHUB_UPDATE_WEB) {
+            if (strncmp(rel, "plain/", 6) == 0) {
+                rel += 6;
+            } else if (strncmp(rel, "gzip/", 5) == 0) {
+                rel += 5;
+            }
+        }
     } else {
         return ESP_ERR_INVALID_ARG;
     }
@@ -413,6 +421,55 @@ static bool asset_item_needed(const mh_update_item_t *item)
     return true;
 }
 
+/* After stripping <version>/, decide whether a Web catalog path matches the
+ * Hub's CONFIG_MINIHUB_WEB_ASSET_* layout (plain/ vs gzip/ trees, or legacy flat). */
+static bool web_asset_path_wanted(const char *rel)
+{
+    if (!rel || !rel[0]) {
+        return false;
+    }
+    const bool under_plain = (strncmp(rel, "plain/", 6) == 0);
+    const bool under_gzip = (strncmp(rel, "gzip/", 5) == 0);
+    const char *leaf = rel;
+    if (under_plain) {
+        leaf = rel + 6;
+    } else if (under_gzip) {
+        leaf = rel + 5;
+    }
+    const size_t leaf_len = strlen(leaf);
+    const bool is_gz = (leaf_len > 3 && strcmp(leaf + leaf_len - 3, ".gz") == 0);
+#ifdef CONFIG_MINIHUB_WEB_ASSET_PLAIN
+    if (under_gzip) {
+        return false;
+    }
+    if (!under_plain && is_gz) {
+        return false; /* legacy flat .gz sibling */
+    }
+    return true;
+#elif defined(CONFIG_MINIHUB_WEB_ASSET_GZIP)
+    if (under_plain) {
+        /* gzip tree carries plain markers (login.html, version.txt, …). */
+        return false;
+    }
+    if (!under_gzip && !is_gz) {
+        /* Legacy flat: keep markers / non-compressible; skip plain JS/CSS/HTML. */
+        const char *dot = strrchr(leaf, '.');
+        if (dot && (strcasecmp(dot, ".js") == 0 || strcasecmp(dot, ".css") == 0 ||
+                    strcasecmp(dot, ".html") == 0 || strcasecmp(dot, ".htm") == 0 ||
+                    strcasecmp(dot, ".json") == 0 || strcasecmp(dot, ".svg") == 0)) {
+            /* Prefer gzip counterparts when the catalog is flat+siblings. */
+            if (strcmp(leaf, "login.html") != 0 && strcmp(leaf, "manifest.json") != 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+#else
+    (void)is_gz;
+    return true; /* BOTH or unset: take every path */
+#endif
+}
+
 static bool item_selected(minihub_update_kind_t kind, const mh_update_index_t *idx,
                           const mh_update_item_t *item, const char *chip, const char *web_ver)
 {
@@ -424,6 +481,18 @@ static bool item_selected(minihub_update_kind_t kind, const mh_update_index_t *i
     }
     if (kind == MINIHUB_UPDATE_WEB || kind == MINIHUB_UPDATE_UI) {
         if (!web_ver || !item->version || strcmp(item->version, web_ver) != 0) {
+            return false;
+        }
+    }
+    if (kind == MINIHUB_UPDATE_WEB) {
+        const char *rel = item->url;
+        if (item->version && item->version[0]) {
+            size_t vl = strlen(item->version);
+            if (strncmp(rel, item->version, vl) == 0 && rel[vl] == '/') {
+                rel += vl + 1;
+            }
+        }
+        if (!web_asset_path_wanted(rel)) {
             return false;
         }
     }

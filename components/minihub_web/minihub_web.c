@@ -174,32 +174,6 @@ static bool file_etag(const char *path, off_t size, char *out, size_t out_len)
     return true;
 }
 
-#if CONFIG_MINIHUB_WEB_UI
-/** Prefer /data/web; fall back to legacy /store/preinstall/web for unflashed storage. */
-static bool resolve_host_web_file(const char *rel_or_null, char *out, size_t out_len, struct stat *st)
-{
-    static const char *const roots[] = {
-        MINIHUB_WEB_DIR,
-        MINIHUB_PREINSTALL_WEB_DIR,
-    };
-    for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); i++) {
-        int n;
-        if (rel_or_null && rel_or_null[0]) {
-            n = snprintf(out, out_len, "%s/%s", roots[i], rel_or_null);
-        } else {
-            n = snprintf(out, out_len, "%s", roots[i]);
-        }
-        if (n < 0 || (size_t)n >= out_len) {
-            continue;
-        }
-        if (stat(out, st) == 0 && S_ISREG(st->st_mode)) {
-            return true;
-        }
-    }
-    return false;
-}
-#endif
-
 /* Only text assets compress well; images are already compressed and would just
  * waste CPU/flash on a near-no-op .gz sibling. */
 static bool path_is_gzip_compressible(const char *path)
@@ -226,20 +200,87 @@ static bool path_is_gzip_compressible(const char *path)
     return false;
 }
 
+#if CONFIG_MINIHUB_WEB_UI
+/** True if the logical path exists as plain, or (gzip-only) as a .gz sibling. */
+static bool host_web_asset_stat(const char *logical_path, struct stat *st)
+{
+    if (stat(logical_path, st) == 0 && S_ISREG(st->st_mode)) {
+        return true;
+    }
+#ifdef CONFIG_MINIHUB_WEB_ASSET_GZIP
+    if (path_is_gzip_compressible(logical_path)) {
+        char gz_path[MINIHUB_PATH_MAX];
+        int m = snprintf(gz_path, sizeof(gz_path), "%s.gz", logical_path);
+        if (m > 0 && (size_t)m < sizeof(gz_path) &&
+            stat(gz_path, st) == 0 && S_ISREG(st->st_mode)) {
+            return true;
+        }
+    }
+#endif
+    return false;
+}
+
+/** Prefer /data/web; fall back to legacy /store/preinstall/web for unflashed storage. */
+static bool resolve_host_web_file(const char *rel_or_null, char *out, size_t out_len, struct stat *st)
+{
+    static const char *const roots[] = {
+        MINIHUB_WEB_DIR,
+        MINIHUB_PREINSTALL_WEB_DIR,
+    };
+    for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); i++) {
+        int n;
+        if (rel_or_null && rel_or_null[0]) {
+            n = snprintf(out, out_len, "%s/%s", roots[i], rel_or_null);
+        } else {
+            n = snprintf(out, out_len, "%s", roots[i]);
+        }
+        if (n < 0 || (size_t)n >= out_len) {
+            continue;
+        }
+        if (host_web_asset_stat(out, st)) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
 {
     struct stat st;
-    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    /* Serve a pre-compressed .gz sibling when the client accepts gzip. This cuts
-     * the Host Web console's JS/CSS payload ~4x on first (uncached) loads without
-     * any on-device compression. Text types only; images are already compressed.
-     * The Content-Type is derived from the original (non-.gz) path. */
     const char *orig_path = path;
     char gz_path[MINIHUB_PATH_MAX];
     bool use_gz = false;
+
+#ifdef CONFIG_MINIHUB_WEB_ASSET_PLAIN
+    /* Plain-only build: never prefer a .gz sibling even if one is left over. */
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return ESP_ERR_NOT_FOUND;
+    }
+#elif defined(CONFIG_MINIHUB_WEB_ASSET_GZIP)
+    /* Gzip-only: compressible assets live as path.gz (login.html stays plain). */
+    if (path_is_gzip_compressible(orig_path)) {
+        int m = snprintf(gz_path, sizeof(gz_path), "%s.gz", orig_path);
+        if (m > 0 && (size_t)m < sizeof(gz_path) &&
+            stat(gz_path, &st) == 0 && S_ISREG(st.st_mode)) {
+            char ae[64];
+            if (httpd_req_get_hdr_value_str(req, "Accept-Encoding", ae, sizeof(ae)) != ESP_OK ||
+                strstr(ae, "gzip") == NULL) {
+                return ESP_ERR_NOT_SUPPORTED;
+            }
+            path = gz_path;
+            use_gz = true;
+        } else if (stat(orig_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+            return ESP_ERR_NOT_FOUND;
+        }
+    } else if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return ESP_ERR_NOT_FOUND;
+    }
+#else
+    /* Both (default): plain on disk, prefer .gz sibling when client accepts gzip. */
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return ESP_ERR_NOT_FOUND;
+    }
     char ae[64];
     if (path_is_gzip_compressible(orig_path) &&
         httpd_req_get_hdr_value_str(req, "Accept-Encoding", ae, sizeof(ae)) == ESP_OK &&
@@ -253,6 +294,7 @@ static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
             return ESP_ERR_NOT_FOUND;
         }
     }
+#endif
 
     /* Console JS/CSS is ~300 KB and no-cache means the browser revalidates every
      * load; without an ETag that revalidation re-sends the whole body. */
@@ -293,9 +335,10 @@ static esp_err_t send_file_chunked(httpd_req_t *req, const char *path)
     if (use_gz) {
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     }
-    /* The same URL can serve either a gzip or a plain body depending on the
-     * client's Accept-Encoding, so advertise that to any cache in the path. */
+#ifndef CONFIG_MINIHUB_WEB_ASSET_PLAIN
+    /* Plain+gzip or gzip-only: body may depend on Accept-Encoding. */
     httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
+#endif
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     httpd_resp_set_hdr(req, "ETag", etag);
     size_t n;
@@ -362,12 +405,17 @@ static esp_err_t send_preinstall_index_or_fallback(httpd_req_t *req)
         if (!index_paths[i] || !index_paths[i][0]) {
             continue;
         }
-        if (stat(index_paths[i], &st) != 0 || !S_ISREG(st.st_mode)) {
+        if (!host_web_asset_stat(index_paths[i], &st)) {
             continue;
         }
         esp_err_t err = send_file_chunked(req, index_paths[i]);
         if (err == ESP_OK) {
             return ESP_OK;
+        }
+        if (err == ESP_ERR_NOT_SUPPORTED) {
+            httpd_resp_set_status(req, "406 Not Acceptable");
+            httpd_resp_set_type(req, "text/plain; charset=utf-8");
+            return httpd_resp_sendstr(req, "gzip required");
         }
         ESP_LOGW(TAG, "web index send failed (%s) path=%s size=%ld",
                  esp_err_to_name(err), index_paths[i], (long)st.st_size);
@@ -1118,6 +1166,11 @@ static esp_err_t handle_web_asset(httpd_req_t *req)
     esp_err_t err = send_file_chunked(req, path);
     if (err == ESP_ERR_NOT_FOUND) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+    }
+    if (err == ESP_ERR_NOT_SUPPORTED) {
+        httpd_resp_set_status(req, "406 Not Acceptable");
+        httpd_resp_set_type(req, "text/plain; charset=utf-8");
+        return httpd_resp_sendstr(req, "gzip required");
     }
     return err;
 }

@@ -15,6 +15,7 @@ main/CMakeLists.txt) and is stamped into version.txt + window.mhWebVersion.
   python3 tools/minify_web_assets.py --src components/minihub_web/web \\
       --deploy-root ~/workspace/minihub_store --web-version v0.1.0 \\
       --notes release_notes.txt
+  python3 tools/minify_web_assets.py --src … --dst … --encoding gzip
 """
 
 from __future__ import annotations
@@ -29,7 +30,32 @@ from pathlib import Path
 # Text asset kinds that benefit from gzip. Images (png/jpg/svg-as-image) are
 # already compressed and are skipped.
 GZIP_SUFFIXES = {".js", ".css", ".html", ".htm", ".json", ".svg"}
+# Always keep a plain copy so firmware can inject auth state / read version
+# markers without on-device inflate.
+PLAIN_ALWAYS = {"login.html", "version.txt", "release_notes.txt", "manifest.json"}
+ENCODINGS = ("plain", "gzip", "both")
+PLAIN_DIR = "plain"
+GZIP_DIR = "gzip"
 _MH_WEB_VERSION = re.compile(r"window\.mhWebVersion\s*=\s*(['\"])(?:\\.|[^\\])*?\1")
+
+
+def _keep_plain(rel: Path) -> bool:
+    return rel.name in PLAIN_ALWAYS
+
+
+def _skip_pack_name(name: str) -> bool:
+    """Build/editor markers must not land in deploy trees or upload ZIPs."""
+    return name == ".stamp" or name.endswith(".stamp") or name == ".DS_Store"
+
+
+def _minify_bytes(path: Path, raw: bytes) -> bytes:
+    if path.suffix.lower() in {".js", ".css", ".html", ".htm"}:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return raw
+        return minify_text(path, text).encode("utf-8")
+    return raw
 
 
 def _strip_block_comments(src: str) -> str:
@@ -198,8 +224,16 @@ def minify_text(path: Path, text: str) -> str:
     return _collapse_blank_lines(text)
 
 
-def process_tree(src: Path, dst: Path | None, *, in_place: bool,
-                 gzip_files: bool) -> tuple[int, int, int, int]:
+def process_tree(
+    src: Path,
+    dst: Path | None,
+    *,
+    in_place: bool,
+    encoding: str,
+) -> tuple[int, int, int, int]:
+    """Write a flat tree (firmware --dst). Deploy both uses split_both_trees()."""
+    if encoding not in ENCODINGS:
+        raise SystemExit(f"encoding must be one of {ENCODINGS}, got {encoding!r}")
     if not src.is_dir():
         raise SystemExit(f"not a directory: {src}")
     files = 0
@@ -210,32 +244,97 @@ def process_tree(src: Path, dst: Path | None, *, in_place: bool,
         if not path.is_file():
             continue
         rel = path.relative_to(src)
+        if any(_skip_pack_name(part) for part in rel.parts):
+            continue
         raw = path.read_bytes()
         bin_in += len(raw)
-        if path.suffix.lower() in {".js", ".css", ".html", ".htm"}:
-            try:
-                text = raw.decode("utf-8")
-            except UnicodeDecodeError:
-                out_bytes = raw
-            else:
-                out_bytes = minify_text(path, text).encode("utf-8")
-        else:
-            out_bytes = raw
+        out_bytes = _minify_bytes(path, raw)
         bout += len(out_bytes)
         files += 1
         if in_place:
             if out_bytes != raw:
                 path.write_bytes(out_bytes)
-        else:
-            assert dst is not None
-            target = dst / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
+            continue
+        assert dst is not None
+        target = dst / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        compressible = path.suffix.lower() in GZIP_SUFFIXES
+        keep_plain = _keep_plain(rel)
+        write_plain = (
+            encoding == "plain"
+            or encoding == "both"
+            or keep_plain
+            or not compressible
+        )
+        write_gz = compressible and encoding in ("gzip", "both") and not (
+            encoding == "gzip" and keep_plain
+        )
+        if write_plain:
             target.write_bytes(out_bytes)
-            if gzip_files and path.suffix.lower() in GZIP_SUFFIXES:
-                gz = target.with_name(target.name + ".gz")
-                gz.write_bytes(gzip.compress(out_bytes, mtime=0))
-                gz_out += gz.stat().st_size
+        if write_gz:
+            gz = target.with_name(target.name + ".gz")
+            gz.write_bytes(gzip.compress(out_bytes, mtime=0))
+            gz_out += gz.stat().st_size
     return files, bin_in, bout, gz_out
+
+
+def finalize_encoding(dst: Path, encoding: str) -> None:
+    """After version stamping, drop plain or .gz copies that the flat mode forbids."""
+    if encoding == "both":
+        return
+    if encoding == "plain":
+        for gz in dst.rglob("*.gz"):
+            if gz.is_file():
+                gz.unlink()
+        return
+    for path in sorted(dst.rglob("*")):
+        if not path.is_file() or path.suffix.lower() == ".gz":
+            continue
+        rel = path.relative_to(dst)
+        if path.suffix.lower() not in GZIP_SUFFIXES or _keep_plain(rel):
+            continue
+        data = path.read_bytes()
+        gz = path.with_name(path.name + ".gz")
+        gz.write_bytes(gzip.compress(data, mtime=0))
+        path.unlink()
+
+
+def write_gzip_tree_from_plain(plain_root: Path, gzip_root: Path) -> int:
+    """Build gzip/ parallel tree from a stamped plain tree. Returns .gz byte total."""
+    if gzip_root.exists():
+        shutil.rmtree(gzip_root)
+    gzip_root.mkdir(parents=True, exist_ok=True)
+    gz_out = 0
+    for path in sorted(plain_root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(plain_root)
+        if any(_skip_pack_name(part) for part in rel.parts):
+            continue
+        data = path.read_bytes()
+        compressible = path.suffix.lower() in GZIP_SUFFIXES and not _keep_plain(rel)
+        out = gzip_root / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if compressible:
+            gz = out.with_name(out.name + ".gz")
+            payload = gzip.compress(data, mtime=0)
+            gz.write_bytes(payload)
+            gz_out += len(payload)
+        else:
+            out.write_bytes(data)
+    return gz_out
+
+
+def split_both_trees(stage: Path, dst: Path) -> int:
+    """Copy stamped flat stage into dst/plain and dst/gzip (deploy --encoding both)."""
+    plain = dst / PLAIN_DIR
+    gz_dir = dst / GZIP_DIR
+    if plain.exists():
+        shutil.rmtree(plain)
+    if gz_dir.exists():
+        shutil.rmtree(gz_dir)
+    shutil.copytree(stage, plain)
+    return write_gzip_tree_from_plain(plain, gz_dir)
 
 
 def canonical_version(version: str) -> str:
@@ -268,6 +367,16 @@ def stamp_web_version(dst: Path, version: str) -> None:
         boot.write_text(new, encoding="utf-8")
 
 
+def _stamp_and_notes(dst: Path, version: str | None, notes_bytes: bytes | None,
+                     src: Path) -> None:
+    if version:
+        stamp_web_version(dst, version)
+    elif (src / "version.txt").is_file():
+        stamp_web_version(dst, (src / "version.txt").read_text(encoding="utf-8"))
+    if notes_bytes is not None:
+        (dst / "release_notes.txt").write_bytes(notes_bytes)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--src", required=True, type=Path)
@@ -288,14 +397,26 @@ def main(argv: list[str] | None = None) -> int:
         help="with --deploy-root and --web-version, copy this file to Webs/<version>/release_notes.txt",
     )
     ap.add_argument("--in-place", action="store_true")
-    ap.add_argument("--gzip", action="store_true",
-                    help="also write a .gz sibling for each text asset")
+    ap.add_argument(
+        "--encoding",
+        choices=ENCODINGS,
+        default=None,
+        help="plain | gzip | both. Deploy --encoding both writes plain/ and gzip/ "
+             "subtrees. Firmware --dst stays a flat tree (siblings for both).",
+    )
+    ap.add_argument(
+        "--gzip",
+        action="store_true",
+        help="alias for --encoding both (kept for older callers)",
+    )
     ap.add_argument("-q", "--quiet", action="store_true")
     args = ap.parse_args(argv)
+    if args.encoding and args.gzip and args.encoding != "both":
+        raise SystemExit("--gzip conflicts with --encoding " + args.encoding)
+    encoding = args.encoding or ("both" if args.gzip else "plain")
     src = args.src.resolve()
+    deploy_split = False
     if args.deploy_root or args.web_version:
-        # Publishing goes through --deploy-root; a plain --dst (the Host storage
-        # image built by main/CMakeLists.txt) may also carry a stamp.
         if args.deploy_root and not args.web_version:
             raise SystemExit("--deploy-root needs --web-version")
         if args.deploy_root and args.dst:
@@ -306,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("--web-version must be a single folder name")
         if args.deploy_root:
             args.dst = args.deploy_root.expanduser() / "Webs" / args.web_version
+            deploy_split = encoding == "both"
     notes_bytes: bytes | None = None
     if args.notes is not None:
         if not args.deploy_root or not args.web_version:
@@ -319,8 +441,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.in_place:
         if args.dst:
             raise SystemExit("--in-place and --dst are mutually exclusive")
-        # Never drop .gz next to the source tree in in-place mode.
-        n, a, b, g = process_tree(src, None, in_place=True, gzip_files=False)
+        n, a, b, g = process_tree(src, None, in_place=True, encoding="plain")
     else:
         if not args.dst:
             raise SystemExit("need --dst or --in-place")
@@ -328,20 +449,34 @@ def main(argv: list[str] | None = None) -> int:
         if dst.exists():
             shutil.rmtree(dst)
         dst.mkdir(parents=True, exist_ok=True)
-        n, a, b, g = process_tree(src, dst, in_place=False, gzip_files=args.gzip)
-        if args.web_version:
-            stamp_web_version(dst, args.web_version)
-        elif (src / "version.txt").is_file():
-            # No explicit version (e.g. a Host skin copied with --dst): keep the
-            # source tree's own marker, and make boot.js agree with it.
-            stamp_web_version(dst, (src / "version.txt").read_text(encoding="utf-8"))
-        if notes_bytes is not None:
-            (dst / "release_notes.txt").write_bytes(notes_bytes)
+        if deploy_split:
+            stage = dst / ".stage"
+            stage.mkdir(parents=True, exist_ok=True)
+            n, a, b, g = process_tree(src, stage, in_place=False, encoding="plain")
+            _stamp_and_notes(stage, args.web_version, notes_bytes, src)
+            g = split_both_trees(stage, dst)
+            shutil.rmtree(stage)
+        else:
+            # Flat tree for firmware --dst, or deploy plain/gzip-only.
+            flat_enc = "plain" if encoding == "both" else encoding
+            if encoding == "both":
+                # Firmware BOTH: plain + sibling .gz in one directory.
+                n, a, b, g = process_tree(src, dst, in_place=False, encoding="both")
+            else:
+                n, a, b, g = process_tree(src, dst, in_place=False, encoding=flat_enc)
+            _stamp_and_notes(dst, args.web_version, notes_bytes, src)
+            finalize_encoding(dst, encoding)
+            if encoding != "plain":
+                g = sum(p.stat().st_size for p in dst.rglob("*.gz") if p.is_file())
     if not args.quiet:
         saved = a - b
         pct = (100.0 * saved / a) if a else 0.0
-        line = f"minify_web_assets: {n} files {a} → {b} bytes (−{saved}, {pct:.1f}%)"
-        if args.gzip:
+        layout = "plain/+gzip/" if deploy_split else "flat"
+        line = (
+            f"minify_web_assets: {n} files {a} → {b} bytes (−{saved}, {pct:.1f}%) "
+            f"encoding={encoding} layout={layout}"
+        )
+        if encoding != "plain":
             line += f"; gz {g} bytes"
         print(line)
     return 0

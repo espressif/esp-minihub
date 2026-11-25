@@ -236,7 +236,7 @@ JSON 文档。 ``application/minihub/manifest.yml`` 只决定这块屏是否编�
 
 中文 UI（chrome 与设备名）统一走 FreeType：``ui/fonts/minihub_sc.otf`` 必须
 出现在设备 storage 分区的 ``/data/ui/fonts/``。该 OTF 为思源黑体子集，覆盖 UI
-文案与 **GB2312 一级汉字全集**（3755 字，约 1.8 MiB）。固件不再编入 LVGL 内置
+文案与 **GB2312 一级汉字全集** （3755 字，约 1.8 MiB）。固件不再编入 LVGL 内置
 Han Sans 子集（约省数百 KB flash）。该 OTF 缺失时中文会不可读；拉丁文案仍可用
 Montserrat。改字表后跑 ``./tools/ui_font/build_subset.sh`` 并重烧 ``storage``。
 
@@ -247,8 +247,8 @@ Montserrat。改字表后跑 ``./tools/ui_font/build_subset.sh`` 并重烧 ``sto
 STA 尚未拿到 IP 时，槽位显示提示「配网后扫码进 Web」（英文 ``Enter Web after IP``），
 避免留白。
 
-概览设备卡较大（约一行两个）。卡上电源控件只负责开关；点卡片打开近全屏**通用**
-参数弹层（类型目录 ∩ ``props.params``：开关 / 滑杆 / 下拉 / 按钮），并可用「详情」
+概览设备卡较大（约一行两个）。卡上电源控件只负责开关；点卡片打开近全屏 **通用**
+参数弹层（类型目录 ∩ ``props.params`` ：开关 / 滑杆 / 下拉 / 按钮），并可用「详情」
 查看身份字段——与 Web 控制台 ``openDeviceDetail`` 主路径一致，不移植 Web 上按类型
 硬编码的专用面板。设备图标来自 ``/data/ui/images/devices/<type>.png``
 （见 ``assets/device_icons.json``）；可用 ``tools/regen_lcd_device_icons.py`` 重生成。

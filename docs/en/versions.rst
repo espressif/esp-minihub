@@ -8,7 +8,7 @@ it together with the commit line in ``GET /api/system``: the version says what t
 product author declared, the commit says which tree was built.
 
 One number per device, three release trains
-------------------------------------------
+-------------------------------------------
 
 ``MINIHUB_VERSION`` is the device version, set once in
 :file:`cmake/minihub_bundle/Kconfig.projbuild` (default ``0.1.0-dev``). The same string

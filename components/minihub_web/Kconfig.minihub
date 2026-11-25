@@ -50,6 +50,38 @@ menu "Web UI"
             web-only fix bumps this without touching the firmware.
             Defaults to MINIHUB_VERSION (defined in the MiniHub menu).
 
+    choice MINIHUB_WEB_ASSET_ENCODING
+        prompt "Web console files on storage"
+        default MINIHUB_WEB_ASSET_GZIP
+        depends on MINIHUB_WEB_UI
+        help
+            Controls which copies of Host Web JS/CSS/HTML/JSON land in /data/web/
+            and how httpd serves them. Tiny markers (version.txt, release_notes.txt)
+            and login.html always stay plain so the login page can inject auth state.
+
+            Two practical modes (plus an optional both):
+
+            * Gzip only (default) — compressible assets stored as .gz only
+              (~0.13 MiB plus plain login.html). Clients must send
+              Accept-Encoding: gzip or the request returns 406.
+            * Plain only — no .gz siblings (~0.53 MiB). Every client reads plain.
+            * Both — plain file plus a .gz sibling (~0.65 MiB). Clients that send
+              Accept-Encoding: gzip get the compressed copy.
+
+            Store publish (deploy.sh / pack_store_resources) writes parallel
+            Webs/<ver>/plain/ and …/gzip/ trees (same relative paths; gzip side
+            uses *.gz names). Upload either ZIP alone or both. OTA flattens onto
+            /data/web/ and only pulls the tree this choice needs. A flash built
+            here packs a flat /data/web layout for this mode only.
+
+    config MINIHUB_WEB_ASSET_GZIP
+        bool "Gzip only (Accept-Encoding: gzip required)"
+    config MINIHUB_WEB_ASSET_PLAIN
+        bool "Plain only"
+    config MINIHUB_WEB_ASSET_BOTH
+        bool "Plain and gzip (.gz siblings)"
+    endchoice
+
     # Login / Bearer live with the console they protect (same httpd).
     rsource "../minihub_auth/Kconfig.minihub"
 

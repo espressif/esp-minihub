@@ -34,6 +34,10 @@ def _stage(src: pathlib.Path, dst: pathlib.Path, quiet: bool) -> int:
         if not path.is_file():
             continue
         rel = path.relative_to(src)
+        # Build stamps / editor junk must not ship in LCD_UI ZIPs or deploy trees.
+        if any(part == ".stamp" or part.endswith(".stamp") or part == ".DS_Store"
+               for part in rel.parts):
+            continue
         if rel.as_posix() == "i18n/strings.json":
             continue
         out = dst / rel
